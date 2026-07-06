@@ -19,8 +19,8 @@ hidden_imports = [
     "services.calculadora_actividad_braqui",
     "services.MLCs_calibration_service",
     "services.auditorias",
-    "services.decoradores_audit"
-    
+    "services.decoradores_audit",
+
     # ANALISIS
     "analisisImagenes.Analisis_Catphan_TAC",
     "analisisImagenes.Analisis_PlacaCuadrada",
@@ -56,13 +56,7 @@ cmd += [
     "--add-data", "services;services",
     "--add-data", "mcc_PTW_read;mcc_PTW_read",
     "--add-data", "analisisImagenes;analisisImagenes",
-    "--add-data", "BaseDatosQA.db;.",
     "--exclude-module", "torch",
-    "--add-data", "analisisImagenes;espesor_corte.jpg",
-    "--add-data", "analisisImagenes;resolucion_contraste.jpg",
-    "--add-data", "analisisImagenes;resolucion_espacial.jpg",
-    "--add-data", "analisisImagenes;valores_ct.jpg",
-    "--add-data", "analisisImagenes;uniformidad_ruido.jpg",
 ]
 
 cmd.append("main.py")
