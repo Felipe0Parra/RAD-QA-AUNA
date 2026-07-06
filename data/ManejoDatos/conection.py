@@ -1,0 +1,1210 @@
+import sqlite3
+from data.ManejoDatos.encriptarInfo import encrypt_data 
+import traceback
+
+class Conexion():
+    _instance = None  # Variable de clase para almacenar una única instancia de la conexión
+    
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:  # Si no hay una instancia, la crea
+            cls._instance = super(Conexion, cls).__new__(cls)
+            cls._instance.__init_connection()  # Llama a un nuevo método de inicialización
+        return cls._instance  # Devuelve la única instancia existente
+    
+    def __init_connection(self):
+        #print("Conexion               __init__ called")
+        
+        #print("Inicialización de la base de datos (Archivo: conection.py)")
+        try:
+            self.con = sqlite3.connect('BaseDatosQA.db', check_same_thread=False)  # Evita errores de hilos
+            self.createTable()
+            #self.eliminar_tablas_cambio_fuente()
+            self.crearTablasCambioFuente()
+            self.crearTablaLinealidad()
+            self.crearTablaAnalisis600()
+            self.crearTablasCatphan()
+            self.crearTablasAnuales() # Crear tablas para controles anuales del 600 e IX
+            self.crearTablasHalcyon()  # Crear tablas para controles Halcyon (Anuales y Mensuales)
+            self.crearTablasMLCs()
+
+        except Exception as ex:
+            traceback.print_exc()
+            print("Error al conectar a la base de datos:", ex)
+            
+    def fetchone(self, sql, params=None):
+        """
+        Ejecuta una consulta SQL y retorna una única fila.
+        
+        Args:
+            sql: Consulta SQL a ejecutar
+            params: Tupla de parámetros para la consulta (opcional)
+            
+        Returns:
+            Una tupla con los valores de la fila, o None si no hay resultados
+        """
+        try:
+            cursor = self.con.cursor()
+            if params:
+                cursor.execute(sql, params)
+            else:
+                cursor.execute(sql)
+            
+            result = cursor.fetchone()
+            cursor.close()
+            return result
+            
+        except Exception as ex:
+            print(f"Error en fetchone: {ex}")
+            traceback.print_exc()
+            raise
+    
+    def createTable(self):
+        sql_create_table1 = """
+        CREATE TABLE IF NOT EXISTS users (
+            id  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user TEXT UNIQUE,
+            password TEXT,
+            fullname TEXT UNIQUE,
+            active INTEGER,
+            idreal INTEGER, 
+            role TEXT,
+            firma BLOB
+        )  
+        """
+        # Control diario del 600
+        sql_create_table2 = """
+        CREATE TABLE IF NOT EXISTS aceleradorlineal_600 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            user_id TEXT,
+            luces_consola INTEGER,
+            luces_puerta INTEGER,
+            luces_irradiacion INTEGER,
+            sistema_visualizacion INTEGER,
+            sistema_anticolision INTEGER,
+            interruptor_radiacion_puerta INTEGER,
+            interruptor_radiacion_panel INTEGER,
+            interrupcion_um INTEGER,
+            verificacion_monitoras INTEGER,
+            movimiento_brazo INTEGER,
+            movimiento_colimador INTEGER,
+            movimientos_camilla INTEGER,
+            laseres INTEGER,
+            telemetro INTEGER,
+            tamano_campo INTEGER,
+            centrado_reticulo INTEGER,
+            dosis_referencia INTEGER,
+            observaciones TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+        )  
+        """
+        # Control diario del ix
+        sql_create_table3 = """
+        CREATE TABLE IF NOT EXISTS aceleradorlineal_ix (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            user_id TEXT,
+            luces_consola INTEGER,
+            luces_puerta INTEGER,
+            luces_irradiacion INTEGER,
+            sistema_visualizacion INTEGER,
+            sistema_anticolision INTEGER,
+            interruptor_radiacion_puerta INTEGER,
+            interruptor_radiacion_panel INTEGER,
+            interrupcion_um INTEGER,
+            verificacion_monitoras INTEGER,
+            movimiento_brazo INTEGER,
+            movimiento_colimador INTEGER,
+            movimientos_camilla INTEGER,
+            laseres INTEGER,
+            telemetro INTEGER,
+            tamano_campo INTEGER,
+            centrado_reticulo INTEGER,
+            tol_fot_6mv INTEGER,
+            tol_fot_15mv INTEGER,
+            tol_ele_6mev INTEGER,
+            tol_ele_9mev INTEGER,
+            tol_ele_12mev INTEGER,
+            tol_ele_15mev INTEGER,
+            observaciones TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+        )  
+        """
+        # Control diario de braqui
+        sql_create_table4 = """
+        CREATE TABLE IF NOT EXISTS braqui (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            user_id TEXT,
+            int_con_box INTEGER,
+            emerg_con INTEGER,
+            blq_puerta INTEGER,
+            pos_fuente INTEGER,
+            res_fuente INTEGER,
+            key_fuente INTEGER,
+            mon_area INTEGER,
+            lum_puerta INTEGER,
+            tub_guia INTEGER,
+            visual_sys INTEGER,
+            intercom INTEGER,
+            mon_rad_port INTEGER,
+            tol_rep_act_ci INTEGER,
+            tol_exp_act INTEGER,
+            tol_cyc_dummy INTEGER,
+            tol_cyc_rad INTEGER,
+            observaciones TEXT,
+            pelicula BLOB,
+            distancias TEXT NULL,
+            promedio REAL NULL,
+            desviacion REAL NULL,
+            desplazamientos TEXT NULL,
+            promedio_des REAL NULL,
+            desviacion_des REAL NULL,
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """
+        # Control del halcyon
+        sql_create_table5 = """
+        CREATE TABLE IF NOT EXISTS halcyon (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            user_id TEXT,
+            IsoCenterSize_name2 INTEGER,
+            IsoCenterMVOffset INTEGER,
+            IsoCenterKVOffset INTEGER, 
+            BeamOutputChange INTEGER,
+            BeamUniformityChange INTEGER,
+            BeamMu1GainChange INTEGER,
+            BeamMu2GainChange INTEGER,
+            GantryAbsolute INTEGER,
+            GantryRelative INTEGER,
+            CouchLat INTEGER,
+            CouchLng INTEGER,
+            CouchVrt INTEGER,
+            CouchLatLong INTEGER,
+            CouchLngLong INTEGER,
+            CouchVrtLong INTEGER,
+            VirtualToIsoLat INTEGER,
+            VirtualToIsoLng INTEGER,
+            VirtualToIsoVrt INTEGER,
+            MVImagerCalibrationGain INTEGER,
+            MVImagerCalibrationUniformity INTEGER,
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+        )  
+        """
+        # Tabla de equipos, las unidades están: 
+        #       Factores de Calibración cámara de inización: 1x10^9 (Gy/C) 
+        #       Factores de Calibración cámara de pozo: 1x10^1 (Gy·m²/h·A) 
+        #       Temperatura de calibración: °C
+        #       Presión de calibración: kPa
+        #       Humedad de calibración: %
+        sql_create_table6 = """
+        CREATE TABLE IF NOT EXISTS equipos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equip_type TEXT,
+            model TEXT,
+            serie TEXT,
+            calibr_fact INTEGER,
+            calibr_fact2 INTEGER,
+            fecha_calibr INTEGER,
+            fabricante TEXT,
+            t_cal REAL,
+            p_cal REAL,
+            h_cal REAL,
+            v1 TEXT,
+            vigente REAL,
+            activo REAL,
+            imagen_certificado BLOB
+        )"""
+        #sql_alter_table = """
+        #ALTER TABLE equipos ADD COLUMN imagen_cetificado BLOB;
+        #"""
+        # Alterar tabla (solo si no existe la columna)
+        #sql_alter_table = """
+        #ALTER TABLE equipos ADD COLUMN h_cal TEXT;
+        #"""
+        #-----------------------------------------------------------------------------------------------
+        # Información general del control (equipo, fecha, usuario)        
+        sql_create_tableMENSUAL = """
+        CREATE TABLE IF NOT EXISTS controles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipo TEXT,
+            control TEXT,
+            fecha TEXT,
+            user_id TEXT,
+            user_id_f2 TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (user_id_f2) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """
+        # Tabla de datos de los indicadores de brazos
+        sql_create_table7 = """
+        CREATE TABLE IF NOT EXISTS indicadores_brazo (
+            ref INTEGER,
+            nivel TEXT,
+            indicador_luminoso_consola TEXT,
+            indicador_luminoso_equipo TEXT,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )  
+        """
+        # Tabla de datos de los indicadores del colimador
+        sql_create_table8 = """
+        CREATE TABLE IF NOT EXISTS indicadores_angulares_colimador (
+            ref INTEGER,
+            nivel TEXT,
+            indicador_luminoso_consola TEXT,
+            indicador_luminoso_equipo TEXT, 
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )  
+        """
+        # Tabla de tamaños de campo
+        sql_create_table9 = """
+        CREATE TABLE IF NOT EXISTS tamano_campo (
+            ref INTEGER,
+            campo_nominal TEXT,
+            ie_largoy1 TEXT,
+            ie_largoy2 TEXT,
+            ie_anchox1 TEXT,
+            ie_anchox2 TEXT,
+            ic_largoy1 TEXT,
+            ic_largoy2 TEXT,
+            ic_anchox1 TEXT,
+            ic_anchox2 TEXT,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )  
+        """
+        # Tabla de datos del funcionamiento mecánico del dispositivo
+        sql_create_table10 = """
+        CREATE TABLE IF NOT EXISTS preguntas (
+            ref INTEGER,
+            iso_mec,
+            reticulo_cent,
+            bordes_coin,
+            camilla_vert_rango,
+            camilla_vert_desp,
+            camilla_iso_desp,
+            telem_rango,
+            telem_desp,
+            camp_luz_desp,
+            puntero_telem_diff,
+            laser_techo,
+            laser_lateral27,
+            laser_lateral9,
+            observaciones,
+            imagen BLOB,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )  """
+
+        # Tabla de equipos que se usuan en el control
+        sql_create_table11 = """
+        CREATE TABLE IF NOT EXISTS equipos_medicion (
+            ref INTEGER,
+            id  INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo_camara TEXT,
+            equip_type TEXT,
+            model TEXT,
+            serie TEXT,
+            calibr_fact INTEGER,
+            fecha_calibr INTEGER,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )  
+        """
+        # Tabla de datos relacionados con la dosis
+        sql_create_table12 = """
+        CREATE TABLE IF NOT EXISTS dosimetriaMen (
+            ref INTEGER,
+            val_teo_discrepancia REAL,
+            dosis_ref_cgy_um INTEGER,
+            discrepancia_dosis INTEGER,
+            tolerancia_dosis INTEGER,
+            calidad_pdd20_10 INTEGER,
+            discrepancia_calidad INTEGER,
+            tolerancia_calidad INTEGER,
+            simetria_inplane INTEGER,
+            simetria_crossplane INTEGER,
+            tolerancia_simetria INTEGER,
+            planicidad_inplane INTEGER,
+            planicidad_crossplane INTEGER,
+            tolerancia_planicidad INTEGER,
+            observaciones_dosi TEXT,
+            energia TEXT,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """
+        # Alterar tabla (solo si no existe la columna)
+        #sql_alter_table = """ALTER TABLE dosimetriaMen ADD COLUMN energia TEXT;"""
+
+        sql_create_table13 = """CREATE TABLE IF NOT EXISTS control_cunas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            angulo INTEGER NOT NULL,
+            in_val INTEGER CHECK(in_val IN (0,1)),
+            out_val INTEGER CHECK(out_val IN (0,1)),
+            right_val INTEGER CHECK(right_val IN (0,1)),
+            left_val INTEGER CHECK(left_val IN (0,1)),
+            observaciones TEXT, 
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )"""
+        
+        sql_create_table14 = """CREATE TABLE IF NOT EXISTS control_conos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,         -- referencia o identificador del equipo/paciente
+            medida TEXT NOT NULL,      -- por ejemplo "6x6", "10x10", etc.
+            valor INTEGER NOT NULL,     -- 1 = funciona, 0 = no funciona
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )"""
+
+        cur = self.con.cursor()
+        cur.execute(sql_create_table1)
+        cur.execute(sql_create_table2)
+        cur.execute(sql_create_table3)
+        cur.execute(sql_create_table4)
+        cur.execute(sql_create_table5)
+        #cur.execute(sql_alter_table)  # Se ejecuta una sola vez para agregar alguna columna a la tabla equipos
+        cur.execute(sql_create_table6)
+        cur.execute(sql_create_tableMENSUAL)
+        cur.execute(sql_create_table7)
+        cur.execute(sql_create_table8)
+        cur.execute(sql_create_table9)
+        cur.execute(sql_create_table10)
+        cur.execute(sql_create_table11)
+        cur.execute(sql_create_table12)
+        cur.execute(sql_create_table13)
+        cur.execute(sql_create_table14)
+        cur.close()
+        self.createAdmin()
+
+    def eliminar_tablas_cambio_fuente(self):
+        nombres_tablas = [
+            "TipoCalibracion",
+            "SistemaMedicion",
+            "CondicionesMedicion",
+            "MaximosCamaras",
+            "LecturasMaximos",
+            "ResultadosActividad"
+        ]
+        
+        cursor = self.con.cursor()
+        for nombre in nombres_tablas:
+            cursor.execute(f"DROP TABLE IF EXISTS {nombre}")
+        self.con.commit()
+
+    def crearTablasCambioFuente(self):
+        tablas_sql = [
+            """
+            CREATE TABLE IF NOT EXISTS TipoCalibracion (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user TEXT,
+                fecha TEXT,
+                tipo REAL,
+                serie TEXT,
+                certificado REAL,
+                fecha_cer TEXT,
+                intensidad REAL,
+                conversion REAL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS SistemaMedicion (
+                ref INTEGER,
+                user TEXT,
+                fecha TEXT,
+                modelo TEXT,
+                serie_cp TEXT,
+                calibracion REAL,
+                modelo_elec TEXT,
+                serie_ele TEXT,
+                electrometro REAL,
+                t0 REAL,
+                p0 REAL,
+                h0 REAL,
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS CondicionesMedicion (
+                ref INTEGER,
+                user TEXT,
+                fecha TEXT,
+                t REAL,
+                p REAL,
+                h REAL,
+                desplazamiento_ini REAL,
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS MaximosCamaras (
+                ref INTEGER,
+                user TEXT,
+                fecha TEXT,
+                posicion TEXT,
+                medida1 TEXT,
+                medida2 TEXT,
+                promedio TEXT,
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS LecturasMaximos (
+                ref INTEGER,
+                user TEXT,
+                fecha TEXT,
+                voltaje TEXT,
+                V_300 TEXT,
+                V_150 TEXT,
+                Vn_300 TEXT,
+                promediosV TEXT,
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS ResultadosActividad (
+                ref INTEGER,
+                user TEXT,
+                fecha TEXT,
+                Ks REAL,
+                Kp REAL,
+                Ktp REAL,
+                actividad_monitor REAL,
+                actividad_calculada REAL,
+                actividad_decaimiento REAL,
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+            )
+            """
+        ]
+        cursor = self.con.cursor()
+        for tabla in tablas_sql:
+            cursor.execute(tabla)
+        self.con.commit()
+
+    def crearTablaLinealidad(self):
+        tabla = """
+            CREATE TABLE IF NOT EXISTS LinealidadBraquiterapia (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user TEXT,
+                fecha TEXT,
+                modelo TEXT,
+                serie_cp TEXT,
+                calibracion REAL,
+                modelo_elec TEXT,
+                serie_ele TEXT,
+                electrometro REAL,
+                q_est REAL,
+                t_integrado REAL,
+                i_est REAL,
+                reproducibilidad REAL,
+                exactitud REAL,
+                tiempo_transito REAL,
+                repro_m1 REAL,
+                repro_m2 REAL,
+                repro_m3 REAL,
+                repro_m4 REAL,
+                repro_m5 REAL,
+                repro_prom REAL,
+                lin_tp_0 REAL, lin_q1_0 REAL, lin_q2_0 REAL, lin_qprom_0 REAL, lin_te_0 REAL,
+                lin_tp_1 REAL, lin_q1_1 REAL, lin_q2_1 REAL, lin_qprom_1 REAL, lin_te_1 REAL,
+                lin_tp_2 REAL, lin_q1_2 REAL, lin_q2_2 REAL, lin_qprom_2 REAL, lin_te_2 REAL,
+                lin_tp_3 REAL, lin_q1_3 REAL, lin_q2_3 REAL, lin_qprom_3 REAL, lin_te_3 REAL,
+                lin_tp_4 REAL, lin_q1_4 REAL, lin_q2_4 REAL, lin_qprom_4 REAL, lin_te_4 REAL,
+                lin_tp_5 REAL, lin_q1_5 REAL, lin_q2_5 REAL, lin_qprom_5 REAL, lin_te_5 REAL,
+                lin_tp_6 REAL, lin_q1_6 REAL, lin_q2_6 REAL, lin_qprom_6 REAL, lin_te_6 REAL,
+                lin_tp_7 REAL, lin_q1_7 REAL, lin_q2_7 REAL, lin_qprom_7 REAL, lin_te_7 REAL,
+                lin_tp_8 REAL, lin_q1_8 REAL, lin_q2_8 REAL, lin_qprom_8 REAL, lin_te_8 REAL,
+                lin_tp_9 REAL, lin_q1_9 REAL, lin_q2_9 REAL, lin_qprom_9 REAL, lin_te_9 REAL
+            )
+            """
+        cursor = self.con.cursor()
+        cursor.execute(tabla)
+        self.con.commit()
+
+    def crearTablaAnalisis600(self):
+        resultados_franja = """
+            CREATE TABLE IF NOT EXISTS analisis_placa_franjas (
+            ref INTEGER,                  
+            franja TEXT NOT NULL,          
+            ancho_media_h REAL,
+            ancho_media_v REAL,
+            penumbra_izq_h REAL,
+            penumbra_izq_v REAL,
+            penumbra_der_h REAL,
+            penumbra_der_v REAL,
+            diferencia_arriba_izq REAL,
+            diferencia_arriba_der REAL,
+            diferencia_abajo_izq REAL,
+            diferencia_abajo_der REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        );"""
+
+        verificaciones = """
+        CREATE TABLE IF NOT EXISTS analisis_placa_verificaciones (
+            ref INTEGER,
+            tipo TEXT NOT NULL,
+            angulo1 REAL,
+            angulo2 REAL,
+            angulo3 REAL,
+            angulo4 REAL,
+            lado_arriba REAL,
+            lado_abajo REAL,
+            lado_izquierda REAL,
+            lado_derecha REAL,
+            desv_vert_izq REAL,
+            desv_vert_der REAL,
+            desv_horiz_arriba REAL,
+            desv_horiz_abajo REAL,
+            ortogonal INTEGER,
+            simetrico INTEGER,
+            alineado_horizontal INTEGER,
+            alineado_vertical INTEGER,
+            torcido INTEGER,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE CASCADE ON UPDATE CASCADE
+            );"""
+
+        correcciones = """
+        CREATE TABLE IF NOT EXISTS analisis_placa_correcciones (
+            ref INTEGER,
+            vertice TEXT NOT NULL,
+            delta_x REAL,
+            delta_y REAL,
+            diferencia_arriba REAL,
+            diferencia_abajo REAL,
+            diferencia_izquierda REAL,
+            diferencia_derecha REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE CASCADE ON UPDATE CASCADE
+        );
+
+        """
+        cursor = self.con.cursor()
+        cursor.execute(resultados_franja)
+        cursor.execute(verificaciones)
+        cursor.execute(correcciones)
+        self.con.commit()
+
+    def crearTablasCatphan(self):
+        # Tabla de tipos de prueba (catálogo)
+        tipos_prueba = """
+        CREATE TABLE IF NOT EXISTS tipos_prueba (
+            id_tipo INTEGER PRIMARY KEY,
+            nombre_prueba VARCHAR(100) NOT NULL UNIQUE,
+            descripcion TEXT,
+            activo BOOLEAN DEFAULT 1
+        );"""
+
+        # Tabla principal de pruebas individuales
+        pruebas = """   
+        CREATE TABLE IF NOT EXISTS pruebas (
+            id_prueba INTEGER PRIMARY KEY AUTOINCREMENT,    -- Identificador único de cada prueba
+            id_sesion INTEGER NOT NULL,                     -- Referencia a la sesión de prueba
+            id_tipo INTEGER NOT NULL,                       -- Referencia al tipo de prueba
+            kv INTEGER NOT NULL,
+            ma INTEGER NOT NULL,
+            espesor_corte REAL NOT NULL,
+            imagen_path BLOB,                               -- Imagen asociada a la prueba
+            imagen_resultado BLOB,                          -- Imagen con resultados (BLOB)
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Fecha y hora de creación
+
+            FOREIGN KEY (id_sesion) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_tipo) REFERENCES tipos_prueba(id_tipo)
+        );"""
+
+        # Tabla específica para ESPESOR DE CORTE
+        espesor_corte = """
+        CREATE TABLE IF NOT EXISTS espesor_corte (
+            id_prueba INTEGER PRIMARY KEY,                  -- Referencia a la prueba en la tabla principal
+            espesor_promedio_mm REAL NOT NULL,              -- Espesor promedio medido en mm
+            espesor_teorico_mm REAL NOT NULL,               -- Espesor teórico en mm    
+            diferencia_mm REAL NOT NULL,                    -- Diferencia entre espesor medido y teórico en mm
+            error_pct REAL NOT NULL,                        -- Error porcentual
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE ON UPDATE CASCADE
+        );"""
+
+        # Tabla específica para TAMAÑO DE PIXEL
+        tamaño_pixel = """
+                    CREATE TABLE IF NOT EXISTS tamaño_pixel (
+                id_prueba INTEGER PRIMARY KEY,
+                valor_teorico_dicom REAL,                   -- Valor del DICOM header
+                X REAL,                                     -- Promedio xarr, xabajo
+                Y REAL,                                     -- Promedio yizq, yder
+                diferencia_x REAL,                          -- |promedio_x - teorico|
+                diferencia_y REAL,                          -- |promedio_y - teorico|
+                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+            );"""
+        
+        # Tabla para detalles por ROI en RESOLUCIÓN DE CONTRASTE
+        rois_contraste = """
+        CREATE TABLE IF NOT EXISTS resolucion_contraste_rois (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_prueba INTEGER NOT NULL,
+            diametro_mm INTEGER NOT NULL,               -- 15, 9, 8, 7, 6, 5
+            centro_x INTEGER,
+            centro_y INTEGER,
+            roi_promedio_hu REAL,
+            background_promedio_hu REAL,
+            contraste_michelson REAL,                   -- Métrica principal
+            cnr REAL,                                   -- Contrast-to-Noise Ratio
+            snr REAL,                                   -- Signal-to-Noise Ratio  
+            visibilidad_lim REAL,                       -- Criterio de Rose
+            pasa_cnr BOOLEAN,
+            pasa_visibilidad_lim BOOLEAN,               -- Criterio recomendado
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+        );"""
+
+        # Tabla específica para RESOLUCIÓN DE CONTRASTE
+        resolucion_contraste = """
+        CREATE TABLE IF NOT EXISTS resolucion_contraste (
+            id_prueba INTEGER PRIMARY KEY,
+            rois_visibles_cnr INTEGER,                  -- Cantidad que pasan CNR
+            rois_visibles_visibilidad INTEGER,          -- Cantidad que pasan visibilidad
+            total_rois INTEGER,                         -- Total evaluados (6)
+            diametro_minimo_visible REAL,              -- Menor diámetro visible
+            pasa_test_cnr BOOLEAN,                     -- ≥4 ROIs visibles con CNR
+            pasa_test_visibilidad BOOLEAN,             -- ≥4 ROIs visibles con visibilidad
+            metodo_recomendado VARCHAR(20),            -- 'visibilidad_lim'
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+        );"""
+
+        # Tabla específica para RESOLUCIÓN ESPACIAL
+        resolucion_espacial = """
+            CREATE TABLE IF NOT EXISTS resolucion_espacial (
+                id_prueba INTEGER PRIMARY KEY,
+                regiones_analizadas INTEGER,                -- Cantidad de regiones procesadas
+                regiones_exitosas INTEGER,                  -- Regiones con status "OK"
+                lp_mm_maximo REAL,                         -- Máximo lp/mm logrado
+                ultima_region_exitosa VARCHAR(20),         -- Nombre de la última región OK
+                gap_size_minimo_cm REAL,                   -- Gap size de la mejor resolución
+                num_picos_totales INTEGER,                 -- Total de picos detectados
+                mtf_10_pct REAL,                          -- lp/mm para MTF 10%
+                mtf_20_pct REAL,                          -- lp/mm para MTF 20%
+                mtf_50_pct REAL,                          -- lp/mm para MTF 50%
+                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+            );"""
+
+        resolucion_espacial_regiones = """
+            CREATE TABLE IF NOT EXISTS resolucion_espacial_regiones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_prueba INTEGER NOT NULL,
+                region_nombre VARCHAR(20),                  -- "region 1", "region 2", etc.
+                lp_mm REAL,                                -- 0.1, 0.2, 0.3, etc.
+                peak_mean REAL,
+                valley_mean REAL,
+                gap_size_cm REAL,
+                n_peaks_used INTEGER,
+                n_valleys_used INTEGER,
+                status VARCHAR(50),                        -- "OK", "Picos insuficientes", etc.
+                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+            );"""
+        
+        # Catálogo de materiales para pruebas CT
+        materiales_ct = """
+        CREATE TABLE IF NOT EXISTS materiales_ct (
+            id_material INTEGER PRIMARY KEY,                -- Identificador único del material
+            nombre_material VARCHAR(50) NOT NULL UNIQUE,    -- Nombre descriptivo del material
+            rango_referencia_min REAL,                      -- Valor mínimo del rango de referencia para el material
+            rango_referencia_max REAL                       -- Valor máximo del rango de referencia para el material
+        );"""
+
+        # Tabla para VALORES DEL NÚMERO CT (detalle por material)
+        valores_ct = """
+        CREATE TABLE IF NOT EXISTS valores_ct (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,          -- Identificador único de la prueba valor CT
+            id_prueba INTEGER NOT NULL,                    -- Referencia a la prueba en la tabla principal
+            id_material INTEGER NOT NULL,                  -- Referencia al material en la tabla de materiales
+            promedio_hu REAL NOT NULL,                     -- Valor promedio medido en Hounsfield Units (HU)
+            error_absoluto REAL NOT NULL,                  -- Error absoluto entre el valor medido y el rango de referencia
+            error_relativo REAL NOT NULL,                  -- Error relativo en porcentaje
+
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE,
+            FOREIGN KEY (id_material) REFERENCES materiales_ct(id_material),
+            UNIQUE(id_prueba, id_material)
+        );"""
+
+        # Catálogo de regiones para uniformidad
+        regiones_uniformidad = """
+        CREATE TABLE IF NOT EXISTS regiones_uniformidad ( 
+            id_region INTEGER PRIMARY KEY,                 -- Identificador único de la región
+            nombre_region VARCHAR(20) NOT NULL UNIQUE,     -- Nombre descriptivo de la región (Centro, Superior, Derecha, Inferior, Izquierda)
+            angulo INTEGER NOT NULL                        -- Ángulo asociado a la región (0, 90, 180, 270)
+        );"""
+
+        # Tabla para UNIFORMIDAD Y RUIDO (detalle por región)
+        uniformidad_ruido = """
+        CREATE TABLE IF NOT EXISTS uniformidad_ruido (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,          -- Identificador único de la prueba de uniformidad y ruido
+            id_prueba INTEGER NOT NULL,                    -- Referencia a la prueba en la tabla principal
+            id_region INTEGER NOT NULL,                    -- Referencia a la región en la tabla de regiones
+            hu_promedio REAL NOT NULL,                     -- Valor promedio medido en Hounsfield Units (HU) para la región
+            desviacion REAL NOT NULL,                      -- Desviación estándar de los valores medidos en la región
+
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_region) REFERENCES regiones_uniformidad(id_region),
+            UNIQUE(id_prueba, id_region)
+        );"""
+
+        # Tabla para resultados globales de uniformidad
+        uniformidad_global = """
+        CREATE TABLE IF NOT EXISTS uniformidad_global (
+            id_prueba INTEGER PRIMARY KEY,
+            max_diferencia REAL NOT NULL,              -- Diferencia máxima entre ROIs
+            desviacion_global REAL,                    -- Desviación estándar global
+            uniformity_index_max REAL,                -- |UI|max (%)
+            uniformity_index_roi VARCHAR(20),         -- ROI con peor UI
+            integral_non_uniformity REAL,             -- INU (fracción)
+            integral_non_uniformity_pct REAL,         -- INU (%)
+            pasa_ui BOOLEAN NOT NULL,                 -- UI <= threshold
+            pasa_inu BOOLEAN NOT NULL,                -- INU <= threshold  
+            pasa_global BOOLEAN NOT NULL,             -- Ambos criterios
+            ui_threshold_pct REAL,                    -- Umbral UI usado (2.0%)
+            inu_threshold_pct REAL,                   -- Umbral INU usado (2.0%)
+            hu_tolerancia REAL,                       -- Tolerancia HU usada (40.0)
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+        );  """
+
+        # Tabla para LINEALIDAD CT (pendiente de implementación)
+        linealidad_ct = """
+        CREATE TABLE IF NOT EXISTS linealidad_ct (
+            id_prueba INTEGER PRIMARY KEY,
+            pendiente REAL,                           -- Pendiente de la regresión
+            intercepto REAL,                          -- Intercepto
+            r_cuadrado REAL,                          -- Coeficiente de correlación²
+            referencia REAL,                          -- Valor de referencia calculado
+            escala_contraste REAL,                    -- 1/pendiente
+            num_materiales INTEGER,                   -- Cantidad de materiales usados
+            rango_hu_min REAL,                        -- HU mínimo del análisis
+            rango_hu_max REAL,                        -- HU máximo del análisis
+            linealidad_aceptable BOOLEAN,            -- r² >= 0.99
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+        );"""
+
+        cursor = self.con.cursor()
+        cursor.execute(tipos_prueba)
+        cursor.execute(pruebas)
+        cursor.execute(espesor_corte)
+        cursor.execute(tamaño_pixel)
+        cursor.execute(rois_contraste)
+        cursor.execute(resolucion_contraste)
+        cursor.execute(resolucion_espacial)
+        cursor.execute(resolucion_espacial_regiones)
+        cursor.execute(materiales_ct)
+        cursor.execute(valores_ct)
+        cursor.execute(regiones_uniformidad)
+        cursor.execute(uniformidad_ruido)
+        cursor.execute(uniformidad_global)
+        cursor.execute(linealidad_ct)
+        self.con.commit()
+
+    def crearTablasAnuales(self):
+        energias = """
+            CREATE TABLE IF NOT EXISTS energias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                energia TEXT
+            )
+        """
+        # ------------------------------------------ 600 e ix ------------------------------------------
+        tabla_factor_campo = """
+            CREATE TABLE IF NOT EXISTS tabla_factor_campo (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER, 
+                id_energia INTEGER,
+                tamano_campo TEXT,
+                factor_campo REAL,
+                factor_campo_esperado REAL,
+                discrepancia REAL,
+                FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY (id_energia) REFERENCES energias(id)
+            )
+        """
+
+        tabla_factores_transmision = """
+            CREATE TABLE IF NOT EXISTS tabla_factores_transmision (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER,
+                id_energia INTEGER,
+                angulo INTEGER,
+                factor_transmision REAL,
+                factor_transmision_esperado REAL,
+                discrepancia REAL,
+                FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY (id_energia) REFERENCES energias(id)
+            )"""
+        
+        tabla_factores_sobre_eje = """
+            CREATE TABLE IF NOT EXISTS tabla_factores_sobre_eje (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER,
+                id_energia INTEGER,
+                tam_pdd TEXT,
+                profundidad INTEGER,
+                ppd REAL,
+                ppd_esperado REAL,
+                discrepancia REAL,
+                FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY (id_energia) REFERENCES energias(id)
+            )"""
+        
+        tabla_control_camaras_monitoras = """
+            CREATE TABLE IF NOT EXISTS tabla_control_camaras_monitoras (    
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER,
+                id_energia INTEGER,
+                indicador_medir TEXT,
+                valor_medido REAL,
+                FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE CASCADE ON UPDATE CASCADE,
+                FOREIGN KEY (id_energia) REFERENCES energias(id)
+            )"""
+
+        # -----------------------------------------------------------------------------------------------
+
+        cursor = self.con.cursor()
+        cursor.execute(energias)
+        cursor.execute(tabla_factor_campo)
+        cursor.execute(tabla_factores_transmision)
+        cursor.execute(tabla_factores_sobre_eje)
+        cursor.execute(tabla_control_camaras_monitoras)
+        self.con.commit()
+
+    # Tablas para el Halcyon anual o mensual
+    def crearTablasHalcyon(self):
+        # Halcyon
+
+        tabla_fantomas = """
+        CREATE TABLE IF NOT EXISTS HC_fantomas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            modelo1 TEXT,
+            serie1 TEXT,
+            modelo2 TEXT,
+            serie2 TEXT,
+            modelo3 TEXT,
+            serie3 TEXT,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+
+        tabla_indi_colimador = """
+        CREATE TABLE IF NOT EXISTS HC_indicadores_colimador (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            nivel REAL,
+            valor_medido REAL,
+            discrepancia REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+
+        tabla_indi_brazo = """
+        CREATE TABLE IF NOT EXISTS HC_indicadores_brazo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            nivel REAL,
+            valor_medido REAL,
+            discrepancia REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+        
+        tabla_indi_laser = """
+        CREATE TABLE IF NOT EXISTS HC_indicadores_laser (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            ubicacion TEXT,
+            concordancia REAL,
+            dif_isocentro REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+
+        tabla_indicadores_camilla = """
+        CREATE TABLE IF NOT EXISTS HC_indicadores_camilla (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            ubicacion TEXT,
+            desplazamiento REAL,
+            medido_cm REAL,
+            diferencia REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""    
+
+        tabla_desplazamiento_iso = """
+        CREATE TABLE IF NOT EXISTS HC_desplazamiento_isocentro_mensual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            ubicacion INTEGER,
+            teorico REAL,
+            medido REAL,
+            diferencia REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+
+        tabla_velocidad_multilaminas = """
+        CREATE TABLE IF NOT EXISTS HC_velocidad_multilaminas_anual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            banco TEXT,
+            velocidad_prom REAL,
+            desviacion_med REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+
+        tabla_precision_posicion_multilaminas = """
+        CREATE TABLE IF NOT EXISTS HC_precision_posicion_multilaminas_anual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            medida REAL,
+            esperada REAL,
+            discrepancia REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+
+        tabla_imagen_perfil_mlc = """
+        CREATE TABLE IF NOT EXISTS HC_imagen_perfil_mlc_anual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            imagen BLOB,
+            imagen_perfil_horiz BLOB,
+            picos_perfil TEXT,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+
+        tabla_dosimetria_anual_hc = """CREATE TABLE IF NOT EXISTS HC_dosimetria_anual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            val_teo_discrepancia REAL,
+            dosis_ref_cgy_um INTEGER,
+            discrepancia_dosis INTEGER,
+            tolerancia_dosis INTEGER,
+            calidad_pdd20_10 INTEGER,
+            discrepancia_calidad INTEGER,
+            tolerancia_calidad INTEGER,
+            simetria_inplane INTEGER,
+            simetria_crossplane INTEGER,
+            tolerancia_simetria INTEGER,
+            planicidad_inplane INTEGER,
+            planicidad_crossplane INTEGER,
+            tolerancia_planicidad INTEGER,
+            observaciones_dosi TEXT,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )
+        """
+
+        tabla_linealidad_unidades_monitor = """
+        CREATE TABLE IF NOT EXISTS HC_linealidad_unidades_monitor_anual (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            UM TEXT,
+            Q1 REAL,
+            Q2 REAL,
+            Qprom REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+
+        tabla_tamanos_campo_radiacion = """
+        CREATE TABLE IF NOT EXISTS HC_tamanos_campo_radiacion (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER,
+            id_energia INTEGER,
+            indicado_inplane REAL,
+            indicado_crossplane REAL,
+            medido_inplane REAL,
+            medido_crossplane REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_energia) REFERENCES energias(id)
+        )"""
+        cursor = self.con.cursor()
+        cursor.execute(tabla_fantomas)
+        cursor.execute(tabla_indi_colimador)
+        cursor.execute(tabla_indi_brazo)
+        cursor.execute(tabla_indi_laser)
+        cursor.execute(tabla_indicadores_camilla)
+        cursor.execute(tabla_desplazamiento_iso)
+        cursor.execute(tabla_velocidad_multilaminas)
+        cursor.execute(tabla_precision_posicion_multilaminas)
+        cursor.execute(tabla_dosimetria_anual_hc)
+        cursor.execute(tabla_linealidad_unidades_monitor)
+        cursor.execute(tabla_tamanos_campo_radiacion)
+        cursor.execute(tabla_imagen_perfil_mlc)
+        self.con.commit()
+        
+    def crearTablasMLCs(self):
+        
+        configuracion_picketfence=""" 
+        CREATE TABLE IF NOT EXISTS configuracion_picketfence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER NOT NULL ,
+            fecha TEXT, 
+            equipo TEXT,
+            fisico_1 TEXT,
+            fisico_2 TEXT,
+            tolerancia REAL,
+            action_tolerance REAL,
+            imagen_mlc BLOB,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            )"""
+        error_picket = """ 
+        CREATE TABLE IF NOT EXISTS error_picket (
+            id  INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER NOT NULL,
+            picket INTEGER NOT NULL,
+            picket_mean_error REAL NOT NULL,
+            picket_max_error REAL NOT NULL,
+            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE CASCADE ON UPDATE CASCADE
+            
+        )
+        """
+        leaf_error = """ 
+        CREATE TABLE IF NOT EXISTS leaf_error (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER NOT NULL,
+            leaf INTEGER NOT NULL,
+            error REAL NOT NULL,
+            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """
+        highest_leaf_errors = """ 
+        CREATE TABLE IF NOT EXISTS highest_leaf_errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref integer NOT NULL,
+            leaf_out INTEGER NOT NULL,
+            picket_asociado INTEGER NOT NULL,
+            desviacion REAL,
+            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """
+        
+        # STARSHOT 
+        
+        configurar_starshot = """ 
+        CREATE TABLE IF NOT EXISTS configuracion_starshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref integer NOT NULL,
+            fecha TEXT,
+            equipo TEXT,
+            fisico_1 TEXT,
+            fisico_2 TEXT,
+            tolerancia REAL,
+            sid REAL,
+            imagen_mlc_spoke,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """
+      
+        angulos_starshot = """    
+        CREATE TABLE IF NOT EXISTS angulo_starshot (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ref INTEGER NOT NULL,
+        spoke_index INTEGER NOT NULL,
+        angulo_nominal_deg REAL NOT NULL,
+        angulo_real_deg REAL NOT NULL,
+        desviacion_deg REAL NOT NULL,
+        FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE, 
+        UNIQUE(ref, spoke_index)
+        )
+        """
+        
+        estadisticas_starshot = """ 
+        CREATE TABLE IF NOT EXISTS estadisticas_starshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref integer NOT NULL,
+            std_mm REAL, 
+            rms_mm REAL,
+            pm_95 REAL,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """
+        
+        angulos_entre_lineas_starshot = """ 
+        CREATE TABLE IF NOT EXISTS angulos_entre_lineas_starshot (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ref INTEGER NOT NULL,
+            separacion_ideal REAL,
+            error_separacion REAL,
+            FOREING KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )
+        """   
+        uniformidad_angular_starshot ="""
+            CREATE TABLE IF NOT EXISTS uniformidad_angular_starshot (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ref INTEGER NOT NULL,
+        gap_index INTEGER NOT NULL,
+        spoke_inicial INTEGER,
+        spoke_final INTEGER,
+        separacion_deg REAL,
+        separacion_ideal_deg REAL,
+        error_deg REAL,
+        FOREIGN KEY (ref) REFERENCES controles(id)
+            ON DELETE CASCADE
+            ON UPDATE CASCADE
+    )"""
+        
+        cursor = self.con.cursor()
+        
+        tablas = [configuracion_picketfence, error_picket, leaf_error, highest_leaf_errors, configurar_starshot, angulos_starshot, estadisticas_starshot, uniformidad_angular_starshot, angulos_entre_lineas_starshot]
+        
+        for tabla in tablas:
+            cursor.execute(tabla)
+        self.con.commit()
+        
+
+        
+            
+        
+        
+            
+        
+
+    "Aqui solo se está llenando la tabla de los usuarios"
+    def createAdmin(self):
+        try:
+            cur = self.con.cursor()
+            cur.execute("SELECT COUNT(*) FROM users WHERE user = ?", ("admin",))
+            if cur.fetchone()[0] == 0:  # Solo inserta si el admin no existe
+                sql_insert = "INSERT INTO users (user, password, fullname, active) VALUES (?, ?, ?, ?)"
+                encrypted_pass = encrypt_data("admin2025")
+                print("Contraseña encriptada:", encrypted_pass)
+                cur.execute(sql_insert, ("admin", encrypted_pass, "Administrador", 1))
+                self.con.commit()
+            cur.close()
+        except Exception as ex:
+            traceback.print_exc()
+            print("Error al crear admin:", ex)
+
+    def conectar(self): 
+        try:
+            return sqlite3.connect('BaseDatosQA.db', check_same_thread=False)
+        except Exception as e:
+            print("Error al obtener conexión nueva:", e)
+            return None

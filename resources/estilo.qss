@@ -1,0 +1,569 @@
+/* ------------------------- QLabel (sin borde) ------------------------- */
+QLabel {
+    color: #0a0a0a;
+    font-size: 14px;
+    font-weight: bold;
+    font-family: "Segoe UI";
+}
+
+/* ------------------------- QLineEdit ------------------------- */
+QLineEdit {
+    color: #0a0a0a;
+    border: 1px solid #338e9e;
+    border-radius: 12px;
+    background-color: #f4f4f4;
+    padding: 5px 10px;
+    font-size: 14px;
+}
+
+
+QLineEdit:focus {
+    border: 1px solid  #c1df08;  /* df0808 */
+}
+
+QLineEdit[error="true"] {
+    background-color: #ffe6e6;
+    border: 1px solid #ff4d4d;
+    color: #ff0000;
+}
+
+/* ------------------------- QPushButton (Estilo Sobrio) ------------------------- */
+QPushButton {
+    background-color: #5b9ea8;  /* Azul verdoso más oscuro */
+    color: white;
+    border-radius: 10px;  /* Menos curvatura */
+    padding: 6px 14px;  /* Botón más pequeño */
+    font-family: "Segoe UI";
+    font-size: 13px;
+    font-weight: medium;
+    border: none;
+}
+
+QPushButton:hover {
+    background-color: #4a8892; /* Un poco más oscuro al pasar el mouse */
+}
+
+QPushButton:pressed {
+    background-color: #2e5d66; /* Más oscuro al presionar */
+}
+
+/* Botón de minimizar */
+QPushButton#btn_minimizar{
+    border: none;
+    background: none;
+    qproperty-icon: url("resources/icons/minimize.png");
+    qproperty-iconSize: 10px 10px;
+}
+
+QPushButton#btn_minimizar:hover {
+    background-color: grey;
+}
+
+
+/* Botón de maximizar */
+#btn_maximizar {
+    border: none;
+    background: none;
+    qproperty-icon: url("resources/icons/maximize.png");
+    qproperty-iconSize: 10px 10px;
+}
+
+/* Botón de restaurar */
+#btn_restaurar {
+    border: none;
+    background: none;
+    qproperty-icon: url("resources/icons/restore.png");
+    qproperty-iconSize: 10px 10px;
+}
+
+#btn_restaurar:hover {
+    background-color: red;
+}
+
+/* Botón de cerrar */
+#btn_cerrar {
+    border: none;
+    background: none;
+    qproperty-icon: url("resources/icons/close.png");
+    qproperty-iconSize: 10px 10px;
+}
+
+#btn_cerrar:hover {
+    background-color: red;
+}
+
+
+/* ------------------------- QPushButton1 ------------------------- */
+QPushButton#boton_funciona {
+    background-color:rgb(181, 212, 0); /* Nuevo verde */
+    color: white;
+    border-radius: 12px;
+    padding: 6px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    font-family: "Segoe UI";
+    border: none;
+}
+
+QPushButton#boton_funciona:hover {
+    background-color: #b8c865; /* Verde más oscuro para hover */
+}
+
+QPushButton#boton_funciona:pressed {
+    background-color:rgb(116, 158, 38); /* Verde aún más oscuro para pressed */
+}
+
+/* ------------------------- QPushButton2 ------------------------- */
+QPushButton#boton_nofunciona {
+    font-family: "Segoe UI";
+    background-color: #ec2022; /* Rojo que contrasta bien con el nuevo verde */
+    color: white;
+    border-radius: 12px;
+    padding: 6px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+}
+
+QPushButton#boton_nofunciona:hover {
+    background-color: #f05050; /* Rojo más oscuro para hover */
+}
+
+QPushButton#boton_nofunciona:pressed {
+    background-color: #ce2e2e; /* Rojo aún más oscuro para pressed */
+} 
+
+QPushButton#boton_funciona[estado="selected"] {
+    background-color:  rgb(138, 189, 44);
+    color: white;
+}
+
+QPushButton#boton_funciona[estado="noselected"] {
+    background-color: #ced876; /* Verde grisáceo para disabled */
+    color: rgb(255, 255, 255);
+}
+
+QPushButton#boton_nofunciona[estado="selected"] {
+    background-color: #ce2e2e;
+    color: white;
+}
+QPushButton#boton_nofunciona[estado="noselected"] {
+    background-color: #e69696;
+    color: white;
+}
+
+QMenuBar {
+    margin: 0px;
+    padding: 0px;
+}
+
+/* ------------------------- QRadioButton ------------------------- */
+QRadioButton::indicator {
+    border: 2px solid #00B2BC; 
+    height: 16px;
+    width: 16px;
+    border-radius: 10px;
+}
+QRadioButton::indicator:checked {
+    background: qradialgradient(
+        cx:.5, cy:.5, radius: .7,
+        fx:.5, fy:.5,
+        stop:0 '#749e26;', 
+        stop:0.45 'rgb(116, 158, 38);',
+        stop:0.5 transparent,
+        stop:1 transparent
+    );
+}
+
+
+/* ------------------------- QToolBox ------------------------- */
+QToolBox::tab {
+    background-color: #e0e0e0;
+    color: #333;
+    padding: 2px;
+    border-radius: 10px;
+    font-family: "Segoe UI";
+    font-size: 14px;
+    
+}
+
+QToolBox::tab:selected {
+    background-color: #c1df08;
+    color: black;
+}
+
+QToolBox::tab:hover {
+    background-color: #d4d4d4;
+}
+
+/* ------------------------- QComboBox ------------------------- */
+/* Estilo general del QComboBox */
+QComboBox {
+    background-color: rgb(255, 253, 253);
+    padding: 5px;
+    font-size: 14px;
+    font-family: "Segoe UI";
+    color: #0a0a0a;
+    border: 1px solid #ccc;
+    border-radius: 18px;
+    outline: none; /* Elimina bordes azules de selección */
+}
+
+/* Cambia el color de fondo y texto mientras se está seleccionando */
+QComboBox:on {
+    font-weight: bold;
+    background-color: #c1df08;
+    color: #ffffff;
+}
+
+/* Estilo del desplegable */
+QComboBox::drop-down {
+    border-radius: 10px;
+    subcontrol-origin: padding;
+    subcontrol-position: right;
+    width: 20px;
+}
+
+/* Icono de flecha */
+QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+}
+
+/* Estilo del menú desplegable */
+QComboBox QAbstractItemView {
+    background-color: white;
+    border-radius: 6px;
+    selection-background-color: rgb(234, 244, 167);
+    selection-color: rgb(110, 122, 32);
+    padding: 5px;
+    outline: none;
+}
+
+/* Cambiar el color del texto al pasar el mouse */
+QComboBox QAbstractItemView::item:hover {
+    background-color: #eaf4a7;
+    color: rgb(110, 122, 32);
+}
+
+
+/* ------------------------- QScrollBar ------------------------- */
+
+/* Personalización de la barra de desplazamiento */
+QScrollBar:vertical {
+    border: none;
+    background: transparent;
+    width: 8px;
+    margin: 2px;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: transparent;
+    height: 8px; /* Altura de la barra */
+    margin: 2px 10px; /* Margen alrededor */
+}
+
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: #c1df08;
+    border-radius: 4px;
+    min-width: 25px; /* Tamaño mínimo del mango */
+}
+
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
+    background: #a8c907;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::add-line:horizontal, QScrollBar::sub-line:vertical {
+    background: none;
+    border: none;
+}
+
+
+
+/* ------------------------- QTabWidget ------------------------- */
+
+QTabWidget::pane {
+    border: 1px solid #c1df08; /* Borde más delgado */
+    background-color:rgb(255, 255, 255);
+    padding: 3px; /* Menos espacio interno */
+
+}
+
+QTabBar::tab {
+    background-color:rgb(234, 244, 167);
+    color: rgb(110, 122, 32) ;
+    padding: 4px 6px; /* Reducir espacio interno */
+    font-size: 12px;  /* Tamaño de fuente más pequeño */
+    font-weight: normal; /* Quitar negrita */
+    margin-right: 1px; /* Menos separación entre pestañas */
+    border-top-left-radius: 2px;
+    border-top-right-radius: 2px;
+    min-height: 10px;  /* Altura mínima */
+    min-width: 80px;   /* Ancho mínimo (opcional) */
+    
+}
+
+QTabBar::tab:selected {
+    background-color: #c1df08;
+    color: white;
+    font-weight: bold;
+}
+
+QTabBar::tab:hover {
+    background-color: #d4d4d4;
+}
+
+/* ------------------------- QTableWidget ------------------------- */
+
+/* Estilo general de la tabla */
+QTableWidget {
+    background-color: #f9fafb;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    gridline-color: #e0e0e0;
+    font-size: 14px;
+}
+
+/* Encabezado */
+QHeaderView::section {
+    background-color: #5b9ea8;
+    color: white;
+    font-weight: bold;
+    padding: 8px;
+    border: 1px solid #ddd;
+}
+
+/* Filas alternas */
+QTableWidget::item:nth-child(even) {
+    background-color: #ffffff;
+}
+QTableWidget::item:nth-child(odd) {
+    background-color: #f4f6f8;
+}
+
+/* Texto en azul para fechas */
+QTableWidget::item:selected {
+    background-color: #d1e8ff;
+    color: #0056b3;
+}
+
+/* Estado de 1 (Verde) */
+QTableWidgetItem[data-value="1"] {
+    background-color:rgb(206, 219, 141);
+    color: #abcd05;
+    border-radius: 4px;
+    padding: 4px;
+    text-align: center;
+}
+
+/* Estado de 0 (Rojo) */
+QTableWidgetItem[data-value="0"] {
+    background-color:rgb(229, 134, 134);
+    color: #ce2e2e;
+    border-radius: 4px;
+    padding: 4px;
+    text-align: center;
+}
+/* ------------------------- Table QLabel ------------------------- */
+
+
+QLabel[valor="1"] {
+    background-color:#cedb8d;
+    color:rgb(138, 189, 44);
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-weight: bold;
+    text-align: center;
+}
+
+QLabel[valor="0"] {
+    background-color:rgb(243, 159, 159);
+    color: #ce2e2e;
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-weight: bold;
+    text-align: center;
+}
+
+QLabel[dosis="verde"] { 
+    background-color: green; 
+    color: white; 
+    padding: 5px; 
+    border-radius: 5px; 
+}
+
+QLabel[dosis="amarillo"] { 
+    background-color: yellow; 
+    color: black; 
+    padding: 5px; 
+    border-radius: 5px; 
+}
+
+QLabel[dosis="rojo"] { 
+    background-color: red; 
+    color: white; 
+    padding: 5px; 
+    border-radius: 5px; 
+}
+
+/* ------------------------- Table QDateEdit ------------------------- */
+
+/* Estilo general del QDateEdit */
+QDateEdit {
+    border-radius: 13px;
+    background-color: rgb(255, 253, 253);
+    padding: 5px;
+    font-size: 14px;
+    color: #0a0a0a;
+    border: 1px solid #ccc;
+}
+
+/* Cuando se está interactuando */
+QDateEdit:on {
+    
+    background-color: rgb(110, 122, 32);
+    color: #ffffff;
+}
+
+/* Flecha del desplegable */
+QDateEdit::drop-down {
+    border: none;
+    subcontrol-origin: padding;
+    subcontrol-position: right;
+    width: 20px;
+}
+
+/* Icono de flecha */
+QDateEdit::down-arrow {
+    image: url(resources/icons/flecha-hacia-abajo.png);
+    width: 12px;
+    height: 12px;
+}
+
+/* ------------------------- Estilo para QDateTimeEdit ------------------------- */
+
+/* Estilo general del QDateTimeEdit */
+QDateTimeEdit {
+    border-radius: 13px;
+    background-color: rgb(255, 253, 253);
+    padding: 5px;
+    font-size: 14px;
+    color: #0a0a0a;
+    border: 1px solid #ccc;
+}
+
+/* Cuando se está interactuando */
+QDateTimeEdit:on {
+    background-color: rgb(110, 122, 32);
+    color: #ffffff;
+}
+
+/* Flecha del desplegable */
+QDateTimeEdit::drop-down {
+    border: none;
+    subcontrol-origin: padding;
+    subcontrol-position: right;
+    width: 20px;
+}
+
+/* Icono de flecha */
+QDateTimeEdit::down-arrow {
+    image: url(resources/icons/flecha-hacia-abajo.png);
+    width: 12px;
+    height: 12px;
+}
+
+/* Personalización del calendario emergente */
+QCalendarWidget {
+    background-color: white;
+    border-radius: 5px;
+}
+
+/* Cambiar color al pasar el mouse sobre los días */
+QCalendarWidget QAbstractItemView::item:hover {
+    background-color: rgb(234, 244, 167);
+    color: rgb(110, 122, 32);
+}
+
+/* Día seleccionado en el calendario */
+QCalendarWidget QAbstractItemView::item:selected {
+    background-color: rgb(110, 122, 32);
+    color: white;
+}
+
+/* Estilo del widget deshabilitado */
+QWidget:disabled {
+    color: gray;
+    background-color: #E0E0E0;
+}
+
+/* ------------------------- MLC Navigation Widget ------------------------- */
+#nav_mlc {
+    background-color: #5b9ea8;
+    border-radius: 6px;
+}
+
+#nav_mlc QLabel {
+    color: white;
+    font-size: 11px;
+    font-weight: normal;
+}
+
+#nav_mlc QPushButton {
+    background-color: transparent;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 13px;
+    font-weight: bold;
+    color: white;
+}
+
+#nav_mlc QPushButton:hover {
+    background-color: #4a8892;
+}
+
+#nav_mlc QPushButton:disabled {
+    color: #c1df08;
+}
+
+/* ------------------------- MLC Resumen Label ------------------------- */
+#lbl_resumen_mlc {
+    font-size: 12px;
+    font-weight: normal;
+    font-family: "Segoe UI";
+    border: 1px solid #338e9e;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+/* ------------------------- MLC Estado passed ------------------------- */
+QLabel[mlc_estado="passed"] {
+    color: rgb(138, 189, 44);
+    font-weight: bold;
+}
+
+QLabel[mlc_estado="failed"] {
+    color: #ec2022;
+    font-weight: bold;
+}
+
+/* ------------------------- MLC Tabla críticas ------------------------- */
+QTableWidget#tabla_criticas QTableWidgetItem {
+    font-size: 12px;
+}
+
+/* ------------------------- MLC Tab Selector ------------------------- */
+#tab_selector_mlc QPushButton {
+    background-color: transparent;
+    border: 1px solid #5b9ea8;
+    border-radius: 6px;
+    color: #5b9ea8;
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+#tab_selector_mlc QPushButton:checked {
+    background-color: #5b9ea8;
+    color: white;
+}

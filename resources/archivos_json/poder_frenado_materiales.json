@@ -1,0 +1,11 @@
+{
+    "energia_0.12MeV": {
+        "Aire":         {"poder_frenado": 0.145,   "densidad": 0.0013, "coeficiente_atenuacion": 0.00089 },
+        "PMP":          {"poder_frenado": 0.164,   "densidad": 0.83,   "coeficiente_atenuacion": 0.136   },
+        "LDPE":         {"poder_frenado": 0.164,   "densidad": 0.92,   "coeficiente_atenuacion": 0.136   },
+        "Poliestireno": {"poder_frenado": 0.155,   "densidad": 1.03,   "coeficiente_atenuacion": 0.160   },
+        "Acrilico":     {"poder_frenado": 0.156,   "densidad": 1.18,   "coeficiente_atenuacion": 0.184   },
+        "Delrin":       {"poder_frenado": 0.154,   "densidad": 1.42,   "coeficiente_atenuacion": 0.213   },
+        "Teflon":       {"poder_frenado": 0.141,   "densidad": 2.16,   "coeficiente_atenuacion": 0.305   }
+    }
+}
