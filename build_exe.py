@@ -16,7 +16,6 @@ hidden_imports = [
     "data.ManejoDatos.conection",
     "data.ManejoDatos.Tablas_Anuales.tablas_anuales",
     "ui.paginasControles.PruebasDiarias.PruebasDiarias",
-    "services.calculadora_actividad_braqui",
     "services.MLCs_calibration_service",
     "services.auditorias",
     "services.decoradores_audit",
