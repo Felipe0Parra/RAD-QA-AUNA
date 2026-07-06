@@ -1,6 +1,25 @@
 import sqlite3
-from data.ManejoDatos.encriptarInfo import encrypt_data 
+import sys
+import os
+from data.ManejoDatos.encriptarInfo import encrypt_data
 import traceback
+
+
+def ruta_base_datos():
+    """
+    Resuelve la ruta absoluta de BaseDatosQA.db anclada a la ubicación real del
+    ejecutable (o de la raíz del proyecto en desarrollo), en vez de depender del
+    directorio de trabajo actual del proceso (cwd). Antes de esta corrección, la
+    ruta relativa 'BaseDatosQA.db' hacía que la aplicación pudiera terminar
+    leyendo/escribiendo un archivo distinto según desde dónde se lanzara el
+    ejecutable, bifurcando los datos en dos copias divergentes con el tiempo.
+    """
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+    return os.path.join(base_dir, 'BaseDatosQA.db')
+
 
 class Conexion():
     _instance = None  # Variable de clase para almacenar una única instancia de la conexión
@@ -16,7 +35,7 @@ class Conexion():
         
         #print("Inicialización de la base de datos (Archivo: conection.py)")
         try:
-            self.con = sqlite3.connect('BaseDatosQA.db', check_same_thread=False)  # Evita errores de hilos
+            self.con = sqlite3.connect(ruta_base_datos(), check_same_thread=False)  # Evita errores de hilos
             self.createTable()
             #self.eliminar_tablas_cambio_fuente()
             self.crearTablasCambioFuente()
@@ -1202,9 +1221,9 @@ class Conexion():
             traceback.print_exc()
             print("Error al crear admin:", ex)
 
-    def conectar(self): 
+    def conectar(self):
         try:
-            return sqlite3.connect('BaseDatosQA.db', check_same_thread=False)
+            return sqlite3.connect(ruta_base_datos(), check_same_thread=False)
         except Exception as e:
             print("Error al obtener conexión nueva:", e)
             return None

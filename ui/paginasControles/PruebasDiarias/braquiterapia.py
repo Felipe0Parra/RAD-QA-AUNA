@@ -13,7 +13,7 @@ import tempfile
 import pandas as pd
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 from ui.paginasControles.PruebasMensuales.PruebasMensuales import PruebaMensualBraq
-from data.ManejoDatos.conection import Conexion
+from data.ManejoDatos.conection import Conexion, ruta_base_datos
 from PyQt5.QtWidgets import (QHBoxLayout, QVBoxLayout, QWidget, QToolBox, QPushButton, QLabel, QComboBox, QTableWidget, 
                             QTableWidgetItem, QMessageBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout, QDialog,
                             QDateEdit, QSplitter)
@@ -594,7 +594,7 @@ class PruebaDiariaBraq(PruebaBasico):
         -Calcular el tiempo transcurrido entre ese instante y la fecha actual
         """
         try:
-            conn = sqlite3.connect('BaseDatosQA.db')
+            conn = sqlite3.connect(ruta_base_datos())
             cursor = conn.cursor()
             if fecha is None:
                 current_datetime = self.date_box.dateTime().toPyDateTime()

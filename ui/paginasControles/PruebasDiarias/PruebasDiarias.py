@@ -6,6 +6,7 @@ from resources.utils.matplotlib_lazy import get_matplotlib_components
 from data.ManejoDatos.lectorWidgets import DataFront  #ya
 from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar, DialogAdminPermisoEditar
 from data.ManejoDatos.load import add_info, conectarfueradeservicio
+from data.ManejoDatos.conection import ruta_base_datos
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QRadioButton, QLabel, QLineEdit, 
                             QComboBox, QAbstractItemDelegate, QTableWidget, QTableWidgetItem, QHeaderView, 
                             QSizePolicy, QDateEdit, QDateTimeEdit, QSplitter, QMessageBox, QAbstractItemView, 
@@ -495,7 +496,7 @@ class PruebaBasico(QWidget):
         try:
             if not QSqlDatabase.contains("qt_sql_default_connection"):
                 db = QSqlDatabase.addDatabase("QSQLITE")
-                db.setDatabaseName("BaseDatosQA.db")
+                db.setDatabaseName(ruta_base_datos())
             else:
                 db = QSqlDatabase.database("qt_sql_default_connection")
 

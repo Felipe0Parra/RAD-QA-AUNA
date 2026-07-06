@@ -1,5 +1,6 @@
 from data.GraficasyTablas.calculadora_dosis_Tablas import *
 from services.dosis_service_calculations import *
+from data.ManejoDatos.conection import ruta_base_datos
 import sqlite3
 from typing import Optional, Dict, List
 class DosisService():
@@ -156,12 +157,12 @@ class DosisService():
                 kq_factor = y0 + (y1-y0)*(r50-x0)/(x1-x0)
                 kq = round(kq_factor, 4)
                 return kq
-    DB_NAME = "BaseDatosQA.db"
-    
+    DB_NAME = "BaseDatosQA.db"  # se conserva solo por compatibilidad; la ruta real la resuelve ruta_base_datos()
+
     @classmethod
     def _get_connection(cls):
         """Get database connection"""
-        return sqlite3.connect(cls.DB_NAME)
+        return sqlite3.connect(ruta_base_datos())
     
     @classmethod
     def crear_tabla(cls):
