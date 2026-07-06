@@ -1,4 +1,5 @@
 import subprocess
+import sys
 
 hidden_imports = [
     # PAGINAS
@@ -34,7 +35,7 @@ hidden_imports = [
 ]
 
 cmd = [
-    "pyinstaller",
+    sys.executable, "-m", "PyInstaller",
     "--onedir",
     "--noconsole",
     "--clean",
