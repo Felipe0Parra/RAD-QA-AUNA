@@ -1,0 +1,4 @@
+# Dependencias exclusivas de desarrollo (tests).
+# NO instalar en el venv de build de Windows: el ejecutable no las necesita.
+#   pip install -r requirements-dev.txt
+pytest==9.1.1
