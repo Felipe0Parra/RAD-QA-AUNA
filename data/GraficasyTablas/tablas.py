@@ -46,7 +46,9 @@ def load_table(self, boolean_keys=None, dosis=None, maquina=""):
 
             elif dosis is not None and column_name in dosis and maquina != 'braqui':
                 if value is None or value == '':
-                    row += 1
+                    # Dosis vacía: la celda queda en blanco. Incrementar row aquí
+                    # (dentro del bucle de columnas) desalineaba el render de todos
+                    # los registros posteriores.
                     continue
                 item = QTableWidgetItem(str(value))
                 item.setTextAlignment(Qt.AlignCenter)

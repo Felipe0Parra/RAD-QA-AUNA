@@ -723,6 +723,12 @@ class PruebaBasico(QWidget):
 
         if not query.exec():
             QMessageBox.critical(self, "Error", f"Error al actualizar: {query.lastError().text()}")
+        elif query.numRowsAffected() == 0:
+            # Un UPDATE cuyo WHERE no coincide con ninguna fila no es error en SQL:
+            # antes se reportaba "actualizado correctamente" sin haber cambiado nada.
+            QMessageBox.warning(self, "Atención",
+                                f"Ningún registro con id {id_value} fue modificado: "
+                                "el cambio NO se guardó. Recargue la tabla e intente de nuevo.")
         else:
             db.commit()
             QMessageBox.information(self, "Éxito", "Registro actualizado correctamente.")
