@@ -1181,7 +1181,7 @@ class Conexion():
             ref INTEGER NOT NULL,
             separacion_ideal REAL,
             error_separacion REAL,
-            FOREING KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
         )
         """   
         uniformidad_angular_starshot ="""
