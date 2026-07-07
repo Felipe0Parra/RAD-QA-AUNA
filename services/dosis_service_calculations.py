@@ -93,9 +93,6 @@ def interpolar_coeficientes_ks(tabla, c):
     a0 = np.interp(c, xs, a0s)
     a1 = np.interp(c, xs, a1s)
     a2 = np.interp(c, xs, a2s)
-    print(a0)
-    print(a1)
-    print(a2)
 
     return a0, a1, a2
 

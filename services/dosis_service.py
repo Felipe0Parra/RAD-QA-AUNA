@@ -121,9 +121,8 @@ class DosisService():
     @staticmethod
     def interpolar_r50(camara, r50):
         datos = KQ_TPR_TABLE[camara]
-        
+
         xf = sorted(datos.keys())
-        print(xf)
         yf = [datos[x] for x in xf]
         if r50 < xf[0]:
             return yf[0]
@@ -141,9 +140,8 @@ class DosisService():
     @staticmethod
     def interpolar_kq0(camara, r50):
         datos = KQ_TPR_TABLE[camara]
-        
+
         xf = sorted(datos.keys())
-        print(xf)
         yf = [datos[x] for x in xf]
         if r50 < xf[0]:
             return yf[0]
