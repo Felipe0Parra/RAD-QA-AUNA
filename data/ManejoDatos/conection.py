@@ -5,6 +5,20 @@ from data.ManejoDatos.encriptarInfo import encrypt_data
 import traceback
 
 
+def ruta_datos(nombre_archivo):
+    """
+    Ruta absoluta para archivos de datos mutables (base de datos, JSON de
+    campos, etc.) anclada a la carpeta del ejecutable (congelado) o a la raíz
+    del proyecto (desarrollo), en vez de depender del directorio de trabajo
+    actual del proceso (cwd).
+    """
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    return os.path.join(base_dir, nombre_archivo)
+
+
 def ruta_base_datos():
     """
     Resuelve la ruta absoluta de BaseDatosQA.db anclada a la ubicación real del
@@ -14,11 +28,7 @@ def ruta_base_datos():
     leyendo/escribiendo un archivo distinto según desde dónde se lanzara el
     ejecutable, bifurcando los datos en dos copias divergentes con el tiempo.
     """
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-    return os.path.join(base_dir, 'BaseDatosQA.db')
+    return ruta_datos('BaseDatosQA.db')
 
 
 class Conexion():

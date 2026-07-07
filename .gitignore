@@ -5,3 +5,4 @@ __pycache__/
 *.pyo
 *.spec
 .venv/
+BaseDatosQA.db
