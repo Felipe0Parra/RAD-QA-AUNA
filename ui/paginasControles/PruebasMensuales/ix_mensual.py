@@ -3,7 +3,7 @@ from PyQt5.QtCore import Qt, QDate
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual
 from data.ManejoDatos.load import mostrar_controles_mensuales, encontrar_columnas
-from data.ManejoDatos.conection import Conexion
+from data.ManejoDatos.conection import Conexion, ruta_datos
 import json, traceback
 import os
 from mcc_PTW_read.mcc_read import read_mcc
@@ -356,6 +356,9 @@ class PruebaMensualIX(PruebaMensual600):
         Incluye campos de tolerancia (ln_tolerancia_*), que son comunes a todas las energías.
         """
         ENERGIAS_IX = ["6mv", "15mv", "6mev", "9mev", "12mev","15mev"]
+
+        # [0] Anclar el JSON de campos junto a la BD (independiente del cwd)
+        filename = ruta_datos(filename)
 
         # [1] Filtra QLineEdit para la prueba "dosimetria"
         df_lines = df.loc[(df.widget_type.str.contains('QLineEdit')) & (df.prueba == f'{typee}')]['nombres']
