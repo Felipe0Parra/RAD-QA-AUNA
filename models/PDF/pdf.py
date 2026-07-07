@@ -1096,6 +1096,31 @@ _WHITE     = colors.white
 _BLACK     = colors.black
 
 
+# ── Helpers de celda a nivel de módulo ────────────────────────────
+# La sección "Interpretación de métricas" de generar_reporte_pdf_multitabla_mensual
+# usa P()/Pl(), que solo existían como funciones anidadas dentro de
+# generar_reporte_mlc_pdf y generar_reporte_starshot_pdf (fuera de alcance allí:
+# NameError determinista al generar ese reporte). Las copias anidadas se conservan
+# intactas: dentro de sus funciones tienen prioridad de alcance, así que el
+# renderizado de los reportes MLC y Starshot no cambia.
+def P(text, bold=False, size=8):
+    s = getSampleStyleSheet()["Normal"].clone("tmp_c")
+    s.alignment = TA_CENTER
+    s.fontSize  = size
+    if bold:
+        return Paragraph(f"<b>{text}</b>", s)
+    return Paragraph(str(text), s)
+
+
+def Pl(text, bold=False, size=8):
+    s = getSampleStyleSheet()["Normal"].clone("tmp_l")
+    s.alignment = TA_LEFT
+    s.fontSize  = size
+    if bold:
+        return Paragraph(f"<b>{text}</b>", s)
+    return Paragraph(str(text), s)
+
+
 def _pass_color(value, tol, action):
     """Color semáforo para una celda de error."""
     if value > tol:
