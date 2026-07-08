@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import (
     QWidget, QFileDialog, QMessageBox, QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QGroupBox, QDateEdit, QComboBox, QCheckBox, QButtonGroup, QFrame, QScrollArea, QAction, QToolBar, QMenuBar
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QDate
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtGui import QPixmap, QIcon, QColor
 from data.ManejoDatos.user import Usuario
 from data.ManejoDatos.usuariosManager import UsuarioData
 from mcc_PTW_read import mcc_read
@@ -608,6 +608,7 @@ from services.equipos_service import EquiposService   # <- BD
 from mcc_PTW_read import mcc_read
 
 from models.PDF.reporte_calculadora_dos import generar_reporte_calibracion
+from services.trs398_excel import leer_trs398, comparar_trs398
 import pandas as pd
 class DialogCalculadoraDosis(QDialog):
     dosis_asignada = pyqtSignal(str, float)
@@ -957,12 +958,15 @@ class DialogCalculadoraDosis(QDialog):
 
         # Acciones
         self.act_importar = QAction("Importar MCC", self)
+        self.act_comparar_excel = QAction("Comparar con Excel TRS-398", self)
         self.act_graficar = QAction("Graficar perfiles", self)
         self.act_pdf = QAction("Generar reporte PDF", self)
 
         # Agregar a menús
         menu_archivo.addAction(self.act_importar)
+        menu_archivo.addAction(self.act_comparar_excel)
         self.act_importar.triggered.connect(self.import_mcc)
+        self.act_comparar_excel.triggered.connect(self.comparar_con_excel)
         self.act_pdf.triggered.connect(self.generar_reporte_fecha_seleccionada)
         
         menu_analisis.addAction(self.act_graficar)
@@ -1077,8 +1081,91 @@ class DialogCalculadoraDosis(QDialog):
         for clave, valor in dict2.items():
             print(f"  {clave!r}: {valor}")
         self.mapear_excel_a_ui(dict1)
-            
-    
+
+    def comparar_con_excel(self):
+        """Compara los resultados de la app con una hoja TRS-398 del OIEA.
+
+        Lee el .xls/.xlsx/.xlsm (multiplataforma, vía services.trs398_excel:
+        sin Excel ni win32com), recalcula las magnitudes con el mismo motor de
+        la calculadora a partir de las entradas crudas del archivo, y muestra
+        una tabla app-vs-Excel con estado por tolerancia. No modifica los
+        campos de la calculadora: es una herramienta de validación.
+        """
+        ruta, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar hoja TRS-398", "",
+            "Hojas TRS-398 (*.xls *.xlsx *.xlsm);;Todos los archivos (*)")
+        if not ruta:
+            return
+        try:
+            datos = leer_trs398(ruta)
+        except Exception as e:
+            QMessageBox.critical(
+                self, "No se pudo leer el archivo",
+                f"No fue posible leer la hoja TRS-398:\n{e}")
+            return
+
+        modelo = self.combo_modelos.currentData()
+        filas = comparar_trs398(datos, modelo_camara=modelo)
+        self._mostrar_dialogo_comparacion(datos, filas, modelo)
+
+    def _mostrar_dialogo_comparacion(self, datos, filas, modelo):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Comparación con hoja TRS-398")
+        dlg.resize(640, 360)
+        layout = QVBoxLayout(dlg)
+
+        encabezado = QLabel(
+            f"Archivo: <b>{datos['archivo']}</b><br>"
+            f"Cámara para kQ: <b>{modelo or '— (ninguna seleccionada)'}</b>")
+        encabezado.setTextFormat(Qt.RichText)
+        layout.addWidget(encabezado)
+
+        if modelo is None or not DosisService.camara_tiene_kq(modelo):
+            aviso = QLabel(
+                "⚠ Sin una cámara con coeficientes kQ seleccionada, las filas "
+                "kQ, D(zref) y D(zmax) no se pueden comparar.")
+            aviso.setWordWrap(True)
+            aviso.setStyleSheet("color: #a06a00;")
+            layout.addWidget(aviso)
+
+        tabla = QTableWidget(len(filas), 5, dlg)
+        tabla.setHorizontalHeaderLabels(
+            ["Magnitud", "App", "Excel", "Dif.", "Estado"])
+        tabla.verticalHeader().setVisible(False)
+        tabla.setEditTriggers(QTableWidget.NoEditTriggers)
+
+        verde, rojo, gris = QColor("#d6f5d6"), QColor("#f7d4d4"), QColor("#ececec")
+        for i, f in enumerate(filas):
+            app_txt = "—" if f["app"] is None else f"{f['app']:.5f}"
+            exc_txt = "—" if f["excel"] is None else f"{f['excel']:.5f}"
+            if not f["comparable"]:
+                dif_txt, estado, color = "—", "No comparable", gris
+            else:
+                dif_txt = f"{f['diferencia_rel']*100:.3f}%"
+                estado = "✓ OK" if f["ok"] else "✗ Difiere"
+                color = verde if f["ok"] else rojo
+            for col, texto in enumerate(
+                    [f["etiqueta"], app_txt, exc_txt, dif_txt, estado]):
+                item = QTableWidgetItem(texto)
+                item.setBackground(color)
+                tabla.setItem(i, col, item)
+
+        tabla.resizeColumnsToContents()
+        layout.addWidget(tabla)
+
+        n_ok = sum(1 for f in filas if f["ok"])
+        n_comp = sum(1 for f in filas if f["comparable"])
+        resumen = QLabel(f"Coinciden dentro de tolerancia: <b>{n_ok}/{n_comp}</b> "
+                         f"magnitudes comparables (tolerancia 0.1 %).")
+        resumen.setTextFormat(Qt.RichText)
+        layout.addWidget(resumen)
+
+        btn_cerrar = QPushButton("Cerrar")
+        btn_cerrar.clicked.connect(dlg.accept)
+        layout.addWidget(btn_cerrar)
+
+        dlg.exec_()
+
     def mapear_excel_a_ui(self, datos: dict):
         """
         Mapea los valores del diccionario importado del Excel

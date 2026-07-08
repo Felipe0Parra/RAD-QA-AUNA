@@ -187,3 +187,65 @@ class TestCamaraSinDatosKq:
         assert "manualmente" not in d.Kq_0.placeholderText()
         d.tpr2010.setText("0.68")
         assert d.Kq_0.text() == "0.99"
+
+
+HALCYON = os.path.expanduser(
+    "~/Documents/Archivos_UseApp/TRS-398 6 MV FFF Halcyon Dmax.xls")
+
+
+class TestComparacionConExcel:
+    """Flujo D3.3: menú 'Comparar con Excel TRS-398' sobre el diálogo real."""
+
+    def _parchear_dialogo_modal(self, d, monkeypatch, ruta):
+        """QFileDialog devuelve `ruta`; exec_ no bloquea; captura los filas."""
+        monkeypatch.setattr(
+            dialogs_mod.QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: (ruta, "")))
+        monkeypatch.setattr(dialogs_mod.QDialog, "exec_", lambda self: 0)
+        capturado = {}
+        orig = d._mostrar_dialogo_comparacion
+
+        def espia(datos, filas, modelo):
+            capturado["datos"], capturado["filas"], capturado["modelo"] = datos, filas, modelo
+            return orig(datos, filas, modelo)
+        monkeypatch.setattr(d, "_mostrar_dialogo_comparacion", espia)
+        return capturado
+
+    def test_cancelar_selector_no_hace_nada(self, dialogo, monkeypatch):
+        monkeypatch.setattr(
+            dialogs_mod.QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: ("", "")))
+        llamado = []
+        monkeypatch.setattr(dialogo, "_mostrar_dialogo_comparacion",
+                            lambda *a: llamado.append(True))
+        dialogo.comparar_con_excel()
+        assert not llamado
+
+    def test_extension_invalida_avisa_sin_reventar(self, dialogo, monkeypatch, tmp_path):
+        p = tmp_path / "x.txt"
+        p.write_text("no soy excel")
+        monkeypatch.setattr(
+            dialogs_mod.QFileDialog, "getOpenFileName",
+            staticmethod(lambda *a, **k: (str(p), "")))
+        dialogo.comparar_con_excel()
+        assert any(a[0] == "critical" for a in dialogo.avisos)
+
+    @pytest.mark.skipif(not os.path.exists(HALCYON),
+                        reason="archivo real del físico no disponible")
+    def test_halcyon_con_n31010_todo_ok(self, dialogo, monkeypatch):
+        seleccionar_camara(dialogo, "N31010")
+        cap = self._parchear_dialogo_modal(dialogo, monkeypatch, HALCYON)
+        dialogo.comparar_con_excel()
+        assert cap["modelo"] == "N31010"
+        for f in cap["filas"]:
+            assert f["comparable"], f["magnitud"]
+            assert f["ok"], f"{f['magnitud']} difiere"
+
+    @pytest.mark.skipif(not os.path.exists(HALCYON),
+                        reason="archivo real del físico no disponible")
+    def test_halcyon_sin_camara_compara_parcial(self, dialogo, monkeypatch):
+        cap = self._parchear_dialogo_modal(dialogo, monkeypatch, HALCYON)
+        dialogo.comparar_con_excel()  # sin cámara seleccionada
+        filas = {f["magnitud"]: f for f in cap["filas"]}
+        assert filas["kQ"]["comparable"] is False
+        assert filas["ktp"]["comparable"] is True and filas["ktp"]["ok"]

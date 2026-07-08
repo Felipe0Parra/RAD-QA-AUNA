@@ -170,3 +170,123 @@ def leer_trs398(ruta):
         "entradas": {k: lector.obtener(ref) for k, ref in CELDAS_ENTRADAS.items()},
         "calculados": {k: lector.obtener(ref) for k, ref in CELDAS_CALCULADAS.items()},
     }
+
+
+# Etiquetas legibles para la tabla de comparación.
+ETIQUETAS = {
+    "ktp":          "kTP (presión-temperatura)",
+    "kpol":         "kpol (polaridad)",
+    "ks":           "ks (recombinación)",
+    "Mq":           "Mq (lectura corregida)",
+    "kQ":           "kQ,Q0 (calidad del haz)",
+    "Dzref":        "D(zref) [Gy/UM]",
+    "dosis_maxima": "D(zmax) [Gy/UM]",
+}
+
+
+def _recalcular_con_app(entradas):
+    """Recalcula las magnitudes con el MISMO motor que usa la calculadora
+    (services.dosis_service) a partir de las entradas crudas del Excel.
+
+    Devuelve {clave: valor|None}. Un valor None significa "no recalculable"
+    (falta un dato de entrada, o kQ sin modelo de cámara conocido).
+    """
+    from services.dosis_service import DosisService
+
+    e = entradas
+    r = {}
+
+    def num(*claves):
+        vals = []
+        for c in claves:
+            v = e.get(c)
+            if v is None or v == "":
+                return None
+            try:
+                vals.append(float(v))
+            except (TypeError, ValueError):
+                return None
+        return vals
+
+    tp = num("T_clinica", "P_clinica", "T0", "P0")
+    r["ktp"] = DosisService.factor_tp(*tp) if tp else None
+
+    pol = num("Mplus", "Mminus")
+    r["kpol"] = DosisService.factor_k_polaridad(*pol) if pol else None
+
+    rec = num("M1_recomb", "M2_recomb", "a0", "a1", "a2")
+    if rec:
+        m1, m2, a0, a1, a2 = rec
+        r["ks"] = DosisService.Ks_factor(a0, a1, a2, DosisService.cociente_M1M2(m1, m2))
+    else:
+        r["ks"] = None
+
+    coc = num("lectura_V1", "unidades_monitor")
+    cociente = DosisService.cociente_ldv1_um(*coc) if coc else None
+    if cociente is not None and None not in (r["ktp"], r["kpol"], r["ks"]):
+        r["Mq"] = DosisService.calcular_mq_fot(cociente, r["ktp"], r["kpol"], r["ks"])
+    else:
+        r["Mq"] = None
+
+    # kQ requiere el modelo de cámara (la clave que resuelve KQ_TPR_TABLE).
+    modelo = e.get("_modelo_camara")
+    tpr = num("tpr2010")
+    if modelo and tpr and DosisService.camara_tiene_kq(modelo):
+        r["kQ"] = DosisService.interpolar_kq0(modelo, tpr[0])
+    else:
+        r["kQ"] = None
+
+    cal = num("factor_calibracion")
+    if cal and None not in (r["Mq"], r["kQ"]):
+        r["Dzref"] = DosisService.calcular_dwref(cal[0], r["Mq"], r["kQ"])
+    else:
+        r["Dzref"] = None
+
+    pdd = num("PDD_zref")
+    if r["Dzref"] is not None and pdd:
+        r["dosis_maxima"] = DosisService.dwqzmax_calc(r["Dzref"], pdd[0])
+    else:
+        r["dosis_maxima"] = None
+
+    return r
+
+
+def comparar_trs398(datos_excel, modelo_camara=None, tolerancia_rel=0.001):
+    """Compara los valores calculados por la app vs los del Excel.
+
+    Args:
+        datos_excel: dict devuelto por leer_trs398().
+        modelo_camara: modelo de cámara seleccionado en la calculadora
+            (necesario para recalcular kQ y, por lo tanto, D(zref)/D(zmax)).
+        tolerancia_rel: tolerancia relativa; el redondeo interno de la app
+            (4-6 decimales) frente a la precisión completa del Excel produce
+            diferencias diminutas — 0.1 % las cubre con holgura.
+
+    Returns:
+        Lista de filas dict: magnitud, etiqueta, app, excel, diferencia_rel,
+        comparable (ambos valores presentes) y ok (dentro de tolerancia).
+    """
+    entradas = dict(datos_excel["entradas"])
+    entradas["_modelo_camara"] = modelo_camara
+    app = _recalcular_con_app(entradas)
+    excel = datos_excel["calculados"]
+
+    filas = []
+    for clave in CELDAS_CALCULADAS:
+        va, vx = app.get(clave), excel.get(clave)
+        comparable = va is not None and vx is not None
+        dif = ok = None
+        if comparable:
+            vx_f = float(vx)
+            dif = abs(va - vx_f) / abs(vx_f) if vx_f != 0 else abs(va - vx_f)
+            ok = dif <= tolerancia_rel
+        filas.append({
+            "magnitud": clave,
+            "etiqueta": ETIQUETAS[clave],
+            "app": va,
+            "excel": float(vx) if vx is not None else None,
+            "diferencia_rel": dif,
+            "comparable": comparable,
+            "ok": ok,
+        })
+    return filas

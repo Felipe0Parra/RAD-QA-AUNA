@@ -18,8 +18,28 @@ import openpyxl
 import pytest
 
 from services.trs398_excel import (
-    leer_trs398, CELDAS_ENTRADAS, CELDAS_CALCULADAS, _ref_a_indices, _normalizar,
+    leer_trs398, comparar_trs398, CELDAS_ENTRADAS, CELDAS_CALCULADAS,
+    _ref_a_indices, _normalizar,
 )
+
+# Caso realista: entradas del Halcyon con sus valores calculados por el Excel.
+# Sirve para probar comparar_trs398 sin depender del archivo real.
+DATOS_HALCYON = {
+    "archivo": "test.xls",
+    "entradas": {
+        "T_clinica": 21.1, "P_clinica": 85.13, "T0": 22.0, "P0": 101.325,
+        "Mplus": 5.525, "Mminus": 5.6, "M1_recomb": 5.525, "M2_recomb": 5.447,
+        "a0": 1.198, "a1": -0.8753, "a2": 0.6773,
+        "lectura_V1": 5.525, "unidades_monitor": 200.0,
+        "tpr2010": 0.626, "factor_calibracion": 0.3034, "PDD_zref": 100.0,
+    },
+    "calculados": {
+        "ktp": 1.1866096830385666, "kpol": 1.006787330316742,
+        "ks": 1.0070023695467674, "Mq": 0.03323367808333775,
+        "kQ": 0.9964, "Dzref": 0.010046798777934927,
+        "dosis_maxima": 0.010046798777934927,
+    },
+}
 
 CARPETA_REAL = os.path.expanduser("~/Documents/Archivos_UseApp")
 HALCYON = os.path.join(CARPETA_REAL, "TRS-398 6 MV FFF Halcyon Dmax.xls")
@@ -96,6 +116,59 @@ class TestHelpers:
     ])
     def test_normalizar(self, entrada, esperado):
         assert _normalizar(entrada) == esperado
+
+
+class TestComparacion:
+    def test_con_modelo_todo_comparable_y_ok(self):
+        filas = comparar_trs398(DATOS_HALCYON, modelo_camara="N31010")
+        assert len(filas) == len(CELDAS_CALCULADAS)
+        for f in filas:
+            assert f["comparable"], f["magnitud"]
+            assert f["ok"], f"{f['magnitud']} difiere: {f['diferencia_rel']}"
+            assert f["diferencia_rel"] < 0.001
+
+    def test_sin_modelo_kq_y_dependientes_no_comparables(self):
+        filas = {f["magnitud"]: f for f in comparar_trs398(DATOS_HALCYON)}
+        # Sin modelo de cámara no hay kQ, y sin kQ no hay Dzref ni dosis
+        assert filas["kQ"]["comparable"] is False
+        assert filas["Dzref"]["comparable"] is False
+        assert filas["dosis_maxima"]["comparable"] is False
+        # Los que no dependen de kQ sí se comparan
+        for clave in ("ktp", "kpol", "ks", "Mq"):
+            assert filas[clave]["comparable"] is True
+            assert filas[clave]["ok"] is True
+
+    def test_detecta_discrepancia_fuera_de_tolerancia(self):
+        datos = {
+            "archivo": "x", "entradas": dict(DATOS_HALCYON["entradas"]),
+            "calculados": dict(DATOS_HALCYON["calculados"]),
+        }
+        datos["calculados"]["ktp"] = 1.25  # ~5 % de diferencia, muy fuera
+        filas = {f["magnitud"]: f for f in comparar_trs398(datos, modelo_camara="N31010")}
+        assert filas["ktp"]["comparable"] is True
+        assert filas["ktp"]["ok"] is False
+        assert filas["ktp"]["diferencia_rel"] > 0.001
+
+    def test_excel_con_valor_none_no_es_comparable(self):
+        datos = {
+            "archivo": "x", "entradas": dict(DATOS_HALCYON["entradas"]),
+            "calculados": dict(DATOS_HALCYON["calculados"]),
+        }
+        datos["calculados"]["kQ"] = None  # como el .xlsm real (#NAME?)
+        filas = {f["magnitud"]: f for f in comparar_trs398(datos, modelo_camara="N31010")}
+        assert filas["kQ"]["comparable"] is False
+        assert filas["kQ"]["app"] is not None  # la app sí lo calcula
+        assert filas["kQ"]["excel"] is None
+
+    def test_entrada_faltante_deja_magnitud_no_comparable(self):
+        datos = {
+            "archivo": "x", "entradas": dict(DATOS_HALCYON["entradas"]),
+            "calculados": dict(DATOS_HALCYON["calculados"]),
+        }
+        datos["entradas"]["Mplus"] = None  # sin M+ no hay kpol
+        filas = {f["magnitud"]: f for f in comparar_trs398(datos, modelo_camara="N31010")}
+        assert filas["kpol"]["app"] is None
+        assert filas["kpol"]["comparable"] is False
 
 
 # ── Capa 2: validación opcional contra archivos reales ────────────────────
