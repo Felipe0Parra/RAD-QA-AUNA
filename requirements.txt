@@ -17,3 +17,10 @@ reportlab==4.4.2
 scipy==1.16.3
 
 openpyxl==3.1.5
+
+# Lectura de las hojas TRS-398 del OIEA sin Excel/win32com (Fase D3):
+# los .xls oficiales vienen cifrados con la contraseña por defecto de Excel
+# (VelvetSweatshop) y son BIFF8 -> msoffcrypto descifra y xlrd lee.
+# cryptography (dep de msoffcrypto) ya viene con pyAesCrypt.
+xlrd==2.0.2
+msoffcrypto-tool==6.0.0

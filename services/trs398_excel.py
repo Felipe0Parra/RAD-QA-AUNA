@@ -1,0 +1,172 @@
+"""Lector de las hojas de cálculo TRS-398 del OIEA (IAEA) — Fase D3.
+
+Reemplaza la lectura vía win32com/Excel de `DialogCalculadoraDosis.import_mcc`
+por un lector multiplataforma (Linux y Windows) que no depende de tener Excel
+instalado ni deja procesos EXCEL.EXE colgados.
+
+Las plantillas oficiales de TRS-398 son un formato FIJO: la hoja de interés se
+llama 'Sheet' y cada magnitud vive siempre en la misma celda (verificado
+idéntico entre las variantes 6 MV, 6 MV FFF Halcyon y 6 MV 600). Por eso el
+mapeo es por coordenada de celda, mucho más robusto que buscar por etiqueta
+(el método anterior fallaba con etiquetas duplicadas en la plantilla).
+
+Los `.xls` (BIFF8) vienen cifrados con la contraseña por defecto de Excel
+('VelvetSweatshop'): Excel los abre sin pedir clave, pero las librerías chocan
+con el cifrado. Se descifran con msoffcrypto antes de leer con xlrd. Los
+`.xlsx`/`.xlsm` se leen con openpyxl (data_only) — ojo: en la variante .xlsm
+kQ y Dzref quedan como '#NAME?' en caché porque dependen de macros de Excel;
+se devuelven como None y quien compare debe tolerarlo.
+"""
+import io
+import os
+import re
+
+# Contraseña por defecto con la que Excel "cifra" libros sin clave de usuario.
+_PASSWORD_POR_DEFECTO = "VelvetSweatshop"
+
+# Nombre de la hoja de trabajo dentro de la plantilla OIEA.
+_HOJA = "Sheet"
+
+# Mapeo celda -> clave lógica. Dos grupos:
+#   entradas crudas (para recalcular con el motor de la app) y
+#   valores ya calculados por el Excel (para la tabla de comparación).
+CELDAS_ENTRADAS = {
+    "acelerador":          "D6",
+    "potencial_nominal":   "I7",
+    "tpr2010":             "I8",
+    "tamano_campo":        "E10",
+    "zref":                "E11",
+    "serie_camara":        "H14",
+    "factor_calibracion":  "G19",   # N_D,w
+    "profundidad_calib":   "H21",
+    "P0":                  "C25",
+    "T0":                  "F25",
+    "humedad_calib":       "I25",
+    "V1_polarizante":      "D27",
+    "P_clinica":           "C41",
+    "T_clinica":           "F41",
+    "humedad_clinica":     "I41",
+    "lectura_V1":          "H37",   # dosímetro sin corregir a V1
+    "unidades_monitor":    "H38",
+    "M1_ratio":            "H39",   # lectura/UM
+    "kelec":               "F46",
+    "Mplus":               "F48",
+    "Mminus":              "J48",
+    "V1_recomb":           "F56",
+    "V2_recomb":           "I56",
+    "M1_recomb":           "F57",
+    "M2_recomb":           "I57",
+    "a0":                  "E60",
+    "a1":                  "G60",
+    "a2":                  "I60",
+    "zmax":                "H76",
+    "PDD_zref":            "H80",
+}
+
+CELDAS_CALCULADAS = {
+    "ktp":           "I43",
+    "kpol":          "I51",
+    "ks":            "I62",
+    "Mq":            "G67",   # lectura corregida a V1
+    "kQ":            "G70",   # factor de calidad del haz
+    "Dzref":         "G73",   # dosis en zref (Gy/MU)
+    "dosis_maxima":  "H83",   # dosis en zmax, montaje SSD (Gy/MU)
+}
+
+
+def _ref_a_indices(ref):
+    """'I43' -> (fila0, col0) en base 0."""
+    m = re.match(r"([A-Z]+)(\d+)", ref)
+    col = 0
+    for ch in m.group(1):
+        col = col * 26 + (ord(ch) - 64)
+    return int(m.group(2)) - 1, col - 1
+
+
+def _normalizar(valor):
+    """Limpia un valor de celda: '#NAME?'/errores -> None; recorta strings."""
+    if valor is None:
+        return None
+    if isinstance(valor, str):
+        v = valor.strip()
+        if v == "" or v.startswith("#"):   # #NAME?, #REF!, #VALUE!...
+            return None
+        return v
+    return valor
+
+
+class _LectorCeldas:
+    """Adapta xlrd u openpyxl a una interfaz común: obtener(ref) -> valor."""
+
+    def __init__(self, fn_celda):
+        self._fn = fn_celda
+
+    def obtener(self, ref):
+        fila, col = _ref_a_indices(ref)
+        try:
+            return _normalizar(self._fn(fila, col))
+        except IndexError:
+            return None
+
+
+def _abrir_xls(ruta):
+    import msoffcrypto
+    import xlrd
+
+    with open(ruta, "rb") as f:
+        off = msoffcrypto.OfficeFile(f)
+        if off.is_encrypted():
+            off.load_key(password=_PASSWORD_POR_DEFECTO)
+            buffer = io.BytesIO()
+            off.decrypt(buffer)
+            contenido = buffer.getvalue()
+        else:
+            f.seek(0)
+            contenido = f.read()
+
+    libro = xlrd.open_workbook(file_contents=contenido)
+    hoja = libro.sheet_by_name(_HOJA)
+    return _LectorCeldas(lambda fila, col: hoja.cell_value(fila, col))
+
+
+def _abrir_xlsx(ruta):
+    import openpyxl
+
+    libro = openpyxl.load_workbook(ruta, data_only=True, read_only=True)
+    hoja = libro[_HOJA]
+
+    def celda(fila, col):
+        # openpyxl es base 1; devuelve el valor cacheado (data_only)
+        return hoja.cell(row=fila + 1, column=col + 1).value
+
+    return _LectorCeldas(celda)
+
+
+def leer_trs398(ruta):
+    """Lee una hoja TRS-398 (.xls/.xlsx/.xlsm) y devuelve un dict:
+
+        {
+            "archivo": <nombre>,
+            "entradas":   {clave: valor, ...},   # datos crudos
+            "calculados": {clave: valor, ...},   # resultados del Excel
+        }
+
+    Lanza FileNotFoundError si la ruta no existe y ValueError si la extensión
+    no es reconocida. Celdas vacías o con error de fórmula devuelven None.
+    """
+    if not os.path.exists(ruta):
+        raise FileNotFoundError(ruta)
+
+    ext = os.path.splitext(ruta)[1].lower()
+    if ext == ".xls":
+        lector = _abrir_xls(ruta)
+    elif ext in (".xlsx", ".xlsm"):
+        lector = _abrir_xlsx(ruta)
+    else:
+        raise ValueError(f"Formato no soportado: {ext} (use .xls, .xlsx o .xlsm)")
+
+    return {
+        "archivo": os.path.basename(ruta),
+        "entradas": {k: lector.obtener(ref) for k, ref in CELDAS_ENTRADAS.items()},
+        "calculados": {k: lector.obtener(ref) for k, ref in CELDAS_CALCULADAS.items()},
+    }
