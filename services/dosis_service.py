@@ -119,6 +119,17 @@ class DosisService():
         return zref_r50(r50)
     
     @staticmethod
+    def camara_tiene_kq(camara):
+        """True si el modelo tiene coeficientes kQ(TPR20,10) en KQ_TPR_TABLE.
+
+        Guarda de la Fase D2: parte del inventario activo (N31014, N31022,
+        N34001, TN34001) aún no tiene fila en la tabla; la UI usa esto para
+        avisar y dejar el kQ en ingreso manual en vez de fallar. Al completar
+        KQ_TPR_TABLE la guarda se desactiva sola para ese modelo.
+        """
+        return camara in KQ_TPR_TABLE
+
+    @staticmethod
     def interpolar_r50(camara, r50):
         datos = KQ_TPR_TABLE[camara]
 

@@ -1,0 +1,189 @@
+"""Test de integración de DialogCalculadoraDosis (Fase D2).
+
+Maneja el diálogo REAL en modo offscreen simulando al físico: selecciona
+cámara y serie, llena los campos en orden y verifica que la cascada de
+señales produce la dosis correcta al final. Cubre los dos escenarios D2:
+
+1. Cámara CON coeficientes kQ (N31010): flujo de fotones completo,
+   kQ automático desde TPR20,10 y dosis máxima al final.
+2. Cámara SIN coeficientes (N31014): aviso claro al seleccionarla y,
+   crucialmente, el kQ ingresado a mano NO se borra al teclear el TPR
+   (antes de D2.1 sí se borraba: la interpolación fallida hacía clear()).
+
+EquiposService y QMessageBox van parcheados: sin base de datos real y sin
+diálogos modales que bloqueen la corrida.
+"""
+import os
+
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PyQt5.QtWidgets import QApplication, QWidget
+
+import ui.paginasGuia.dialogs as dialogs_mod
+from ui.paginasGuia.dialogs import DialogCalculadoraDosis
+
+EQUIPO_N31010 = {"id": 76, "equip_type": "Cámara de ionización", "model": "N31010",
+                 "serie": "1825", "calibr_fact": 5.397, "t_cal": 20.0,
+                 "p_cal": 101.325, "h_cal": 50.0}
+EQUIPO_N31014 = {"id": 7, "equip_type": "Cámara de ionización", "model": "N31014",
+                 "serie": "0453", "calibr_fact": 2.404, "t_cal": 20.0,
+                 "p_cal": 101.325, "h_cal": 50.0}
+EQUIPOS = (EQUIPO_N31010, EQUIPO_N31014)
+
+
+class VentanaIX(QWidget):
+    """Padre falso cuyo nombre termina en IX (el diálogo deduce el acelerador)."""
+
+
+@pytest.fixture(scope="module")
+def app():
+    return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture
+def dialogo(app, monkeypatch):
+    avisos = []
+
+    monkeypatch.setattr(
+        dialogs_mod.EquiposService, "obtener_modelos_unicos",
+        staticmethod(lambda: [{"model": e["model"], "equip_type": e["equip_type"]}
+                              for e in EQUIPOS]))
+    monkeypatch.setattr(
+        dialogs_mod.EquiposService, "obtener_series_por_modelo",
+        staticmethod(lambda m: [e for e in EQUIPOS if e["model"] == m]))
+    monkeypatch.setattr(
+        dialogs_mod.EquiposService, "obtener_por_id",
+        staticmethod(lambda i: next((e for e in EQUIPOS if e["id"] == i), None)))
+    for tipo in ("information", "warning", "critical"):
+        monkeypatch.setattr(
+            dialogs_mod.QMessageBox, tipo,
+            staticmethod(lambda *a, _t=tipo, **k: avisos.append((_t,) + a[1:3])))
+
+    d = DialogCalculadoraDosis(energias=[], parent=VentanaIX())
+    d.avisos = avisos
+    yield d
+    d.deleteLater()
+
+
+def seleccionar_camara(d, modelo, con_serie=True):
+    idx = d.combo_modelos.findData(modelo)
+    assert idx >= 0, f"{modelo} no está en el combo"
+    d.combo_modelos.setCurrentIndex(idx)
+    if con_serie:
+        d.combo_series.setCurrentIndex(1)  # única serie del modelo parcheado
+
+
+class TestFlujoFotonesConDatos:
+    """Cadena completa con N31010, la cámara con coeficientes kQ cargados."""
+
+    def test_cadena_completa_hasta_dosis_maxima(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N31010")
+
+        # Selección de serie carga la calibración del certificado
+        assert d.visualize_calib.text() == "5.397"
+        assert d.temp_0.text() == "20.0"
+        assert d.pressure_0.text() == "101.325"
+        assert not d.avisos, f"no debía haber avisos para N31010: {d.avisos}"
+
+        d.fotones.setChecked(True)
+        d.SSD.setChecked(True)
+        d.pulse.setChecked(True)
+
+        # Condiciones clínicas → kTP (valor pineado en la suite D1)
+        d.temp.setText("22.0")
+        d.pressure.setText("101.325")
+        assert d.ktp.text() == "1.0068"
+
+        # Lecturas del dosímetro → promedio, Mplus y M1
+        for campo in (d.lDV1_1, d.lDV1_2, d.lDV1_3):
+            campo.setText("12.437")
+        assert d.lDV1_prom.text() == "12.437"
+        assert d.Mplus.text() == "12.437"
+        assert d.lect_m1.text() == "12.437"
+
+        # Unidades monitor → cociente lectura/UM
+        d.unidades_monitor.setText("100")
+        assert d.cociente.text() == "0.12437"
+
+        # Polaridad: lecturas negativas simétricas → kpol = 1
+        for campo in (d.Mminus1, d.Mminus2, d.Mminus3):
+            campo.setText("-12.437")
+        assert d.Mminus.text() == "-12.437"
+        assert d.Kpol.text() == "1.0"
+
+        # Recombinación: V1/V2 = 4 → coeficientes de la tabla pulsados
+        d.tension_v1.setText("400")
+        d.tension_v2.setText("100")
+        assert d.cociente_tensiones.text() == "4.0"
+        assert (d.a0.text(), d.a1.text(), d.a2.text()) == ("1.022", "-0.3632", "0.3413")
+
+        # M1/M2 = 1 → ks = a0+a1+a2 (redondeo de tabla: 1.0001)
+        for campo in (d.lect_m2_1, d.lect_m2_2, d.lect_m2_3):
+            campo.setText("12.437")
+        assert d.lect_m2.text() == "12.437"
+        assert d.cociente_lecturas.text() == "1.0"
+        assert d.ks.text() == "1.0001"
+
+        # Mq = cociente·ktp·kpol·ks
+        assert d.MQvar.text() == "0.125228"
+
+        # TPR20,10 = 0.68 → kQ automático interpolado de KQ_TPR_TABLE
+        d.tpr2010.setText("0.68")
+        assert d.Kq_0.text() == "0.99"
+
+        # D(zref) = N_D,w · Mq · kQ y dosis máxima vía PDD
+        assert d.Dzref.text() == "0.669097"
+        d.pddzref.setText("66.6")
+        assert d.dosis_maxima.text() == "1.0046502"
+
+    def test_borrar_tpr_limpia_el_kq_automatico(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N31010")
+        d.fotones.setChecked(True)
+        d.tpr2010.setText("0.68")
+        assert d.Kq_0.text() == "0.99"
+        d.tpr2010.clear()
+        assert d.Kq_0.text() == ""  # kQ auto pendiente, sin valor fantasma
+
+
+class TestCamaraSinDatosKq:
+    """N31014 está activa en la BD pero sin fila en KQ_TPR_TABLE (guarda D2)."""
+
+    def test_avisa_al_seleccionar_modelo(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N31014", con_serie=False)
+        avisos_kq = [a for a in d.avisos if "coeficientes kQ" in a[1]]
+        assert len(avisos_kq) == 1, f"avisos: {d.avisos}"
+        assert "N31014" in avisos_kq[0][2]
+        assert "manualmente" in avisos_kq[0][2]
+        assert "manualmente" in d.Kq_0.placeholderText()
+
+    def test_kq_manual_sobrevive_al_teclear_tpr(self, dialogo):
+        """El bug corregido en D2.1: antes, cada tecla en TPR20,10 disparaba
+        una interpolación fallida (KeyError) que borraba el kQ manual."""
+        d = dialogo
+        seleccionar_camara(d, "N31014", con_serie=False)
+        d.fotones.setChecked(True)
+        d.Kq_0.setText("0.985")
+        d.tpr2010.setText("0.68")
+        assert d.Kq_0.text() == "0.985"
+
+    def test_kq_electrones_manual_sobrevive_al_teclear_r50(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N31014", con_serie=False)
+        d.electrones.setChecked(True)
+        d.Kq0r50_widget.setText("0.912")
+        d.R50.setText("4.0")
+        assert d.Kq0r50_widget.text() == "0.912"
+
+    def test_al_volver_a_camara_con_datos_se_restaura_el_flujo(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N31014", con_serie=False)
+        seleccionar_camara(d, "N31010")
+        d.fotones.setChecked(True)
+        assert "manualmente" not in d.Kq_0.placeholderText()
+        d.tpr2010.setText("0.68")
+        assert d.Kq_0.text() == "0.99"

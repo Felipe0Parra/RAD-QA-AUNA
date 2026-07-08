@@ -64,6 +64,23 @@ class TestCoeficientesKs:
         assert DosisService.Ks_factor(1.022, -0.3632, 0.3413, 1.006) == 1.002
 
 
+class TestGuardaCamaraTieneKq:
+    """Guarda D2: la UI la consulta antes de interpolar kQ. Es puro
+    membership en KQ_TPR_TABLE: al agregar la fila de una cámara, la
+    guarda se desactiva sola para ese modelo."""
+
+    def test_camara_con_datos(self):
+        assert DosisService.camara_tiene_kq("N31010") is True
+
+    @pytest.mark.parametrize("modelo", [
+        "N31014", "N31022", "TN31022", "N34001", "TN34001",
+        "N30013",  # su fila existe pero con la clave "30013" — sin verificar aún
+        None,
+    ])
+    def test_camaras_activas_sin_datos(self, modelo):
+        assert DosisService.camara_tiene_kq(modelo) is False
+
+
 class TestInterpolacionKQ:
     """interpolar_kq0 (redondeo 4) e interpolar_r50 (redondeo 5) comparten
     lógica y tabla KQ_TPR_TABLE; la UI usa la primera para el kQ mostrado."""

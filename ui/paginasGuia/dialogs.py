@@ -1162,7 +1162,8 @@ class DialogCalculadoraDosis(QDialog):
         equipo_layout.addWidget(self.combo_series)
         
         self.combo_modelos.currentIndexChanged.connect(self.on_modelo_cambiado)
-        self.combo_modelos.currentTextChanged.connect(self.actualizar_kCharge)
+        # actualizar_kCharge se conecta a combo_modelos en _setup_columna3
+        # (junto a tpr2010/pdds); conectarlo también aquí lo disparaba doble.
         self.combo_series.currentIndexChanged.connect(self.on_serie_cambiada)
         
         self.col1.addWidget(equipo_box)
@@ -1934,6 +1935,19 @@ class DialogCalculadoraDosis(QDialog):
         self.limpiar_datos_equipo()
         
         if modelo is not None:
+            if not DosisService.camara_tiene_kq(modelo):
+                # Guarda D2: sin fila en KQ_TPR_TABLE no hay kQ automático.
+                # Al completar la tabla para este modelo, el aviso desaparece solo.
+                self.Kq_0.setPlaceholderText("Sin coeficientes kQ para este modelo — ingrese el valor manualmente")
+                QMessageBox.information(
+                    self, "Modelo sin coeficientes kQ",
+                    f"El modelo {modelo} aún no tiene cargados los coeficientes "
+                    "kQ(TPR20,10) en el sistema, por lo que el cálculo automático "
+                    "de kQ,Q0 no está disponible por ahora.\n\n"
+                    "Puede ingresar el valor de kQ,Q0 manualmente en el campo "
+                    "correspondiente; el resto del cálculo funciona normal.")
+            else:
+                self.Kq_0.setPlaceholderText("Factor de calidad del haz (fotones),Ej: 0.998")
             try:
                 equipos = EquiposService.obtener_series_por_modelo(modelo)
                 
@@ -2560,6 +2574,8 @@ class DialogCalculadoraDosis(QDialog):
                 modo = "pulsados"
             elif self.pulse_scan.isChecked():
                 modo = "pulsados_y_barridos"
+            else:
+                return  # sin tipo de escaneo elegido, "modo" quedaba sin asignar
             a0, a1, a2 = DosisService.obtener_coeficientes_ks(modo, float(self.cociente_tensiones.text()))
             self.a0.setText(str(a0))
             self.a1.setText(str(a1))
@@ -2572,13 +2588,16 @@ class DialogCalculadoraDosis(QDialog):
     
     
     def Kq0_r50(self):
+        modelo = self.combo_modelos.currentData()
+        if modelo is None or not DosisService.camara_tiene_kq(modelo):
+            # Misma guarda que en actualizar_kCharge: el kQ de electrones
+            # queda en ingreso manual y no se pisa lo que escriba el físico.
+            return
         try:
             r50 = float(self.R50.text())
-            print(self.combo_modelos.currentData())
-            quality_result = DosisService.interpolar_r50(self.combo_modelos.currentData(), r50)
+            quality_result = DosisService.interpolar_r50(modelo, r50)
             self.Kq0r50_widget.setText(str(quality_result))
-        except Exception as e:
-            print(e)
+        except ValueError:
             self.Kq0r50_widget.clear()
             
     def calcular_mq(self):
@@ -2661,26 +2680,15 @@ class DialogCalculadoraDosis(QDialog):
             self.Kpol.clear()
             
     def actualizar_kCharge(self):
+        modelo = self.combo_modelos.currentData()
+        if modelo is None or not DosisService.camara_tiene_kq(modelo):
+            # Sin modelo o sin datos kQ: no tocar el campo, que queda en
+            # ingreso manual (antes esto borraba el valor escrito a mano).
+            return
         try:
-            # pdd20 = float(self.pdd20.text())
-            # pdd10 = float(self.pdd10.text())
-            # Q = DosisService.calcular_Q0(pdd20, pdd10)
-            print(self.combo_modelos.currentData())
-            A, Q0 = DosisService.get_AQ(self.combo_modelos.currentData())
-            a, b = DosisService.get_ab(self.combo_modelos.currentData())
-            print("Factor A", A)
-            print("Q", a)
-            print("Q0", b)
-            self.Kq_0.setText(str(round(DosisService.interpolar_kq0(self.combo_modelos.currentData(), float(self.tpr2010.text())), 5)))
-           
-            
-            
-            
-                
-            
-        except Exception as e:
-            print(f"Error en el calculo de kQ0, {e}")
-            self.Kq_0.clear()
+            self.Kq_0.setText(str(round(DosisService.interpolar_kq0(modelo, float(self.tpr2010.text())), 5)))
+        except ValueError:
+            self.Kq_0.clear()  # TPR20,10 vacío o no numérico: kQ auto pendiente
 
     def actualizar_v1v2(self):
         try:
