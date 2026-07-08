@@ -1151,6 +1151,7 @@ class DialogCalculadoraDosis(QDialog):
                 tabla.setItem(i, col, item)
 
         tabla.resizeColumnsToContents()
+        tabla.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         layout.addWidget(tabla)
 
         n_ok = sum(1 for f in filas if f["ok"])
