@@ -851,7 +851,12 @@ class DialogCalculadoraDosis(QDialog):
             self.acelerador_actual = "Hc"
         elif self.acelerador.endswith("600"):
             self.acelerador_actual = "Seiscientos"
-            
+        else:
+            # Padre de tipo no reconocido: sin esto, guardar_db y
+            # cargar_datos_desde_db revientan con AttributeError al leer
+            # self.acelerador_actual más adelante.
+            self.acelerador_actual = self.acelerador
+
         ####################### 
         self.setWindowTitle("Calculadora de Dosis de Referencia")
         self.dosis_calculada = None
@@ -2143,11 +2148,11 @@ class DialogCalculadoraDosis(QDialog):
                 
                 # Recombination data
                 if datos.get('lectura_m2_1'):
-                    self.lect_m2.setText(str(datos['lectura_m2_1']))
-                if datos.get('lectura_m2_1'):
-                    self.lect_m2.setText(str(datos['lectura_m2_2']))
-                if datos.get('lectura_m2_1'):
-                    self.lect_m2.setText(str(datos['lectura_m2_3']))
+                    self.lect_m2_1.setText(str(datos['lectura_m2_1']))
+                if datos.get('lectura_m2_2'):
+                    self.lect_m2_2.setText(str(datos['lectura_m2_2']))
+                if datos.get('lectura_m2_3'):
+                    self.lect_m2_3.setText(str(datos['lectura_m2_3']))
                 if datos.get('lectura_m2'):
                     self.lect_m2.setText(str(datos['lectura_m2']))
                 
@@ -2179,8 +2184,15 @@ class DialogCalculadoraDosis(QDialog):
                 
                 if datos.get('dosis_maxima'):
                     self.dosis_maxima.setText(str(datos['dosis_maxima']))
-                
-                
+
+                # Re-aplicar factor_calibracion: seleccionar Modelo_equipo y
+                # Numero_serie arriba dispara on_serie_cambiada -> cargar_datos_equipo(),
+                # que trae el factor VIGENTE del catálogo (services/equipos_service.py) y
+                # pisa el valor ya restaurado. Si el equipo fue recalibrado desde que se
+                # guardó este registro, el histórico debe ganar.
+                if datos.get('factor_calibracion'):
+                    self.visualize_calib.setText(str(datos['factor_calibracion']))
+
                 # Re-enable signals
                 self.blockSignals(False)
                 
@@ -2255,7 +2267,7 @@ class DialogCalculadoraDosis(QDialog):
             "lectura_m1": self.lect_m1.text(),
             "lectura_m2_1": self.lect_m2_1.text(),
             "lectura_m2_2": self.lect_m2_2.text(),
-            "lectura_m2_3": self.lect_m2_2.text(),
+            "lectura_m2_3": self.lect_m2_3.text(),
             "lectura_m2": self.lect_m2.text(),
             "cociente_lecturas": self.cociente_lecturas.text(),
             "a0": self.a0.text(),
