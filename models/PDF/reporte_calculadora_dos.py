@@ -27,8 +27,8 @@ except Exception:
 # crudo ("2000"/"rev1") es el que se persiste en la BD; aquí solo se traduce
 # para mostrar, sin mutar el dict `datos` que también usa guardar_datos.
 _ETIQUETAS_PROTOCOLO_TRS398 = {
-    "2000": "TRS-398 (2000)",
-    "rev1": "TRS-398 Rev.1 (2024) — provisional",
+    "2000": "TRS-398 (2000/2005)",
+    "rev1": "TRS-398 Rev.1 (2024)",
 }
 
 

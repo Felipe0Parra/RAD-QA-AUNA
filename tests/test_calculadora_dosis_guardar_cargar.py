@@ -247,10 +247,11 @@ class TestProtocoloTrs398(object):
         from models.PDF.reporte_calculadora_dos import datos_a_dataframe
 
         df_2000 = datos_a_dataframe({"protocolo_trs398": "2000"})
-        assert df_2000["Valores"].iloc[0] == "TRS-398 (2000)"
+        assert df_2000["Valores"].iloc[0] == "TRS-398 (2000/2005)"
 
         df_rev1 = datos_a_dataframe({"protocolo_trs398": "rev1"})
         assert "Rev.1" in df_rev1["Valores"].iloc[0]
+        assert "provisional" not in df_rev1["Valores"].iloc[0]
 
         # El código crudo persiste intacto en el dict de origen -- la
         # traducción es solo para mostrar en el PDF, no muta lo que se guarda.

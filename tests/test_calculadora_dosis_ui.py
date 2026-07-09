@@ -234,6 +234,19 @@ class TestSelectorProtocolo:
     def test_protocolo_default_es_2000(self, dialogo):
         assert dialogo.combo_protocolo.currentData() == "2000"
 
+    def test_etiquetas_del_selector_sin_provisional_y_con_2000_2005(self, dialogo):
+        """El usuario reportó (2026-07-09) que la palabra "provisional" no
+        aportaba (no se aprecia diferencia real al cambiar de protocolo,
+        ambos son opciones igual de válidas) y que el PDF de la TRS-398
+        más antigua que tiene fechada dice 2005, no 2000 (protocolo
+        original en inglés de 2000; traducción española oficial de 2005)."""
+        d = dialogo
+        idx_2000 = d.combo_protocolo.findData("2000")
+        idx_rev1 = d.combo_protocolo.findData("rev1")
+        assert d.combo_protocolo.itemText(idx_2000) == "TRS-398 (2000/2005)"
+        assert d.combo_protocolo.itemText(idx_rev1) == "TRS-398 Rev.1 (2024)"
+        assert "provisional" not in d.combo_protocolo.itemText(idx_rev1).lower()
+
     def test_n31010_cambia_de_2000_a_rev1_y_vuelve(self, dialogo):
         d = dialogo
         seleccionar_camara(d, "N31010")

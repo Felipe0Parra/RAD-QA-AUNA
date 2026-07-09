@@ -2040,9 +2040,14 @@ class DialogCalculadoraDosis(QDialog):
         de initGUI() para que el primer addItem (que dispara
         currentIndexChanged en cualquier QComboBox recién poblado) encuentre
         self.Kq_0 y self.combo_modelos ya creados. Default: "2000" (TRS-398
-        original, validado en D3 contra hoja real del físico)."""
-        self.combo_protocolo.addItem("TRS-398 (2000)", "2000")
-        self.combo_protocolo.addItem("TRS-398 Rev.1 (2024) — provisional", "rev1")
+        original, validado en D3 contra hoja real del físico). Etiqueta
+        "2000/2005": el protocolo original es de 2000 (inglés); la
+        traducción oficial española que circula en la institución (el PDF
+        que usa el físico) está fechada 2005 -- mismo protocolo, dos años
+        de portada distintos, para evitar la confusión reportada
+        2026-07-09 ("el PDF... dice 2005 no 2000")."""
+        self.combo_protocolo.addItem("TRS-398 (2000/2005)", "2000")
+        self.combo_protocolo.addItem("TRS-398 Rev.1 (2024)", "rev1")
 
     def _refrescar_guardia_kq(self, modelo):
         """Aviso/placeholder de kQ según si `modelo` tiene coeficientes en el
