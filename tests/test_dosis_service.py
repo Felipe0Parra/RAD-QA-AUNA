@@ -100,8 +100,32 @@ class TestInterpolacionKQ:
         assert DosisService.interpolar_kq0("N30010", 0.40) == 1.004
         assert DosisService.interpolar_kq0("N30010", 0.90) == 0.943
 
-    def test_interpolar_r50_misma_tabla_redondeo_5(self):
-        assert DosisService.interpolar_r50("N30010", 0.69) == 0.989
+    def test_interpolar_r50_usa_tabla_de_electrones(self):
+        """Corregido en la auditoría 2026-07-09: interpolar_r50 leía
+        KQ_TPR_TABLE (fotones); ahora lee la tabla kQ(R50) de electrones del
+        protocolo. Centinela real: la hoja de Enero/12 MeV del corpus 2024
+        (R50,w=5.2157) calcula kQ=0.9102745; el motor da 0.91027 (redondeo 5).
+        """
+        assert DosisService.interpolar_r50("N34001", 5.2157) == 0.91027
+
+    def test_interpolar_r50_nodo_exacto_y_default_2000(self):
+        assert DosisService.interpolar_r50("N34001", 5.0) == 0.912
+        assert DosisService.interpolar_r50("N34001", 5.0, protocolo="2000") == 0.912
+        assert DosisService.interpolar_r50("N34001", 5.0, protocolo="rev1") == 0.9127
+
+    def test_interpolar_r50_protocolo_invalido_lanza_keyerror(self):
+        with pytest.raises(KeyError):
+            DosisService.interpolar_r50("N34001", 5.0, protocolo="no-existe")
+
+    def test_camara_tiene_kq_electrones(self):
+        # Roos (ambas grafías) tiene fila en ambos protocolos.
+        assert DosisService.camara_tiene_kq_electrones("N34001") is True
+        assert DosisService.camara_tiene_kq_electrones("TN34001") is True
+        assert DosisService.camara_tiene_kq_electrones("N30013", protocolo="rev1") is True
+        # Cámaras de fotones NO tienen kQ de electrones: la guarda evita que
+        # la UI interpole la tabla equivocada (bug corregido 2026-07-09).
+        assert DosisService.camara_tiene_kq_electrones("N31010") is False
+        assert DosisService.camara_tiene_kq_electrones("N30013") is False  # solo rev1
 
     def test_camara_desconocida_lanza_keyerror(self):
         with pytest.raises(KeyError):

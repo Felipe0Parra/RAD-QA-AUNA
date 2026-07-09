@@ -133,8 +133,26 @@ class DosisService():
         return camara in KQ_TABLAS_POR_PROTOCOLO[protocolo]
 
     @staticmethod
-    def interpolar_r50(camara, r50):
-        datos = KQ_TPR_TABLE[camara]
+    def camara_tiene_kq_electrones(camara, protocolo="2000"):
+        """True si el modelo tiene fila kQ(R50) en la tabla de ELECTRONES del
+        protocolo. Guarda paralela a camara_tiene_kq (que es de fotones): la
+        UI la usa para dejar el kQ de electrones en ingreso manual cuando la
+        cámara no tiene datos, en vez de interpolar la tabla equivocada.
+        """
+        return camara in Q0_R50_TABLAS_POR_PROTOCOLO[protocolo]
+
+    @staticmethod
+    def interpolar_r50(camara, r50, protocolo="2000"):
+        """Interpola kQ(R50) para ELECTRONES desde la tabla del protocolo.
+
+        Corregido en la auditoría 2026-07-09: leía KQ_TPR_TABLE (la tabla de
+        FOTONES, indexada por TPR20,10 0.50-0.84) — cualquier R50 clínico
+        (1-20 g/cm2) caía fuera de rango y devolvía el kQ del borde en
+        silencio. Ahora lee Q0_R50_TABLAS_POR_PROTOCOLO: "2000" (Cuadro 18,
+        default, valida las 53 hojas de electrones del corpus 2024 con dif.
+        máx. 0.0006%) o "rev1" (Table 20). Protocolo desconocido -> KeyError.
+        """
+        datos = Q0_R50_TABLAS_POR_PROTOCOLO[protocolo][camara]
 
         xf = sorted(datos.keys())
         yf = [datos[x] for x in xf]
