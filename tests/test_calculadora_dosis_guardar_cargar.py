@@ -178,6 +178,127 @@ class TestIdaYVueltaCompleta:
         assert cargado.dosis_maxima.text() != ""
 
 
+class TestProtocoloTrs398(object):
+    """Fase K3: trazabilidad del protocolo (2000/Rev.1) en guardar↔cargar.
+
+    El selector de UI (combo_protocolo) nace en K4; hasta entonces
+    cargar_datos_desde_db lo restaura solo si existe (hasattr guard) y
+    guardar_db persiste "2000" por defecto. Aquí se prueba lo que YA es
+    real en K3: la columna persiste fielmente en la BD, Kq_0 se re-aplica
+    al final (gana sobre cualquier recálculo intermedio), y la ausencia de
+    la clave en un registro legado no rompe la carga.
+    """
+
+    def test_guardar_db_persiste_protocolo_2000_por_defecto(self, dialogo_factory):
+        original = llenar_flujo_fotones_completo(dialogo_factory())
+        assert not hasattr(original, "combo_protocolo")  # aún no existe (K4)
+        original.guardar_db()
+
+        fecha = original.date_edit.date().toString("dd/MM/yyyy")
+        datos_bd = dosis_service_mod.DosisService.buscar_por_fecha(fecha, original.acelerador_actual)
+        assert datos_bd["protocolo_trs398"] == "2000"
+
+    def test_round_trip_bd_preserva_protocolo_rev1(self, bd_temporal):
+        """Round-trip a nivel de BD (sin pasar por el widget, que no existe
+        aún): si el protocolo persistido es 'rev1', buscar_por_fecha lo
+        devuelve intacto -- la columna no trunca ni normaliza el valor."""
+        datos = {
+            "Fecha": "09/07/2026", "Acelerador": "Clinac ix", "equipo_id": 1,
+            "protocolo_trs398": "rev1",
+        }
+        assert dosis_service_mod.DosisService.guardar_datos(datos) is True
+        recuperado = dosis_service_mod.DosisService.buscar_por_fecha("09/07/2026", "Clinac ix")
+        assert recuperado["protocolo_trs398"] == "rev1"
+
+    def test_cargar_con_protocolo_rev1_sin_widget_no_revienta_y_kq_final_gana(
+            self, dialogo_factory):
+        """Simula un registro guardado con rev1 (adelantándose a K4): sin
+        combo_protocolo, cargar_datos_desde_db no debe fallar, y el Kq_0
+        restaurado debe ser el guardado (re-aplicado al final), no un
+        recálculo intermedio disparado por el cambio de modelo/serie."""
+        original = llenar_flujo_fotones_completo(dialogo_factory())
+        original.guardar_db()
+        fecha = original.date_edit.date().toString("dd/MM/yyyy")
+        datos_bd = dosis_service_mod.DosisService.buscar_por_fecha(fecha, original.acelerador_actual)
+        datos_bd["protocolo_trs398"] = "rev1"  # adelanta lo que K4 produciría
+
+        cargado = dialogo_factory()
+        cargado.cargar_datos_desde_db(datos_bd)  # no debe lanzar
+        assert cargado.Kq_0.text() == datos_bd["Kq_0"]
+
+    def test_registro_legado_sin_columna_protocolo_no_revienta(self, dialogo_factory):
+        """Un registro guardado ANTES de K3 no tiene la clave en absoluto
+        (dict.get devuelve None) -- cargar_datos_desde_db debe tratarlo como
+        '2000' internamente y no fallar."""
+        original = llenar_flujo_fotones_completo(dialogo_factory())
+        original.guardar_db()
+        fecha = original.date_edit.date().toString("dd/MM/yyyy")
+        datos_bd = dosis_service_mod.DosisService.buscar_por_fecha(fecha, original.acelerador_actual)
+        del datos_bd["protocolo_trs398"]  # simula registro legado pre-K3
+
+        cargado = dialogo_factory()
+        cargado.cargar_datos_desde_db(datos_bd)  # no debe lanzar
+        assert cargado.Kq_0.text() == datos_bd["Kq_0"]
+
+    def test_reporte_pdf_muestra_etiqueta_legible_del_protocolo(self):
+        from models.PDF.reporte_calculadora_dos import datos_a_dataframe
+
+        df_2000 = datos_a_dataframe({"protocolo_trs398": "2000"})
+        assert df_2000["Valores"].iloc[0] == "TRS-398 (2000)"
+
+        df_rev1 = datos_a_dataframe({"protocolo_trs398": "rev1"})
+        assert "Rev.1" in df_rev1["Valores"].iloc[0]
+
+        # El código crudo persiste intacto en el dict de origen -- la
+        # traducción es solo para mostrar en el PDF, no muta lo que se guarda.
+        datos_originales = {"protocolo_trs398": "rev1"}
+        datos_a_dataframe(datos_originales)
+        assert datos_originales["protocolo_trs398"] == "rev1"
+
+
+class TestMigracionColumnaProtocolo:
+    """Fase K3: _asegurar_columna sobre una BD de esquema viejo (sin la
+    columna protocolo_trs398), como sería cualquier copia de producción
+    desplegada antes de esta fase."""
+
+    def test_migracion_idempotente_sobre_esquema_viejo(self, bd_temporal):
+        import sqlite3
+        from services.dosis_service import DosisService
+
+        # Crear la tabla en su forma VIEJA (sin protocolo_trs398), como
+        # quedaría cualquier BD desplegada antes de K3.
+        con = sqlite3.connect(bd_temporal)
+        con.execute("""
+            CREATE TABLE calculadora_dosimetrica (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                Fecha TEXT, Acelerador TEXT
+            )
+        """)
+        con.execute("INSERT INTO calculadora_dosimetrica (Fecha, Acelerador) VALUES ('01/01/2026', 'Clinac ix')")
+        con.commit()
+        con.close()
+
+        # Primera corrida: agrega la columna.
+        assert DosisService.crear_tabla() is True
+        con = sqlite3.connect(bd_temporal)
+        cols_1 = [c[1] for c in con.execute("PRAGMA table_info('calculadora_dosimetrica')").fetchall()]
+        assert "protocolo_trs398" in cols_1
+        assert con.execute("SELECT COUNT(*) FROM calculadora_dosimetrica").fetchone()[0] == 1
+        valor = con.execute("SELECT protocolo_trs398 FROM calculadora_dosimetrica").fetchone()[0]
+        assert valor == "2000"  # backfill vía DEFAULT, fila preexistente
+        con.close()
+
+        # Segunda corrida: idempotente, no duplica la columna ni pierde datos.
+        assert DosisService.crear_tabla() is True
+        con = sqlite3.connect(bd_temporal)
+        cols_2 = [c[1] for c in con.execute("PRAGMA table_info('calculadora_dosimetrica')").fetchall()]
+        assert cols_2.count("protocolo_trs398") == 1
+        assert con.execute("SELECT COUNT(*) FROM calculadora_dosimetrica").fetchone()[0] == 1
+        integridad = con.execute("PRAGMA integrity_check").fetchone()[0]
+        assert integridad == "ok"
+        con.close()
+
+
 class TestAceleradorActualSiempreDefinido:
     """acelerador_actual se deriva del nombre de clase del padre; si no
     termina en IX/Hc/600 no debe quedar sin definir (AttributeError

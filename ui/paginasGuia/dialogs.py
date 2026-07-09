@@ -2151,9 +2151,23 @@ class DialogCalculadoraDosis(QDialog):
             if datos.get('Acelerador') == self.acelerador_actual:
                 # Block signals temporarily to avoid triggering calculations while loading
                 self.blockSignals(True)
-                
+
+                # Restaurar el PROTOCOLO ANTES que cualquier otro campo (modelo,
+                # TPR, etc.): combo_modelos.setCurrentIndex más abajo dispara
+                # on_modelo_cambiado (blockSignals(True) en self NO bloquea
+                # señales de widgets hijos - D2.2), que evalúa la guarda de kQ
+                # contra el protocolo ACTUALMENTE seleccionado. Si el protocolo
+                # se restaura después, esa evaluación usaría el protocolo
+                # equivocado. El widget combo_protocolo nace en K4; hasta
+                # entonces esto es un no-op defensivo.
+                if hasattr(self, "combo_protocolo"):
+                    protocolo_guardado = datos.get('protocolo_trs398') or '2000'
+                    idx_protocolo = self.combo_protocolo.findData(protocolo_guardado)
+                    if idx_protocolo >= 0:
+                        self.combo_protocolo.setCurrentIndex(idx_protocolo)
+
                 # Configuration fields
-                
+
                 if datos.get('factor_calibracion'):
                     self.visualize_calib.setText(str(datos['factor_calibracion']))
                 if datos.get('Modelo_equipo'):
@@ -2254,9 +2268,6 @@ class DialogCalculadoraDosis(QDialog):
                 if datos.get('Zmax'):
                     self.Zmax.setText(str(datos['Zmax']))
                 
-                if datos.get('Kq_0'):
-                    self.Kq_0.setText(str(datos['Kq_0']))
-                
                 # PDD values
                 if datos.get('pdd20'):
                     self.pdd20.setText(str(datos['pdd20']))
@@ -2280,6 +2291,14 @@ class DialogCalculadoraDosis(QDialog):
                 # guardó este registro, el histórico debe ganar.
                 if datos.get('factor_calibracion'):
                     self.visualize_calib.setText(str(datos['factor_calibracion']))
+
+                # Re-aplicar Kq_0 AL FINAL, mismo patrón que factor_calibracion:
+                # el cambio de Modelo_equipo/Numero_serie arriba pudo disparar la
+                # cascada de kQ automático (actualizar_kCharge) con el protocolo/
+                # TPR en un estado intermedio y recalcular un valor distinto. El
+                # kQ histórico guardado con el registro debe ganar siempre.
+                if datos.get('Kq_0'):
+                    self.Kq_0.setText(str(datos['Kq_0']))
 
                 # Re-enable signals
                 self.blockSignals(False)
@@ -2371,7 +2390,9 @@ class DialogCalculadoraDosis(QDialog):
             "pdd10": self.pdd10.text(),
             "pddzref": self.pddzref.text(),
             "tmrzref": self.tmrzref.text(),
-            "dosis_maxima": self.dosis_maxima.text()
+            "dosis_maxima": self.dosis_maxima.text(),
+            "protocolo_trs398": (self.combo_protocolo.currentData()
+                                  if hasattr(self, "combo_protocolo") else "2000"),
         }
             
             # Generate report

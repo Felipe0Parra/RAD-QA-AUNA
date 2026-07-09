@@ -22,11 +22,25 @@ except Exception:
 # -----------------------------
 # Adaptador: dict → DataFrame
 # -----------------------------
+
+# Etiquetas legibles para el reporte (trazabilidad P1, Fase K). El código
+# crudo ("2000"/"rev1") es el que se persiste en la BD; aquí solo se traduce
+# para mostrar, sin mutar el dict `datos` que también usa guardar_datos.
+_ETIQUETAS_PROTOCOLO_TRS398 = {
+    "2000": "TRS-398 (2000)",
+    "rev1": "TRS-398 Rev.1 (2024) — provisional",
+}
+
+
 def datos_a_dataframe(datos: dict) -> pd.DataFrame:
+    valores = [
+        _ETIQUETAS_PROTOCOLO_TRS398.get(v, v) if k == "protocolo_trs398" else v
+        for k, v in datos.items()
+    ]
     return pd.DataFrame({
         "": list(datos.keys()),
         "Evaluación": [None] * len(datos),
-        "Valores": list(datos.values())
+        "Valores": valores
     })
 
 

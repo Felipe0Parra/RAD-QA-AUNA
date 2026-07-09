@@ -243,18 +243,36 @@ class DosisService():
                     pdd10 TEXT,
                     pddzref TEXT,
                     tmrzref TEXT,
-                    dosis_maxima TEXT
+                    dosis_maxima TEXT,
+                    protocolo_trs398 TEXT DEFAULT '2000'
                 )
             """
-            
+
             cursor.execute(query)
+            cls._asegurar_columna(cursor, "calculadora_dosimetrica",
+                                   "protocolo_trs398", "TEXT DEFAULT '2000'")
             conn.commit()
             conn.close()
             return True
-            
+
         except Exception as e:
             print(f"Error creating table: {e}")
             return False
+
+    @staticmethod
+    def _asegurar_columna(cursor, tabla, columna, ddl):
+        """Migración mínima idempotente: agrega la columna si no existe.
+
+        Patrón del proyecto para cambios de esquema (no hay sistema de
+        migraciones, deuda conocida): `CREATE TABLE IF NOT EXISTS` solo cubre
+        bases de datos nuevas; las existentes (como copias de producción ya
+        desplegadas) necesitan un ALTER TABLE explícito. Con DEFAULT
+        constante, SQLite hace que las filas ya existentes devuelvan ese
+        valor al leerse sin necesidad de un UPDATE.
+        """
+        cols = [c[1] for c in cursor.execute(f"PRAGMA table_info('{tabla}')").fetchall()]
+        if columna not in cols:
+            cursor.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {ddl}")
     
     @classmethod
     def guardar_datos(cls, datos: Dict) -> bool:
