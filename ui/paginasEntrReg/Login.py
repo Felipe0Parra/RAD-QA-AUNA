@@ -148,7 +148,7 @@ class LoginPage(QMainWindow):
         self.forgot_label = QLabel('<a href="#">¿Olvidó su contraseña?</a>', self)
         self.forgot_label.setTextFormat(Qt.RichText)  # Para habilitar el HTML
         self.forgot_label.setAlignment(Qt.AlignCenter)
-        self.forgot_label.setGeometry(290, 301, 140, 15)
+        self.forgot_label.setGeometry(270, 301, 260, 20)
         self.forgot_label.setOpenExternalLinks(False)  # Evita abrir en navegador
         self.forgot_label.setCursor(QCursor(Qt.PointingHandCursor))  # Cambia el cursor a una mano
         self.forgot_label.linkActivated.connect(self.resetLoginFields)
@@ -177,7 +177,7 @@ class LoginPage(QMainWindow):
         --------------------------------------------------------------'''
         self.registro = QLabel('<a href="#">Crear usuario </a>', self)
         self.registro.setAlignment(Qt.AlignCenter)
-        self.registro.setGeometry(295, 375,70, 20)
+        self.registro.setGeometry(310, 375, 180, 20)
         self.registro.setOpenExternalLinks(False)  # Evita abrir en navegador
         self.registro.setCursor(QCursor(Qt.PointingHandCursor))  # Cambia el cursor a una mano
         self.registro.linkActivated.connect(self.displayAdminDialog)
