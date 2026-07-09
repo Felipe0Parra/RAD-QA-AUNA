@@ -2120,11 +2120,23 @@ class DialogCalculadoraDosis(QDialog):
                 
                 if equipos:
                     self.combo_series.addItem("-- Seleccione una serie --", None)
-                    
+
                     for equipo in equipos:
+                        # 2026-07-09: un mismo número de serie puede repetirse con
+                        # varios factores de calibración (recalibraciones históricas)
+                        # sin nada que los distinga en el desplegable -> se agrega
+                        # la fecha del certificado y si es la calibración vigente.
+                        # .get() defensivo: fixtures de test más viejos no traen
+                        # estas claves y deben seguir mostrando solo "Serie: X".
                         texto = f"Serie: {equipo['serie']}"
+                        fecha = equipo.get('fecha_calibr')
+                        if fecha:
+                            texto += f" — calibrado {fecha}"
+                        vigente = equipo.get('vigente')
+                        if vigente is not None:
+                            texto += " ✓ vigente" if vigente else " (no vigente)"
                         self.combo_series.addItem(texto, equipo['id'])
-                    
+
                     self.combo_series.setEnabled(True)
                 else:
                     QMessageBox.information(self, "Info", "No hay equipos registrados para este modelo")
