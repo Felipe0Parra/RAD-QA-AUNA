@@ -170,6 +170,36 @@ class TestCamaraSinDatosKq:
         assert "manualmente" in avisos_kq[0][2]
         assert "manualmente" in d.Kq_0.placeholderText()
 
+    def test_aviso_indica_marcar_fotones_si_kq0_aun_no_es_visible(self, dialogo):
+        """Bug reportado en pruebas Windows 2026-07-09: el aviso decía
+        'ingréselo en el campo correspondiente' pero Kq_0 nace oculto
+        (solo se muestra al marcar 'Fotones') -> el físico no encontraba
+        ninguna casilla habilitada. Sin marcar Fotones todavía, el mensaje
+        debe decir explícitamente que hay que marcarlo.
+
+        Nota: se usa isHidden(), no isVisible() -- este último exige que
+        TODA la cadena de ancestros esté mapeada en pantalla (siempre falso
+        aquí, porque el diálogo de test nunca llama a .show())."""
+        d = dialogo
+        assert d.Kq_0.isHidden()  # todavía no se marcó "Fotones"
+        seleccionar_camara(d, "N31014", con_serie=False)
+        avisos_kq = [a for a in d.avisos if "coeficientes kQ" in a[1]]
+        assert len(avisos_kq) == 1
+        assert "Fotones" in avisos_kq[0][2]
+
+    def test_aviso_no_pide_marcar_fotones_si_kq0_ya_es_visible(self, dialogo):
+        """Con 'Fotones' ya marcado (Kq_0 visible), el aviso vuelve al
+        mensaje original -- no hace falta redirigir a un campo que el
+        físico ya tiene delante."""
+        d = dialogo
+        d.fotones.setChecked(True)
+        assert not d.Kq_0.isHidden()
+        seleccionar_camara(d, "N31014", con_serie=False)
+        avisos_kq = [a for a in d.avisos if "coeficientes kQ" in a[1]]
+        assert len(avisos_kq) == 1
+        assert "Fotones" not in avisos_kq[0][2]
+        assert "manualmente" in avisos_kq[0][2]
+
     def test_kq_manual_sobrevive_al_teclear_tpr(self, dialogo):
         """El bug corregido en D2.1: antes, cada tecla en TPR20,10 disparaba
         una interpolación fallida (KeyError) que borraba el kQ manual."""

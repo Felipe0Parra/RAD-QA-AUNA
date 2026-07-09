@@ -2055,19 +2055,32 @@ class DialogCalculadoraDosis(QDialog):
         catálogo sobre el histórico (bug corregido en D2.2).
         """
         protocolo = self.combo_protocolo.currentData() if hasattr(self, "combo_protocolo") else "2000"
-        etiqueta_protocolo = self.combo_protocolo.currentText() if hasattr(self, "combo_protocolo") else "TRS-398 (2000)"
+        etiqueta_protocolo = self.combo_protocolo.currentText() if hasattr(self, "combo_protocolo") else "TRS-398 (2000/2005)"
         if not DosisService.camara_tiene_kq(modelo, protocolo):
             # Guarda D2 (extendida en K4 con el protocolo activo): sin fila en
             # la tabla del protocolo elegido no hay kQ automático. Al completar
             # esa tabla para este modelo, el aviso desaparece solo.
             self.Kq_0.setPlaceholderText("Sin coeficientes kQ para este modelo — ingrese el valor manualmente")
+            # El campo Kq_0 solo es visible tras marcar "Fotones" (mostrarWidget_PDD_Fotones).
+            # Si el usuario todavía no lo marcó, el mensaje genérico "ingréselo en el campo
+            # correspondiente" describe un campo que no puede ver (bug reportado 2026-07-09:
+            # "sale el mensaje... pero no hay ninguna casilla habilitada") -> instrucción explícita.
+            # isHidden() (no isVisible()) a propósito: isVisible() exige que TODA la cadena de
+            # ancestros esté mapeada en pantalla (falso en diálogos aún no mostrados con .show()),
+            # mientras que isHidden() refleja el flag explícito de setVisible() sin esa dependencia.
+            if not self.Kq_0.isHidden():
+                instruccion = ("Puede ingresar el valor de kQ,Q0 manualmente en el campo "
+                                "correspondiente; el resto del cálculo funciona normal.")
+            else:
+                instruccion = ('Marque "Fotones" en "Tipo de Radiación" para habilitar el '
+                                "campo kQ,Q0 e ingresarlo manualmente; el resto del cálculo "
+                                "funciona normal.")
             QMessageBox.information(
                 self, "Modelo sin coeficientes kQ",
                 f"El modelo {modelo} aún no tiene cargados los coeficientes "
                 f"kQ(TPR20,10) en {etiqueta_protocolo}, por lo que el cálculo "
                 "automático de kQ,Q0 no está disponible por ahora.\n\n"
-                "Puede ingresar el valor de kQ,Q0 manualmente en el campo "
-                "correspondiente; el resto del cálculo funciona normal.")
+                f"{instruccion}")
         else:
             self.Kq_0.setPlaceholderText("Factor de calidad del haz (fotones),Ej: 0.998")
 
