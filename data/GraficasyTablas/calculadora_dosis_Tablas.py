@@ -121,6 +121,9 @@ Q0_R50_TABLE = {
     }
 }
 
+# kQ(TPR20,10) para fotones, cámaras cilíndricas — copia literal del Cuadro 14 de la
+# TRS-398 original (OIEA, 2000; traducción española "Determinación de la dosis absorbida
+# en radioterapia con haces externos", Viena 2005), "adaptado de Andreo [20]".
 KQ_TPR_TABLE = {
 
     "23323 micro": {
@@ -171,12 +174,16 @@ KQ_TPR_TABLE = {
         0.76: 0.975, 0.78: 0.968, 0.80: 0.960, 0.82: 0.952, 0.84: 0.940
     },
 
+    # PTW 31002 flexible (Cuadro 14, TRS-398 2000). Posteriormente N31010.
     "N31002": {
         0.50: 1.003, 0.53: 1.002, 0.56: 1.000, 0.59: 0.999, 0.62: 0.997,
         0.65: 0.994, 0.68: 0.990, 0.70: 0.988, 0.72: 0.984, 0.74: 0.980,
         0.76: 0.975, 0.78: 0.968, 0.80: 0.960, 0.82: 0.952, 0.84: 0.940
     },
-    
+
+    # Copia de N31002 (PTW 31002 flexible) reetiquetada — la 31010 no existía en el
+    # Cuadro 14 (2000). Valores oficiales de la 31010 real: Rev.1 Tabla 16 (ver
+    # KQ_TPR_TABLE_REV1, protocolo "rev1").
     "N31010": {
         0.50: 1.003, 0.53: 1.002, 0.56: 1.000, 0.59: 0.999, 0.62: 0.997,
         0.65: 0.994, 0.68: 0.990, 0.70: 0.988, 0.72: 0.984, 0.74: 0.980,

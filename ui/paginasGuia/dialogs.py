@@ -1632,7 +1632,7 @@ class DialogCalculadoraDosis(QDialog):
         pol_layout.addWidget(self.Mplus)
         
         lbl_mm = QLabel(f"M- (Lectura negativa)")
-        lbl_mm = QLabel(f"M- Voltaje netativo")
+        lbl_mm = QLabel(f"M- Voltaje negativo")
         self.tension_neg = QLineEdit()
         
         
