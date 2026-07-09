@@ -179,19 +179,17 @@ class TestIdaYVueltaCompleta:
 
 
 class TestProtocoloTrs398(object):
-    """Fase K3: trazabilidad del protocolo (2000/Rev.1) en guardar↔cargar.
+    """Trazabilidad del protocolo (2000/Rev.1) en guardar↔cargar (Fases K3+K4).
 
-    El selector de UI (combo_protocolo) nace en K4; hasta entonces
-    cargar_datos_desde_db lo restaura solo si existe (hasattr guard) y
-    guardar_db persiste "2000" por defecto. Aquí se prueba lo que YA es
-    real en K3: la columna persiste fielmente en la BD, Kq_0 se re-aplica
-    al final (gana sobre cualquier recálculo intermedio), y la ausencia de
-    la clave en un registro legado no rompe la carga.
+    guardar_db persiste "2000" por defecto (índice 0 del selector, el
+    protocolo validado); cargar_datos_desde_db restaura el protocolo guardado
+    y re-aplica Kq_0 al final (gana sobre cualquier recálculo intermedio); un
+    registro legado sin la clave no rompe la carga.
     """
 
     def test_guardar_db_persiste_protocolo_2000_por_defecto(self, dialogo_factory):
         original = llenar_flujo_fotones_completo(dialogo_factory())
-        assert not hasattr(original, "combo_protocolo")  # aún no existe (K4)
+        assert original.combo_protocolo.currentData() == "2000"  # default (K4)
         original.guardar_db()
 
         fecha = original.date_edit.date().toString("dd/MM/yyyy")
@@ -210,26 +208,30 @@ class TestProtocoloTrs398(object):
         recuperado = dosis_service_mod.DosisService.buscar_por_fecha("09/07/2026", "Clinac ix")
         assert recuperado["protocolo_trs398"] == "rev1"
 
-    def test_cargar_con_protocolo_rev1_sin_widget_no_revienta_y_kq_final_gana(
+    def test_cargar_con_protocolo_rev1_restaura_selector_y_kq_final_gana(
             self, dialogo_factory):
-        """Simula un registro guardado con rev1 (adelantándose a K4): sin
-        combo_protocolo, cargar_datos_desde_db no debe fallar, y el Kq_0
-        restaurado debe ser el guardado (re-aplicado al final), no un
-        recálculo intermedio disparado por el cambio de modelo/serie."""
+        """Un registro guardado con rev1: al cargarlo en un diálogo nuevo
+        (que arranca en "2000" por default), el selector debe terminar en
+        "rev1" -- restaurado ANTES que combo_modelos/tpr2010, para que
+        cualquier cascada intermedia dispare on_modelo_cambiado/
+        actualizar_kCharge ya con el protocolo correcto -- y el Kq_0 final
+        debe ser el histórico guardado, no un recálculo intermedio."""
         original = llenar_flujo_fotones_completo(dialogo_factory())
         original.guardar_db()
         fecha = original.date_edit.date().toString("dd/MM/yyyy")
         datos_bd = dosis_service_mod.DosisService.buscar_por_fecha(fecha, original.acelerador_actual)
-        datos_bd["protocolo_trs398"] = "rev1"  # adelanta lo que K4 produciría
+        datos_bd["protocolo_trs398"] = "rev1"
 
         cargado = dialogo_factory()
-        cargado.cargar_datos_desde_db(datos_bd)  # no debe lanzar
+        assert cargado.combo_protocolo.currentData() == "2000"  # default antes de cargar
+        cargado.cargar_datos_desde_db(datos_bd)
+        assert cargado.combo_protocolo.currentData() == "rev1"
         assert cargado.Kq_0.text() == datos_bd["Kq_0"]
 
     def test_registro_legado_sin_columna_protocolo_no_revienta(self, dialogo_factory):
         """Un registro guardado ANTES de K3 no tiene la clave en absoluto
         (dict.get devuelve None) -- cargar_datos_desde_db debe tratarlo como
-        '2000' internamente y no fallar."""
+        '2000' internamente, dejar el selector en '2000' y no fallar."""
         original = llenar_flujo_fotones_completo(dialogo_factory())
         original.guardar_db()
         fecha = original.date_edit.date().toString("dd/MM/yyyy")
@@ -238,6 +240,7 @@ class TestProtocoloTrs398(object):
 
         cargado = dialogo_factory()
         cargado.cargar_datos_desde_db(datos_bd)  # no debe lanzar
+        assert cargado.combo_protocolo.currentData() == "2000"
         assert cargado.Kq_0.text() == datos_bd["Kq_0"]
 
     def test_reporte_pdf_muestra_etiqueta_legible_del_protocolo(self):

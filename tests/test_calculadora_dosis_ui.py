@@ -30,7 +30,10 @@ EQUIPO_N31010 = {"id": 76, "equip_type": "Cámara de ionización", "model": "N31
 EQUIPO_N31014 = {"id": 7, "equip_type": "Cámara de ionización", "model": "N31014",
                  "serie": "0453", "calibr_fact": 2.404, "t_cal": 20.0,
                  "p_cal": 101.325, "h_cal": 50.0}
-EQUIPOS = (EQUIPO_N31010, EQUIPO_N31014)
+EQUIPO_N31022 = {"id": 99, "equip_type": "Cámara de ionización", "model": "N31022",
+                 "serie": "3344", "calibr_fact": 3.100, "t_cal": 20.0,
+                 "p_cal": 101.325, "h_cal": 50.0}
+EQUIPOS = (EQUIPO_N31010, EQUIPO_N31014, EQUIPO_N31022)
 
 
 class VentanaIX(QWidget):
@@ -73,6 +76,12 @@ def seleccionar_camara(d, modelo, con_serie=True):
     d.combo_modelos.setCurrentIndex(idx)
     if con_serie:
         d.combo_series.setCurrentIndex(1)  # única serie del modelo parcheado
+
+
+def seleccionar_protocolo(d, codigo):
+    idx = d.combo_protocolo.findData(codigo)
+    assert idx >= 0, f"protocolo {codigo!r} no está en el selector"
+    d.combo_protocolo.setCurrentIndex(idx)
 
 
 class TestFlujoFotonesConDatos:
@@ -189,6 +198,67 @@ class TestCamaraSinDatosKq:
         assert d.Kq_0.text() == "0.99"
 
 
+class TestSelectorProtocolo:
+    """Fase K4: selector TRS-398 (2000/Rev.1) sobre el diálogo real."""
+
+    def test_protocolo_default_es_2000(self, dialogo):
+        assert dialogo.combo_protocolo.currentData() == "2000"
+
+    def test_n31010_cambia_de_2000_a_rev1_y_vuelve(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N31010")
+        d.fotones.setChecked(True)
+        d.tpr2010.setText("0.68")
+        assert d.Kq_0.text() == "0.99"  # tabla 2000 (default)
+
+        seleccionar_protocolo(d, "rev1")
+        assert d.Kq_0.text() == "0.9869"  # tabla Rev.1, valores oficiales de la 31010
+
+        seleccionar_protocolo(d, "2000")
+        assert d.Kq_0.text() == "0.99"  # vuelve a la tabla validada en D3
+
+    def test_n31022_sin_datos_en_2000_automatico_en_rev1(self, dialogo):
+        """N31022 está congelada en 2000 (guarda D2) pero SÍ tiene fila en
+        Rev.1 (Tabla 16) — el selector la habilita sin tocar código."""
+        d = dialogo
+        seleccionar_camara(d, "N31022", con_serie=False)
+        avisos_kq = [a for a in d.avisos if "coeficientes kQ" in a[1]]
+        assert len(avisos_kq) == 1, f"avisos: {d.avisos}"
+        assert "manualmente" in d.Kq_0.placeholderText()
+
+        d.fotones.setChecked(True)
+        n_avisos_antes = len(d.avisos)
+        seleccionar_protocolo(d, "rev1")
+        assert len(d.avisos) == n_avisos_antes, "no debía avisar de nuevo: rev1 sí tiene datos"
+        assert "manualmente" not in d.Kq_0.placeholderText()
+
+        d.tpr2010.setText("0.68")
+        assert d.Kq_0.text() == "0.9905"
+
+        seleccionar_protocolo(d, "2000")
+        assert "manualmente" in d.Kq_0.placeholderText()  # guarda activa otra vez
+        d.Kq_0.setText("0.985")  # kQ manual del físico
+        d.tpr2010.setText("0.70")  # re-teclear TPR no debe borrarlo (bug D2.1)
+        assert d.Kq_0.text() == "0.985"
+
+    def test_n31014_manual_sobrevive_al_cambiar_protocolo_y_teclear_tpr(self, dialogo):
+        """N31014 no está en NINGUNA tabla (ni 2000 ni Rev.1, verificado en
+        K2) — kQ manual siempre, sin importar el protocolo seleccionado."""
+        d = dialogo
+        seleccionar_camara(d, "N31014", con_serie=False)
+        d.fotones.setChecked(True)
+        d.Kq_0.setText("0.978")
+
+        seleccionar_protocolo(d, "rev1")
+        assert d.Kq_0.text() == "0.978"
+
+        d.tpr2010.setText("0.68")
+        assert d.Kq_0.text() == "0.978"
+
+        seleccionar_protocolo(d, "2000")
+        assert d.Kq_0.text() == "0.978"
+
+
 HALCYON = os.path.expanduser(
     "~/Documents/Archivos_UseApp/TRS-398 6 MV FFF Halcyon Dmax.xls")
 
@@ -249,3 +319,21 @@ class TestComparacionConExcel:
         filas = {f["magnitud"]: f for f in cap["filas"]}
         assert filas["kQ"]["comparable"] is False
         assert filas["ktp"]["comparable"] is True and filas["ktp"]["ok"]
+
+    @pytest.mark.skipif(not os.path.exists(HALCYON),
+                        reason="archivo real del físico no disponible")
+    def test_halcyon_con_selector_en_rev1_sigue_pineado_a_2000(self, dialogo, monkeypatch):
+        """Fase K1/K4: comparar_trs398 (vía trs398_excel._recalcular_con_app)
+        queda PINEADA a protocolo "2000" a propósito, sin importar en qué
+        protocolo esté el selector de la calculadora -- las hojas del físico
+        están calculadas con TRS-398 2000. Con el selector en rev1, la
+        comparación debe seguir dando exactamente el mismo resultado (todo
+        verde) que con el selector en 2000 (test_halcyon_con_n31010_todo_ok)."""
+        seleccionar_camara(dialogo, "N31010")
+        seleccionar_protocolo(dialogo, "rev1")
+        cap = self._parchear_dialogo_modal(dialogo, monkeypatch, HALCYON)
+        dialogo.comparar_con_excel()
+        assert cap["modelo"] == "N31010"
+        for f in cap["filas"]:
+            assert f["comparable"], f["magnitud"]
+            assert f["ok"], f"{f['magnitud']} difiere -- ¿el pin a 2000 se rompió?"

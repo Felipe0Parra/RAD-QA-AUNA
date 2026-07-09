@@ -894,6 +894,7 @@ class DialogCalculadoraDosis(QDialog):
         self.initGUI()
         self.crear_menu()
         self.cargar_modelos_combobox()
+        self._poblar_combo_protocolo()
         self.construir_botones_asignacion(self.energias)
        
 
@@ -1120,7 +1121,11 @@ class DialogCalculadoraDosis(QDialog):
         encabezado.setTextFormat(Qt.RichText)
         layout.addWidget(encabezado)
 
-        if modelo is None or not DosisService.camara_tiene_kq(modelo):
+        # Pineado a "2000" a propósito (igual que trs398_excel._recalcular_con_app,
+        # Fase K1): las hojas del físico están en TRS-398 2000, no en Rev.1 -
+        # este aviso debe reflejar SIEMPRE esa tabla, sin importar en qué
+        # protocolo esté el selector de la calculadora (combo_protocolo).
+        if modelo is None or not DosisService.camara_tiene_kq(modelo, protocolo="2000"):
             aviso = QLabel(
                 "⚠ Sin una cámara con coeficientes kQ seleccionada, las filas "
                 "kQ, D(zref) y D(zmax) no se pueden comparar.")
@@ -1260,7 +1265,19 @@ class DialogCalculadoraDosis(QDialog):
         self.combo_series.currentIndexChanged.connect(self.on_serie_cambiada)
         
         self.col1.addWidget(equipo_box)
-        
+
+        # Protocolo TRS-398 (Fase K): selecciona qué tabla kQ(TPR20,10) usar
+        # para fotones. Se crea VACÍO aquí (señal conectada sin items todavía
+        # -> no dispara nada) y se puebla en _poblar_combo_protocolo(), llamado
+        # en __init__ DESPUÉS de initGUI(), cuando self.Kq_0 y self.combo_modelos
+        # ya existen (mismo patrón que combo_modelos/cargar_modelos_combobox).
+        protocolo_box, protocolo_layout = self.crear_bloque("Protocolo TRS-398 (kQ)", "#5b9ea8")
+        self.combo_protocolo = QComboBox()
+        self.estilo_combobox(self.combo_protocolo)
+        protocolo_layout.addWidget(self.combo_protocolo)
+        self.combo_protocolo.currentIndexChanged.connect(self.on_protocolo_cambiado)
+        self.col1.addWidget(protocolo_box)
+
         # Tamaño de campo
         field_size_box, field_size_layout = self.crear_bloque("Tamaño de campo", "#5b9ea8")
         self.combo_fieldsize = QComboBox()
@@ -2017,30 +2034,65 @@ class DialogCalculadoraDosis(QDialog):
         except Exception as e:
             print(f"Error cargando modelos: {e}")
             QMessageBox.warning(self, "Error", f"No se pudieron cargar los modelos: {e}")
-    
+
+    def _poblar_combo_protocolo(self):
+        """Puebla el selector de protocolo TRS-398 (Fase K). Se llama DESPUÉS
+        de initGUI() para que el primer addItem (que dispara
+        currentIndexChanged en cualquier QComboBox recién poblado) encuentre
+        self.Kq_0 y self.combo_modelos ya creados. Default: "2000" (TRS-398
+        original, validado en D3 contra hoja real del físico)."""
+        self.combo_protocolo.addItem("TRS-398 (2000)", "2000")
+        self.combo_protocolo.addItem("TRS-398 Rev.1 (2024) — provisional", "rev1")
+
+    def _refrescar_guardia_kq(self, modelo):
+        """Aviso/placeholder de kQ según si `modelo` tiene coeficientes en el
+        protocolo TRS-398 actualmente seleccionado. Compartida por
+        on_modelo_cambiado y on_protocolo_cambiado (Fase K4).
+
+        ⚠️ NUNCA llamar a on_modelo_cambiado desde el handler del selector de
+        protocolo: repoblaría combo_series y dispararía on_serie_cambiada ->
+        cargar_datos_equipo, que pisa el factor de calibración vigente del
+        catálogo sobre el histórico (bug corregido en D2.2).
+        """
+        protocolo = self.combo_protocolo.currentData() if hasattr(self, "combo_protocolo") else "2000"
+        etiqueta_protocolo = self.combo_protocolo.currentText() if hasattr(self, "combo_protocolo") else "TRS-398 (2000)"
+        if not DosisService.camara_tiene_kq(modelo, protocolo):
+            # Guarda D2 (extendida en K4 con el protocolo activo): sin fila en
+            # la tabla del protocolo elegido no hay kQ automático. Al completar
+            # esa tabla para este modelo, el aviso desaparece solo.
+            self.Kq_0.setPlaceholderText("Sin coeficientes kQ para este modelo — ingrese el valor manualmente")
+            QMessageBox.information(
+                self, "Modelo sin coeficientes kQ",
+                f"El modelo {modelo} aún no tiene cargados los coeficientes "
+                f"kQ(TPR20,10) en {etiqueta_protocolo}, por lo que el cálculo "
+                "automático de kQ,Q0 no está disponible por ahora.\n\n"
+                "Puede ingresar el valor de kQ,Q0 manualmente en el campo "
+                "correspondiente; el resto del cálculo funciona normal.")
+        else:
+            self.Kq_0.setPlaceholderText("Factor de calidad del haz (fotones),Ej: 0.998")
+
+    def on_protocolo_cambiado(self, index):
+        """Cambiar el protocolo TRS-398 re-evalúa la guarda de kQ para el
+        modelo actual y, si hay fotones activos y TPR ya tecleado, recalcula
+        kQ con la tabla del protocolo recién elegido. Ver _refrescar_guardia_kq
+        sobre por qué esto NO reusa on_modelo_cambiado."""
+        modelo = self.combo_modelos.currentData()
+        if modelo is not None:
+            self._refrescar_guardia_kq(modelo)
+        if self.fotones.isChecked():
+            self.actualizar_kCharge()
+
     def on_modelo_cambiado(self, index):
         """Se ejecuta cuando el usuario selecciona un modelo"""
         modelo = self.combo_modelos.currentData()
-        
-        
+
+
         self.combo_series.clear()
         self.combo_series.setEnabled(False)
         self.limpiar_datos_equipo()
-        
+
         if modelo is not None:
-            if not DosisService.camara_tiene_kq(modelo):
-                # Guarda D2: sin fila en KQ_TPR_TABLE no hay kQ automático.
-                # Al completar la tabla para este modelo, el aviso desaparece solo.
-                self.Kq_0.setPlaceholderText("Sin coeficientes kQ para este modelo — ingrese el valor manualmente")
-                QMessageBox.information(
-                    self, "Modelo sin coeficientes kQ",
-                    f"El modelo {modelo} aún no tiene cargados los coeficientes "
-                    "kQ(TPR20,10) en el sistema, por lo que el cálculo automático "
-                    "de kQ,Q0 no está disponible por ahora.\n\n"
-                    "Puede ingresar el valor de kQ,Q0 manualmente en el campo "
-                    "correspondiente; el resto del cálculo funciona normal.")
-            else:
-                self.Kq_0.setPlaceholderText("Factor de calidad del haz (fotones),Ej: 0.998")
+            self._refrescar_guardia_kq(modelo)
             try:
                 equipos = EquiposService.obtener_series_por_modelo(modelo)
                 
@@ -2802,12 +2854,15 @@ class DialogCalculadoraDosis(QDialog):
             
     def actualizar_kCharge(self):
         modelo = self.combo_modelos.currentData()
-        if modelo is None or not DosisService.camara_tiene_kq(modelo):
-            # Sin modelo o sin datos kQ: no tocar el campo, que queda en
-            # ingreso manual (antes esto borraba el valor escrito a mano).
+        protocolo = self.combo_protocolo.currentData() if hasattr(self, "combo_protocolo") else "2000"
+        if modelo is None or not DosisService.camara_tiene_kq(modelo, protocolo):
+            # Sin modelo o sin datos kQ en el protocolo activo: no tocar el
+            # campo, que queda en ingreso manual (antes esto borraba el valor
+            # escrito a mano).
             return
         try:
-            self.Kq_0.setText(str(round(DosisService.interpolar_kq0(modelo, float(self.tpr2010.text())), 5)))
+            self.Kq_0.setText(str(round(
+                DosisService.interpolar_kq0(modelo, float(self.tpr2010.text()), protocolo), 5)))
         except ValueError:
             self.Kq_0.clear()  # TPR20,10 vacío o no numérico: kQ auto pendiente
 
