@@ -1358,9 +1358,14 @@ class DialogCalculadoraDosis(QDialog):
         self.col1.addWidget(self.QR50_box)
         self.electrones.toggled.connect(lambda c: self.show_r50(c))
         self.R50.textChanged.connect(self.calcular_calidad_r50)
-        self.R50.textChanged.connect(self.Kq0_r50)
+        # kQ y zref se encadenan desde la CALIDAD R50,w (no desde el R50 crudo):
+        # el Cuadro 18/Table 20 indexan kQ por R50,w y zref = 0.6*R50,w - 0.1
+        # (verificado contra las 53 hojas de electrones del corpus 2024; con el
+        # R50 crudo la profundidad salía ~2% corta). Encadenar desde QualityR50
+        # mantiene todo coherente también si el físico corrige la calidad a mano.
+        self.QualityR50.textChanged.connect(self.Kq0_r50)
         self.combo_modelos.currentTextChanged.connect(self.Kq0_r50)
-        self.R50.textChanged.connect(self.calcular_profundidad_r50)
+        self.QualityR50.textChanged.connect(self.calcular_profundidad_r50)
         
         
         ####################################################
@@ -2103,6 +2108,10 @@ class DialogCalculadoraDosis(QDialog):
             self._refrescar_guardia_kq(modelo)
         if self.fotones.isChecked():
             self.actualizar_kCharge()
+        # El kQ de electrones también depende del protocolo (Cuadro 18 vs
+        # Table 20 — auditoría 2026-07-09). Kq0_r50 trae sus propias guardas
+        # (modelo con datos, R50,w tecleado), así que se refresca siempre.
+        self.Kq0_r50()
 
     def on_modelo_cambiado(self, index):
         """Se ejecuta cuando el usuario selecciona un modelo"""
@@ -2752,8 +2761,10 @@ class DialogCalculadoraDosis(QDialog):
             
     def calcular_profundidad_r50(self):
         try:
-            r50_z = self.R50.text()
-            q_r50 = DosisService.r50_depth(float(r50_z))
+            # zref = 0.6*R50,w - 0.1 con la CALIDAD del haz (QualityR50), no el
+            # R50 crudo del escaneo — corregido en la auditoría 2026-07-09.
+            r50w = self.QualityR50.text()
+            q_r50 = DosisService.r50_depth(float(r50w))
             self.zrefR50.setText(str(q_r50))
         except Exception as e:
             print(e)
@@ -2796,13 +2807,22 @@ class DialogCalculadoraDosis(QDialog):
     
     def Kq0_r50(self):
         modelo = self.combo_modelos.currentData()
-        if modelo is None or not DosisService.camara_tiene_kq(modelo):
-            # Misma guarda que en actualizar_kCharge: el kQ de electrones
-            # queda en ingreso manual y no se pisa lo que escriba el físico.
+        protocolo = (self.combo_protocolo.currentData()
+                     if hasattr(self, "combo_protocolo")
+                     and self.combo_protocolo.currentData() else "2000")
+        if modelo is None or not DosisService.camara_tiene_kq_electrones(
+                modelo, protocolo=protocolo):
+            # Guarda de ELECTRONES (corregida 2026-07-09): antes consultaba
+            # camara_tiene_kq (tabla de FOTONES), que bloqueaba a la Roos y
+            # habilitaba interpolar la tabla equivocada justo para las cámaras
+            # de fotones. El kQ queda en ingreso manual y no se pisa lo que
+            # escriba el físico.
             return
         try:
-            r50 = float(self.R50.text())
-            quality_result = DosisService.interpolar_r50(modelo, r50)
+            # Se interpola a la CALIDAD R50,w (QualityR50), como el Cuadro 18.
+            r50w = float(self.QualityR50.text())
+            quality_result = DosisService.interpolar_r50(modelo, r50w,
+                                                         protocolo=protocolo)
             self.Kq0r50_widget.setText(str(quality_result))
         except ValueError:
             self.Kq0r50_widget.clear()

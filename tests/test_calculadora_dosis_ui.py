@@ -33,7 +33,10 @@ EQUIPO_N31014 = {"id": 7, "equip_type": "Cámara de ionización", "model": "N310
 EQUIPO_N31022 = {"id": 99, "equip_type": "Cámara de ionización", "model": "N31022",
                  "serie": "3344", "calibr_fact": 3.100, "t_cal": 20.0,
                  "p_cal": 101.325, "h_cal": 50.0}
-EQUIPOS = (EQUIPO_N31010, EQUIPO_N31014, EQUIPO_N31022)
+EQUIPO_N34001 = {"id": 55, "equip_type": "Cámara de ionización", "model": "N34001",
+                 "serie": "1069", "calibr_fact": 0.08563, "t_cal": 20.0,
+                 "p_cal": 101.325, "h_cal": 50.0}
+EQUIPOS = (EQUIPO_N31010, EQUIPO_N31014, EQUIPO_N31022, EQUIPO_N34001)
 
 
 class VentanaIX(QWidget):
@@ -437,3 +440,54 @@ class TestComparacionConExcel:
         for f in cap["filas"]:
             assert f["comparable"], f["magnitud"]
             assert f["ok"], f"{f['magnitud']} difiere -- ¿el pin a 2000 se rompió?"
+
+
+class TestFlujoElectronesRoos:
+    """Camino de electrones corregido en la auditoría 2026-07-09 contra el
+    corpus 2024 (53 hojas TRS-398 reales): kQ y zref se derivan de la CALIDAD
+    R50,w (no del R50 crudo) y el kQ automático sale de la tabla de electrones
+    del protocolo activo (antes: tabla de fotones, bloqueada por accidente).
+    Valores centinela = hoja real Enero/iX/12 MeV."""
+
+    def test_cadena_r50_calidad_zref_kq(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N34001")
+        d.electrones.setChecked(True)
+        d.R50.setText("5.127")                      # R50 medido (ionización)
+        assert d.QualityR50.text() == "5.2157"      # 1.029*R50 - 0.06
+        # zref = 0.6*R50,w - 0.1; con el bug (R50 crudo) daba 2.9762
+        assert d.zrefR50.text() == "3.0294"
+        # Cuadro 18 (2000) Roos a R50,w; la hoja calcula 0.9102745
+        assert d.Kq0r50_widget.text() == "0.91027"
+
+    def test_selector_protocolo_conmuta_kq_electrones(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N34001")
+        d.electrones.setChecked(True)
+        d.R50.setText("5.127")
+        assert d.Kq0r50_widget.text() == "0.91027"   # 2000 default
+        seleccionar_protocolo(d, "rev1")
+        assert d.Kq0r50_widget.text() == "0.91102"   # Table 20 Rev.1
+        seleccionar_protocolo(d, "2000")
+        assert d.Kq0r50_widget.text() == "0.91027"   # de vuelta al Cuadro 18
+
+    def test_camara_de_fotones_no_autollena_kq_electrones(self, dialogo):
+        # Antes del fix, N31010 (con fila en la tabla de FOTONES) pasaba la
+        # guarda equivocada y el kQ de electrones se llenaba con el borde de
+        # la tabla de fotones. Ahora el valor manual del físico sobrevive.
+        d = dialogo
+        seleccionar_camara(d, "N31010")
+        d.electrones.setChecked(True)
+        d.Kq0r50_widget.setText("0.945")
+        d.R50.setText("5.127")
+        assert d.Kq0r50_widget.text() == "0.945"
+        seleccionar_protocolo(d, "rev1")
+        assert d.Kq0r50_widget.text() == "0.945"
+
+    def test_kq_manual_n31014_sobrevive_en_electrones(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N31014")   # sin datos en NINGUNA tabla
+        d.electrones.setChecked(True)
+        d.Kq0r50_widget.setText("0.912")
+        d.R50.setText("2.397")
+        assert d.Kq0r50_widget.text() == "0.912"
