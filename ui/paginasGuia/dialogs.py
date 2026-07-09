@@ -958,15 +958,19 @@ class DialogCalculadoraDosis(QDialog):
         menu_reporte = menubar.addMenu("Reporte")
 
         # Acciones
-        self.act_importar = QAction("Importar MCC", self)
         self.act_comparar_excel = QAction("Comparar con Excel TRS-398", self)
         self.act_graficar = QAction("Graficar perfiles", self)
         self.act_pdf = QAction("Generar reporte PDF", self)
 
         # Agregar a menús
-        menu_archivo.addAction(self.act_importar)
+        # "Importar MCC" (win32com/Excel COM, import_mcc) se retiró del menú
+        # 2026-07-09: crasheaba en los 3 casos probados en Windows (F5, ya
+        # documentado en el handoff) -- Sheets(4) revienta con cualquier
+        # archivo real (el .mcc es texto plano de 1 hoja, no un .xlsx de 7).
+        # El método import_mcc queda en el código como referencia muerta;
+        # D3 (trs398_excel.py) ya reemplazó su función real para hojas
+        # Excel, y D4 hará lo propio para autollenar desde .mcc real.
         menu_archivo.addAction(self.act_comparar_excel)
-        self.act_importar.triggered.connect(self.import_mcc)
         self.act_comparar_excel.triggered.connect(self.comparar_con_excel)
         self.act_pdf.triggered.connect(self.generar_reporte_fecha_seleccionada)
         

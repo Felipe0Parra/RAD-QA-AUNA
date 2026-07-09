@@ -306,6 +306,18 @@ HALCYON = os.path.expanduser(
     "~/Documents/Archivos_UseApp/TRS-398 6 MV FFF Halcyon Dmax.xls")
 
 
+class TestMenuArchivo:
+    """K-fix.3: el menú 'Importar MCC' (win32com, crasheaba en los 3 casos
+    probados en Windows -- F5/HANDOFF) se retiró de la UI 2026-07-09."""
+
+    def test_no_existe_accion_importar_mcc(self, dialogo):
+        assert not hasattr(dialogo, "act_importar")
+
+    def test_comparar_excel_sigue_disponible(self, dialogo):
+        assert hasattr(dialogo, "act_comparar_excel")
+        assert dialogo.act_comparar_excel.text() == "Comparar con Excel TRS-398"
+
+
 class TestComparacionConExcel:
     """Flujo D3.3: menú 'Comparar con Excel TRS-398' sobre el diálogo real."""
 
