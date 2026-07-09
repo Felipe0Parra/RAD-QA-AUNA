@@ -119,15 +119,18 @@ class DosisService():
         return zref_r50(r50)
     
     @staticmethod
-    def camara_tiene_kq(camara):
-        """True si el modelo tiene coeficientes kQ(TPR20,10) en KQ_TPR_TABLE.
+    def camara_tiene_kq(camara, protocolo="2000"):
+        """True si el modelo tiene coeficientes kQ(TPR20,10) en la tabla del protocolo.
 
         Guarda de la Fase D2: parte del inventario activo (N31014, N31022,
         N34001, TN34001) aún no tiene fila en la tabla; la UI usa esto para
         avisar y dejar el kQ en ingreso manual en vez de fallar. Al completar
-        KQ_TPR_TABLE la guarda se desactiva sola para ese modelo.
+        una tabla la guarda se desactiva sola para ese modelo.
+
+        `protocolo`: "2000" (TRS-398 original, default) o "rev1" (TRS-398
+        Rev.1, Fase K2). Protocolo desconocido -> KeyError (fallo ruidoso).
         """
-        return camara in KQ_TPR_TABLE
+        return camara in KQ_TABLAS_POR_PROTOCOLO[protocolo]
 
     @staticmethod
     def interpolar_r50(camara, r50):
@@ -149,8 +152,14 @@ class DosisService():
                 return kq
         
     @staticmethod
-    def interpolar_kq0(camara, r50):
-        datos = KQ_TPR_TABLE[camara]
+    def interpolar_kq0(camara, r50, protocolo="2000"):
+        """Interpola kQ(TPR20,10) para fotones desde la tabla del protocolo.
+
+        `protocolo`: "2000" (TRS-398 original, default, validado en D3 contra
+        hoja real) o "rev1" (TRS-398 Rev.1, Fase K2, provisional). Protocolo
+        desconocido -> KeyError (fallo ruidoso, no degradar en silencio).
+        """
+        datos = KQ_TABLAS_POR_PROTOCOLO[protocolo][camara]
 
         xf = sorted(datos.keys())
         yf = [datos[x] for x in xf]

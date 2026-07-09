@@ -191,6 +191,12 @@ KQ_TPR_TABLE = {
     }
 
 }
+
+# Tablas kQ(TPR20,10) por versión de protocolo. "2000" = Cuadro 14 (KQ_TPR_TABLE,
+# arriba); "rev1" (TRS-398 Rev.1, Tabla 16) se agrega en la Fase K2.
+KQ_TABLAS_POR_PROTOCOLO = {
+    "2000": KQ_TPR_TABLE,
+}
 # import numpy as np 
 # import matplotlib.pyplot as plt
 

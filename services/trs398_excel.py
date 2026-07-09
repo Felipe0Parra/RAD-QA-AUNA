@@ -229,10 +229,15 @@ def _recalcular_con_app(entradas):
         r["Mq"] = None
 
     # kQ requiere el modelo de cámara (la clave que resuelve KQ_TPR_TABLE).
+    # Pineado a protocolo "2000" A PROPÓSITO (Fase K): las hojas TRS-398 oficiales
+    # que el físico usa hoy están calculadas con la TRS-398 original (2000), no
+    # con Rev.1 — comparar contra la tabla equivocada produciría rojos engañosos
+    # en "Comparar con Excel TRS-398". Si algún día llegan hojas Rev.1, este
+    # pineado debe revisarse (p. ej. leyendo el protocolo desde la propia hoja).
     modelo = e.get("_modelo_camara")
     tpr = num("tpr2010")
-    if modelo and tpr and DosisService.camara_tiene_kq(modelo):
-        r["kQ"] = DosisService.interpolar_kq0(modelo, tpr[0])
+    if modelo and tpr and DosisService.camara_tiene_kq(modelo, protocolo="2000"):
+        r["kQ"] = DosisService.interpolar_kq0(modelo, tpr[0], protocolo="2000")
     else:
         r["kQ"] = None
 
