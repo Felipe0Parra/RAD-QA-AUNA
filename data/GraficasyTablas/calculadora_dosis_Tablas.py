@@ -64,37 +64,39 @@ Q0_FIT_TABLE = {
 
 
 
+# kQ(R50) para ELECTRONES, cámaras calibradas en Co-60 — copia literal de la
+# Table 20 de la TRS-398 Rev.1 (OIEA, 2024), verificada nodo a nodo contra el
+# PDF oficial (auditoría 2026-07-09). OJO: NO es la tabla de la TRS-398
+# original (2000) — las hojas de cálculo que usa el físico salen del Cuadro 18
+# de la 2000 (ver Q0_R50_TABLE_2000 abajo). Misma situación que KQ_TPR_TABLE /
+# KQ_TPR_TABLE_REV1 en fotones (Fase K).
+_ROOS_REV1 = {
+    1.0: 0.9743,
+    1.4: 0.9645,
+    2.0: 0.9518,
+    2.5: 0.9428,
+    3.0: 0.9349,
+    3.5: 0.9281,
+    4.0: 0.9222,
+    4.5: 0.9171,
+    5.0: 0.9127,
+    5.5: 0.9088,
+    6.0: 0.9055,
+    7.0: 0.9001,
+    8.0: 0.8960,
+    10.0: 0.8907
+}
+
 Q0_R50_TABLE = {
-        "N34001": {
-        1.0: 0.9743,
-        1.4: 0.9645,
-        2.0: 0.9518,
-        2.5: 0.9428,
-        3.0: 0.9349,
-        3.5: 0.9281,
-        4.0: 0.9222,
-        4.5: 0.9171,
-        5.0: 0.9127,
-        5.5: 0.9088,
-        6.0: 0.9055,
-        7.0: 0.9001,
-        8.0: 0.8960,
-        10.0: 0.8907
-    },
+    "N34001": _ROOS_REV1,
+    # PTW 34001 Roos con prefijo T (misma cámara física; la BD registra ambas
+    # grafías). Hasta 2026-07-09 esta fila tenía copiados por error los valores
+    # de la PTW 30013 (cilíndrica Farmer) — una Roos plano-paralela con curva
+    # de Farmer, hasta 0.4% de desviación y sin datos bajo R50=3 donde la Roos
+    # sí mide (6 MeV → R50≈2.4). Corregida a la fila Roos real de la Table 20.
+    "TN34001": dict(_ROOS_REV1),
 
     "N30013": {
-        3.0: 0.9300,
-        3.5: 0.9247,
-        4.0: 0.9210,
-        4.5: 0.9180,
-        5.0: 0.9155,
-        5.5: 0.9135,
-        6.0: 0.9118,
-        7.0: 0.9090,
-        8.0: 0.9068,
-        10.0: 0.9037
-    },
-    "TN34001": {
         3.0: 0.9300,
         3.5: 0.9247,
         4.0: 0.9210,
@@ -119,6 +121,47 @@ Q0_R50_TABLE = {
         8.0: 0.9131,
         10.0: 0.9094
     }
+}
+
+# kQ(R50) para ELECTRONES según la TRS-398 ORIGINAL (2000): fila "Roos" del
+# Cuadro 18 (pág. 104, PDF español OIEA 2005), verificada idéntica contra la
+# hoja 'Tables' (TABLE 7.III) de los workbooks oficiales que usa el físico
+# (corpus 2024: reproduce las 53 hojas de electrones con dif. máx. 0.0006% en
+# kQ). Solo la Roos a propósito: es la única cámara de electrones del
+# inventario real, y las filas cilíndricas del Cuadro 18 no tienen datos bajo
+# R50=4 — agregarlas activaría el clamp silencioso de la interpolación
+# (hallazgo D1-H4) justo donde la Roos sí mide.
+_ROOS_2000 = {
+    1.0: 0.965,
+    1.4: 0.955,
+    2.0: 0.944,
+    2.5: 0.937,
+    3.0: 0.931,
+    3.5: 0.925,
+    4.0: 0.920,
+    4.5: 0.916,
+    5.0: 0.912,
+    5.5: 0.908,
+    6.0: 0.904,
+    7.0: 0.898,
+    8.0: 0.892,
+    10.0: 0.882,
+    13.0: 0.870,
+    16.0: 0.860,
+    20.0: 0.848
+}
+
+Q0_R50_TABLE_2000 = {
+    "N34001": _ROOS_2000,
+    "TN34001": dict(_ROOS_2000),
+}
+
+# Registro por protocolo (espejo de KQ_TABLAS_POR_PROTOCOLO de fotones):
+# "2000" = Cuadro 18 (default, consistente con las hojas del físico);
+# "rev1" = Table 20 (Q0_R50_TABLE, arriba).
+Q0_R50_TABLAS_POR_PROTOCOLO = {
+    "2000": Q0_R50_TABLE_2000,
+    "rev1": Q0_R50_TABLE,
 }
 
 # kQ(TPR20,10) para fotones, cámaras cilíndricas — copia literal del Cuadro 14 de la
