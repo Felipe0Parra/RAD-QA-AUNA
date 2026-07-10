@@ -146,6 +146,8 @@ def llenar_flujo_fotones_completo(d):
 
     d.tpr2010.setText("0.68")
     d.pddzref.setText("66.6")
+    d.Zref.setText("10.0")  # anotación manual, sin cascada -- F3 exige completo
+    d.Zmax.setText("1.5")
     return d
 
 
@@ -163,6 +165,8 @@ def llenar_flujo_electrones_completo(d):
 
     d.temp.setText("21.9")
     d.pressure.setText("85.43")
+    d.humr_cal.setText("45.0")
+    d.humedad_r.setText("48.0")
 
     for campo in (d.lDV1_1, d.lDV1_2, d.lDV1_3):
         campo.setText("21.36")
@@ -179,6 +183,8 @@ def llenar_flujo_electrones_completo(d):
 
     d.R50.setText("5.127")
     d.pddzrefE.setText("99.3")
+    d.Zref.setText("3.0")  # anotación manual, sin cascada -- F3 exige completo
+    d.Zmax.setText("2.7")
     return d
 
 
@@ -488,6 +494,87 @@ class TestMigracionColumnaR50PddElectrones:
         assert con.execute("SELECT COUNT(*) FROM calculadora_dosimetrica").fetchone()[0] == 1
         assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         con.close()
+
+
+class TestValidacionFormularioCompleto:
+    """F3 (auditoría 2026-07-10): decisión explícita del usuario -- "todos
+    los campos deben estar completos" antes de permitir guardar. Motivada por
+    el único registro real de producción, guardado casi vacío sin ninguna
+    validación previa (calculadora_dosimetrica id=1, 09/04/2026)."""
+
+    def _espiar_avisos(self, monkeypatch):
+        avisos = []
+        monkeypatch.setattr(
+            dialogs_mod.QMessageBox, "warning",
+            staticmethod(lambda *a, **k: avisos.append(a[1:3])))
+        return avisos
+
+    def test_formulario_vacio_no_guarda_y_avisa(self, dialogo_factory, monkeypatch):
+        avisos = self._espiar_avisos(monkeypatch)
+        d = dialogo_factory()
+        d.fotones.setChecked(True)  # nada más llenado
+        d.guardar_db()
+
+        fecha = d.date_edit.date().toString("dd/MM/yyyy")
+        assert dosis_service_mod.DosisService.buscar_por_fecha(fecha, d.acelerador_actual) is None
+        assert any("incompleto" in a[0].lower() for a in avisos), avisos
+        assert not dialogo_factory.reportes, "no debía generarse el reporte con formulario vacío"
+
+    def test_formulario_completo_guarda_sin_avisar(self, dialogo_factory, monkeypatch):
+        avisos = self._espiar_avisos(monkeypatch)
+        original = llenar_flujo_fotones_completo(dialogo_factory())
+        original.guardar_db()
+        assert not avisos, f"no debía avisar con el formulario completo: {avisos}"
+        fecha = original.date_edit.date().toString("dd/MM/yyyy")
+        assert dosis_service_mod.DosisService.buscar_por_fecha(
+            fecha, original.acelerador_actual) is not None
+
+    def test_falta_un_solo_campo_bloquea_el_guardado(self, dialogo_factory, monkeypatch):
+        """Zref/Zmax son anotación manual sin cascada de cálculo -- ningún
+        otro campo los llena por sí solo. Si el físico olvida uno, debe
+        bloquear (no basta con que el resto de la cadena esté completa)."""
+        avisos = self._espiar_avisos(monkeypatch)
+        d = llenar_flujo_fotones_completo(dialogo_factory())
+        d.Zref.clear()
+        d.guardar_db()
+        assert avisos, "debía avisar con Zref vacío"
+        assert "Zref" in avisos[0][1]
+        fecha = d.date_edit.date().toString("dd/MM/yyyy")
+        assert dosis_service_mod.DosisService.buscar_por_fecha(fecha, d.acelerador_actual) is None
+
+    def test_electrones_exige_r50_y_pdd_no_pddzref(self, dialogo_factory_electrones, monkeypatch):
+        """La exigencia de PDD es condicional al Tipo_de_radiacion: un
+        registro de electrones no debe reclamar 'pddzref' (campo de fotones,
+        que en electrones queda vacío por diseño -- mutuamente excluyentes)."""
+        avisos = self._espiar_avisos(monkeypatch)
+        d = dialogo_factory_electrones()
+        d.electrones.setChecked(True)  # nada más llenado
+        d.guardar_db()
+        assert avisos
+        faltantes_reportados = avisos[0][1]
+        assert "r50_medido" in faltantes_reportados
+        assert "pdd_zref_electrones" in faltantes_reportados
+        assert "pddzref" not in faltantes_reportados.replace("pdd_zref_electrones", "")
+
+    def test_electrones_completo_guarda_sin_avisar(
+            self, dialogo_factory_electrones, monkeypatch):
+        avisos = self._espiar_avisos(monkeypatch)
+        original = llenar_flujo_electrones_completo(dialogo_factory_electrones())
+        original.guardar_db()
+        assert not avisos, f"no debía avisar con el formulario de electrones completo: {avisos}"
+        fecha = original.date_edit.date().toString("dd/MM/yyyy")
+        assert dosis_service_mod.DosisService.buscar_por_fecha(
+            fecha, original.acelerador_actual) is not None
+
+    def test_pdd10_pdd20_tmrzref_no_se_exigen(self):
+        """Hallazgo lateral (F3): pdd10/pdd20 existen como QLineEdit pero su
+        bloque completo (pdd_box) nunca se agrega a ningún layout -- el
+        físico no puede verlos ni llenarlos. tmrzref solo aplica a geometría
+        SAD, desactivada. Exigirlos bloquearía el guardado para siempre."""
+        requeridos = dialogs_mod.DialogCalculadoraDosis._CAMPOS_SIEMPRE_REQUERIDOS
+        assert "pdd10" not in requeridos
+        assert "pdd20" not in requeridos
+        assert "tmrzref" not in requeridos
 
 
 class TestAceleradorActualSiempreDefinido:

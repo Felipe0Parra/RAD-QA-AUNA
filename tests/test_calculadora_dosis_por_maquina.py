@@ -108,6 +108,8 @@ def llenar_fotones_10x10(d, equipo):
 
     d.temp.setText("22.0")
     d.pressure.setText("101.325")
+    d.humr_cal.setText("45.0")
+    d.humedad_r.setText("48.0")
     for campo in (d.lDV1_1, d.lDV1_2, d.lDV1_3):
         campo.setText("12.437")
     d.unidades_monitor.setText("100")
@@ -119,6 +121,8 @@ def llenar_fotones_10x10(d, equipo):
         campo.setText("12.437")
     d.tpr2010.setText("0.68")
     d.pddzref.setText("66.6")
+    d.Zref.setText("10.0")  # anotación manual, sin cascada -- F3 exige completo
+    d.Zmax.setText("1.5")
     return d
 
 
@@ -134,6 +138,8 @@ def llenar_electrones_10x10(d, equipo):
 
     d.temp.setText("21.9")
     d.pressure.setText("85.43")
+    d.humr_cal.setText("45.0")
+    d.humedad_r.setText("48.0")
     for campo in (d.lDV1_1, d.lDV1_2, d.lDV1_3):
         campo.setText("21.36")
     d.unidades_monitor.setText("200")
@@ -145,6 +151,8 @@ def llenar_electrones_10x10(d, equipo):
         campo.setText("20.52")
     d.R50.setText("5.127")
     d.pddzrefE.setText("99.3")
+    d.Zref.setText("3.0")  # anotación manual, sin cascada -- F3 exige completo
+    d.Zmax.setText("2.7")
     return d
 
 

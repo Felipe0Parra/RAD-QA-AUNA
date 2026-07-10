@@ -2029,6 +2029,13 @@ class DialogCalculadoraDosis(QDialog):
         # Botón Aceptar
         self.btn_ok = QPushButton("✓ Aceptar y Cerrar")
         #self.estilo_boton(self.btn_ok, "#c1df08")
+        # F3 (auditoría 2026-07-10): decisión explícita del usuario -- este
+        # botón y los de energía (ver construir_botones_asignacion) se dejan
+        # SEPARADOS a propósito; el tooltip evita que se confundan.
+        self.btn_ok.setToolTip(
+            "Guarda este cálculo en el registro de la calculadora.\n"
+            "NO asigna la dosis al formulario mensual -- para eso, use el "
+            "botón de la energía correspondiente (p. ej. \"6 MV\").")
         self.btn_ok.clicked.connect(self.guardar_db)
         self.btn_ok.clicked.connect(self.accept)
         result_layout.addWidget(self.btn_ok)
@@ -2459,13 +2466,54 @@ class DialogCalculadoraDosis(QDialog):
                 campo.clear()
 
 
+    # Campos exigidos completos antes de guardar (F3, auditoría 2026-07-10):
+    # decisión explícita del usuario -- "todos los campos deben estar
+    # completos", en respuesta al hallazgo de que el único registro real de
+    # producción se guardó casi vacío (sin validación previa). Se EXCLUYEN 3
+    # casos donde exigirlos sería imposible o incoherente:
+    #   - pdd10/pdd20: los widgets existen pero su bloque completo
+    #     (pdd_box/pdd_layout) nunca se agrega a ningún layout visible -- el
+    #     físico no puede verlos ni llenarlos. Alimentan la ruta muerta de kQ0
+    #     vía Q0/A (hallazgo D1-H2, congelada). No se activan aquí.
+    #   - tmrzref: solo aplica a geometría SAD, desactivada (comentada en
+    #     calcular_dosis_maxima) -- no tiene forma de llenarse hoy.
+    #   - pddzref (fotones) / r50_medido+pdd_zref_electrones (electrones):
+    #     mutuamente excluyentes según Tipo_de_radiacion.
+    _CAMPOS_SIEMPRE_REQUERIDOS = (
+        "Fecha", "Acelerador", "equipo_id", "Modelo_equipo", "Numero_serie",
+        "factor_calibracion", "Tamano_campo", "Tipo_de_radiacion",
+        "Tipo_de_escaneo", "Tipo_de_medicion",
+        "temperatura", "presion", "Humedad_calibracion",
+        "temp_clinica", "presion_clinica", "Humedad_relativa",
+        "ktp", "lectura_Q1", "lectura_Q2", "lectura_Q3", "lectura_dosimetro",
+        "unidades_monitor", "cociente_ldv1_um",
+        "Mplus", "Lectura_neg_1", "Lectura_neg_2", "Lectura_neg_3",
+        "Lectura_neg_prom", "Kpol",
+        "tension_v1", "tension_v2", "cociente_tensiones",
+        "lectura_m1", "lectura_m2_1", "lectura_m2_2", "lectura_m2_3", "lectura_m2",
+        "cociente_lecturas", "a0", "a1", "a2", "ks", "Mq",
+        "Zref", "Zmax", "Kq_0", "Dzref", "dosis_maxima",
+    )
+
+    @classmethod
+    def _campos_faltantes(cls, datos):
+        """Claves de `datos` vacías/None entre las exigidas por guardar_db:
+        las siempre-requeridas más la condicionada por Tipo_de_radiacion
+        (PDD de fotones o de electrones, nunca ambas a la vez)."""
+        requeridos = list(cls._CAMPOS_SIEMPRE_REQUERIDOS)
+        if datos.get("Tipo_de_radiacion") == "Electrones":
+            requeridos += ["r50_medido", "pdd_zref_electrones"]
+        else:
+            requeridos += ["pddzref"]
+        return [c for c in requeridos if not datos.get(c)]
+
     def guardar_db(self):
         """
         Save dosimetry data to database using the separate database service.
         Also generates the calibration report.
         """
         # Collect data from UI fields
-        
+
         datos = {
             "Fecha": self.date_edit.date().toString("dd/MM/yyyy"),
             "Acelerador": self.acelerador_actual,
@@ -2528,9 +2576,17 @@ class DialogCalculadoraDosis(QDialog):
             "r50_medido": self.R50.text(),
             "pdd_zref_electrones": self.pddzrefE.text(),
         }
-            
+
+        faltantes = self._campos_faltantes(datos)
+        if faltantes:
+            QMessageBox.warning(
+                self, "Formulario incompleto",
+                "No se puede guardar: faltan los siguientes campos por "
+                "completar:\n\n" + "\n".join(f"• {c}" for c in faltantes))
+            return
+
             # Generate report
-        if datos.get('Acelerador')==self.acelerador_actual:    
+        if datos.get('Acelerador')==self.acelerador_actual:
             generar_reporte_calibracion(
                 parent=self,
                 datos=datos,
@@ -2553,10 +2609,8 @@ class DialogCalculadoraDosis(QDialog):
     
         
         if exito:
-            from PyQt5.QtWidgets import QMessageBox
             QMessageBox.information(self, "Success", "Datos cargados exitosamente")
         else:
-            from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Error", "Failed to save dosimetry data to database")
             
 
@@ -2995,6 +3049,12 @@ class DialogCalculadoraDosis(QDialog):
             btn = QPushButton(f"{energia.upper()}")
             color = colores[i % len(colores)]
             #self.estilo_boton(btn, color)
+            # F3: ver tooltip de btn_ok -- este botón asigna la dosis al
+            # formulario mensual pero NO guarda el registro de la calculadora.
+            btn.setToolTip(
+                f"Asigna la dosis calculada al campo de {energia.upper()} del "
+                "formulario mensual.\nNO guarda este cálculo en el registro "
+                "de la calculadora -- para eso, use \"Aceptar y Cerrar\".")
             btn.clicked.connect(lambda _, e=energia: self.emitir_dosis(e))
             self.layout_asignar.addWidget(btn)
     
