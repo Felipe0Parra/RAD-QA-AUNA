@@ -2375,9 +2375,20 @@ class DialogCalculadoraDosis(QDialog):
                 
                 if datos.get('tmrzref'):
                     self.tmrzref.setText(str(datos['tmrzref']))
-                
+
                 if datos.get('dosis_maxima'):
                     self.dosis_maxima.setText(str(datos['dosis_maxima']))
+
+                # R50 medido (electrones) y PDD de electrones (E4, 2026-07-10):
+                # restaurar R50 dispara su cascada completa (calidad -> zref ->
+                # kQ automático), igual que Modelo_equipo/Numero_serie más
+                # arriba -- por eso va ANTES del bloque "al final" de abajo,
+                # que re-aplica el kQ histórico y gana sobre esta cascada.
+                if datos.get('r50_medido'):
+                    self.R50.setText(str(datos['r50_medido']))
+
+                if datos.get('pdd_zref_electrones'):
+                    self.pddzrefE.setText(str(datos['pdd_zref_electrones']))
 
                 # Re-aplicar factor_calibracion: seleccionar Modelo_equipo y
                 # Numero_serie arriba dispara on_serie_cambiada -> cargar_datos_equipo(),
@@ -2387,13 +2398,24 @@ class DialogCalculadoraDosis(QDialog):
                 if datos.get('factor_calibracion'):
                     self.visualize_calib.setText(str(datos['factor_calibracion']))
 
-                # Re-aplicar Kq_0 AL FINAL, mismo patrón que factor_calibracion:
-                # el cambio de Modelo_equipo/Numero_serie arriba pudo disparar la
-                # cascada de kQ automático (actualizar_kCharge) con el protocolo/
-                # TPR en un estado intermedio y recalcular un valor distinto. El
-                # kQ histórico guardado con el registro debe ganar siempre.
+                # Re-aplicar el kQ guardado AL FINAL, mismo patrón que
+                # factor_calibracion: el cambio de Modelo_equipo/Numero_serie/
+                # R50 arriba pudo disparar la cascada de kQ automático
+                # (actualizar_kCharge o Kq0_r50) con el protocolo/TPR/R50 en
+                # un estado intermedio y recalcular un valor distinto. El kQ
+                # histórico guardado con el registro debe ganar siempre.
+                #
+                # Corregido en E4 (2026-07-10): "Kq_0" es la clave COMPARTIDA
+                # con la que guardar_db persiste el kQ sin importar el tipo de
+                # radiación (ver guardar_db). Antes esto SIEMPRE escribía en
+                # self.Kq_0 (el widget de FOTONES) -- un registro de
+                # electrones cargado dejaba su kQ real en el widget
+                # equivocado y Kq0r50_widget (y por tanto Dzref) vacío.
                 if datos.get('Kq_0'):
-                    self.Kq_0.setText(str(datos['Kq_0']))
+                    if datos.get('Tipo_de_radiacion') == 'Electrones':
+                        self.Kq0r50_widget.setText(str(datos['Kq_0']))
+                    else:
+                        self.Kq_0.setText(str(datos['Kq_0']))
 
                 # Re-enable signals
                 self.blockSignals(False)
@@ -2488,6 +2510,12 @@ class DialogCalculadoraDosis(QDialog):
             "dosis_maxima": self.dosis_maxima.text(),
             "protocolo_trs398": (self.combo_protocolo.currentData()
                                   if hasattr(self, "combo_protocolo") else "2000"),
+            # E4 (auditoría 2026-07-10): sin esto, un registro de ELECTRONES
+            # guardado no tenía de dónde restaurar R50/PDD al recargarlo (ver
+            # cargar_datos_desde_db). QualityR50/zrefR50/Kq0r50_widget no se
+            # persisten aparte: se derivan de R50 + modelo + protocolo.
+            "r50_medido": self.R50.text(),
+            "pdd_zref_electrones": self.pddzrefE.text(),
         }
             
             # Generate report

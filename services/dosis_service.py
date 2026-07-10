@@ -262,13 +262,22 @@ class DosisService():
                     pddzref TEXT,
                     tmrzref TEXT,
                     dosis_maxima TEXT,
-                    protocolo_trs398 TEXT DEFAULT '2000'
+                    protocolo_trs398 TEXT DEFAULT '2000',
+                    r50_medido TEXT,
+                    pdd_zref_electrones TEXT
                 )
             """
 
             cursor.execute(query)
             cls._asegurar_columna(cursor, "calculadora_dosimetrica",
                                    "protocolo_trs398", "TEXT DEFAULT '2000'")
+            # E4 (auditoría 2026-07-10): faltaban columnas para persistir el
+            # R50 medido y el PDD de electrones -- cargar_datos_desde_db no
+            # tenía de dónde restaurarlos (ver hallazgo en CLAUDE.md/plan E4).
+            cls._asegurar_columna(cursor, "calculadora_dosimetrica",
+                                   "r50_medido", "TEXT")
+            cls._asegurar_columna(cursor, "calculadora_dosimetrica",
+                                   "pdd_zref_electrones", "TEXT")
             conn.commit()
             conn.close()
             return True
