@@ -234,6 +234,66 @@ class TestCamaraSinDatosKq:
         assert d.Kq_0.text() == "0.99"
 
 
+def _llenar_hasta_dosis_maxima_n31010(d):
+    """Reproduce el mismo flujo de TestFlujoFotonesConDatos hasta obtener
+    dosis_maxima='1.0046502' -- reusado para probar emitir_dosis (F2)."""
+    seleccionar_camara(d, "N31010")
+    d.fotones.setChecked(True)
+    d.SSD.setChecked(True)
+    d.pulse.setChecked(True)
+    d.temp.setText("22.0")
+    d.pressure.setText("101.325")
+    for campo in (d.lDV1_1, d.lDV1_2, d.lDV1_3):
+        campo.setText("12.437")
+    d.unidades_monitor.setText("100")
+    for campo in (d.Mminus1, d.Mminus2, d.Mminus3):
+        campo.setText("-12.437")
+    d.tension_v1.setText("400")
+    d.tension_v2.setText("100")
+    for campo in (d.lect_m2_1, d.lect_m2_2, d.lect_m2_3):
+        campo.setText("12.437")
+    d.tpr2010.setText("0.68")
+    d.pddzref.setText("66.6")
+    assert d.dosis_maxima.text() == "1.0046502"
+    return d
+
+
+class TestEmitirDosisFormularioMensual:
+    """F2 (auditoría 2026-07-10): corrige H-F1 -- emitir_dosis calculaba
+    '1 - dosis_maxima' (unidad y signo equivocados; el campo destino del
+    formulario mensual espera cGy/MU). La fórmula correcta es
+    'dosis_maxima * 100' (dosis_maxima está en Gy/MU)."""
+
+    def test_valor_emitido_es_dosis_por_100_no_1_menos_dosis(self, dialogo):
+        d = _llenar_hasta_dosis_maxima_n31010(dialogo)
+        emitidos = []
+        d.dosis_asignada.connect(lambda e, v: emitidos.append((e, v)))
+        d.emitir_dosis("6mv")
+        assert emitidos == [("6mv", 100.46502)]
+        # el bug viejo habría emitido 1 - 1.0046502 = -0.0046502
+        assert emitidos[0][1] > 0
+
+    def test_mensaje_de_exito_usa_cgy_um(self, dialogo, monkeypatch):
+        import ui.paginasGuia.dialogs as dialogs_mod
+        mensajes = []
+        monkeypatch.setattr(
+            dialogs_mod.QMessageBox, "information",
+            staticmethod(lambda *a, **k: mensajes.append(a[2])))
+        d = _llenar_hasta_dosis_maxima_n31010(dialogo)
+        d.emitir_dosis("6mv")
+        assert mensajes and "cGy/MU" in mensajes[0]
+        assert "Gy/MU" not in mensajes[0].replace("cGy/MU", "")
+
+    def test_dosis_no_calculada_avisa_y_no_emite(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N31010")  # dosis_maxima nunca se llena
+        emitidos = []
+        d.dosis_asignada.connect(lambda e, v: emitidos.append((e, v)))
+        d.emitir_dosis("6mv")
+        assert not emitidos
+        assert any(a[0] == "warning" for a in d.avisos)
+
+
 class TestCamaraN30013YaNoAvisaSinDatos:
     """E6 (auditoría 2026-07-10): antes del alias, N30013 caía en esta misma
     clase (TestCamaraSinDatosKq) -- disparaba el aviso "sin coeficientes kQ"

@@ -3059,12 +3059,29 @@ class DialogCalculadoraDosis(QDialog):
             self.layout_asignar.addWidget(btn)
     
     def emitir_dosis(self, energia):
-        QApplication.processEvents()  
+        """Asigna la dosis calculada al campo de `energia` en el formulario
+        mensual (ln_dosis_ref_cgy_um_{energia}), en cGy/MU.
+
+        Corregido en F2 (auditoría 2026-07-10, hallazgo H-F1): calculaba
+        `1 - dosis_maxima`. `dosis_maxima` está en Gy/MU (≈0.010, verificado
+        en las 4 configuraciones del corpus 2024); el campo destino espera
+        cGy/MU (≈1.0, verificado contra las 37 filas reales de
+        dosimetriaMen -- confirmado por el usuario). La fórmula vieja
+        producía un valor cercano a 1 por coincidencia aritmética (1 - un
+        número pequeño ≈ 1), pero con la magnitud y el signo equivocados
+        -- se hace evidente con factores de calibración fuera del rango
+        típico (puede dar hasta negativo). La transferencia correcta es
+        `dosis_maxima * 100`.
+        """
+        QApplication.processEvents()
         try:
-            valor = 1 - float(self.dosis_maxima.text())
+            dosis_gy_mu = float(self.dosis_maxima.text())
+            if dosis_gy_mu <= 0:
+                raise ValueError("dosis_maxima no positiva o no calculada")
+            valor = dosis_gy_mu * 100
             self.dosis_asignada.emit(energia, valor)
-            QMessageBox.information(self, "✓ Éxito", 
-                f"Dosis asignada a {energia.upper()}: {valor:.6f} Gy/MU")
+            QMessageBox.information(self, "✓ Éxito",
+                f"Dosis asignada a {energia.upper()}: {valor:.4f} cGy/MU")
         except ValueError:
             QMessageBox.warning(self, "⚠ Error", "Dosis inválida o no calculada")
     
