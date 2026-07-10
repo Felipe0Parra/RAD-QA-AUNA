@@ -954,12 +954,10 @@ class DialogCalculadoraDosis(QDialog):
 
         # Menú principal
         menu_archivo = menubar.addMenu("Archivo")
-        menu_analisis = menubar.addMenu("Análisis")
         menu_reporte = menubar.addMenu("Reporte")
 
         # Acciones
         self.act_comparar_excel = QAction("Comparar con Excel TRS-398", self)
-        self.act_graficar = QAction("Graficar perfiles", self)
         self.act_pdf = QAction("Generar reporte PDF", self)
 
         # Agregar a menús
@@ -970,11 +968,14 @@ class DialogCalculadoraDosis(QDialog):
         # El método import_mcc queda en el código como referencia muerta;
         # D3 (trs398_excel.py) ya reemplazó su función real para hojas
         # Excel, y D4 hará lo propio para autollenar desde .mcc real.
+        # "Análisis > Graficar perfiles" se retiró (G5, auditoría 2026-07-10):
+        # el QAction se agregaba al menú pero su .triggered nunca se conectó
+        # a nada -- ítem muerto. Se reintroducirá junto con D4, cuando el
+        # .mcc autollene perfiles reales para graficar.
         menu_archivo.addAction(self.act_comparar_excel)
         self.act_comparar_excel.triggered.connect(self.comparar_con_excel)
         self.act_pdf.triggered.connect(self.generar_reporte_fecha_seleccionada)
-        
-        menu_analisis.addAction(self.act_graficar)
+
         menu_reporte.addAction(self.act_pdf)
     
     def lista_a_diccionario(self, lista):
@@ -1398,6 +1399,10 @@ class DialogCalculadoraDosis(QDialog):
         escaneo_layout.addWidget(self.pulse)
         escaneo_layout.addWidget(self.pulse_scan)
         self.col1.addWidget(escaneo_box)
+
+        # G4 (auditoría 2026-07-10): "Pulse" es el modo que usa el físico casi
+        # siempre -- lo pidió marcado por defecto (sigue siendo cambiable).
+        self.pulse.setChecked(True)
         
         # Geometría (Fotones)
         geometria_box, geometria_layout = self.crear_bloque(" Geometría de Medición", "#5b9ea8")
@@ -1431,16 +1436,24 @@ class DialogCalculadoraDosis(QDialog):
         self.visualize_calib.setReadOnly(True)
         self.estilo_calculado(self.visualize_calib)
         calib_layout.addWidget(self.visualize_calib)
-        lbl_pdd = QLabel("TPR2010")
-        calib_layout.addWidget(lbl_pdd)
+        self.lbl_tpr2010 = QLabel("TPR2010")
+        calib_layout.addWidget(self.lbl_tpr2010)
         self.tpr2010 = QLineEdit()
         #self.estilo_entrada(self.tpr2010)
         calib_layout.addWidget(self.tpr2010)
-        
+
         self.mostrar_ayuda_tpr2010 = QPushButton('?')
         self.mostrar_ayuda_tpr2010.clicked.connect(self.mostrar_ayuda_parametros_tpr2010)
         self.tpr2010.textChanged.connect(self.actualizar_kCharge)
         calib_layout.addWidget(self.mostrar_ayuda_tpr2010)
+
+        # G2 (auditoría 2026-07-10): TPR20,10 no aplica a electrones -- su kQ
+        # sale de R50, no de TPR. Oculto por defecto (como QR50_box/geometry_box
+        # arriba) hasta que se marque "Fotones"; ver _mostrar_tpr2010.
+        self.lbl_tpr2010.setVisible(False)
+        self.tpr2010.setVisible(False)
+        self.mostrar_ayuda_tpr2010.setVisible(False)
+        self.fotones.toggled.connect(self._mostrar_tpr2010)
         
         
         lbl_temp0 = QLabel("Temperatura de calibración (°C)")
@@ -2182,6 +2195,12 @@ class DialogCalculadoraDosis(QDialog):
     def show_r50(self, checked):
         self.QR50_box.setVisible(checked)
         self.Kq0r50_widget.setVisible(checked)
+
+    def _mostrar_tpr2010(self, checked):
+        """G2 (auditoría 2026-07-10): visible solo con Fotones marcado."""
+        self.lbl_tpr2010.setVisible(checked)
+        self.tpr2010.setVisible(checked)
+        self.mostrar_ayuda_tpr2010.setVisible(checked)
     def seleccionar_equipo_por_id(self, equipo_id):
         """Selecciona un equipo específico en los ComboBox por su ID"""
         try:
@@ -2197,22 +2216,39 @@ class DialogCalculadoraDosis(QDialog):
         except Exception as e:
             print(f"Error seleccionando equipo: {e}")
 
+    @staticmethod
+    def _formatear_1_decimal(valor):
+        """G3 (auditoría 2026-07-10): t_cal/p_cal/h_cal se muestran Y
+        calculan con 1 decimal -- así reporta el certificado/instrumento
+        real (mismo criterio que los .xls del corpus 2024); valores con más
+        cifras en el catálogo son espurios, no precisión real ganada."""
+        try:
+            return f"{float(valor):.1f}"
+        except (TypeError, ValueError):
+            return str(valor)
+
     def cargar_datos_equipo(self):
         """Carga los datos del equipo seleccionado"""
         if self.equipo_id is None:
             return
-            
+
         try:
             self.datos_equipo = EquiposService.obtener_por_id(self.equipo_id)
-            
+
             if self.datos_equipo:
                 self.visualize_calib.setText(str(self.datos_equipo["calibr_fact"]))
-                self.temp_0.setText(str(self.datos_equipo["t_cal"]))
-                self.pressure_0.setText(str(self.datos_equipo["p_cal"]))
+                self.temp_0.setText(self._formatear_1_decimal(self.datos_equipo["t_cal"]))
+                self.pressure_0.setText(self._formatear_1_decimal(self.datos_equipo["p_cal"]))
+                # G3 (auditoría 2026-07-10): antes NO se cargaba h_cal aunque
+                # EquiposService.obtener_por_id ya lo devuelve -- el físico
+                # tenía que teclearlo a mano cada vez que elegía la serie.
+                h_cal = self.datos_equipo.get("h_cal")
+                if h_cal is not None:
+                    self.humr_cal.setText(self._formatear_1_decimal(h_cal))
                 self.actualizar_ktp()
             else:
                 QMessageBox.warning(self, "Error", "No se encontraron datos del equipo")
-                
+
         except Exception as e:
             print(f"Error cargando datos del equipo: {e}")
             QMessageBox.warning(self, "Error", f"Error al cargar datos: {e}")
