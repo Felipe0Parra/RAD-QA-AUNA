@@ -366,23 +366,30 @@ class TestMenuArchivo:
         assert dialogo.act_comparar_excel.text() == "Comparar con Excel TRS-398"
 
 
+def _parchear_dialogo_modal(d, monkeypatch, ruta):
+    """QFileDialog devuelve `ruta`; exec_ no bloquea; captura los filas.
+
+    Extraída a nivel de módulo (antes método de TestComparacionConExcel) para
+    que TestComparacionConExcelElectrones (E5) pueda reusarla sin heredar de
+    la clase de fotones y duplicar toda su colección de tests."""
+    monkeypatch.setattr(
+        dialogs_mod.QFileDialog, "getOpenFileName",
+        staticmethod(lambda *a, **k: (ruta, "")))
+    monkeypatch.setattr(dialogs_mod.QDialog, "exec_", lambda self: 0)
+    capturado = {}
+    orig = d._mostrar_dialogo_comparacion
+
+    def espia(datos, filas, modelo):
+        capturado["datos"], capturado["filas"], capturado["modelo"] = datos, filas, modelo
+        return orig(datos, filas, modelo)
+    monkeypatch.setattr(d, "_mostrar_dialogo_comparacion", espia)
+    return capturado
+
+
 class TestComparacionConExcel:
     """Flujo D3.3: menú 'Comparar con Excel TRS-398' sobre el diálogo real."""
 
-    def _parchear_dialogo_modal(self, d, monkeypatch, ruta):
-        """QFileDialog devuelve `ruta`; exec_ no bloquea; captura los filas."""
-        monkeypatch.setattr(
-            dialogs_mod.QFileDialog, "getOpenFileName",
-            staticmethod(lambda *a, **k: (ruta, "")))
-        monkeypatch.setattr(dialogs_mod.QDialog, "exec_", lambda self: 0)
-        capturado = {}
-        orig = d._mostrar_dialogo_comparacion
-
-        def espia(datos, filas, modelo):
-            capturado["datos"], capturado["filas"], capturado["modelo"] = datos, filas, modelo
-            return orig(datos, filas, modelo)
-        monkeypatch.setattr(d, "_mostrar_dialogo_comparacion", espia)
-        return capturado
+    _parchear_dialogo_modal = staticmethod(_parchear_dialogo_modal)
 
     def test_cancelar_selector_no_hace_nada(self, dialogo, monkeypatch):
         monkeypatch.setattr(
@@ -440,6 +447,57 @@ class TestComparacionConExcel:
         for f in cap["filas"]:
             assert f["comparable"], f["magnitud"]
             assert f["ok"], f"{f['magnitud']} difiere -- ¿el pin a 2000 se rompió?"
+
+
+ELECTRONES_12MEV = os.path.expanduser(
+    "~/Documents/Archivos_UseApp/Archivos QA/2024/Enero/iX/Electrones/TRS-398 12 MeV.xls")
+
+
+class TestComparacionConExcelElectrones:
+    """E5 (auditoría 2026-07-10): el comparador 'Comparar con Excel TRS-398'
+    ahora reconoce hojas de ELECTRONES (antes solo entendía el layout de
+    fotones -- leerlas producía celdas corridas / NC engañoso). Reusa
+    _parchear_dialogo_modal (función de módulo, ver TestComparacionConExcel)."""
+
+    @pytest.mark.skipif(not os.path.exists(ELECTRONES_12MEV),
+                        reason="corpus 2024 no disponible en esta máquina")
+    def test_electrones_12mev_con_roos_todo_ok(self, dialogo, monkeypatch):
+        seleccionar_camara(dialogo, "N34001")
+        dialogo.electrones.setChecked(True)
+        cap = _parchear_dialogo_modal(dialogo, monkeypatch, ELECTRONES_12MEV)
+        dialogo.comparar_con_excel()
+        assert cap["datos"]["tipo_haz"] == "electrones"
+        assert cap["modelo"] == "N34001"
+        for f in cap["filas"]:
+            assert f["comparable"], f["magnitud"]
+            assert f["ok"], f"{f['magnitud']} difiere: {f['diferencia_rel']}"
+
+    @pytest.mark.skipif(not os.path.exists(ELECTRONES_12MEV),
+                        reason="corpus 2024 no disponible en esta máquina")
+    def test_electrones_sin_camara_compara_parcial_con_aviso_correcto(
+            self, dialogo, monkeypatch):
+        """Sin cámara seleccionada, el aviso debe evaluar la guarda de
+        ELECTRONES (camara_tiene_kq_electrones) -- si usara por error la de
+        fotones, N31010 (que SÍ tiene fila de fotones) pasaría la guarda y
+        el aviso desaparecería incorrectamente para una hoja de electrones."""
+        cap = _parchear_dialogo_modal(dialogo, monkeypatch, ELECTRONES_12MEV)
+        dialogo.comparar_con_excel()
+        filas = {f["magnitud"]: f for f in cap["filas"]}
+        assert filas["kQ"]["comparable"] is False
+        assert filas["ktp"]["comparable"] is True and filas["ktp"]["ok"]
+
+    @pytest.mark.skipif(not os.path.exists(ELECTRONES_12MEV),
+                        reason="corpus 2024 no disponible en esta máquina")
+    def test_electrones_no_compara_zref_r50w(self, dialogo, monkeypatch):
+        """10/53 hojas del corpus tienen zref sobreescrito a mano por el
+        físico (uso legítimo) -- por diseño esa celda no debe aparecer entre
+        las magnitudes comparadas, para no producir un rojo engañoso."""
+        seleccionar_camara(dialogo, "N34001")
+        cap = _parchear_dialogo_modal(dialogo, monkeypatch, ELECTRONES_12MEV)
+        dialogo.comparar_con_excel()
+        magnitudes = {f["magnitud"] for f in cap["filas"]}
+        assert "zref" not in magnitudes
+        assert "r50w" not in magnitudes
 
 
 class TestFlujoElectronesRoos:

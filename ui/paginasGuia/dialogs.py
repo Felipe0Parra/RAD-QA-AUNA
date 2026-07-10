@@ -1129,7 +1129,18 @@ class DialogCalculadoraDosis(QDialog):
         # Fase K1): las hojas del físico están en TRS-398 2000, no en Rev.1 -
         # este aviso debe reflejar SIEMPRE esa tabla, sin importar en qué
         # protocolo esté el selector de la calculadora (combo_protocolo).
-        if modelo is None or not DosisService.camara_tiene_kq(modelo, protocolo="2000"):
+        #
+        # La guarda de "tiene kQ" depende del tipo de haz de LA HOJA leída
+        # (datos['tipo_haz'], detectado por trs398_excel -- E5, 2026-07-10):
+        # una hoja de electrones se valida contra camara_tiene_kq_electrones
+        # (tabla R50), no contra la de fotones (tabla TPR20,10).
+        if datos.get("tipo_haz") == "electrones":
+            tiene_kq = modelo is not None and DosisService.camara_tiene_kq_electrones(
+                modelo, protocolo="2000")
+        else:
+            tiene_kq = modelo is not None and DosisService.camara_tiene_kq(
+                modelo, protocolo="2000")
+        if not tiene_kq:
             aviso = QLabel(
                 "⚠ Sin una cámara con coeficientes kQ seleccionada, las filas "
                 "kQ, D(zref) y D(zmax) no se pueden comparar.")

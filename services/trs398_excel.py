@@ -73,6 +73,57 @@ CELDAS_CALCULADAS = {
     "dosis_maxima":  "H83",   # dosis en zmax, montaje SSD (Gy/MU)
 }
 
+# Mapeo de la hoja de ELECTRONES (auditoría 2026-07-10 contra las 53 hojas de
+# electrones del corpus 2024: layout FIJO, igual de estable que el de
+# fotones, verificado en las 4 energías iX 6/9/12/15 MeV). Mismas claves
+# lógicas de CELDAS_CALCULADAS (ktp/kpol/ks/Mq/kQ/Dzref/dosis_maxima) para que
+# comparar_trs398/ETIQUETAS no necesiten duplicarse por tipo de haz.
+#
+# NO se mapea "zref" (I11, calidad R50,w derivada) ni r50w: 10/53 hojas del
+# corpus lo tienen sobreescrito a mano por el físico (p. ej. 1.4 en vez del
+# 1.33 calculado) -- comparar esa celda produciría un rojo engañoso por un
+# uso legítimo del formato, no un error de cálculo.
+CELDAS_ENTRADAS_ELECTRONES = {
+    "acelerador":          "D6",
+    "energia_nominal":     "I7",
+    "r50_medido":          "I8",
+    "serie_camara":        "H14",
+    "factor_calibracion":  "G19",   # N_D,w
+    "profundidad_calib":   "H20",
+    "P0":                  "C23",
+    "T0":                  "F23",
+    "humedad_calib":       "I23",
+    "V1_polarizante":      "D25",
+    "P_clinica":           "C43",
+    "T_clinica":           "F43",
+    "humedad_clinica":     "I43",
+    "lectura_V1":          "H40",
+    "unidades_monitor":    "H41",
+    "M1_ratio":            "H42",
+    "kelec":               "F48",
+    "Mplus":               "F50",
+    "Mminus":              "J50",
+    "V1_recomb":           "F57",
+    "V2_recomb":           "I57",
+    "M1_recomb":           "F58",
+    "M2_recomb":           "I58",
+    "a0":                  "E61",
+    "a1":                  "G61",
+    "a2":                  "I61",
+    "zmax":                "H83",
+    "PDD_zref":            "H86",
+}
+
+CELDAS_CALCULADAS_ELECTRONES = {
+    "ktp":           "I45",
+    "kpol":          "I53",
+    "ks":            "I63",
+    "Mq":            "G68",   # lectura corregida a V1
+    "kQ":            "I72",   # Table 18/20 (Q0=Co-60), a la calidad R50,w
+    "Dzref":         "G80",   # dosis en zref (Gy/MU)
+    "dosis_maxima":  "H89",   # dosis en zmax, montaje SSD (Gy/MU)
+}
+
 
 def _ref_a_indices(ref):
     """'I43' -> (fila0, col0) en base 0."""
@@ -142,11 +193,34 @@ def _abrir_xlsx(ruta):
     return _LectorCeldas(celda)
 
 
+def _detectar_tipo_haz(lector):
+    """Lee A2 ('...in a high-energy photon-beam' / '...in an electron-beam')
+    para elegir el mapa de celdas correcto. Ambos layouts comparten fila/hoja
+    pero difieren en las filas de abajo (electrones tiene 2 filas más de
+    encabezado en la sección 1) -- por eso el mapeo por coordenada NO es
+    intercambiable entre haces, a diferencia de entre variantes del mismo haz
+    (6 MV / 6 MV FFF / 600, verificado idéntico en D3).
+
+    Devuelve "fotones" (default si no se reconoce -- preserva el
+    comportamiento pre-E5, cuando solo existía el mapa de fotones) o
+    "electrones".
+    """
+    valor = lector.obtener("A2")
+    if isinstance(valor, str):
+        v = valor.lower()
+        if "electron" in v:
+            return "electrones"
+        if "photon" in v:
+            return "fotones"
+    return "fotones"
+
+
 def leer_trs398(ruta):
     """Lee una hoja TRS-398 (.xls/.xlsx/.xlsm) y devuelve un dict:
 
         {
             "archivo": <nombre>,
+            "tipo_haz": "fotones" | "electrones",
             "entradas":   {clave: valor, ...},   # datos crudos
             "calculados": {clave: valor, ...},   # resultados del Excel
         }
@@ -165,10 +239,17 @@ def leer_trs398(ruta):
     else:
         raise ValueError(f"Formato no soportado: {ext} (use .xls, .xlsx o .xlsm)")
 
+    tipo_haz = _detectar_tipo_haz(lector)
+    if tipo_haz == "electrones":
+        mapa_entradas, mapa_calculadas = CELDAS_ENTRADAS_ELECTRONES, CELDAS_CALCULADAS_ELECTRONES
+    else:
+        mapa_entradas, mapa_calculadas = CELDAS_ENTRADAS, CELDAS_CALCULADAS
+
     return {
         "archivo": os.path.basename(ruta),
-        "entradas": {k: lector.obtener(ref) for k, ref in CELDAS_ENTRADAS.items()},
-        "calculados": {k: lector.obtener(ref) for k, ref in CELDAS_CALCULADAS.items()},
+        "tipo_haz": tipo_haz,
+        "entradas": {k: lector.obtener(ref) for k, ref in mapa_entradas.items()},
+        "calculados": {k: lector.obtener(ref) for k, ref in mapa_calculadas.items()},
     }
 
 
@@ -184,12 +265,14 @@ ETIQUETAS = {
 }
 
 
-def _recalcular_con_app(entradas):
+def _recalcular_con_app(entradas, tipo_haz="fotones"):
     """Recalcula las magnitudes con el MISMO motor que usa la calculadora
     (services.dosis_service) a partir de las entradas crudas del Excel.
 
     Devuelve {clave: valor|None}. Un valor None significa "no recalculable"
-    (falta un dato de entrada, o kQ sin modelo de cámara conocido).
+    (falta un dato de entrada, o kQ sin modelo de cámara conocido). ktp/kpol/
+    ks son física genérica idéntica para ambos haces; Mq/kQ/Dzref/dosis_maxima
+    bifurcan por tipo_haz (E5, auditoría 2026-07-10).
     """
     from services.dosis_service import DosisService
 
@@ -223,31 +306,49 @@ def _recalcular_con_app(entradas):
 
     coc = num("lectura_V1", "unidades_monitor")
     cociente = DosisService.cociente_ldv1_um(*coc) if coc else None
-    if cociente is not None and None not in (r["ktp"], r["kpol"], r["ks"]):
-        r["Mq"] = DosisService.calcular_mq_fot(cociente, r["ktp"], r["kpol"], r["ks"])
-    else:
-        r["Mq"] = None
-
-    # kQ requiere el modelo de cámara (la clave que resuelve KQ_TPR_TABLE).
-    # Pineado a protocolo "2000" A PROPÓSITO (Fase K): las hojas TRS-398 oficiales
-    # que el físico usa hoy están calculadas con la TRS-398 original (2000), no
-    # con Rev.1 — comparar contra la tabla equivocada produciría rojos engañosos
-    # en "Comparar con Excel TRS-398". Si algún día llegan hojas Rev.1, este
-    # pineado debe revisarse (p. ej. leyendo el protocolo desde la propia hoja).
     modelo = e.get("_modelo_camara")
-    tpr = num("tpr2010")
-    if modelo and tpr and DosisService.camara_tiene_kq(modelo, protocolo="2000"):
-        r["kQ"] = DosisService.interpolar_kq0(modelo, tpr[0], protocolo="2000")
-    else:
-        r["kQ"] = None
-
     cal = num("factor_calibracion")
+    pdd = num("PDD_zref")
+
+    if tipo_haz == "electrones":
+        if cociente is not None and None not in (r["ktp"], r["kpol"], r["ks"]):
+            r["Mq"] = DosisService.calcular_mq_elec(cociente, r["ktp"], r["kpol"], r["ks"])
+        else:
+            r["Mq"] = None
+
+        # kQ de electrones se interpola a la CALIDAD R50,w (no al R50 medido
+        # crudo -- mismo fix de E2/E3), pineado a protocolo "2000" por la
+        # misma razón que fotones (ver más abajo).
+        r50m = num("r50_medido")
+        r50w = DosisService.r50_quality(r50m[0]) if r50m else None
+        if (modelo and r50w is not None
+                and DosisService.camara_tiene_kq_electrones(modelo, protocolo="2000")):
+            r["kQ"] = DosisService.interpolar_r50(modelo, r50w, protocolo="2000")
+        else:
+            r["kQ"] = None
+    else:
+        if cociente is not None and None not in (r["ktp"], r["kpol"], r["ks"]):
+            r["Mq"] = DosisService.calcular_mq_fot(cociente, r["ktp"], r["kpol"], r["ks"])
+        else:
+            r["Mq"] = None
+
+        # kQ requiere el modelo de cámara (la clave que resuelve KQ_TPR_TABLE).
+        # Pineado a protocolo "2000" A PROPÓSITO (Fase K): las hojas TRS-398 oficiales
+        # que el físico usa hoy están calculadas con la TRS-398 original (2000), no
+        # con Rev.1 — comparar contra la tabla equivocada produciría rojos engañosos
+        # en "Comparar con Excel TRS-398". Si algún día llegan hojas Rev.1, este
+        # pineado debe revisarse (p. ej. leyendo el protocolo desde la propia hoja).
+        tpr = num("tpr2010")
+        if modelo and tpr and DosisService.camara_tiene_kq(modelo, protocolo="2000"):
+            r["kQ"] = DosisService.interpolar_kq0(modelo, tpr[0], protocolo="2000")
+        else:
+            r["kQ"] = None
+
     if cal and None not in (r["Mq"], r["kQ"]):
         r["Dzref"] = DosisService.calcular_dwref(cal[0], r["Mq"], r["kQ"])
     else:
         r["Dzref"] = None
 
-    pdd = num("PDD_zref")
     if r["Dzref"] is not None and pdd:
         r["dosis_maxima"] = DosisService.dwqzmax_calc(r["Dzref"], pdd[0])
     else:
@@ -273,11 +374,15 @@ def comparar_trs398(datos_excel, modelo_camara=None, tolerancia_rel=0.001):
     """
     entradas = dict(datos_excel["entradas"])
     entradas["_modelo_camara"] = modelo_camara
-    app = _recalcular_con_app(entradas)
+    tipo_haz = datos_excel.get("tipo_haz") or "fotones"
+    app = _recalcular_con_app(entradas, tipo_haz=tipo_haz)
     excel = datos_excel["calculados"]
 
+    # Mismas 7 claves lógicas en ambos mapas (E5) -- ETIQUETAS no necesita
+    # bifurcar por tipo_haz.
+    claves = CELDAS_CALCULADAS_ELECTRONES if tipo_haz == "electrones" else CELDAS_CALCULADAS
     filas = []
-    for clave in CELDAS_CALCULADAS:
+    for clave in claves:
         va, vx = app.get(clave), excel.get(clave)
         comparable = va is not None and vx is not None
         dif = ok = None

@@ -19,7 +19,8 @@ import pytest
 
 from services.trs398_excel import (
     leer_trs398, comparar_trs398, CELDAS_ENTRADAS, CELDAS_CALCULADAS,
-    _ref_a_indices, _normalizar,
+    CELDAS_ENTRADAS_ELECTRONES, CELDAS_CALCULADAS_ELECTRONES,
+    _ref_a_indices, _normalizar, _detectar_tipo_haz,
 )
 
 # Caso realista: entradas del Halcyon con sus valores calculados por el Excel.
@@ -43,6 +44,31 @@ DATOS_HALCYON = {
 
 CARPETA_REAL = os.path.expanduser("~/Documents/Archivos_UseApp")
 HALCYON = os.path.join(CARPETA_REAL, "TRS-398 6 MV FFF Halcyon Dmax.xls")
+ELECTRONES_12MEV = os.path.join(
+    CARPETA_REAL, "Archivos QA/2024/Enero/iX/Electrones/TRS-398 12 MeV.xls")
+
+# Caso realista de ELECTRONES (E5, auditoría 2026-07-10): hoja real
+# Enero/iX/12 MeV, cámara Roos (N34001). Sirve para probar comparar_trs398
+# sin depender del corpus real -- la validación contra el archivo real vive
+# en TestArchivoRealElectrones12MeV más abajo.
+DATOS_ELECTRONES_12MEV = {
+    "archivo": "test_electrones.xls",
+    "tipo_haz": "electrones",
+    "entradas": {
+        "r50_medido": 5.127,
+        "T_clinica": 21.9, "P_clinica": 85.43, "T0": 20.0, "P0": 101.325,
+        "Mplus": 20.96, "Mminus": 20.93, "M1_recomb": 20.96, "M2_recomb": 20.52,
+        "a0": 1.022, "a1": -0.3632, "a2": 0.3413,
+        "lectura_V1": 21.36, "unidades_monitor": 200.0,
+        "factor_calibracion": 0.08563, "PDD_zref": 99.3,
+    },
+    "calculados": {
+        "ktp": 1.1937446812282109, "kpol": 0.9992843511450381,
+        "ks": 1.0071056560613143, "Mq": 0.12830595800293096,
+        "kQ": 0.9102745360000001, "Dzref": 0.010001039940131951,
+        "dosis_maxima": 0.01007154072520841,
+    },
+}
 
 
 # ── Capa 1: fixture sintético determinista ────────────────────────────────
@@ -171,6 +197,98 @@ class TestComparacion:
         assert filas["kpol"]["comparable"] is False
 
 
+# ── E5 (2026-07-10): detección de tipo de haz + hojas de ELECTRONES ──────
+
+ENTRADAS_TESTIGO_ELECTRONES = {k: float(i + 1) for i, k in enumerate(CELDAS_ENTRADAS_ELECTRONES)}
+CALCULADOS_TESTIGO_ELECTRONES = {
+    k: round(1.0 + i / 100, 3) for i, k in enumerate(CELDAS_CALCULADAS_ELECTRONES)}
+
+
+def _xlsx_con_haz(tmp_path, nombre, texto_a2, entradas_map=None, calculadas_map=None):
+    """Construye un .xlsx con la hoja 'Sheet', A2 = texto_a2 (para probar
+    _detectar_tipo_haz) y, si se pasan mapas, los valores testigo en sus
+    celdas -- mismo patrón que xlsx_sintetico pero parametrizado por haz."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet"
+    ws["A2"] = texto_a2
+    if entradas_map:
+        for clave, valor in ENTRADAS_TESTIGO_ELECTRONES.items():
+            ws[entradas_map[clave]] = valor
+    if calculadas_map:
+        for clave, valor in CALCULADOS_TESTIGO_ELECTRONES.items():
+            ws[calculadas_map[clave]] = valor
+    ruta = tmp_path / nombre
+    wb.save(ruta)
+    return str(ruta)
+
+
+class TestDeteccionTipoHaz:
+    """leer_trs398 debe elegir el mapa de celdas correcto según A2."""
+
+    def test_texto_photon_beam(self, tmp_path):
+        ruta = _xlsx_con_haz(tmp_path, "f.xlsx",
+                             "in a high-energy photon-beam")
+        assert leer_trs398(ruta)["tipo_haz"] == "fotones"
+
+    def test_texto_electron_beam(self, tmp_path):
+        ruta = _xlsx_con_haz(tmp_path, "e.xlsx", "in an electron-beam",
+                             CELDAS_ENTRADAS_ELECTRONES, CELDAS_CALCULADAS_ELECTRONES)
+        datos = leer_trs398(ruta)
+        assert datos["tipo_haz"] == "electrones"
+        for clave, esperado in ENTRADAS_TESTIGO_ELECTRONES.items():
+            assert datos["entradas"][clave] == esperado, clave
+
+    def test_a2_irreconocible_hace_fallback_a_fotones(self, tmp_path):
+        """Preserva el comportamiento pre-E5: un archivo sin A2 reconocible
+        (como el fixture sintético xlsx_sintetico, que no la setea) se lee
+        con el mapa de fotones -- el único que existía antes de esta fase."""
+        ruta = _xlsx_con_haz(tmp_path, "vacio.xlsx", "")
+        assert leer_trs398(ruta)["tipo_haz"] == "fotones"
+
+    def test_detectar_tipo_haz_directo(self):
+        from services.trs398_excel import _LectorCeldas
+        lector = _LectorCeldas(lambda f, c: "in an electron-beam" if (f, c) == (1, 0) else None)
+        assert _detectar_tipo_haz(lector) == "electrones"
+
+
+class TestComparacionElectrones:
+    """Espejo de TestComparacion pero con la hoja de ELECTRONES (Roos,
+    N34001) -- valores centinela de la hoja real Enero/iX 12 MeV."""
+
+    def test_con_modelo_todo_comparable_y_ok(self):
+        filas = comparar_trs398(DATOS_ELECTRONES_12MEV, modelo_camara="N34001")
+        assert len(filas) == len(CELDAS_CALCULADAS_ELECTRONES)
+        for f in filas:
+            assert f["comparable"], f["magnitud"]
+            assert f["ok"], f"{f['magnitud']} difiere: {f['diferencia_rel']}"
+
+    def test_sin_modelo_kq_y_dependientes_no_comparables(self):
+        filas = {f["magnitud"]: f for f in comparar_trs398(DATOS_ELECTRONES_12MEV)}
+        assert filas["kQ"]["comparable"] is False
+        assert filas["Dzref"]["comparable"] is False
+        assert filas["dosis_maxima"]["comparable"] is False
+        for clave in ("ktp", "kpol", "ks", "Mq"):
+            assert filas[clave]["comparable"] is True
+            assert filas[clave]["ok"] is True
+
+    def test_camara_de_fotones_no_tiene_kq_de_electrones(self):
+        """N31010 tiene fila en la tabla de FOTONES pero no en la de
+        electrones -- comparar una hoja de electrones con esa cámara
+        seleccionada debe dejar kQ no comparable, no interpolar la tabla
+        equivocada (el bug real que motivó E2/E3)."""
+        filas = {f["magnitud"]: f
+                for f in comparar_trs398(DATOS_ELECTRONES_12MEV, modelo_camara="N31010")}
+        assert filas["kQ"]["comparable"] is False
+
+    def test_no_incluye_zref_ni_r50w(self):
+        """10/53 hojas del corpus sobreescriben zref a mano -- no debe
+        aparecer entre las magnitudes comparadas (evita un rojo engañoso)."""
+        magnitudes = {f["magnitud"] for f in comparar_trs398(DATOS_ELECTRONES_12MEV)}
+        assert "zref" not in magnitudes
+        assert "r50w" not in magnitudes
+
+
 # ── Capa 2: validación opcional contra archivos reales ────────────────────
 
 @pytest.fixture(scope="module")
@@ -219,3 +337,60 @@ class TestArchivoRealHalcyon:
         m1m2 = DosisService.cociente_M1M2(e["M1_recomb"], e["M2_recomb"])
         assert DosisService.Ks_factor(e["a0"], e["a1"], e["a2"], m1m2) == round(c["ks"], 4)
         assert DosisService.interpolar_kq0("N31010", e["tpr2010"]) == c["kQ"]
+
+
+@pytest.fixture(scope="module")
+def datos_electrones_12mev():
+    return leer_trs398(ELECTRONES_12MEV)
+
+
+@pytest.mark.skipif(not os.path.exists(ELECTRONES_12MEV),
+                    reason="corpus 2024 no disponible en esta máquina")
+class TestArchivoRealElectrones12MeV:
+    """Espejo de TestArchivoRealHalcyon para la hoja real de ELECTRONES
+    (E5, auditoría 2026-07-10): Enero/iX/Electrones/TRS-398 12 MeV.xls,
+    cámara Roos serie 1069 (N34001)."""
+
+    @pytest.fixture
+    def datos(self, datos_electrones_12mev):
+        return datos_electrones_12mev
+
+    def test_tipo_haz_detectado(self, datos):
+        assert datos["tipo_haz"] == "electrones"
+
+    def test_descifra_y_lee_identificacion(self, datos):
+        assert datos["entradas"]["acelerador"] == "IX"
+        assert datos["entradas"]["serie_camara"] == 1069.0
+        assert datos["entradas"]["r50_medido"] == 5.127
+
+    def test_entradas_crudas_esperadas(self, datos):
+        e = datos["entradas"]
+        assert e["T_clinica"] == 21.9
+        assert e["P_clinica"] == 85.43
+        assert e["Mplus"] == 20.96
+        assert e["Mminus"] == 20.93
+        assert e["factor_calibracion"] == 0.08563
+
+    def test_valores_calculados_del_excel(self, datos):
+        c = datos["calculados"]
+        assert round(c["ktp"], 4) == 1.1937
+        assert round(c["kpol"], 5) == 0.99928
+        assert round(c["ks"], 4) == 1.0071
+        assert round(c["kQ"], 5) == 0.91027
+        assert round(c["Dzref"], 6) == 0.010001
+
+    def test_motor_de_la_app_reproduce_al_excel(self, datos):
+        """Mismo espíritu que D3 pero para electrones: recalcular con el
+        motor de la app y confirmar que coincide con lo que ya trae el
+        Excel oficial (E1-E3 corrigieron los 3 bugs que lo impedían)."""
+        from services.dosis_service import DosisService
+        e, c = datos["entradas"], datos["calculados"]
+
+        assert DosisService.factor_tp(
+            e["T_clinica"], e["P_clinica"], e["T0"], e["P0"]) == round(c["ktp"], 4)
+        assert DosisService.factor_k_polaridad(
+            e["Mplus"], e["Mminus"]) == round(c["kpol"], 5)
+        m1m2 = DosisService.cociente_M1M2(e["M1_recomb"], e["M2_recomb"])
+        assert DosisService.Ks_factor(e["a0"], e["a1"], e["a2"], m1m2) == round(c["ks"], 4)
+        r50w = DosisService.r50_quality(e["r50_medido"])
+        assert DosisService.interpolar_r50("N34001", r50w) == round(c["kQ"], 5)
