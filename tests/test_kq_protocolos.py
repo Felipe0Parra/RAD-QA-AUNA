@@ -67,10 +67,15 @@ class TestPropiedadesTablaRev1:
     def test_tn31022_alias_de_n31022(self):
         assert KQ_TPR_TABLE_REV1["TN31022"] == KQ_TPR_TABLE_REV1["N31022"]
 
+    def test_n30013_alias_de_30013(self):
+        """E6 (auditoría 2026-07-10): "N30013" ya no está congelada -- la
+        clave real de la BD (serie 2123) se confirmó con evidencia (hoja
+        farmer real, 7/7 verdes) y ahora es alias de "30013" en ambos
+        protocolos, no solo en KQ_TPR_TABLE (2000)."""
+        assert KQ_TPR_TABLE_REV1["N30013"] == KQ_TPR_TABLE_REV1["30013"]
+
     def test_no_incluye_camaras_congeladas_o_ausentes(self):
-        # N30013 sigue congelada (falta verificar certificado); N31014 no
-        # existe en Rev.1 (ausente también en el Cuadro 14 de 2000).
-        assert "N30013" not in KQ_TPR_TABLE_REV1
+        # N31014 no existe en Rev.1 (ausente también en el Cuadro 14 de 2000).
         assert "N31014" not in KQ_TPR_TABLE_REV1
 
 

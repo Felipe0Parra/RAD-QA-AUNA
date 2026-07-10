@@ -235,6 +235,15 @@ KQ_TPR_TABLE = {
 
 }
 
+# Alias (E6, auditoría 2026-07-10): el certificado de calibración y la BD
+# real (AUNA_2026_2/BaseDatosQA.db, serie 2123) identifican esta cámara como
+# "N30013" -- la tabla histórica solo tenía la clave sin el prefijo "N", así
+# que no hacían match y la Farmer real quedaba en kQ manual (K-fix, hallazgo
+# #4). Evidencia que respalda el alias: la hoja farmer 6 MV de Mayo/2024
+# (serie 2123 real) reproduce esta fila 7/7 verdes vía comparar_trs398
+# (kQ dif. 0.027%, dentro de la tolerancia 0.1%).
+KQ_TPR_TABLE["N30013"] = dict(KQ_TPR_TABLE["30013"])
+
 # kQ(TPR20,10) para fotones, cámaras cilíndricas — copia literal de la Tabla 16 de
 # la TRS-398 Rev.1 (OIEA, "p15048-DOC-010-398-Rev1_web.pdf", págs. 103-105). Nodos
 # 0.56-0.82 (Rev.1 no publica 0.50/0.53/0.84, a diferencia del Cuadro 14 de 2000).
@@ -313,6 +322,10 @@ KQ_TPR_TABLE_REV1 = {
     "TN31022": dict(_REV1_31022),
 
 }
+
+# Alias "N30013" (E6, misma evidencia que en KQ_TPR_TABLE arriba) también
+# para la tabla Rev.1 -- consistencia entre protocolos del selector K4.
+KQ_TPR_TABLE_REV1["N30013"] = dict(KQ_TPR_TABLE_REV1["30013"])
 
 # Tablas kQ(TPR20,10) por versión de protocolo. "2000" = Cuadro 14 (KQ_TPR_TABLE,
 # arriba); "rev1" = Tabla 16 (KQ_TPR_TABLE_REV1, arriba).

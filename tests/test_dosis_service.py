@@ -72,9 +72,18 @@ class TestGuardaCamaraTieneKq:
     def test_camara_con_datos(self):
         assert DosisService.camara_tiene_kq("N31010") is True
 
+    def test_n30013_tiene_datos_via_alias(self):
+        """E6 (auditoría 2026-07-10): antes de este alias, "N30013" (la clave
+        real de la BD, serie 2123) no hacía match con "30013" (la clave
+        histórica de la tabla) y la Farmer real quedaba en kQ manual. La hoja
+        farmer 6 MV de Mayo/2024 (serie 2123 real) reproduce esta fila 7/7
+        verdes vía comparar_trs398 -- ya no está "sin verificar"."""
+        assert DosisService.camara_tiene_kq("N30013") is True
+        assert DosisService.interpolar_kq0("N30013", 0.6707) == \
+            DosisService.interpolar_kq0("30013", 0.6707)
+
     @pytest.mark.parametrize("modelo", [
         "N31014", "N31022", "TN31022", "N34001", "TN34001",
-        "N30013",  # su fila existe pero con la clave "30013" — sin verificar aún
         None,
     ])
     def test_camaras_activas_sin_datos(self, modelo):

@@ -36,7 +36,10 @@ EQUIPO_N31022 = {"id": 99, "equip_type": "Cámara de ionización", "model": "N31
 EQUIPO_N34001 = {"id": 55, "equip_type": "Cámara de ionización", "model": "N34001",
                  "serie": "1069", "calibr_fact": 0.08563, "t_cal": 20.0,
                  "p_cal": 101.325, "h_cal": 50.0}
-EQUIPOS = (EQUIPO_N31010, EQUIPO_N31014, EQUIPO_N31022, EQUIPO_N34001)
+EQUIPO_N30013 = {"id": 12, "equip_type": "Cámara de ionización", "model": "N30013",
+                 "serie": "2123", "calibr_fact": 0.306, "t_cal": 20.0,
+                 "p_cal": 101.325, "h_cal": 50.0}
+EQUIPOS = (EQUIPO_N31010, EQUIPO_N31014, EQUIPO_N31022, EQUIPO_N34001, EQUIPO_N30013)
 
 
 class VentanaIX(QWidget):
@@ -229,6 +232,27 @@ class TestCamaraSinDatosKq:
         assert "manualmente" not in d.Kq_0.placeholderText()
         d.tpr2010.setText("0.68")
         assert d.Kq_0.text() == "0.99"
+
+
+class TestCamaraN30013YaNoAvisaSinDatos:
+    """E6 (auditoría 2026-07-10): antes del alias, N30013 caía en esta misma
+    clase (TestCamaraSinDatosKq) -- disparaba el aviso "sin coeficientes kQ"
+    pese a que la fila SÍ existe en la tabla bajo la clave "30013". Verificado
+    end-to-end contra la hoja real de Mayo/2024 (serie 2123): 7/7 verdes."""
+
+    def test_no_avisa_al_seleccionar(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N30013")
+        avisos_kq = [a for a in d.avisos if "coeficientes kQ" in a[1]]
+        assert not avisos_kq, f"N30013 ya no debería avisar, pero: {avisos_kq}"
+        assert "manualmente" not in d.Kq_0.placeholderText()
+
+    def test_kq_automatico_desde_tpr(self, dialogo):
+        d = dialogo
+        seleccionar_camara(d, "N30013")
+        d.fotones.setChecked(True)
+        d.tpr2010.setText("0.6707")
+        assert d.Kq_0.text() == "0.9912"
 
 
 class TestSelectorProtocolo:
