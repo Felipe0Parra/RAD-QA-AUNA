@@ -2036,8 +2036,8 @@ class DialogCalculadoraDosis(QDialog):
             "Guarda este cálculo en el registro de la calculadora.\n"
             "NO asigna la dosis al formulario mensual -- para eso, use el "
             "botón de la energía correspondiente (p. ej. \"6 MV\").")
-        self.btn_ok.clicked.connect(self.guardar_db)
-        self.btn_ok.clicked.connect(self.accept)
+        # G1 (auditoría 2026-07-10): una sola conexión -- ver on_aceptar_y_cerrar.
+        self.btn_ok.clicked.connect(self.on_aceptar_y_cerrar)
         result_layout.addWidget(self.btn_ok)
         
 
@@ -2495,6 +2495,63 @@ class DialogCalculadoraDosis(QDialog):
         "Zref", "Zmax", "Kq_0", "Dzref", "dosis_maxima",
     )
 
+    # Etiquetas amigables para el aviso de campos faltantes (Fase G1,
+    # auditoría 2026-07-10): el físico no debe leer claves crudas de columna
+    # ("Tipo_de_medicion") sino el nombre del dato tal como lo conoce.
+    _ETIQUETAS_CAMPOS = {
+        "Fecha": "Fecha",
+        "Acelerador": "Acelerador",
+        "equipo_id": "Equipo (selección de cámara)",
+        "Modelo_equipo": "Modelo de cámara",
+        "Numero_serie": "Número de serie de la cámara",
+        "factor_calibracion": "Factor de calibración (N_D,w)",
+        "Tamano_campo": "Tamaño de campo",
+        "Tipo_de_radiacion": "Tipo de radiación (Fotones/Electrones)",
+        "Tipo_de_escaneo": "Tipo de escaneo (Pulse/Pulse scanned)",
+        "Tipo_de_medicion": "Tipo de medición (SSD)",
+        "temperatura": "Temperatura de calibración",
+        "presion": "Presión de calibración",
+        "Humedad_calibracion": "Humedad de calibración",
+        "temp_clinica": "Temperatura clínica",
+        "presion_clinica": "Presión clínica",
+        "Humedad_relativa": "Humedad relativa clínica",
+        "ktp": "Factor ktp",
+        "lectura_Q1": "Lectura Q1",
+        "lectura_Q2": "Lectura Q2",
+        "lectura_Q3": "Lectura Q3",
+        "lectura_dosimetro": "Lectura promedio del dosímetro",
+        "unidades_monitor": "Unidades de monitor (UM)",
+        "cociente_ldv1_um": "Cociente lectura/UM",
+        "Mplus": "Lectura M+ (polaridad positiva)",
+        "Lectura_neg_1": "Lectura M- 1 (polaridad negativa)",
+        "Lectura_neg_2": "Lectura M- 2 (polaridad negativa)",
+        "Lectura_neg_3": "Lectura M- 3 (polaridad negativa)",
+        "Lectura_neg_prom": "Lectura M- promedio (polaridad negativa)",
+        "Kpol": "Factor de polaridad Kpol",
+        "tension_v1": "Tensión V1",
+        "tension_v2": "Tensión V2",
+        "cociente_tensiones": "Cociente de tensiones V1/V2",
+        "lectura_m1": "Lectura M1 (recombinación)",
+        "lectura_m2_1": "Lectura M2 (1)",
+        "lectura_m2_2": "Lectura M2 (2)",
+        "lectura_m2_3": "Lectura M2 (3)",
+        "lectura_m2": "Lectura M2 promedio",
+        "cociente_lecturas": "Cociente M1/M2",
+        "a0": "Coeficiente a0",
+        "a1": "Coeficiente a1",
+        "a2": "Coeficiente a2",
+        "ks": "Factor de recombinación Ks",
+        "Mq": "Lectura corregida Mq",
+        "Zref": "Profundidad de referencia (zref)",
+        "Zmax": "Profundidad de dosis máxima (zmax)",
+        "Kq_0": "Factor de calidad del haz (kQ)",
+        "Dzref": "Dosis en zref",
+        "dosis_maxima": "Dosis máxima (cGy/UM)",
+        "r50_medido": "R50 medido (electrones)",
+        "pdd_zref_electrones": "PDD en zref (electrones)",
+        "pddzref": "PDD en zref (fotones)",
+    }
+
     @classmethod
     def _campos_faltantes(cls, datos):
         """Claves de `datos` vacías/None entre las exigidas por guardar_db:
@@ -2507,10 +2564,43 @@ class DialogCalculadoraDosis(QDialog):
             requeridos += ["pddzref"]
         return [c for c in requeridos if not datos.get(c)]
 
+    def _avisar_formulario_incompleto(self, etiquetas):
+        """Muestra los campos faltantes (nombres amigables) y pregunta si el
+        físico quiere salir sin guardar. Devuelve True solo si elige
+        explícitamente "Descartar y salir".
+
+        Aislado en su propio método -- en vez de un QMessageBox.warning
+        estático -- para que guardar_db/on_aceptar_y_cerrar puedan decidir
+        si cierran el diálogo, y para que los tests puedan sustituirlo sin
+        disparar un QMessageBox modal real (ver test_calculadora_dosis_g1.py).
+        """
+        aviso = QMessageBox(self)
+        aviso.setIcon(QMessageBox.Warning)
+        aviso.setWindowTitle("Formulario incompleto")
+        aviso.setText(
+            "No se puede guardar: faltan los siguientes campos por "
+            "completar:\n\n" + "\n".join(f"• {e}" for e in etiquetas)
+            + "\n\n¿Desea salir de la calculadora sin guardar?")
+        btn_seguir = aviso.addButton("Seguir editando", QMessageBox.RejectRole)
+        btn_salir = aviso.addButton("Descartar y salir", QMessageBox.DestructiveRole)
+        aviso.setDefaultButton(btn_seguir)
+        aviso.exec_()
+        return aviso.clickedButton() is btn_salir
+
     def guardar_db(self):
         """
         Save dosimetry data to database using the separate database service.
         Also generates the calibration report.
+
+        Returns
+        -------
+        bool
+            True si el registro quedó guardado en la base de datos. False si
+            la validación falló (formulario incompleto) o si el guardado en
+            sí falló. on_aceptar_y_cerrar usa este valor para decidir si
+            cierra el diálogo -- ver Fase G1 (auditoría 2026-07-10): antes,
+            "Aceptar y Cerrar" cerraba el diálogo aunque no se hubiera
+            guardado nada, perdiendo los datos tecleados.
         """
         # Collect data from UI fields
 
@@ -2579,11 +2669,10 @@ class DialogCalculadoraDosis(QDialog):
 
         faltantes = self._campos_faltantes(datos)
         if faltantes:
-            QMessageBox.warning(
-                self, "Formulario incompleto",
-                "No se puede guardar: faltan los siguientes campos por "
-                "completar:\n\n" + "\n".join(f"• {c}" for c in faltantes))
-            return
+            etiquetas = [self._ETIQUETAS_CAMPOS.get(c, c) for c in faltantes]
+            if self._avisar_formulario_incompleto(etiquetas):
+                self.reject()
+            return False
 
             # Generate report
         if datos.get('Acelerador')==self.acelerador_actual:
@@ -2612,7 +2701,23 @@ class DialogCalculadoraDosis(QDialog):
             QMessageBox.information(self, "Success", "Datos cargados exitosamente")
         else:
             QMessageBox.warning(self, "Error", "Failed to save dosimetry data to database")
-            
+
+        return bool(exito)
+
+    def on_aceptar_y_cerrar(self):
+        """Slot único de btn_ok (Fase G1, auditoría 2026-07-10).
+
+        Antes, btn_ok conectaba guardar_db Y accept() como dos señales
+        independientes: si guardar_db interrumpía sin guardar (formulario
+        incompleto o fallo de guardado), accept() se ejecutaba de todas
+        formas y cerraba el diálogo, perdiendo los datos tecleados -- así lo
+        vivió el físico con una dosimetría de electrones completa. Ahora
+        solo se cierra si guardar_db confirma que el guardado se completó;
+        si no, el propio guardar_db ya preguntó (vía
+        _avisar_formulario_incompleto) si se desea salir sin guardar.
+        """
+        if self.guardar_db():
+            self.accept()
 
     def generar_reporte_fecha_seleccionada(self):
         """

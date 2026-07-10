@@ -503,10 +503,20 @@ class TestValidacionFormularioCompleto:
     validación previa (calculadora_dosimetrica id=1, 09/04/2026)."""
 
     def _espiar_avisos(self, monkeypatch):
+        """G1 (auditoría 2026-07-10): el aviso de formulario incompleto ya
+        NO pasa por el QMessageBox.warning estático -- ahora vive en
+        _avisar_formulario_incompleto (una QMessageBox con botones "Seguir
+        editando"/"Descartar y salir"; parchear solo warning/information/
+        critical dejaría un exec_() real colgando la corrida offscreen).
+        Se sustituye directamente y se simula "Seguir editando" (no cierra),
+        capturando las ETIQUETAS legibles reportadas."""
         avisos = []
-        monkeypatch.setattr(
-            dialogs_mod.QMessageBox, "warning",
-            staticmethod(lambda *a, **k: avisos.append(a[1:3])))
+
+        def _fake(dialogo_self, etiquetas):
+            avisos.append(("Formulario incompleto", etiquetas))
+            return False
+
+        monkeypatch.setattr(DialogCalculadoraDosis, "_avisar_formulario_incompleto", _fake)
         return avisos
 
     def test_formulario_vacio_no_guarda_y_avisa(self, dialogo_factory, monkeypatch):
@@ -538,7 +548,7 @@ class TestValidacionFormularioCompleto:
         d.Zref.clear()
         d.guardar_db()
         assert avisos, "debía avisar con Zref vacío"
-        assert "Zref" in avisos[0][1]
+        assert "Profundidad de referencia (zref)" in avisos[0][1]
         fecha = d.date_edit.date().toString("dd/MM/yyyy")
         assert dosis_service_mod.DosisService.buscar_por_fecha(fecha, d.acelerador_actual) is None
 
@@ -551,10 +561,10 @@ class TestValidacionFormularioCompleto:
         d.electrones.setChecked(True)  # nada más llenado
         d.guardar_db()
         assert avisos
-        faltantes_reportados = avisos[0][1]
-        assert "r50_medido" in faltantes_reportados
-        assert "pdd_zref_electrones" in faltantes_reportados
-        assert "pddzref" not in faltantes_reportados.replace("pdd_zref_electrones", "")
+        etiquetas_reportadas = avisos[0][1]
+        assert "R50 medido (electrones)" in etiquetas_reportadas
+        assert "PDD en zref (electrones)" in etiquetas_reportadas
+        assert "PDD en zref (fotones)" not in etiquetas_reportadas
 
     def test_electrones_completo_guarda_sin_avisar(
             self, dialogo_factory_electrones, monkeypatch):
