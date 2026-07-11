@@ -41,6 +41,11 @@ class EscaneoMCC:
     reporta el software PTW (columna 1 = posicion/profundidad en mm). Cual
     de las dos es la dosis corregida final se resuelve en D4.1b: ese es el
     paso de descubrimiento empirico contra dosimetriaMen, no este lector.
+
+    Algunos archivos (visto en 600/Junio real) traen solo 2 columnas -- sin
+    canal de referencia. En ese caso col3 queda como lista vacia; col2 (la
+    columna que sí varia con la posicion, confirmado empiricamente en D4.1b)
+    siempre esta presente.
     """
     curve_type: str
     meas_date: datetime
@@ -95,12 +100,15 @@ def leer_mcc(ruta_archivo):
         posiciones, col2, col3 = [], [], []
         for fila in filas:
             partes = fila.split()
-            if len(partes) != 3:
-                continue
-            p, a, b = partes
-            posiciones.append(float(p))
-            col2.append(float(a))
-            col3.append(float(b))
+            if len(partes) == 3:
+                p, a, b = partes
+                posiciones.append(float(p))
+                col2.append(float(a))
+                col3.append(float(b))
+            elif len(partes) == 2:
+                p, a = partes
+                posiciones.append(float(p))
+                col2.append(float(a))
         escaneos.append(EscaneoMCC(
             curve_type=curve_type,
             meas_date=_parsear_fecha(meas_date),

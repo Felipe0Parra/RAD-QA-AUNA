@@ -26,10 +26,13 @@ CORPUS = os.path.expanduser("~/Documents/Archivos_UseApp/Archivos QA")
 FEBRERO_FOTONES = os.path.join(CORPUS, "Febrero", "IX", "Fotones")
 FEBRERO_ELECTRONES = os.path.join(CORPUS, "Febrero", "IX", "Electrones")
 FEBRERO_600 = os.path.join(CORPUS, "Febrero", "600")
+JUNIO_600 = os.path.join(CORPUS, "Junio", "600")
 
 
 def _bloque_scan(numero, curve_type, energy, modality, meas_date, filas):
-    datos = "\n".join(f"\t\t\t{p}\t\t{a}\t\t{b}" for p, a, b in filas)
+    # filas: tuplas de 2 (posicion, valor) o 3 (posicion, valor, referencia) --
+    # el formato real trae ambas variantes (ver test_dos_columnas_sin_canal_referencia).
+    datos = "\n".join("\t\t\t" + "\t\t".join(str(x) for x in fila) for fila in filas)
     return (
         f"\tBEGIN_SCAN  {numero}\n"
         f"\t\tMEAS_DATE={meas_date}\n"
@@ -110,6 +113,22 @@ class TestLeerMCCSintetico:
         assert len(escaneos) == 1
         assert escaneos[0].energia == "9mev"
         assert escaneos[0].modalidad == "EL"
+
+    def test_dos_columnas_sin_canal_referencia(self, tmp_path):
+        """Caso real (600/Junio): algunos archivos traen solo 2 columnas de
+        datos (posicion, valor), sin la columna de referencia/monitor. Antes
+        se descartaban en silencio (split() != 3 -> continue), dejando el
+        escaneo vacio y reventando cualquier calculo posterior."""
+        ruta = _escribir_mcc(tmp_path, "dos_columnas.mcc", [
+            _bloque_scan(1, "PDD", "6.00", "X", "30-Jun-2026 18:53:59",
+                         [("0.00", "1.7626E+00"), ("1.00", "1.8545E+00")])])
+
+        escaneos = leer_mcc(ruta)
+
+        assert len(escaneos) == 1
+        assert escaneos[0].posiciones == [0.00, 1.00]
+        assert escaneos[0].col2 == [1.7626, 1.8545]
+        assert escaneos[0].col3 == []
 
     def test_scan_sin_curvetype_falla_ruidoso(self, tmp_path):
         contenido = (
@@ -244,3 +263,17 @@ class TestCorpusReal600Febrero:
         assert set(resultado["datos"].keys()) == {"6mv"}
         assert set(resultado["datos"]["6mv"].keys()) == {
             "PDD", "INPLANE_PROFILE", "CROSSPLANE_PROFILE"}
+
+
+@pytest.mark.skipif(not os.path.exists(JUNIO_600),
+                    reason="corpus real del físico no disponible en esta máquina")
+class TestCorpusReal600JunioDosColumnas:
+    def test_archivo_de_2_columnas_no_queda_vacio(self):
+        """El .mcc real de 600/Junio no trae canal de referencia (2 columnas,
+        no 3) -- motivo del fix de leer_mcc. col2 debe traer los datos."""
+        resultado = agregar_carpeta(JUNIO_600)
+
+        assert resultado["errores"] == []
+        for curva in resultado["datos"]["6mv"].values():
+            assert len(curva.col2) > 0
+            assert curva.col3 == []
