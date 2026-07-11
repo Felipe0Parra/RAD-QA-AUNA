@@ -46,6 +46,12 @@ class EscaneoMCC:
     canal de referencia. En ese caso col3 queda como lista vacia; col2 (la
     columna que sí varia con la posicion, confirmado empiricamente en D4.1b)
     siempre esta presente.
+
+    field_inplane_mm/field_crossplane_mm vienen de FIELD_INPLANE/
+    FIELD_CROSSPLANE (mm, ej. 100.00 = campo 10x10). Quedan en None si el
+    archivo no las trae -- no son obligatorias para parsear, solo las usa
+    agregar_carpeta si se pide filtrar por tamaño de campo (D4.2 Halcyon:
+    una misma carpeta real mezcla 5x5/10x10/20x20 para la misma energia).
     """
     curve_type: str
     meas_date: datetime
@@ -55,6 +61,8 @@ class EscaneoMCC:
     col2: list
     col3: list
     archivo: str
+    field_inplane_mm: float = None
+    field_crossplane_mm: float = None
 
 
 def normalizar_energia(energy, radiation):
@@ -109,13 +117,22 @@ def leer_mcc(ruta_archivo):
                 p, a = partes
                 posiciones.append(float(p))
                 col2.append(float(a))
+        def _float_opcional(clave):
+            valor = campos.get(clave)
+            try:
+                return float(valor) if valor else None
+            except ValueError:
+                return None
+
         escaneos.append(EscaneoMCC(
             curve_type=curve_type,
             meas_date=_parsear_fecha(meas_date),
             energia=normalizar_energia(energy, modality.strip().upper()),
             modalidad=modality.strip().upper(),
             posiciones=posiciones, col2=col2, col3=col3,
-            archivo=ruta_archivo))
+            archivo=ruta_archivo,
+            field_inplane_mm=_float_opcional("FIELD_INPLANE"),
+            field_crossplane_mm=_float_opcional("FIELD_CROSSPLANE")))
 
     with open(ruta_archivo) as f:
         for linea_cruda in f:
@@ -150,7 +167,7 @@ def leer_mcc(ruta_archivo):
     return escaneos
 
 
-def agregar_carpeta(ruta_carpeta):
+def agregar_carpeta(ruta_carpeta, tamano_campo_mm=None, tolerancia_mm=1.0):
     """Recorre todos los .mcc de una carpeta (un mes + una maquina/seccion,
     ej. ".../Febrero/IX/Fotones") y agrupa por (energia, curve_type).
 
@@ -159,6 +176,15 @@ def agregar_carpeta(ruta_carpeta):
     otro curve_type de la MISMA energia (ver docstring del modulo, caso E06).
     Archivos individuales rotos no interrumpen el resto de la carpeta: se
     devuelven en "errores" con su ruta y el motivo.
+
+    tamano_campo_mm (opcional): si se da, solo compiten por "mas reciente"
+    los escaneos cuyo field_inplane_mm Y field_crossplane_mm coincidan
+    (±tolerancia_mm). Necesario en Halcyon: el corpus real mezcla 5x5/10x10/
+    20x20 en la MISMA carpeta para la misma energia (confirmado con el
+    fisico: la dosimetria siempre se ha hecho a 10x10 -- ver D4.2). Un
+    escaneo sin field_inplane_mm/field_crossplane_mm (archivo viejo que no
+    los reporta) se descarta cuando se pide filtro, por seguridad: no se
+    puede confirmar que sea del tamaño pedido.
 
     Devuelve {"datos": {energia: {curve_type: EscaneoMCC}}, "errores": [(ruta, msg)]}.
     """
@@ -172,6 +198,13 @@ def agregar_carpeta(ruta_carpeta):
             errores.append((ruta, str(exc)))
             continue
         for escaneo in escaneos:
+            if tamano_campo_mm is not None:
+                if escaneo.field_inplane_mm is None or escaneo.field_crossplane_mm is None:
+                    continue
+                if abs(escaneo.field_inplane_mm - tamano_campo_mm) > tolerancia_mm:
+                    continue
+                if abs(escaneo.field_crossplane_mm - tamano_campo_mm) > tolerancia_mm:
+                    continue
             por_curva = datos.setdefault(escaneo.energia, {})
             actual = por_curva.get(escaneo.curve_type)
             if actual is None or escaneo.meas_date > actual.meas_date:

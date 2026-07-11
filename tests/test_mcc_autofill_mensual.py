@@ -141,14 +141,22 @@ class TestConfirmarCamposSinRevisar:
 
 # ── Flujo completo: seleccionar_carpeta_mcc contra archivos .mcc sintéticos ──
 
-def _bloque_scan(numero, curve_type, energy, modality, meas_date, filas):
+def _bloque_scan(numero, curve_type, energy, modality, meas_date, filas, campo_mm=100.0):
+    # campo_mm=100.0 (10x10) por defecto: seleccionar_carpeta_mcc siempre
+    # filtra a 10x10 (ver _TAMANO_CAMPO_MM), así que los .mcc sintéticos
+    # deben traer FIELD_INPLANE/FIELD_CROSSPLANE para no quedar excluidos.
+    # campo_mm=None omite esas líneas -- para probar precisamente el caso
+    # "sin tamaño de campo reportado".
     datos = "\n".join("\t\t\t" + "\t\t".join(str(x) for x in fila) for fila in filas)
+    campo = (f"\t\tFIELD_INPLANE={campo_mm:.2f}\n\t\tFIELD_CROSSPLANE={campo_mm:.2f}\n"
+             if campo_mm is not None else "")
     return (
         f"\tBEGIN_SCAN  {numero}\n"
         f"\t\tMEAS_DATE={meas_date}\n"
         f"\t\tMODALITY={modality}\n"
         f"\t\tENERGY={energy}\n"
         f"\t\tSCAN_CURVETYPE={curve_type}\n"
+        f"{campo}"
         "\t\tBEGIN_DATA\n"
         f"{datos}\n"
         "\t\tEND_DATA\n"

@@ -1800,8 +1800,11 @@ class PruebaMensual600(PruebaBasico):
             buttonLayout.addWidget(btn_calculadora)
 
         # D4.2 (PLAN_FASE_K_D4.md): autollenado de simetría/planicidad desde
-        # .mcc -- solo dosimetría de iX/600 (Halcyon queda fuera, ver plan).
-        if self.__class__.__name__ in ["PruebaMensual600", "PruebaMensualIX"] and layout == self.category4.layout():
+        # .mcc -- iX/600/Halcyon (mismas condiciones que el botón de la
+        # calculadora arriba; Halcyon se sumó al confirmar con el físico que
+        # la dosimetría siempre se ha medido a 10x10, ver _TAMANO_CAMPO_MM).
+        if (self.__class__.__name__ in ["PruebaMensual600", "PruebaMensualIX"] and layout == self.category4.layout()) or \
+        (self.equipo_f == "Halcyon" and layout == self.category3.layout()):
             self.btn_cargar_mcc = QPushButton("Cargar carpeta .mcc")
             self.btn_cargar_mcc.clicked.connect(self.seleccionar_carpeta_mcc)
             buttonLayout.addWidget(self.btn_cargar_mcc)
@@ -1824,11 +1827,20 @@ class PruebaMensual600(PruebaBasico):
     # ramificar por self.esIX.
 
     _ESTILO_SUGERIDO_MCC = "background-color: #fff3b0; border: 1px solid #e0b400;"
+    # Confirmado con el físico (2026-07-10): toda la dosimetría mensual --
+    # iX, 600 y Halcyon-- se ha medido siempre a 10x10 (100mm x 100mm). En
+    # Halcyon el corpus real mezcla 5x5/10x10/20x20 para la misma energía en
+    # la misma carpeta; sin este filtro, agregar_carpeta podría quedarse con
+    # el tamaño equivocado solo por tener un MEAS_DATE más reciente. Se
+    # aplica igual a iX/600 por consistencia -- verificado que no cambia nada
+    # ahí (todo el corpus usado para calibrar D4.1b ya era 10x10).
+    _TAMANO_CAMPO_MM = 100.0
 
     def seleccionar_carpeta_mcc(self):
         """Autollena simetría/planicidad a partir de una carpeta de escaneos
         .mcc (un mes+máquina; en iX, Fotones y Electrones están en carpetas
-        separadas -- se puede llamar dos veces, una por carpeta).
+        separadas -- se puede llamar dos veces, una por carpeta). Filtra a
+        campo 10x10 (ver _TAMANO_CAMPO_MM).
 
         La fórmula (services/mcc_metrics.py) es un ajuste EMPÍRICO calibrado
         contra dosimetriaMen real, no un protocolo estándar publicado -- por
@@ -1840,7 +1852,7 @@ class PruebaMensual600(PruebaBasico):
         if not carpeta:
             return
 
-        resultado = agregar_carpeta(carpeta)
+        resultado = agregar_carpeta(carpeta, tamano_campo_mm=self._TAMANO_CAMPO_MM)
         if resultado["errores"]:
             detalle = "\n".join(os.path.basename(ruta) for ruta, _ in resultado["errores"])
             QMessageBox.warning(

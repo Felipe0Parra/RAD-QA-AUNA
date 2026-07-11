@@ -14,6 +14,7 @@ Dos capas, mismo patron que test_trs398_excel.py:
    repetido en archivo aparte, mas reciente que el PDDCRIN original) se
    resuelve exactamente como se documenta en el modulo.
 """
+import glob
 import os
 
 import pytest
@@ -29,16 +30,21 @@ FEBRERO_600 = os.path.join(CORPUS, "Febrero", "600")
 JUNIO_600 = os.path.join(CORPUS, "Junio", "600")
 
 
-def _bloque_scan(numero, curve_type, energy, modality, meas_date, filas):
+def _bloque_scan(numero, curve_type, energy, modality, meas_date, filas, campo_mm=None):
     # filas: tuplas de 2 (posicion, valor) o 3 (posicion, valor, referencia) --
     # el formato real trae ambas variantes (ver test_dos_columnas_sin_canal_referencia).
+    # campo_mm=None (default): sin FIELD_INPLANE/CROSSPLANE, como la mayoria
+    # de estos tests sinteticos (no ejercitan el filtro de tamano de campo).
     datos = "\n".join("\t\t\t" + "\t\t".join(str(x) for x in fila) for fila in filas)
+    campo = (f"\t\tFIELD_INPLANE={campo_mm:.2f}\n\t\tFIELD_CROSSPLANE={campo_mm:.2f}\n"
+             if campo_mm is not None else "")
     return (
         f"\tBEGIN_SCAN  {numero}\n"
         f"\t\tMEAS_DATE={meas_date}\n"
         f"\t\tMODALITY={modality}\n"
         f"\t\tENERGY={energy}\n"
         f"\t\tSCAN_CURVETYPE={curve_type}\n"
+        f"{campo}"
         "\t\tBEGIN_DATA\n"
         f"{datos}\n"
         "\t\tEND_DATA\n"
@@ -214,6 +220,78 @@ class TestAgregarCarpeta:
     def test_carpeta_vacia_no_falla(self, tmp_path):
         resultado = agregar_carpeta(str(tmp_path))
         assert resultado == {"datos": {}, "errores": []}
+
+
+class TestFiltroTamanoCampo:
+    """D4.2 (Halcyon): el corpus real mezcla 5x5/10x10/20x20 para la misma
+    energia en la misma carpeta -- agregar_carpeta(tamano_campo_mm=...)
+    filtra antes de competir por "mas reciente", no despues."""
+
+    def test_toma_solo_el_tamano_pedido_aunque_otro_sea_mas_reciente(self, tmp_path):
+        _escribir_mcc(tmp_path, "10x10.mcc", [
+            _bloque_scan(1, "PDD", "6.00", "X", "28-Feb-2026 09:00:00", FILAS_PDD, campo_mm=100.0)])
+        _escribir_mcc(tmp_path, "20x20_mas_nuevo.mcc", [
+            _bloque_scan(1, "PDD", "6.00", "X", "28-Feb-2026 10:00:00", FILAS_PDD, campo_mm=200.0)])
+
+        resultado = agregar_carpeta(str(tmp_path), tamano_campo_mm=100.0)
+
+        assert resultado["datos"]["6mv"]["PDD"].archivo.endswith("10x10.mcc")
+
+    def test_sin_field_inplane_reportado_se_excluye_por_seguridad(self, tmp_path):
+        _escribir_mcc(tmp_path, "sin_tamano.mcc", [
+            _bloque_scan(1, "PDD", "6.00", "X", "28-Feb-2026 09:00:00", FILAS_PDD, campo_mm=None)])
+
+        resultado = agregar_carpeta(str(tmp_path), tamano_campo_mm=100.0)
+
+        assert resultado["datos"] == {}
+
+    def test_sin_filtro_no_cambia_el_comportamiento_de_siempre(self, tmp_path):
+        """Default tamano_campo_mm=None: mismo resultado que antes de D4.2
+        Halcyon, sin importar si el archivo reporta tamaño o no."""
+        _escribir_mcc(tmp_path, "sin_tamano.mcc", [
+            _bloque_scan(1, "PDD", "6.00", "X", "28-Feb-2026 09:00:00", FILAS_PDD, campo_mm=None)])
+
+        resultado = agregar_carpeta(str(tmp_path))
+
+        assert "6mv" in resultado["datos"]
+
+    def test_tolerancia_admite_pequenas_diferencias_de_redondeo(self, tmp_path):
+        _escribir_mcc(tmp_path, "casi_10x10.mcc", [
+            _bloque_scan(1, "PDD", "6.00", "X", "28-Feb-2026 09:00:00", FILAS_PDD, campo_mm=100.4)])
+
+        resultado = agregar_carpeta(str(tmp_path), tamano_campo_mm=100.0, tolerancia_mm=1.0)
+
+        assert "6mv" in resultado["datos"]
+
+
+@pytest.mark.skipif(not os.path.exists(os.path.join(CORPUS, "Febrero", "Halcyon")),
+                    reason="corpus real del físico no disponible en esta máquina")
+class TestCorpusRealHalcyonFebreroTamanoCampo:
+    def test_la_carpeta_real_mezcla_5x5_10x10_y_20x20(self):
+        """Precondición del filtro: confirma con los archivos REALES (no
+        agregados, uno por uno) que Febrero/Halcyon de verdad mezcla los 3
+        tamaños -- si esto deja de ser cierto, revisar si el filtro de
+        _TAMANO_CAMPO_MM sigue siendo necesario."""
+        carpeta = os.path.join(CORPUS, "Febrero", "Halcyon")
+        tamanos = set()
+        for ruta in glob.glob(os.path.join(carpeta, "*.mcc")):
+            for esc in leer_mcc(ruta):
+                tamanos.add((esc.field_inplane_mm, esc.field_crossplane_mm))
+
+        assert tamanos == {(50.0, 50.0), (100.0, 100.0), (200.0, 200.0)}
+
+    def test_filtro_10x10_solo_deja_pasar_ese_tamano(self):
+        """agregar_carpeta con el filtro puesto: cada escaneo que sobrevive
+        es 10x10 (sin importar qué tan reciente sea un 5x5/20x20)."""
+        carpeta = os.path.join(CORPUS, "Febrero", "Halcyon")
+
+        con_filtro = agregar_carpeta(carpeta, tamano_campo_mm=100.0)
+
+        assert con_filtro["datos"], "debería haber al menos una energía 10x10"
+        for curvas in con_filtro["datos"].values():
+            for esc in curvas.values():
+                assert esc.field_inplane_mm == 100.0
+                assert esc.field_crossplane_mm == 100.0
 
 
 # ── Capa 2: validación opcional contra el corpus real ──────────────────────
