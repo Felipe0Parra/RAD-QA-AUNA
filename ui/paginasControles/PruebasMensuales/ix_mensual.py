@@ -6,7 +6,6 @@ from data.ManejoDatos.load import mostrar_controles_mensuales, encontrar_columna
 from data.ManejoDatos.conection import Conexion, ruta_datos
 import json, traceback
 import os
-from mcc_PTW_read.mcc_read import read_mcc
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 
 
