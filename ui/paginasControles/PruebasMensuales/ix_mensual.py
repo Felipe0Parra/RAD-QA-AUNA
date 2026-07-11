@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QPushButton, QSplitter, QMessageBox,QLabel, QFileDialog)
+from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QPushButton, QSplitter, QMessageBox)
 from PyQt5.QtCore import Qt, QDate
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual
@@ -106,18 +106,6 @@ class PruebaMensualIX(PruebaMensual600):
                 
         except Exception as e:
             print(f"Error configurando MLCs para IX: {e}")
-    def agregar_mcc(self):
-        layout = QHBoxLayout()
-        
-        self.btn_mcc = QPushButton("Seleccionar archivo mcc")
-        self.lbl_mcc = QLabel("Ningún archivo seleccionado")
-        
-        layout.addWidget(self.btn_mcc)
-        layout.addWidget(self.lbl_mcc)
-        
-        self.general_layout.addLayout(layout)
-        self.btn_mcc.clicked.connect(self.seleccionar_archivo_simetria)
-        
     def setupTap1(self):
         #print("Función setupTap1 en la clase PruebaMensualIX")
         super().setupTap1()
@@ -145,79 +133,7 @@ class PruebaMensualIX(PruebaMensual600):
     #     except Exception as e:
     #         print("ERRRRORRR: ", e)
     
-    # def seleccionar_archivo_simetria(self):
-    #     filenames, _ = QFileDialog.getOpenFileNames(self, "Seleccionar archivos MCC", "", "Archivos MCC (*.mcc)")
-    #     if not filenames:
-    #         return
-    #     for filename in filenames:
-    #         if not filename.lower().endswith(".mcc"):
-    #             QMessageBox.critical(self, "Archivo inválido", "El archivo no tiene extensión (.mcc)")
-    #     self.btn_mcc.setProperty("mcc_path", filenames)
-    #     #self.lbl_mcc.setText(os.path.basename(filename))
-    #     for filepath in filenames:
-    #         self.procesar_mcc(filepath)
-            
-        
-    # def procesar_mcc(self, filepath):
-    #     try:
-    #         self.reader = read_mcc()
-    #         self.reader.load(filepath)
-    #         self.mcc_results = {"simetria_inplane": self.reader.get_simmetry_percentage(self.reader.pos_1, self.reader.depth_calib_1), "planicidad_inplane": self.reader.flatness(self.reader.pos_1, self.reader.depth_calib_1), "simetria_crossplane": self.reader.get_simmetry_percentage(self.reader.pos_2, self.reader.depth_calib_2), "planicidad_crossplane": self.reader.flatness(self.reader.pos_2, self.reader.depth_calib_2)}
-    #         self.actualizar_widgets_desde_mcc()
-            
-    #     except Exception as e:
-    #         print(f"Error: {e}")
-            
-            
-    # def actualizar_widgets_desde_mcc(self):
-    #     if not hasattr(self, "mcc_results"):
-    #         return
-        
-    #     energia_archivo = self.reader.energia
-    #     if energia_archivo == "9mev":
-    #         energia = "9mev"
-    #         try:
-    #             self.ln_simetria_inplane_9mev.setText(str(self.mcc_results["simetria_inplane"]))
-    #             self.ln_planicidad_inplane_9mev.setText(str(self.mcc_results["planicidad_inplane"]))
-    #             self.ln_simetria_crossplane_9mev.setText(str(self.mcc_results["simetria_crossplane"]))
-    #             self.ln_planicidad_crossplane_9mev.setText(str(self.mcc_results["planicidad_crossplane"]))
-            
-    #         except Exception as e:
-    #             QMessageBox.critical(self, "Error", f"Error al actualizar widgets desde MCC: {e}")
-    #     if energia_archivo == "6mev":
-    #         energia = "6mev"
-    #         try:
-    #             self.ln_simetria_inplane_6mev.setText(str(self.mcc_results["simetria_inplane"]))
-    #             self.ln_planicidad_inplane_6mev.setText(str(self.mcc_results["planicidad_inplane"]))
-    #             self.ln_simetria_crossplane_6mev.setText(str(self.mcc_results["simetria_crossplane"]))
-    #             self.ln_planicidad_crossplane_6mev.setText(str(self.mcc_results["planicidad_crossplane"]))
-            
-    #         except Exception as e:
-    #             QMessageBox.critical(self, "Error", f"Error al actualizar widgets desde MCC: {e}")
-    #     if energia_archivo == "12mev":
-    #         energia = "12mev"
-    #         try:
-    #             self.ln_simetria_inplane_12mev.setText(str(self.mcc_results["simetria_inplane"]))
-    #             self.ln_planicidad_inplane_12mev.setText(str(self.mcc_results["planicidad_inplane"]))
-    #             self.ln_simetria_crossplane_12mev.setText(str(self.mcc_results["simetria_crossplane"]))
-    #             self.ln_planicidad_crossplane_12mev.setText(str(self.mcc_results["planicidad_crossplane"]))
-            
-    #         except Exception as e:
-    #             QMessageBox.critical(self, "Error", f"Error al actualizar widgets desde MCC: {e}")
-        
-    #     if energia_archivo == "15mev":
-    #         energia = "15mev"
-    #         try:
-    #             self.ln_simetria_inplane_15mev.setText(str(self.mcc_results["simetria_inplane"]))
-    #             self.ln_planicidad_inplane_15mev.setText(str(self.mcc_results["planicidad_inplane"]))
-    #             self.ln_simetria_crossplane_15mev.setText(str(self.mcc_results["simetria_crossplane"]))
-    #             self.ln_planicidad_crossplane_15mev.setText(str(self.mcc_results["planicidad_crossplane"]))
-            
-    #         except Exception as e:
-    #             QMessageBox.critical(self, "Error", f"Error al actualizar widgets desde MCC: {e}")
-                
-            
-    def checkLineEdits_ix(self, df_lines=None): 
+    def checkLineEdits_ix(self, df_lines=None):
         if df_lines is None:
             return False
 
@@ -418,10 +334,14 @@ class PruebaMensualIX(PruebaMensual600):
             buttonLayout = QHBoxLayout()
             btn_guardar = QPushButton("Subir")
             btn_salvar = QPushButton("Guardar")
-            self.btn_mcc = QPushButton("Subir mcc")
+            # D4.2 (PLAN_FASE_K_D4.md): autollenado de simetría/planicidad
+            # desde .mcc -- seleccionar_carpeta_mcc es de PruebaMensual600
+            # (compartido con 600, ver docstring ahí).
+            self.btn_mcc = QPushButton("Cargar carpeta .mcc")
+            self.btn_mcc.clicked.connect(self.seleccionar_carpeta_mcc)
             buttonLayout.addWidget(btn_salvar)
             buttonLayout.addWidget(btn_guardar)
-            #buttonLayout.addWidget(self.btn_mcc)
+            buttonLayout.addWidget(self.btn_mcc)
             btn_calculadora = QPushButton("Calculadora de Dosis")
         # 2. Connect it to the 'abrir_calculadora' method.
         #    This method is inherited "for free" from the parent PruebaMensual600 class.
@@ -430,9 +350,6 @@ class PruebaMensualIX(PruebaMensual600):
             layout.addLayout(buttonLayout, 68, 0)
         else:
             print("No se definió ningún layout en category4 (IX)")
-
-        #btn_guardar.setEnabled(False)
-        #self.btn_mcc.clicked.connect(self.seleccionar_archivo_simetria)
 
         def updateSubirButton():
             if self.checkLineEdits_ix(df_lines=df_lines):
@@ -473,6 +390,8 @@ class PruebaMensualIX(PruebaMensual600):
 
         # [6] Subir a BD (para cada energía)
         def subir():
+            if not self._confirmar_campos_mcc_sin_revisar():
+                return
             try:
                 subidos = []
                 self.subirlineasmensuales_ix(nombre_tabla, datos_eliminar, ref=ref, usarid=usarid, df_lines=df_lines)
