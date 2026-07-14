@@ -100,9 +100,11 @@ class TestFlujoFotonesConDatos:
         # Selección de serie carga la calibración del certificado
         assert d.visualize_calib.text() == "5.397"
         assert d.temp_0.text() == "20.0"
-        # G3 (auditoría 2026-07-10): t_cal/p_cal/h_cal se muestran con 1
-        # decimal a pedido del físico (antes: "101.325" sin redondear).
-        assert d.pressure_0.text() == "101.3"
+        # H3.6 (auditoría 2026-07-14, revierte G3): se muestra el valor
+        # CRUDO del certificado (101.325 = 1 atm estándar, no una cifra
+        # espuria) -- redondear a 1 decimal introducía una diferencia
+        # estructural frente al comparador/Excel (ver PLAN_FASE_H).
+        assert d.pressure_0.text() == "101.325"
         assert d.humr_cal.text() == "50.0"
         assert not d.avisos, f"no debía haber avisos para N31010: {d.avisos}"
 
@@ -111,13 +113,11 @@ class TestFlujoFotonesConDatos:
         d.pulse.setChecked(True)
 
         # Condiciones clínicas → kTP (valor pineado en la suite D1)
-        # G3 (auditoría 2026-07-10): t_cal/p_cal/h_cal se muestran Y calculan
-        # a 1 decimal -- así reporta el certificado/instrumento real (mismo
-        # criterio que los .xls del corpus 2024); "101.325" tenía cifras
-        # espurias que el catálogo de prueba no debería haber tenido.
+        # H3.6: ktp se calcula con P0=101.325 crudo (antes 101.3 redondeado)
+        # -- coincide exacto con la columna "App" del comparador Excel.
         d.temp.setText("22.0")
         d.pressure.setText("101.325")
-        assert d.ktp.text() == "1.0066"
+        assert d.ktp.text() == "1.0068"
 
         # Lecturas del dosímetro → promedio, Mplus y M1
         for campo in (d.lDV1_1, d.lDV1_2, d.lDV1_3):
@@ -150,16 +150,16 @@ class TestFlujoFotonesConDatos:
         assert d.ks.text() == "1.0001"
 
         # Mq = cociente·ktp·kpol·ks
-        assert d.MQvar.text() == "0.125203"
+        assert d.MQvar.text() == "0.125228"
 
         # TPR20,10 = 0.68 → kQ automático interpolado de KQ_TPR_TABLE
         d.tpr2010.setText("0.68")
         assert d.Kq_0.text() == "0.99"
 
         # D(zref) = N_D,w · Mq · kQ y dosis máxima vía PDD
-        assert d.Dzref.text() == "0.6689634"
+        assert d.Dzref.text() == "0.669097"
         d.pddzref.setText("66.6")
-        assert d.dosis_maxima.text() == "1.0044495"
+        assert d.dosis_maxima.text() == "1.0046502"
 
     def test_borrar_tpr_limpia_el_kq_automatico(self, dialogo):
         d = dialogo
@@ -243,9 +243,9 @@ class TestCamaraSinDatosKq:
 
 def _llenar_hasta_dosis_maxima_n31010(d):
     """Reproduce el mismo flujo de TestFlujoFotonesConDatos hasta obtener
-    dosis_maxima='1.0044495' -- reusado para probar emitir_dosis (F2).
-    G3 (auditoría 2026-07-10): p_cal se muestra/calcula a 1 decimal (101.3,
-    no 101.325) -- ver comentario en test_cadena_completa_hasta_dosis_maxima."""
+    dosis_maxima='1.0046502' -- reusado para probar emitir_dosis (F2).
+    H3.6 (auditoría 2026-07-14): p_cal se muestra/calcula con el valor
+    crudo del certificado (101.325) -- ver test_cadena_completa_hasta_dosis_maxima."""
     seleccionar_camara(d, "N31010")
     d.fotones.setChecked(True)
     d.SSD.setChecked(True)
@@ -263,7 +263,7 @@ def _llenar_hasta_dosis_maxima_n31010(d):
         campo.setText("12.437")
     d.tpr2010.setText("0.68")
     d.pddzref.setText("66.6")
-    assert d.dosis_maxima.text() == "1.0044495"
+    assert d.dosis_maxima.text() == "1.0046502"
     return d
 
 
@@ -278,8 +278,8 @@ class TestEmitirDosisFormularioMensual:
         emitidos = []
         d.dosis_asignada.connect(lambda e, v: emitidos.append((e, v)))
         d.emitir_dosis("6mv")
-        assert emitidos == [("6mv", 100.44495)]
-        # el bug viejo habría emitido 1 - 1.0044495 = -0.0044495
+        assert emitidos == [("6mv", 100.46502)]
+        # el bug viejo habría emitido 1 - 1.0046502 = -0.0046502
         assert emitidos[0][1] > 0
 
     def test_mensaje_de_exito_usa_cgy_um(self, dialogo, monkeypatch):

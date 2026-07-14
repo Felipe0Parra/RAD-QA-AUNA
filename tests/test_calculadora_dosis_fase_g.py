@@ -98,13 +98,16 @@ class TestG3CargarHumedadCalibracion:
         seleccionar_camara(dialogo, "N31010")
         assert dialogo.humr_cal.text() == "47.5"
 
-    def test_temperatura_presion_humedad_redondeadas_a_1_decimal(self, dialogo):
+    def test_temperatura_presion_humedad_muestran_el_valor_crudo_del_certificado(self, dialogo):
+        """H3.6 (auditoría 2026-07-14) revierte esta parte de G3: redondear
+        a 1 decimal introducía una diferencia estructural (~0.02% en ktp)
+        frente al comparador/Excel, que usan el certificado a su precisión
+        completa (P0=101.325 = 1 atm estándar, no una cifra espuria)."""
         seleccionar_camara(dialogo, "N31010")
-        for campo in (dialogo.temp_0, dialogo.pressure_0, dialogo.humr_cal):
-            valor = campo.text()
-            if "." in valor:
-                decimales = valor.split(".")[1]
-                assert len(decimales) <= 1, f"{campo.objectName() or campo}: {valor!r} con más de 1 decimal"
+        assert dialogo.temp_0.text() == str(EQUIPO_N31010["t_cal"])
+        assert dialogo.pressure_0.text() == str(EQUIPO_N31010["p_cal"])
+        assert dialogo.pressure_0.text() == "101.325"  # no "101.3" -- evidencia concreta de la reversión
+        assert dialogo.humr_cal.text() == str(EQUIPO_N31010["h_cal"])
 
     def test_humedad_distinta_para_otra_camara(self, dialogo):
         seleccionar_camara(dialogo, "TN34001")

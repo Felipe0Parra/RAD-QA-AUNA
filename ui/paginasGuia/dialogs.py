@@ -2227,17 +2227,6 @@ class DialogCalculadoraDosis(QDialog):
         except Exception as e:
             print(f"Error seleccionando equipo: {e}")
 
-    @staticmethod
-    def _formatear_1_decimal(valor):
-        """G3 (auditoría 2026-07-10): t_cal/p_cal/h_cal se muestran Y
-        calculan con 1 decimal -- así reporta el certificado/instrumento
-        real (mismo criterio que los .xls del corpus 2024); valores con más
-        cifras en el catálogo son espurios, no precisión real ganada."""
-        try:
-            return f"{float(valor):.1f}"
-        except (TypeError, ValueError):
-            return str(valor)
-
     def cargar_datos_equipo(self):
         """Carga los datos del equipo seleccionado"""
         if self.equipo_id is None:
@@ -2248,14 +2237,24 @@ class DialogCalculadoraDosis(QDialog):
 
             if self.datos_equipo:
                 self.visualize_calib.setText(str(self.datos_equipo["calibr_fact"]))
-                self.temp_0.setText(self._formatear_1_decimal(self.datos_equipo["t_cal"]))
-                self.pressure_0.setText(self._formatear_1_decimal(self.datos_equipo["p_cal"]))
+                # H3.6 (auditoría 2026-07-14, revierte G3): se muestra Y
+                # calcula el valor CRUDO del certificado (p.ej. P0=101.325,
+                # 1 atm estándar -- no una cifra espuria). G3 redondeaba a 1
+                # decimal asumiendo que esa era la precisión real del
+                # certificado; el comparador app-vs-Excel demostró que las
+                # hojas SÍ traen la precisión completa y que redondear
+                # introduce una diferencia estructural (~0.02% en ktp) entre
+                # la calculadora y el motor/comparador. Decisión del físico:
+                # lo mostrado debe ser igual a lo calculado, así que no se
+                # separan -- se deja de redondear en el origen.
+                self.temp_0.setText(str(self.datos_equipo["t_cal"]))
+                self.pressure_0.setText(str(self.datos_equipo["p_cal"]))
                 # G3 (auditoría 2026-07-10): antes NO se cargaba h_cal aunque
                 # EquiposService.obtener_por_id ya lo devuelve -- el físico
                 # tenía que teclearlo a mano cada vez que elegía la serie.
                 h_cal = self.datos_equipo.get("h_cal")
                 if h_cal is not None:
-                    self.humr_cal.setText(self._formatear_1_decimal(h_cal))
+                    self.humr_cal.setText(str(h_cal))
                 self.actualizar_ktp()
             else:
                 QMessageBox.warning(self, "Error", "No se encontraron datos del equipo")
