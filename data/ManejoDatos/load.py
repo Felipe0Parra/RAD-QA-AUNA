@@ -38,6 +38,17 @@ def dicom_to_png_blob(dcm_path):
 
     return buffer.getvalue()
 
+def _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha):
+    """Pregunta antes de reemplazar un reporte diario ya existente para esa
+    fecha (H2.2). Aislada en su propia función -- no un QMessageBox armado a
+    mano -- para que los tests puedan sustituir QMessageBox.question sin
+    disparar un diálogo modal real."""
+    respuesta = QMessageBox.question(
+        self, "Reporte existente",
+        f"Ya existe un reporte para {fecha} -- ¿reemplazarlo?",
+        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    return respuesta == QMessageBox.Yes
+
 "Función que almecena la información en la base de datos de los controles diarios"
 def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             distancias=None, promedio=None, desviacion=None,
@@ -108,6 +119,20 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             lista.append(promedio_des)
             lista.append(desviacion_des)
         fecha_actual = self.date_box.date().toString("yyyy-MM-dd")
+
+        # H2.2 (auditoría 2026-07-14): antes, un reporte existente para esta
+        # fecha se reemplazaba en silencio (DELETE+INSERT sin rastro ni
+        # confirmación -- hallazgo PLAN_FASE_H sección 1.6.2). El DELETE+
+        # INSERT se mantiene (decisión de producto existente), pero ahora
+        # requiere confirmación explícita si ya hay un registro.
+        cursor.execute(f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ?", (fecha_actual,))
+        if cursor.fetchone()[0] > 0:
+            fecha_legible = self.date_box.date().toString("dd/MM/yyyy")
+            if not _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha_legible):
+                return
+            # TODO-H2.4: registrar en audit_log (usuario, "reemplazo",
+            # nombre_tabla, fecha_actual) -- ver services/audit_minimo.py.
+
         cursor.execute(f""" DELETE FROM {nombre_tabla} WHERE DATE(date) = ? """, (fecha_actual,))
         # Ejecutar la inserción
         sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
