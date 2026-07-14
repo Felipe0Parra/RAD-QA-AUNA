@@ -357,33 +357,30 @@ class PruebaMensualIX(PruebaMensual600):
             else:
                 btn_guardar.setEnabled(True)
 
-        # [4] Intentar cargar desde JSON (ahora dict)
-        
+        # [4] Intentar cargar desde JSON -- SOLO si el _contexto (equipo+mes)
+        # coincide con el actual (H2.1, auditoría 2026-07-14): antes un
+        # borrador de dict/lista sin contexto se cargaba siempre, aunque
+        # fuera de otro mes -- "la calidad que se carga sola" que reportó
+        # el físico. Formato viejo (sin "_contexto") se trata como
+        # sin-contexto y NO se carga (ver _extraer_campos_de_borrador).
         try:
             with open(filename, "r") as f:
                 datos_cargados = json.load(f)
-            if isinstance(datos_cargados, dict):
-                for line_name, valor in datos_cargados.items():
-                    
-                    campo = getattr(self, line_name)
-                    campo.setText(valor)
-            elif isinstance(datos_cargados, list):
-                for i, line_name in enumerate(df_lines):
-                    
-                    if i < len(datos_cargados):
-                        valor = datos_cargados[i]
-                        if hasattr(self, line_name):
-                            campo = getattr(self, line_name)
-                            campo.setText(str(valor))
-        except Exception as e:          
+            campos = self._extraer_campos_de_borrador(datos_cargados)
+            if campos:
+                for line_name, valor in campos.items():
+                    if hasattr(self, line_name):
+                        getattr(self, line_name).setText(str(valor) if valor is not None else "")
+        except Exception as e:
             print("Error al cargar datos:", e)
 
-        # [5] Guardar en JSON local (como dict, no lista)
+        # [5] Guardar en JSON local (dict envuelto en _contexto/campos -- H2.1)
         def guardar_lines():
-            datos_guardar = {
+            campos = {
                 line: getattr(self, line).text().strip()
                 for line in df_lines
             }
+            datos_guardar = {"_contexto": self._contexto_borrador(), "campos": campos}
             with open(filename, "w") as f:
                 json.dump(datos_guardar, f, indent=4)
             updateSubirButton()

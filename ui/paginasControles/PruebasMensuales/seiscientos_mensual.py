@@ -1943,15 +1943,46 @@ class PruebaMensual600(PruebaBasico):
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         return respuesta == QMessageBox.Yes
 
+    def _contexto_borrador(self):
+        """Clave de contexto (equipo+mes) para los borradores JSON -- H2.1
+        (auditoría 2026-07-14): antes dosimetria.json/tamano_campo.json eran
+        UN SOLO archivo por app (sin distinguir mes ni equipo), así que un
+        borrador de junio "aparecía" al abrir julio (hallazgo del físico en
+        producción). Si equipo_f/date_box no están listos todavía, devuelve
+        un contexto que nunca calza -- más seguro que heredar datos de otra
+        sesión."""
+        equipo = getattr(self, "equipo_f", None)
+        fecha = None
+        if hasattr(self, "date_box"):
+            try:
+                fecha = self.date_box.date().toString("MM/yyyy")
+            except Exception:
+                fecha = None
+        return {"equipo": equipo, "fecha": fecha}
+
+    def _extraer_campos_de_borrador(self, datos_cargados):
+        """Devuelve los "campos" de un borrador JSON SOLO si su "_contexto"
+        coincide con el equipo+mes actuales. Formato viejo (dict plano o
+        lista, sin "_contexto") se trata como sin-contexto y NO se carga --
+        se pierde un borrador viejo una sola vez, pero es más seguro que
+        heredarlo a ciegas en el mes/equipo equivocado."""
+        if not isinstance(datos_cargados, dict) or "_contexto" not in datos_cargados:
+            return None
+        if datos_cargados["_contexto"] != self._contexto_borrador():
+            return None
+        return datos_cargados.get("campos")
+
     def _cargar_json_cache(self, df_lines, filename):
         """Carga datos desde JSON usando caché mejorado"""
         try:
             datos_cargados = self.file_cache.obtener_datos_json(filename)
             if datos_cargados:
-                self._rellenar_campos(df_lines, datos_cargados)
-                print("Datos cargados desde JSON (caché).")
+                campos = self._extraer_campos_de_borrador(datos_cargados)
+                if campos:
+                    self._rellenar_campos(df_lines, campos)
+                    print("Datos cargados desde JSON (caché).")
         except Exception as e:
-           
+
             print(f"Error al cargar JSON: {e}")
 
     def _configurar_eventos_campos(self, df_lines, btn_guardar, btn_salvar, filename, nombre_tabla, datos_eliminar, ref, usarid, anual=False):
@@ -2037,18 +2068,22 @@ class PruebaMensual600(PruebaBasico):
     def _guardar_optimizado(self, df_lines, filename, update_callback):
         """Método optimizado para guardar datos localmente"""
         try:
-            datos_guardar = []
+            # H2.1 (auditoría 2026-07-14): dict por nombre de campo, envuelto
+            # en _contexto/campos -- antes era una LISTA plana, que
+            # _rellenar_campos (dict.get por columna) nunca podía releer
+            # (el intento de carga fallaba en silencio con AttributeError,
+            # atrapado por el except de _cargar_json_cache): el "Guardar"
+            # de este formulario no restauraba nada. De paso, _contexto
+            # (equipo+mes) evita que un borrador de otro mes se cargue solo.
+            campos = {}
             for line in df_lines:
                 campo = getattr(self, line, None)
-                if campo:
-                    item = campo.text().strip()
-                    datos_guardar.append(item if item else "")
-                else:
-                    datos_guardar.append("")
+                campos[line] = campo.text().strip() if campo else ""
+            datos_guardar = {"_contexto": self._contexto_borrador(), "campos": campos}
 
             # Guardar con manejo de errores mejorado
             os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
-            
+
             with open(filename, "w", encoding='utf-8') as f:
                 json.dump(datos_guardar, f, indent=4, ensure_ascii=False)
             
@@ -2384,8 +2419,14 @@ class PruebaMensual600(PruebaBasico):
             datos = [t[1:] for t in datos]
         elif os.path.exists(filename):
             with open(filename, "r") as f:
-                datos = json.load(f)     
-        
+                datos_cargados = json.load(f)
+            # H2.1 (auditoría 2026-07-14): solo se carga si el _contexto
+            # (equipo+mes) coincide -- si no, se queda con el default vacío
+            # de arriba (H1.3) en vez de heredar mediciones de otro mes.
+            campos = self._extraer_campos_de_borrador(datos_cargados)
+            if campos is not None:
+                datos = campos
+
         for fila, fila_datos in enumerate(datos, start=3):
             for columna, dato in enumerate(fila_datos):
                 item = QTableWidgetItem(str(dato)) 
@@ -2429,11 +2470,11 @@ class PruebaMensual600(PruebaBasico):
                     dato_col.append(dato_col0)
                 
                 datos_guardar.append(dato_col)
-            
-            # Ejemplo: guardar en un archivo JSON
+
+            # H2.1: envuelto en _contexto/campos -- ver _extraer_campos_de_borrador.
             with open(ruta_datos(f"{nombre_tabla}.json"), "w") as f:
-                json.dump(datos_guardar, f, indent=4)
-            
+                json.dump({"_contexto": self._contexto_borrador(), "campos": datos_guardar}, f, indent=4)
+
             #print("Datos de fieldSize guardados:", datos_guardar)
             
         def subir_tabla():
