@@ -28,7 +28,12 @@ hidden_imports = [
     "analisisImagenes.ActividadFuente",
     "services.dosis_service",
     "services.equipos_service",
-    
+
+    # D4 (.mcc -> mensual): lector + métricas de simetría/planicidad. Se
+    # importan estáticamente desde seiscientos_mensual, pero se listan aquí
+    # por defensa (software auditado -> cero sorpresas de empaquetado).
+    "services.mcc_metrics",
+    "mcc_PTW_read.mcc_read",
 
     # MODELOS
     "models.PDF.reportes",
@@ -46,6 +51,16 @@ cmd = [
 # hidden imports
 for h in hidden_imports:
     cmd += ["--hidden-import", h]
+
+# pylinac: ya se ejecutaba en builds previos (PicketFence/Starshot en
+# MLCs_calibration_service, CatPhan en el análisis de TAC), PERO D4 usa
+# submódulos NUEVOS -- pylinac.core.profile y pylinac.metrics.profile
+# (simetría/planicidad de perfiles .mcc). PicketFence/Starshot no
+# necesariamente los arrastraban, así que podrían faltar en el .exe y fallar
+# con ModuleNotFoundError SOLO en runtime en Windows (no en desarrollo).
+# collect-submodules mete todo el árbol de pylinac de una vez -> elimina esa
+# clase entera de fallo, a costa de un .exe un poco más grande (aceptable).
+cmd += ["--collect-submodules", "pylinac"]
 
 # data
 cmd += [      
