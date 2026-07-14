@@ -969,3 +969,250 @@ Dialog llamado desde: PruebaMensualIX
 - Me gustaria que por defecto estuviera marcada la casilla de Tipo de escaneo en modo pulse. Debido a que es casi el modo predeterminado en el que se hacen estas pruebas aqui. Claramente que se pueda cambiar en caso tal. 
 
 - Hay un pequeño inconveniente, es muy util que salga el letrero de que hacen falta datos, cuando se selecciona el boton de 'Aceptar y cerrar" pero igualmente se cierra y se limpia la calculadora, lo cual implica que si por error la cierro, tendria que volver a escribir manualmente casi todos los datos, lo cual no es agradable, quisiera que ademas de mostrar los valores que hacen falta mostrara tambien dos botones de "Descartar cambios" o "Quedarse" Acompañados de la pregunta de "Desea salir de la calculadora?".
+
+# Carga manual de la revision en la mañana del 2026-07-14
+
+Esta todo bien en el proceso de construccion?, que son los warnings con hidden import?:
+
+(.venv) PS C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14> .\.venv\Scripts\python.exe build_exe.py
+87 INFO: PyInstaller: 6.21.0, contrib hooks: 2026.6
+87 INFO: Python: 3.11.0
+98 INFO: Platform: Windows-10-10.0.26200-SP0
+98 INFO: Python environment: C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\.venv
+99 INFO: wrote C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\RAD-QA.spec
+100 INFO: Removing temporary files and cleaning cache in C:\Users\parra\AppData\Local\pyinstaller
+6565 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14',
+ 'C:\\Users\\parra\\AppData\\Local\\Programs\\Python\\Python311\\python311.zip',
+ 'C:\\Users\\parra\\AppData\\Local\\Programs\\Python\\Python311\\DLLs',
+ 'C:\\Users\\parra\\AppData\\Local\\Programs\\Python\\Python311\\Lib',
+ 'C:\\Users\\parra\\AppData\\Local\\Programs\\Python\\Python311',
+ 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv',
+ 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages',
+ 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\win32',
+ 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\pythonwin',
+ 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14']
+6770 INFO: Appending 'datas' from .spec
+6777 INFO: checking Analysis
+6777 INFO: Building Analysis because Analysis-00.toc is non existent
+6777 INFO: Looking for Python shared library...
+6777 INFO: Using Python shared library: C:\Users\parra\AppData\Local\Programs\Python\Python311\python311.dll
+6777 INFO: Running Analysis Analysis-00.toc
+6777 INFO: Target bytecode optimization level: 0
+6777 INFO: Initializing module dependency graph...
+6779 INFO: Initializing module graph hook caches...
+6788 INFO: Analyzing modules for base_library.zip ...
+7333 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7372 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7885 INFO: Processing standard module hook 'hook-math.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8078 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8755 INFO: Caching module dependency graph...
+8775 INFO: Analyzing C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\main.py
+8778 INFO: Processing standard module hook 'hook-PyQt5.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+9266 INFO: Processing standard module hook 'hook-PyQt5.QtWidgets.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+10825 INFO: Processing standard module hook 'hook-PyQt5.QtCore.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+12716 INFO: Processing standard module hook 'hook-PyQt5.QtGui.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+21234 INFO: Processing standard module hook 'hook-sqlite3.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+21465 INFO: Processing standard module hook 'hook-cryptography.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+22068 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+22172 INFO: Processing standard module hook 'hook-numpy.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22411 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22512 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22578 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22705 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23045 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23085 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23295 INFO: Processing standard module hook 'hook-webbrowser.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23659 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23659 INFO: SetuptoolsInfo: initializing cached setuptools info...
+24682 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+24852 INFO: Processing standard module hook 'hook-pandas.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+25911 INFO: Processing standard module hook 'hook-pytz.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26117 INFO: Processing standard module hook 'hook-scipy.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26484 INFO: Processing standard module hook 'hook-pycparser.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+26577 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26581 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+26581 INFO: Processing pre-find-module-path hook 'hook-distutils.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+26926 INFO: Processing standard module hook 'hook-distutils.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26958 INFO: Processing standard module hook 'hook-distutils.util.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26974 INFO: Processing standard module hook 'hook-_osx_support.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+27094 INFO: Processing standard module hook 'hook-pkg_resources.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+27704 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+27750 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+28483 INFO: Processing standard module hook 'hook-scipy.linalg.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+28584 INFO: Processing standard module hook 'hook-scipy.special._ufuncs.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29196 INFO: Processing standard module hook 'hook-scipy.spatial._ckdtree.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29227 INFO: Processing standard module hook 'hook-matplotlib.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29470 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29626 INFO: Processing standard module hook 'hook-matplotlib.backend_bases.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29685 INFO: Processing standard module hook 'hook-PIL.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29810 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30010 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30168 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30558 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30593 INFO: Processing standard module hook 'hook-matplotlib.pyplot.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+31169 INFO: Processing standard module hook 'hook-dateutil.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+31323 INFO: Processing pre-safe-import-module hook 'hook-six.moves.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+32297 INFO: Processing standard module hook 'hook-scipy.spatial.transform.rotation.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+33097 INFO: Processing standard module hook 'hook-scipy.stats._stats.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+33370 INFO: Processing standard module hook 'hook-scipy.sparse.csgraph.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+34030 INFO: Processing standard module hook 'hook-scipy.special._ellip_harm_2.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+35461 INFO: Processing standard module hook 'hook-pandas.io.formats.style.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+36769 INFO: Processing standard module hook 'hook-pandas.plotting.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+36993 INFO: Processing standard module hook 'hook-openpyxl.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+38099 INFO: Processing standard module hook 'hook-pandas.io.clipboard.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+38279 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+38691 INFO: Processing standard module hook 'hook-reportlab.lib.utils.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+38728 INFO: Processing standard module hook 'hook-reportlab.pdfbase._fontdata.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+40039 INFO: Processing standard module hook 'hook-PyQt5.QtSql.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+41785 INFO: Processing standard module hook 'hook-pydicom.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+42265 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+46093 INFO: Processing standard module hook 'hook-pyqtgraph.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+364 WARNING: Failed to collect submodules for 'pyqtgraph.opengl' because importing 'pyqtgraph.opengl' raised: ModuleNotFoundError: No module named 'OpenGL'
+46786 INFO: hook-pyqtgraph: selected 'PyQt5' as Qt bindings because hook for 'PyQt5' has been run before.
+46806 INFO: Processing standard module hook 'hook-PyQt5.uic.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+46920 INFO: Processing pre-find-module-path hook 'hook-PyQt5.uic.port_v2.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+46953 INFO: Processing standard module hook 'hook-PyQt5.QtSvg.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+47801 INFO: Processing standard module hook 'hook-PyQt5.QtTest.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+49072 INFO: Processing standard module hook 'hook-matplotlib.backends.backend_qtagg.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+49075 INFO: Processing standard module hook 'hook-matplotlib.backends.qt_compat.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+49075 INFO: hook-matplotlib.backends.qt_compat: selected 'PyQt5' as Qt bindings because hook for 'PyQt5' has been run before.
+49608 INFO: Processing standard module hook 'hook-plotly.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+50484 INFO: Processing standard module hook 'hook-narwhals.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+54124 INFO: Processing standard module hook 'hook-skimage.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+54177 INFO: Processing standard module hook 'hook-skimage.measure.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+54993 INFO: Processing standard module hook 'hook-pydantic.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+55476 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+55906 INFO: Processing standard module hook 'hook-dns.rdata.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+56381 INFO: Processing standard module hook 'hook-pythoncom.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+56443 INFO: Processing standard module hook 'hook-pywintypes.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+56725 INFO: Processing standard module hook 'hook-skimage.filters.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+58883 INFO: Processing standard module hook 'hook-skimage.draw.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+59189 INFO: Processing standard module hook 'hook-skimage.transform.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+59531 INFO: Processing standard module hook 'hook-skimage.segmentation.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+59865 INFO: Processing standard module hook 'hook-skimage.exposure.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+60195 INFO: Processing standard module hook 'hook-skimage.morphology.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+60759 INFO: Processing standard module hook 'hook-skimage.feature.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+61301 INFO: Processing standard module hook 'hook-cv2.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+61879 INFO: Processing standard module hook 'hook-msoffcrypto.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+61988 INFO: Processing pre-safe-import-module hook 'hook-win32com.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\pre_safe_import_module'
+62049 INFO: Processing standard module hook 'hook-win32com.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+62679 INFO: Analyzing hidden import 'ui.paginasControles.PruebasDiarias.IX'
+62691 INFO: Analyzing hidden import 'ui.paginasControles.PruebasDiarias.halcyon'
+62700 INFO: Analyzing hidden import 'ui.paginasControles.PruebasMensuales.ix_mensual'
+62707 INFO: Analyzing hidden import 'ui.paginasControles.PruebasMensuales.tac_mensual'
+62843 INFO: Analyzing hidden import 'ui.paginasControles.PruebasAnuales.ix_anual'
+62870 INFO: Analyzing hidden import 'ui.paginasControles.PruebasDiarias.seiscientos'
+62877 INFO: Analyzing hidden import 'ui.paginasControles.PruebasDiarias.braquiterapia'
+63018 INFO: Analyzing hidden import 'services.auditorias'
+63019 INFO: Analyzing hidden import 'services.decoradores_audit'
+63020 INFO: Analyzing hidden import 'pylinac.contrib'
+63020 INFO: Analyzing hidden import 'pylinac.contrib.orthogonality'
+63024 INFO: Analyzing hidden import 'pylinac.contrib.quasar'
+63025 INFO: Analyzing hidden import 'pylinac.core.metrics'
+63026 INFO: Analyzing hidden import 'pylinac.dlg'
+63029 INFO: Analyzing hidden import 'pylinac.nuclear'
+63055 INFO: Analyzing hidden import 'pylinac.plan_generator'
+63056 INFO: Analyzing hidden import 'pylinac.plan_generator.dicom'
+63077 INFO: Processing module hooks (post-graph stage)...
+63156 WARNING: Hidden import "pycparser.lextab" not found!
+63156 WARNING: Hidden import "pycparser.yacctab" not found!
+63272 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+63469 INFO: Processing standard module hook 'hook-skimage.color.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+63848 INFO: Processing standard module hook 'hook-skimage.restoration.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+64204 INFO: Processing standard module hook 'hook-skimage.metrics.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+64678 INFO: Processing standard module hook 'hook-matplotlib.backends.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+64678 INFO: Matplotlib backend selection method: automatic discovery of used backends
+64714 INFO: Discovered Matplotlib backend(s) via `matplotlib.use()` call in module 'models.PDF.Mensuales.reportes_mensuales': ['Agg', 'Agg', 'Agg']
+64748 INFO: The following Matplotlib backends were discovered by scanning for `matplotlib.use()` calls: ['Agg']. If your backend of choice is not in this list, either add a `matplotlib.use()` call to your code, or configure the backend collection via hook options (see: https://pyinstaller.org/en/stable/hooks-config.html#matplotlib-hooks).
+64748 INFO: Selected matplotlib backends: ['Agg']
+64999 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+65401 WARNING: Hidden import "scipy.special._cdflib" not found!
+65425 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+65485 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+65971 INFO: Processing standard module hook 'hook-tzdata.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+66308 INFO: Performing binary vs. data reclassification (1829 entries)
+66419 INFO: Looking for ctypes DLLs
+66568 INFO: Analyzing run-time hooks ...
+66581 INFO: Including run-time hook 'pyi_rth_mplconfig.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+66583 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+66585 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+66591 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+66592 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+66594 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+66595 INFO: Including run-time hook 'pyi_rth_pkgres.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+66597 INFO: Including run-time hook 'pyi_rth_pywintypes.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+66598 INFO: Including run-time hook 'pyi_rth_pythoncom.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+66598 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+66600 INFO: Including run-time hook 'pyi_rth_pyqt5.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+66603 INFO: Including run-time hook 'pyi_rth_pyqtgraph_multiprocess.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+66604 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+66667 INFO: Creating base_library.zip...
+66680 INFO: Looking for dynamic libraries
+70422 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyQt5\\Qt5\\bin', 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\numpy.libs', 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\scipy.libs', 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\pandas.libs', 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\cv2\\../../x64/vc14/bin']
+70422 INFO: Extra DLL search directories (PATH): ['C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\cv2\\../../x64/vc14/bin', 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyQt5\\Qt5\\bin']
+72034 WARNING: Library not found: could not resolve 'LIBPQ.dll', dependency of 'C:\\Users\\parra\\Documents\\AUNA_Codigos_2026\\Codigo_radqa_2026-07-14\\.venv\\Lib\\site-packages\\PyQt5\\Qt5\\plugins\\sqldrivers\\qsqlpsql.dll'.
+72291 INFO: Warnings written to C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\build\RAD-QA\warn-RAD-QA.txt
+72525 INFO: Graph cross-reference written to C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\build\RAD-QA\xref-RAD-QA.html
+72613 INFO: checking PYZ
+72613 INFO: Building PYZ because PYZ-00.toc is non existent
+72613 INFO: Building PYZ (ZlibArchive) C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\build\RAD-QA\PYZ-00.pyz
+74877 INFO: Building PYZ (ZlibArchive) C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\build\RAD-QA\PYZ-00.pyz completed successfully.
+74926 INFO: checking PKG
+74927 INFO: Building PKG because PKG-00.toc is non existent
+74927 INFO: Building PKG (CArchive) RAD-QA.pkg
+74960 INFO: Building PKG (CArchive) RAD-QA.pkg completed successfully.
+74961 INFO: Bootloader C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+74962 INFO: checking EXE
+74962 INFO: Building EXE because EXE-00.toc is non existent
+74962 INFO: Building EXE from EXE-00.toc
+74962 INFO: Copying bootloader EXE to C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\build\RAD-QA\RAD-QA.exe
+74966 INFO: Copying icon to EXE
+74968 INFO: Copying 0 resources to EXE
+74968 INFO: Embedding manifest in EXE
+74971 INFO: Appending PKG archive to EXE
+74990 INFO: Fixing EXE headers
+75114 INFO: Building EXE from EXE-00.toc completed successfully.
+75234 INFO: checking COLLECT
+75234 INFO: Building COLLECT because COLLECT-00.toc is non existent
+75235 INFO: Building COLLECT COLLECT-00.toc
+76772 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+76792 INFO: Build complete! The results are available in: C:\Users\parra\Documents\AUNA_Codigos_2026\Codigo_radqa_2026-07-14\dist
+
+- Revise nuevamente la formula del calculo de Q(R50) y zref(R50), me comenta que el documento de la IAEA ni el de la AAPM no son claros, (y difieren en muchas cosas). con respecto a cual valor se usa para calculara cada uno de estos anteriormente mencionados.Segun yo, el hecho de que en el documento de la IAEA se mencione un R50,ion que se usa para calcular el Beam Quality(R50) y que este ultimo nada mas se represente como R50, me parece suficiente para saber que el calculo de zref entonces es con R50, y no con R50,ion. Por lo cual yo lo doy como valido, y segun la comparacion con el excel ...
+
+- Camaras de ionizacion disponibles aqui:
+
+- Verificar el guardado y la persisntencia de la informacion:
+
+- Si yo cambio la fecha para llenar una prueba en una fecha diferente a la que en que se realizó, obviamente posterior, se estan actualizando las fechas de vigencia de los equipos? No se ajusta, si en la fecha del formulario mensual elijo octubre del 2024, y en la calculadora de dosis cambio la fecha para que coincida con la del formulario a 10/9/2024 (asumiendo que este formato de fecha tiene sentido porque nos importa es el mes), y busco la serie de la camara N34001, que es la unica que tiene la serie 2426, la TN34001 que es segun me cuentan la que se usa normalmente no tiene la serie 2426, solo la 1069. Incluso si selecciono la serie 001069 para la TN34001 no aparece ni vigente ni nada, hay que hacer una revision en esta seccion. Al final hay realmente alguna diferencia entre TN34001 y N34001?.
+
+- No estan apareciendo los archivos .mcc (MCC FILE) al seleccionar el boton y explorar los archivos. El problema puede ser debido a que la carpeta de electrones incluye archivos .xls ademas de los MCC FILES, y por eso no se puede cargar la "carpeta". Verificado, si es por eso. Seria util que en la ventana emergente de informacion al cargar los datos se muestre la formula y/o principio usado para llegar a estos valores de forma breve y clara. Que es lo de calidad (J1/J2), y por que no se llena automaticamente?
+
+- La calculadora se abre con una fecha diferente al del formulario del control mensual. No tiene sentido realmente.
+
+- Hay que agrandar el tamaño del espacio donde se escriben los meses, o desplazarlos hacia la izquierda, para que la flechita del menú desplegable no quede sobre el texto del mes. Queda sobre la ultima letra.
+
+- Muy bien, aparece de una vez seleccionado el Tipo de escaneo en pulse. Se carga el valor del parametro de Humedad de calibracion automaticamente, aparece la ventana despues de "Aceptar y cerrar" para decidir si descartar o seguir editando. Funciona la carga de archivos MCC y parecen estar bien en el sentido de que estan dentro de las tolerancias. 
+
+- Podriamos incluir en la comparacion de la app vs excel el parametro Q(R50) y el zref.
+
+- La calculadora de dosis para electrones no esta dejando cerrar que porque falta llenar le campo de SSD, el problema es que esa casilla no es visible, si se debe incluir o no, no lo se. Pero al menos en el formato de excel .xls en el que nos hemos basado aparece (100 cm)
+
+- Acaso el comparador de app contra excel esta mintiendo sobre el valor real calculaod, si no por que no coincide exactamente el de la app con el de la tabla de comparacion? Por ejemplo, la calculadora dice, 1.1648 y la ventana de comparacion en la columna de app dice 1.164700y pues no entiendo bien porque, se que hay algunos archivos .xls que estan mal llenados, pero para eso tenemos varios y los documentos de referencia pdf.
+
+- Al menos en el IX hay que poner un subtitulo o texto indicador de cuales energias son para electrones y cuales para fotones, ya que solo aparecen 6 botones sin mas 6 MV, 15 MV, 6 MV, 9 MV, ... y es facil cometer errores de seleccion y permite un proceso mas limpio del codigo y al usar la app.
+
+- Si quedan los datos guardados al abrir y cerrar la app al menos luego de cargar un reporte diario. Pero lo que se registran depende de la fecha. Porque si lleno en el mismo dia dos reportes diarios el ultimo reemplaza al primero.
+
+- Se esta cargando automaticamente un dato en calidad cuando abro el formulario mensual del IX en la fecha actual. Pero no es de lo que habia guardado porque no lo guardé y tampoco están los datos de dosis que habia cargado desde la calculadora.
+
+- En el formulario mensual, aspectos mecanicos, indicadores angulares del colimador falta la fila para llenar informacion de los 180 grados.
+
+En el formulario mensual, aspectos mecanicos, tamaño de campo estan llenos predeterminadamente los valores de las tablas, esto no puede ocurrir, todo debe estar limpio si no hay datos cargados previamente para esa fecha.
+
+- Los datos se cargan correctamente a la base de datos, en cada seccion del formulario mensual, cada tabla una a una.
+
+Cambios proximos:
+- La ventana emergente que informa lo del kQ al elegir una camara no menciona electrones para habilitar el llenado manual de este parametro, deberia tenerse en cuenta tambien.
