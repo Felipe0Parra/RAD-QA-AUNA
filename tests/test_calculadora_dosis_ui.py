@@ -593,6 +593,40 @@ class TestComparacionConExcelElectrones:
         assert "r50w" not in magnitudes
 
 
+class TestH31ComparadorEncabezadoHonesto:
+    """H3.1 (auditoría 2026-07-14): la columna "App" recalcula con el motor
+    de la app usando las entradas DE LA HOJA -- no lo tecleado en la sesión
+    actual. El diálogo debe decirlo, no solo el docstring del método."""
+
+    def _capturar_dialogo(self, dialogo, monkeypatch, filas, datos=None, modelo="N31010"):
+        capturado = {}
+
+        def exec_espia(self):
+            capturado["dlg"] = self
+            return 0
+        monkeypatch.setattr(dialogs_mod.QDialog, "exec_", exec_espia)
+
+        datos = datos or {"archivo": "hoja.xls", "tipo_haz": "fotones"}
+        dialogo._mostrar_dialogo_comparacion(datos, filas, modelo)
+        return capturado["dlg"]
+
+    def test_columna_app_declara_que_usa_entradas_del_excel(self, dialogo, monkeypatch):
+        filas = [{"magnitud": "ktp", "etiqueta": "kTP", "app": 1.0068, "excel": 1.0068,
+                  "comparable": True, "ok": True, "diferencia_rel": 0.0}]
+        dlg = self._capturar_dialogo(dialogo, monkeypatch, filas)
+
+        tabla = dlg.findChild(dialogs_mod.QTableWidget)
+        assert tabla.horizontalHeaderItem(1).text() == "App (motor, entradas del Excel)"
+
+    def test_aparece_la_aclaracion_de_que_no_compara_la_sesion_actual(self, dialogo, monkeypatch):
+        filas = [{"magnitud": "ktp", "etiqueta": "kTP", "app": 1.0068, "excel": 1.0068,
+                  "comparable": True, "ok": True, "diferencia_rel": 0.0}]
+        dlg = self._capturar_dialogo(dialogo, monkeypatch, filas)
+
+        textos = [lbl.text() for lbl in dlg.findChildren(dialogs_mod.QLabel)]
+        assert any("no compara" in t and "sesión actual" in t for t in textos), textos
+
+
 class TestFlujoElectronesRoos:
     """Camino de electrones corregido en la auditoría 2026-07-09 contra el
     corpus 2024 (53 hojas TRS-398 reales): kQ y zref se derivan de la CALIDAD

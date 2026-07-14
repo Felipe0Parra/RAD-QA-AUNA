@@ -1126,6 +1126,21 @@ class DialogCalculadoraDosis(QDialog):
         encabezado.setTextFormat(Qt.RichText)
         layout.addWidget(encabezado)
 
+        # H3.1 (auditoría 2026-07-14): la columna "App" recalcula con el
+        # motor de la app usando las ENTRADAS DE LA HOJA (_recalcular_con_app,
+        # services/trs398_excel.py) -- no los valores tecleados ahora mismo
+        # en esta calculadora. Valida el motor de cálculo, no la sesión
+        # actual. Desde H3.6 (P0/T0 crudos, sin redondeo) esta columna
+        # coincide exacto con lo que mostraría la calculadora si se cargaran
+        # las mismas entradas -- ya no hace falta un disclaimer de 4º decimal.
+        aclaracion = QLabel(
+            "La columna \"App\" recalcula con el motor de la app usando las "
+            "entradas de la hoja -- no compara los valores tecleados en su "
+            "sesión actual de la calculadora.")
+        aclaracion.setWordWrap(True)
+        aclaracion.setStyleSheet("color: #555;")
+        layout.addWidget(aclaracion)
+
         # Pineado a "2000" a propósito (igual que trs398_excel._recalcular_con_app,
         # Fase K1): las hojas del físico están en TRS-398 2000, no en Rev.1 -
         # este aviso debe reflejar SIEMPRE esa tabla, sin importar en qué
@@ -1151,7 +1166,7 @@ class DialogCalculadoraDosis(QDialog):
 
         tabla = QTableWidget(len(filas), 5, dlg)
         tabla.setHorizontalHeaderLabels(
-            ["Magnitud", "App", "Excel", "Dif.", "Estado"])
+            ["Magnitud", "App (motor, entradas del Excel)", "Excel", "Dif.", "Estado"])
         tabla.verticalHeader().setVisible(False)
         tabla.setEditTriggers(QTableWidget.NoEditTriggers)
 
