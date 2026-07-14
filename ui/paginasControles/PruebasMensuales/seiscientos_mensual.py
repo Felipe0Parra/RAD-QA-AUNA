@@ -2364,12 +2364,15 @@ class PruebaMensual600(PruebaBasico):
         table.setItem(2, 7, QTableWidgetItem("X1"))
         table.setItem(2, 8, QTableWidgetItem("X2"))        
         
-        # Rellenar datos en la tabla
+        # Rellenar datos en la tabla (H1.3, auditoría 2026-07-14: solo el
+        # "Campo nominal" nace prellenado -- las 8 columnas de MEDICIÓN
+        # nacían con el valor nominal repetido, como si ya se hubiera
+        # medido; el físico vio números que no eran datos reales).
         datos = [
-            ["5 x 5", "2,5","2,5", "2,5", "2,5", "2,5", "2,5", "2,5", "2,5"],
-            ["10 x 10", "5", "5", "5", "5", "5", "5", "5", "5"],
-            ["15 x 15", "7,5", "7,5", "7,5", "7,5", "7,5", "7,5", "7,5", "7,5"],
-            ["20 x 20", "10", "10", "10", "10", "10", "10", "10", "10"]
+            ["5 x 5", "", "", "", "", "", "", "", ""],
+            ["10 x 10", "", "", "", "", "", "", "", ""],
+            ["15 x 15", "", "", "", "", "", "", "", ""],
+            ["20 x 20", "", "", "", "", "", "", "", ""]
         ]
         
         prueba1 = self.pruebatalas(nombre_tabla, reference)
