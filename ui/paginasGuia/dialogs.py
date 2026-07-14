@@ -1424,6 +1424,17 @@ class DialogCalculadoraDosis(QDialog):
         self.geometry_box.setVisible(False)
         self.fotones.toggled.connect(lambda c: self.geometry_box.setVisible(c))
         self.col1.addWidget(geometria_box)
+
+        # H1.1 (auditoría 2026-07-14): la dosimetría de referencia de
+        # electrones es SIEMPRE SSD=100 cm (TRS-398 Rev.1 Tabla 19), pero el
+        # checkbox SSD solo es visible con fotones (geometry_box oculto
+        # arriba) -- el físico no podía marcarlo y "Tipo_de_medicion"
+        # (siempre-requerido, ver _CAMPOS_SIEMPRE_REQUERIDOS) quedaba en
+        # None, bloqueando el guardado para todo registro de electrones. Se
+        # marca por código sin mostrar el box. QButtonGroup exclusivo no
+        # permite desmarcar luego por código, pero no hace falta: volver a
+        # fotones también usa SSD como caso normal.
+        self.electrones.toggled.connect(lambda c: self.SSD.setChecked(True) if c else None)
         
         # Calibración
         calib_box, calib_layout = self.crear_bloque("Datos de Calibración", "#5b9ea8")
