@@ -156,9 +156,12 @@ class PruebaMensualHc(PruebaMensual600):
                 
                 self.subtool.addItem(widget1, "Indicadores angulares del brazo")
 
-                # Indicadores angulares del colimador
-                datos_colimador = [["0", "", ""], ["90", "", ""], ["270", "", ""]]
-                widget2, tabla_ic = self.createSimpleTable1(3, 3, headers, datos_colimador, "HC_indicadores_colimador",
+                # Indicadores angulares del colimador (H1.2, auditoría
+                # 2026-07-14: faltaba la fila 180° -- mismo hallazgo que en
+                # seiscientos_mensual.py, replicado aquí porque Halcyon tiene
+                # su propia tabla HC_indicadores_colimador).
+                datos_colimador = [["0", "", ""], ["90", "", ""], ["180", "", ""], ["270", "", ""]]
+                widget2, tabla_ic = self.createSimpleTable1(4, 3, headers, datos_colimador, "HC_indicadores_colimador",
                                                             self.ref, id_energia=0, id=True)
                 self.subtool.addItem(widget2, "Indicadores angulares del colimador")
 

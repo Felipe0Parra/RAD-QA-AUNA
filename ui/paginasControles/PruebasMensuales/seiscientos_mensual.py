@@ -867,9 +867,11 @@ class PruebaMensual600(PruebaBasico):
             widget1, _ = self.createSimpleTable1(4, 3, headers, datos_brazo, "indicadores_brazo", self.ref)
             self.subtool.addItem(widget1, "Indicadores angulares del brazo")
 
-            # Indicadores angulares del colimador  
-            datos_colimador = [["0°", "", ""], ["90°", "", ""], ["270°", "", ""]]
-            widget2, _ = self.createSimpleTable1(3, 3, headers, datos_colimador, "indicadores_angulares_colimador", self.ref)
+            # Indicadores angulares del colimador (H1.2, auditoría 2026-07-14:
+            # faltaba la fila 180° -- el brazo sí la tiene; el colimador
+            # también gira las 4 posiciones en el control real).
+            datos_colimador = [["0°", "", ""], ["90°", "", ""], ["180°", "", ""], ["270°", "", ""]]
+            widget2, _ = self.createSimpleTable1(4, 3, headers, datos_colimador, "indicadores_angulares_colimador", self.ref)
             self.subtool.addItem(widget2, "Indicadores angulares del colimador")
             
         except Exception as e:
