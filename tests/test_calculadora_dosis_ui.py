@@ -19,6 +19,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt5.QtCore import QDate
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel
 
 import ui.paginasGuia.dialogs as dialogs_mod
@@ -743,3 +744,41 @@ class TestH33BotonesEnergiaLegibles:
         d.dosis_maxima.setText("0.01")  # necesario para que emitir_dosis no aborte
         boton_6mev.click()
         assert emitidos == ["6mev"]
+
+
+class TestH34FechaCalculadoraDesdeFormulario:
+    """H3.4 (auditoría 2026-07-14): antes la calculadora siempre abría en
+    "hoy", sin relación con el mes que el físico está diligenciando en el
+    formulario mensual."""
+
+    @pytest.fixture
+    def dialogo_factory(self, app, monkeypatch):
+        monkeypatch.setattr(
+            dialogs_mod.EquiposService, "obtener_modelos_unicos",
+            staticmethod(lambda: [{"model": e["model"], "equip_type": e["equip_type"]}
+                                  for e in EQUIPOS]))
+        monkeypatch.setattr(
+            dialogs_mod.EquiposService, "obtener_series_por_modelo",
+            staticmethod(lambda m: [e for e in EQUIPOS if e["model"] == m]))
+        monkeypatch.setattr(
+            dialogs_mod.EquiposService, "obtener_por_id",
+            staticmethod(lambda i: next((e for e in EQUIPOS if e["id"] == i), None)))
+        for tipo in ("information", "warning", "critical"):
+            monkeypatch.setattr(dialogs_mod.QMessageBox, tipo, staticmethod(lambda *a, **k: None))
+
+        def _crear(fecha_inicial=None):
+            d = DialogCalculadoraDosis(energias=[], parent=VentanaIX(), fecha_inicial=fecha_inicial)
+            return d
+
+        return _crear
+
+    def test_sin_fecha_inicial_usa_hoy(self, dialogo_factory):
+        d = dialogo_factory()
+        assert d.date_edit.date() == QDate.currentDate()
+
+    def test_con_fecha_inicial_usa_dia_1_del_mes_elegido(self, dialogo_factory):
+        """El formulario mensual solo registra mes/año (MM/yyyy) -- se fija
+        el día 1, no el día actual (que podría no existir en ese mes)."""
+        fecha_formulario = QDate(2026, 3, 31)  # día 31, mes elegido: marzo
+        d = dialogo_factory(fecha_inicial=fecha_formulario)
+        assert d.date_edit.date() == QDate(2026, 3, 1)

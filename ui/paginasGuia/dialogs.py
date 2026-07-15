@@ -830,7 +830,7 @@ class DialogCalculadoraDosis(QDialog):
         rgb_dark = tuple(int(c * factor) for c in rgb)
         return f"#{rgb_dark[0]:02x}{rgb_dark[1]:02x}{rgb_dark[2]:02x}"
 
-    def __init__(self,energias=None, parent=None):
+    def __init__(self, energias=None, parent=None, fecha_inicial=None):
         super().__init__(parent)
         self.main_window = parent
         print("Dialog llamado desde:", type(self.main_window).__name__)
@@ -896,6 +896,15 @@ class DialogCalculadoraDosis(QDialog):
         self.cargar_modelos_combobox()
         self._poblar_combo_protocolo()
         self.construir_botones_asignacion(self.energias)
+
+        # H3.4 (auditoría 2026-07-14): si el formulario mensual pasa su
+        # fecha, la calculadora abre en el día 1 de ese mes en vez de
+        # "hoy" (self.date_edit nace con QDate.currentDate() en initGUI).
+        # El formulario mensual solo registra mes/año (MM/yyyy) -- fijar el
+        # día ACTUAL del mes elegido sería arbitrario/confuso (ej. si hoy es
+        # 31 pero el mes elegido no tiene 31 días), así que se usa el día 1.
+        if fecha_inicial is not None:
+            self.date_edit.setDate(QDate(fecha_inicial.year(), fecha_inicial.month(), 1))
        
 
     def initGUI(self):

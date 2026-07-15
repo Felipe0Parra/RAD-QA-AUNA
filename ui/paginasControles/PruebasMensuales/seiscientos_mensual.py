@@ -1719,9 +1719,11 @@ class PruebaMensual600(PruebaBasico):
                 mapping[energia] = getattr(self, attr)
         return mapping
     def abrir_calculadora(self):
-        
-
-        dialogo = DialogCalculadoraDosis(self.ENERGIAS, self)
+        # H3.4 (auditoría 2026-07-14): la calculadora abría siempre en la
+        # fecha de hoy, sin relación con el mes que se está diligenciando en
+        # el formulario mensual -- se pasa self.date_box.date() (MM/yyyy).
+        dialogo = DialogCalculadoraDosis(
+            self.ENERGIAS, self, fecha_inicial=self.date_box.date())
         dialogo.dosis_asignada.connect(self._mapear_dosis_a_energia)
         dialogo.setModal(False) 
         dialogo.show()
