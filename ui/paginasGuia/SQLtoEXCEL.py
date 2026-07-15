@@ -16,8 +16,8 @@ import numpy as np
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import QWidget
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-from data.ManejoDatos.conection import ruta_base_datos
-connect = sql.connect(ruta_base_datos())
+from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
+connect = sql.connect(_conection.ruta_base_datos())
 class Color(QWidget):
     def __init__(self, color):
         super().__init__()

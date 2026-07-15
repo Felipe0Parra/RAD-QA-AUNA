@@ -7,7 +7,8 @@ from PyQt5.QtCore import QDate, Qt, QTimer
 from PyQt5.QtGui import QColor
 from models.PDF.pdf import generar_reporte_mlc_pdf, generar_reporte_starshot_pdf
 from data.ManejoDatos.load import *
-from data.ManejoDatos.conection import Conexion, ruta_datos
+from data.ManejoDatos.conection import Conexion
+from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
 from data.ManejoDatos.Tablas_Anuales.tablas_anuales import mostrar_controles_anuales
 import os, json, traceback, sqlite3
 from functools import lru_cache
@@ -1671,7 +1672,7 @@ class PruebaMensual600(PruebaBasico):
         """Añade widgets QLineEdit con funcionalidad optimizada de carga y guardado"""
         try:
             # [0] Anclar el JSON de campos junto a la BD (independiente del cwd)
-            filename = ruta_datos(filename)
+            filename = _conection.ruta_datos(filename)
 
             # [1] Filtrar campos QLineEdit desde DataFrame
             df_lines = self._obtener_lineEdit(df, typee)
@@ -2182,7 +2183,7 @@ class PruebaMensual600(PruebaBasico):
                 return {'source': 'database', 'data': datos_bd}
             
             # 2. Intentar cargar desde JSON con caché
-            filename = ruta_datos(f"{nombre_tabla}.json")
+            filename = _conection.ruta_datos(f"{nombre_tabla}.json")
             datos_json = self.file_cache.obtener_datos_json(filename)
             if datos_json:
                 return {'source': 'json', 'data': datos_json}
@@ -2283,7 +2284,7 @@ class PruebaMensual600(PruebaBasico):
     def _guardar_tabla_optimizada(self, table, nombre_tabla):
         """Guarda datos de tabla en JSON de manera optimizada"""
         try:
-            filename = ruta_datos(f"{nombre_tabla}.json")
+            filename = _conection.ruta_datos(f"{nombre_tabla}.json")
             datos_guardar = []
             
             for i in range(table.rowCount()):
@@ -2416,7 +2417,7 @@ class PruebaMensual600(PruebaBasico):
         prueba1 = self.pruebatalas(nombre_tabla, reference)
         #print(f'Prueba1 en {nombre_tabla} es: {prueba1}')
         
-        filename = ruta_datos(f"{nombre_tabla}.json")
+        filename = _conection.ruta_datos(f"{nombre_tabla}.json")
         if prueba1 is not None and prueba1 != []:
             datos = prueba1
             datos = [t[1:] for t in datos]
@@ -2475,7 +2476,7 @@ class PruebaMensual600(PruebaBasico):
                 datos_guardar.append(dato_col)
 
             # H2.1: envuelto en _contexto/campos -- ver _extraer_campos_de_borrador.
-            with open(ruta_datos(f"{nombre_tabla}.json"), "w") as f:
+            with open(_conection.ruta_datos(f"{nombre_tabla}.json"), "w") as f:
                 json.dump({"_contexto": self._contexto_borrador(), "campos": datos_guardar}, f, indent=4)
 
             #print("Datos de fieldSize guardados:", datos_guardar)
@@ -3451,7 +3452,7 @@ class PruebaMensual600(PruebaBasico):
         #print('Entro a traer info')
         #print(f'Los combenu son: {combenu}')
         
-        ruta_json = ruta_datos(f"{nombre_tabla}.json")
+        ruta_json = _conection.ruta_datos(f"{nombre_tabla}.json")
         if os.path.exists(ruta_json):
             with open(ruta_json, "r") as f:
                 results = json.load(f)

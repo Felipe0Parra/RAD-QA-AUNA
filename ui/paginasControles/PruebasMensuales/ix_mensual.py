@@ -3,7 +3,8 @@ from PyQt5.QtCore import Qt, QDate
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual
 from data.ManejoDatos.load import mostrar_controles_mensuales, encontrar_columnas
-from data.ManejoDatos.conection import Conexion, ruta_datos
+from data.ManejoDatos.conection import Conexion
+from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
 import json, traceback
 import os
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
@@ -278,7 +279,7 @@ class PruebaMensualIX(PruebaMensual600):
         ENERGIAS_IX = ["6mv", "15mv", "6mev", "9mev", "12mev","15mev"]
 
         # [0] Anclar el JSON de campos junto a la BD (independiente del cwd)
-        filename = ruta_datos(filename)
+        filename = _conection.ruta_datos(filename)
 
         # [1] Filtra QLineEdit para la prueba "dosimetria"
         df_lines = df.loc[(df.widget_type.str.contains('QLineEdit')) & (df.prueba == f'{typee}')]['nombres']

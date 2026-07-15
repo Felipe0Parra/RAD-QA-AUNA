@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import QApplication, QTableWidget, QToolBox, QWidget
 import ui.paginasControles.PruebasMensuales.seiscientos_mensual as mensual_mod
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from ui.paginasControles.PruebasMensuales.halcyon_mensual import PruebaMensualHc
+import data.ManejoDatos.conection as conection_mod
 
 
 @pytest.fixture(scope="module")
@@ -106,8 +107,10 @@ class TestTamanoCampoNaceVacio:
         # Hermético: sin esto, ruta_datos() apunta a la raíz del proyecto en
         # desarrollo -- redirigir a tmp_path evita tocar (o depender de) un
         # tamano_campo.json real fuera del test.
+        # HI-1: seiscientos_mensual.py ya no re-exporta ruta_datos por valor
+        # -- parchear conection_mod (unico punto necesario ahora).
         monkeypatch.setattr(
-            mensual_mod, "ruta_datos",
+            conection_mod, "ruta_datos",
             lambda nombre: str(tmp_path / nombre))
         return obj
 

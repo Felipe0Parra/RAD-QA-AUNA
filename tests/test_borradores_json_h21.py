@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import QApplication, QDateEdit, QLineEdit, QPushButton, QTa
 import ui.paginasControles.PruebasMensuales.seiscientos_mensual as mensual_mod
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from ui.paginasControles.PruebasMensuales.ix_mensual import PruebaMensualIX
+import data.ManejoDatos.conection as conection_mod
 
 
 @pytest.fixture(scope="module")
@@ -103,14 +104,16 @@ class TestGuardarOptimizadoCargarJsonCache:
         obj.file_cache = mensual_mod.FileCache()
         obj.ln_campo_a = QLineEdit()
         obj.ln_campo_b = QLineEdit()
-        monkeypatch.setattr(mensual_mod, "ruta_datos", lambda nombre: str(tmp_path / nombre))
+        # HI-1: seiscientos_mensual.py ya no re-exporta ruta_datos por valor
+        # -- parchear conection_mod (unico punto necesario ahora).
+        monkeypatch.setattr(conection_mod, "ruta_datos", lambda nombre: str(tmp_path / nombre))
         return obj
 
     def test_guardar_y_recargar_mismo_contexto_restaura_los_campos(self, app, tmp_path, monkeypatch):
         obj = self._construir("Clinac 600", "07/2026", monkeypatch, tmp_path)
         obj.ln_campo_a.setText("1.23")
         obj.ln_campo_b.setText("4.56")
-        filename = mensual_mod.ruta_datos("dosimetria.json")
+        filename = conection_mod.ruta_datos("dosimetria.json")
         obj._guardar_optimizado(["ln_campo_a", "ln_campo_b"], filename, lambda: None)
 
         otro = self._construir("Clinac 600", "07/2026", monkeypatch, tmp_path)
@@ -121,7 +124,7 @@ class TestGuardarOptimizadoCargarJsonCache:
     def test_guardar_y_recargar_en_otro_mes_no_hereda_el_borrador(self, app, tmp_path, monkeypatch):
         obj = self._construir("Clinac 600", "07/2026", monkeypatch, tmp_path)
         obj.ln_campo_a.setText("1.23")
-        filename = mensual_mod.ruta_datos("dosimetria.json")
+        filename = conection_mod.ruta_datos("dosimetria.json")
         obj._guardar_optimizado(["ln_campo_a"], filename, lambda: None)
 
         otro_mes = self._construir("Clinac 600", "08/2026", monkeypatch, tmp_path)
@@ -132,7 +135,7 @@ class TestGuardarOptimizadoCargarJsonCache:
         """Un dosimetria.json de ANTES de H2.1 (lista plana) sigue en disco
         -- no debe reventar, y (a propósito) no se carga."""
         obj = self._construir("Clinac 600", "07/2026", monkeypatch, tmp_path)
-        filename = mensual_mod.ruta_datos("dosimetria.json")
+        filename = conection_mod.ruta_datos("dosimetria.json")
         os.makedirs(tmp_path, exist_ok=True)
         with open(filename, "w") as f:
             import json
@@ -152,7 +155,9 @@ class TestFieldSizeContexto:
     def _construir(self, equipo_f, fecha, monkeypatch, tmp_path):
         obj = _instancia_pelada(PruebaMensual600, equipo_f, fecha)
         obj.ref = 999999
-        monkeypatch.setattr(mensual_mod, "ruta_datos", lambda nombre: str(tmp_path / nombre))
+        # HI-1: seiscientos_mensual.py ya no re-exporta ruta_datos por valor
+        # -- parchear conection_mod (unico punto necesario ahora).
+        monkeypatch.setattr(conection_mod, "ruta_datos", lambda nombre: str(tmp_path / nombre))
         return obj
 
     def _boton(self, widget, texto):

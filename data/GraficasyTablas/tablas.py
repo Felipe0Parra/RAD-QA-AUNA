@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import QMessageBox , QWidget, QHBoxLayout, QLabel, QTableWi
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery
-from data.ManejoDatos.conection import ruta_base_datos
+from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
 import traceback
 
 def load_table(self, boolean_keys=None, dosis=None, maquina=""):
@@ -153,7 +153,7 @@ def eliminarfilas(self, maquina):
 
     if not QSqlDatabase.contains("qt_sql_default_connection"):
         db = QSqlDatabase.addDatabase("QSQLITE")
-        db.setDatabaseName(ruta_base_datos())
+        db.setDatabaseName(_conection.ruta_base_datos())
     else:
         db = QSqlDatabase.database("qt_sql_default_connection")
 
