@@ -42,8 +42,11 @@ DATOS_HALCYON = {
     },
 }
 
+from _corpus import HALCYON_DMAX  # HI-0: rutas centralizadas del corpus
+
 CARPETA_REAL = os.path.expanduser("~/Documents/Archivos_UseApp")
-HALCYON = os.path.join(CARPETA_REAL, "TRS-398 6 MV FFF Halcyon Dmax.xls")
+# HALCYON: hoja suelta movida a PrimerosArchivosPruebas/ el 2026-07-15 (ver _corpus).
+HALCYON = HALCYON_DMAX
 ELECTRONES_12MEV = os.path.join(
     CARPETA_REAL, "Archivos QA/2024/Enero/iX/Electrones/TRS-398 12 MeV.xls")
 

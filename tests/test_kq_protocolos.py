@@ -117,8 +117,8 @@ class TestDefaultYErrores:
 
 # ── Verificación de transcripción: extracción DOBLE independiente ─────────
 
-PDF_REV1 = os.path.expanduser(
-    "~/Documents/Archivos_UseApp/Archivos QA/p15048-DOC-010-398-Rev1_web.pdf")
+# HI-0: PDF Rev.1 centralizado en _corpus (movido a NormaYEquipos_pdf/).
+from _corpus import PDF_REV1
 
 # Nombres de fila exactamente como aparecen en la Tabla 16 (para localizar la
 # fila correcta con un parseo distinto al usado al transcribir KQ_TPR_TABLE_REV1).

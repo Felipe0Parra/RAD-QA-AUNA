@@ -30,8 +30,9 @@ import ui.paginasGuia.dialogs as dialogs_mod
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 from services.trs398_excel import leer_trs398
 from services.dosis_service import DosisService
+from _corpus import CORPUS_2024  # HI-0: fuente única de rutas del corpus
 
-CORPUS = Path(os.path.expanduser("~/Documents/Archivos_UseApp/Archivos QA/2024"))
+CORPUS = Path(CORPUS_2024)  # 2024 intacto; ruta centralizada en tests/_corpus.py
 
 pytestmark = pytest.mark.skipif(
     not CORPUS.exists(), reason="corpus 2024 no disponible en esta máquina")

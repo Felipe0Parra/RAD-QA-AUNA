@@ -22,12 +22,16 @@ import pytest
 from mcc_PTW_read.mcc_read import (
     ErrorLecturaMCC, agregar_carpeta, leer_mcc, normalizar_energia,
 )
+from _corpus import mes_primeros  # HI-0: fuente única de rutas del corpus
 
-CORPUS = os.path.expanduser("~/Documents/Archivos_UseApp/Archivos QA")
-FEBRERO_FOTONES = os.path.join(CORPUS, "Febrero", "IX", "Fotones")
-FEBRERO_ELECTRONES = os.path.join(CORPUS, "Febrero", "IX", "Electrones")
-FEBRERO_600 = os.path.join(CORPUS, "Febrero", "600")
-JUNIO_600 = os.path.join(CORPUS, "Junio", "600")
+# Febrero/Junio son PrimerosMeses (agrupados ahí el 2026-07-15; antes sueltos
+# bajo "Archivos QA/{Mes}"). mes_primeros devuelve None si la carpeta no está
+# -> el skipif de cada clase hace SKIP honesto, nunca fallo por mudanza.
+FEBRERO_FOTONES = mes_primeros("Febrero", "IX", "Fotones")
+FEBRERO_ELECTRONES = mes_primeros("Febrero", "IX", "Electrones")
+FEBRERO_600 = mes_primeros("Febrero", "600")
+FEBRERO_HALCYON = mes_primeros("Febrero", "Halcyon")
+JUNIO_600 = mes_primeros("Junio", "600")
 
 
 def _bloque_scan(numero, curve_type, energy, modality, meas_date, filas, campo_mm=None):
@@ -264,7 +268,7 @@ class TestFiltroTamanoCampo:
         assert "6mv" in resultado["datos"]
 
 
-@pytest.mark.skipif(not os.path.exists(os.path.join(CORPUS, "Febrero", "Halcyon")),
+@pytest.mark.skipif(FEBRERO_HALCYON is None,
                     reason="corpus real del físico no disponible en esta máquina")
 class TestCorpusRealHalcyonFebreroTamanoCampo:
     def test_la_carpeta_real_mezcla_5x5_10x10_y_20x20(self):
@@ -272,7 +276,7 @@ class TestCorpusRealHalcyonFebreroTamanoCampo:
         agregados, uno por uno) que Febrero/Halcyon de verdad mezcla los 3
         tamaños -- si esto deja de ser cierto, revisar si el filtro de
         _TAMANO_CAMPO_MM sigue siendo necesario."""
-        carpeta = os.path.join(CORPUS, "Febrero", "Halcyon")
+        carpeta = FEBRERO_HALCYON
         tamanos = set()
         for ruta in glob.glob(os.path.join(carpeta, "*.mcc")):
             for esc in leer_mcc(ruta):
@@ -283,7 +287,7 @@ class TestCorpusRealHalcyonFebreroTamanoCampo:
     def test_filtro_10x10_solo_deja_pasar_ese_tamano(self):
         """agregar_carpeta con el filtro puesto: cada escaneo que sobrevive
         es 10x10 (sin importar qué tan reciente sea un 5x5/20x20)."""
-        carpeta = os.path.join(CORPUS, "Febrero", "Halcyon")
+        carpeta = FEBRERO_HALCYON
 
         con_filtro = agregar_carpeta(carpeta, tamano_campo_mm=100.0)
 
@@ -296,7 +300,7 @@ class TestCorpusRealHalcyonFebreroTamanoCampo:
 
 # ── Capa 2: validación opcional contra el corpus real ──────────────────────
 
-@pytest.mark.skipif(not os.path.exists(FEBRERO_FOTONES),
+@pytest.mark.skipif(FEBRERO_FOTONES is None,
                     reason="corpus real del físico no disponible en esta máquina")
 class TestCorpusRealFotonesFebrero:
     def test_energias_repetidas_el_mismo_dia_no_revientan(self):
@@ -312,7 +316,7 @@ class TestCorpusRealFotonesFebrero:
                 "PDD", "INPLANE_PROFILE", "CROSSPLANE_PROFILE"}
 
 
-@pytest.mark.skipif(not os.path.exists(FEBRERO_ELECTRONES),
+@pytest.mark.skipif(FEBRERO_ELECTRONES is None,
                     reason="corpus real del físico no disponible en esta máquina")
 class TestCorpusRealElectronesFebrero:
     def test_6mev_pdd_repetido_toma_el_mas_reciente(self):
@@ -331,7 +335,7 @@ class TestCorpusRealElectronesFebrero:
         assert set(resultado["datos"].keys()) >= {"6mev", "9mev", "12mev", "15mev"}
 
 
-@pytest.mark.skipif(not os.path.exists(FEBRERO_600),
+@pytest.mark.skipif(FEBRERO_600 is None,
                     reason="corpus real del físico no disponible en esta máquina")
 class TestCorpusReal600Febrero:
     def test_unico_archivo_trae_las_tres_curvas(self):
@@ -343,7 +347,7 @@ class TestCorpusReal600Febrero:
             "PDD", "INPLANE_PROFILE", "CROSSPLANE_PROFILE"}
 
 
-@pytest.mark.skipif(not os.path.exists(JUNIO_600),
+@pytest.mark.skipif(JUNIO_600 is None,
                     reason="corpus real del físico no disponible en esta máquina")
 class TestCorpusReal600JunioDosColumnas:
     def test_archivo_de_2_columnas_no_queda_vacio(self):

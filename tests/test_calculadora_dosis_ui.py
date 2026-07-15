@@ -399,8 +399,8 @@ class TestSelectorProtocolo:
         assert d.Kq_0.text() == "0.978"
 
 
-HALCYON = os.path.expanduser(
-    "~/Documents/Archivos_UseApp/TRS-398 6 MV FFF Halcyon Dmax.xls")
+# HI-0: hoja Halcyon movida a PrimerosArchivosPruebas/ (ver tests/_corpus.py).
+from _corpus import HALCYON_DMAX as HALCYON
 
 
 class TestEtiquetaSerieCalibracion:

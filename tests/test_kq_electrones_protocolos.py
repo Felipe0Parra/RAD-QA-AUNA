@@ -99,10 +99,8 @@ class TestPropiedadesFisicas:
 
 # ── Verificación de transcripción: extracción DOBLE independiente ─────────
 
-PDF_2000 = os.path.expanduser(
-    "~/Documents/Archivos_UseApp/Archivos QA/TRS_398s_Web.pdf")
-PDF_REV1 = os.path.expanduser(
-    "~/Documents/Archivos_UseApp/Archivos QA/p15048-DOC-010-398-Rev1_web.pdf")
+# HI-0: PDFs de normativa centralizados en _corpus (movidos a NormaYEquipos_pdf/).
+from _corpus import PDF_2000, PDF_REV1
 
 
 def _extraer_fila_roos(ruta_pdf, titulo_tabla, patron_numero, n_valores,

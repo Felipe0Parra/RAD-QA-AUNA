@@ -32,8 +32,8 @@ from mcc_PTW_read.mcc_read import EscaneoMCC, agregar_carpeta
 from services.mcc_metrics import (
     calcular_planicidad, calcular_simetria, calcular_simetria_planicidad,
 )
+from _corpus import mes_primeros  # HI-0: fuente única de rutas del corpus
 
-CORPUS = os.path.expanduser("~/Documents/Archivos_UseApp/Archivos QA")
 DB = "/home/felipepp/Documents/CodigosPython/AUNA_2026_2/BaseDatosQA.db"
 
 # ref -> (carpeta_mes, nombre_carpeta_ix_o_None_si_es_600)
@@ -129,15 +129,32 @@ def _valores_oro():
 
 
 def _carpeta_de(ref, energia):
+    # HI-0: mes_primeros resuelve la grafía IX/iX y devuelve None si la carpeta
+    # no está (protegido aguas arriba por el skipif granular de la clase).
     mes, ix_nombre = REFS_ORO[ref]
     if ix_nombre is None:
-        return os.path.join(CORPUS, mes, "600")
+        return mes_primeros(mes, "600")
     sub = "Electrones" if energia.endswith("mev") else "Fotones"
-    return os.path.join(CORPUS, mes, ix_nombre, sub)
+    return mes_primeros(mes, "IX", sub)
 
 
-@pytest.mark.skipif(not (os.path.exists(CORPUS) and os.path.exists(DB)),
-                    reason="corpus real y/o BD de producción no disponibles en esta máquina")
+def _corpus_oro_disponible():
+    """HI-0 (granularidad de skip, TEMA D): las 6 carpetas de oro CONCRETAS
+    deben existir, no solo la raíz del corpus. Si alguna no está -> SKIP
+    honesto, nunca fallo (una mudanza de archivos no es una regresión). El
+    guard `len == 26*4` de más abajo sigue detectando datos incompletos como
+    fallo real -- esto solo evita el falso rojo por corpus ausente/movido."""
+    if not os.path.exists(DB):
+        return False
+    for ref, (mes, ix_nombre) in REFS_ORO.items():
+        maquina = "600" if ix_nombre is None else "IX"
+        if mes_primeros(mes, maquina) is None:
+            return False
+    return True
+
+
+@pytest.mark.skipif(not _corpus_oro_disponible(),
+                    reason="corpus de oro (PrimerosMeses) y/o BD no disponibles en esta máquina")
 class TestValidacionContraDosimetriaMenReal:
     @staticmethod
     @pytest.fixture(scope="class")
@@ -189,3 +206,14 @@ class TestValidacionContraDosimetriaMenReal:
                                  if eje.startswith("sim")])
 
         assert errores_sim.mean() <= 0.25
+
+
+class TestCorpusHelperNoneSafe:
+    """HI-0: el helper de rutas nunca revienta por ausencia -> devuelve None,
+    para que el skipif del llamador haga SKIP honesto. Corre en cualquier
+    máquina (no depende de que el corpus del físico esté presente)."""
+
+    def test_mes_inexistente_devuelve_none(self):
+        assert mes_primeros("__no_existe__", "IX", "Fotones") is None
+        assert mes_primeros("__no_existe__", "600") is None
+        assert mes_primeros("__no_existe__", "Halcyon") is None
