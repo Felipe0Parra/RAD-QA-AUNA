@@ -122,6 +122,17 @@ CELDAS_CALCULADAS_ELECTRONES = {
     "kQ":            "I72",   # Table 18/20 (Q0=Co-60), a la calidad R50,w
     "Dzref":         "G80",   # dosis en zref (Gy/MU)
     "dosis_maxima":  "H89",   # dosis en zmax, montaje SSD (Gy/MU)
+    # H3.2 (auditoría 2026-07-14): celdas D11/I11 verificadas contra el
+    # corpus real (varias energías/meses, valor exacto = 1.029*R50-0.06 y
+    # 0.6*Q-0.1). Q(R50) casi nunca se sobreescribe (1/73 hojas, con una
+    # entrada rota, no deliberada); zref SÍ tiene un patrón sistemático:
+    # 15/73 hojas -- TODAS de 6 MeV, en prácticamente todos los meses de
+    # 2024 -- traen 1.4 fijo en vez de la fórmula (convención clínica de
+    # esta institución para 6 MeV). El comparador las muestra igual
+    # (honestidad > silencio, mismo principio que H3.1); la UI avisa que
+    # una diferencia aquí no es necesariamente un error.
+    "beam_quality_r50": "D11",
+    "zref":             "I11",
 }
 
 
@@ -262,6 +273,13 @@ ETIQUETAS = {
     "kQ":           "kQ,Q0 (calidad del haz)",
     "Dzref":        "D(zref) [Gy/UM]",
     "dosis_maxima": "D(zmax) [Gy/UM]",
+    # Solo aplican a electrones (R50 no es un concepto de haces de fotones,
+    # que usan TPR20,10) -- explícito en el propio texto porque ETIQUETAS es
+    # un dict compartido; comparar_trs398 ya despacha por tipo_haz y nunca
+    # itera estas 2 claves para una hoja de fotones (CELDAS_CALCULADAS no las
+    # tiene), pero el texto no debe depender de eso para ser correcto.
+    "beam_quality_r50": "Q(R50) (calidad de haz, electrones)",
+    "zref":             "zref (profundidad de referencia, electrones)",
 }
 
 
@@ -321,6 +339,10 @@ def _recalcular_con_app(entradas, tipo_haz="fotones"):
         # misma razón que fotones (ver más abajo).
         r50m = num("r50_medido")
         r50w = DosisService.r50_quality(r50m[0]) if r50m else None
+        # H3.2: Q(R50) y zref no dependen de la cámara (a diferencia de kQ) --
+        # se calculan siempre que haya R50 medido, con o sin modelo elegido.
+        r["beam_quality_r50"] = r50w
+        r["zref"] = DosisService.r50_depth(r50w) if r50w is not None else None
         if (modelo and r50w is not None
                 and DosisService.camara_tiene_kq_electrones(modelo, protocolo="2000")):
             r["kQ"] = DosisService.interpolar_r50(modelo, r50w, protocolo="2000")

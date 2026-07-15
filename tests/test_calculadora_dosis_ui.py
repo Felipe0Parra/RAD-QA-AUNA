@@ -581,16 +581,19 @@ class TestComparacionConExcelElectrones:
 
     @pytest.mark.skipif(not os.path.exists(ELECTRONES_12MEV),
                         reason="corpus 2024 no disponible en esta máquina")
-    def test_electrones_no_compara_zref_r50w(self, dialogo, monkeypatch):
-        """10/53 hojas del corpus tienen zref sobreescrito a mano por el
-        físico (uso legítimo) -- por diseño esa celda no debe aparecer entre
-        las magnitudes comparadas, para no producir un rojo engañoso."""
+    def test_electrones_incluye_beam_quality_r50_y_zref(self, dialogo, monkeypatch):
+        """H3.2 (auditoría 2026-07-14): invierte la exclusión original de E5.
+        Aunque el físico sobreescribe zref a mano en muchas hojas de 6 MeV
+        (convención clínica desde mediados de 2024, no un error -- ver
+        test_corpus_2024_cross_check.py), la decisión pasó a ser mostrar y
+        explicar (aviso en el diálogo, H3.2/H3.1), no ocultar la fila. Esta
+        hoja (Enero/12 MeV) no tiene el override -- debe comparar exacto."""
         seleccionar_camara(dialogo, "N34001")
         cap = _parchear_dialogo_modal(dialogo, monkeypatch, ELECTRONES_12MEV)
         dialogo.comparar_con_excel()
-        magnitudes = {f["magnitud"] for f in cap["filas"]}
-        assert "zref" not in magnitudes
-        assert "r50w" not in magnitudes
+        filas = {f["magnitud"]: f for f in cap["filas"]}
+        assert "beam_quality_r50" in filas and filas["beam_quality_r50"]["ok"]
+        assert "zref" in filas and filas["zref"]["ok"]
 
 
 class TestH31ComparadorEncabezadoHonesto:

@@ -1164,6 +1164,24 @@ class DialogCalculadoraDosis(QDialog):
             aviso.setStyleSheet("color: #a06a00;")
             layout.addWidget(aviso)
 
+        # H3.2 (auditoría 2026-07-14): verificado contra el corpus real que
+        # zref trae un valor clínico fijo (1.4) en vez de la fórmula en la
+        # gran mayoría de las hojas de 6 MeV (15/73 hojas de electrones del
+        # corpus 2024, todas 6 MeV, en casi todos los meses) -- convención
+        # de esta institución, no un error de digitación. El comparador NO
+        # oculta esa fila (mismo principio que H3.1: mostrar y explicar, no
+        # silenciar), pero sin este aviso un "Difiere" en zref podría leerse
+        # como un bug de la app.
+        if datos.get("tipo_haz") == "electrones":
+            nota_zref = QLabel(
+                "ℹ En electrones, \"zref\" puede diferir de la fórmula "
+                "0.6·Q(R50)−0.1 si la hoja usa un valor clínico fijo en su "
+                "lugar (frecuente en 6 MeV) -- una diferencia aquí no es "
+                "necesariamente un error.")
+            nota_zref.setWordWrap(True)
+            nota_zref.setStyleSheet("color: #555;")
+            layout.addWidget(nota_zref)
+
         tabla = QTableWidget(len(filas), 5, dlg)
         tabla.setHorizontalHeaderLabels(
             ["Magnitud", "App (motor, entradas del Excel)", "Excel", "Dif.", "Estado"])

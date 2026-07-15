@@ -67,6 +67,11 @@ DATOS_ELECTRONES_12MEV = {
         "ks": 1.0071056560613143, "Mq": 0.12830595800293096,
         "kQ": 0.9102745360000001, "Dzref": 0.010001039940131951,
         "dosis_maxima": 0.01007154072520841,
+        # H3.2: D11/I11 reales de esta misma hoja (Enero/iX/12 MeV) --
+        # 1.029*5.127-0.06 y 0.6*Q-0.1, exactos (esta hoja no tiene el
+        # override manual de zref que sí aparece en 6 MeV).
+        "beam_quality_r50": 5.215682999999999,
+        "zref": 3.0294097999999994,
     },
 }
 
@@ -268,7 +273,9 @@ class TestComparacionElectrones:
         assert filas["kQ"]["comparable"] is False
         assert filas["Dzref"]["comparable"] is False
         assert filas["dosis_maxima"]["comparable"] is False
-        for clave in ("ktp", "kpol", "ks", "Mq"):
+        # beam_quality_r50/zref (H3.2) NO dependen de la cámara -- solo del
+        # R50 medido -- así que siguen comparables sin modelo seleccionado.
+        for clave in ("ktp", "kpol", "ks", "Mq", "beam_quality_r50", "zref"):
             assert filas[clave]["comparable"] is True
             assert filas[clave]["ok"] is True
 
@@ -281,12 +288,16 @@ class TestComparacionElectrones:
                 for f in comparar_trs398(DATOS_ELECTRONES_12MEV, modelo_camara="N31010")}
         assert filas["kQ"]["comparable"] is False
 
-    def test_no_incluye_zref_ni_r50w(self):
-        """10/53 hojas del corpus sobreescriben zref a mano -- no debe
-        aparecer entre las magnitudes comparadas (evita un rojo engañoso)."""
+    def test_incluye_beam_quality_r50_y_zref(self):
+        """H3.2 (auditoría 2026-07-14): invierte la exclusión original de E5
+        (test_no_incluye_zref_ni_r50w). Aunque 15/73 hojas de electrones del
+        corpus 2024 sobreescriben zref a mano (siempre 6 MeV, convención
+        clínica -- ver comentario en CELDAS_CALCULADAS_ELECTRONES), la
+        decisión pasó a ser mostrar y explicar (aviso en la UI), no ocultar
+        -- mismo principio que H3.1."""
         magnitudes = {f["magnitud"] for f in comparar_trs398(DATOS_ELECTRONES_12MEV)}
-        assert "zref" not in magnitudes
-        assert "r50w" not in magnitudes
+        assert "beam_quality_r50" in magnitudes
+        assert "zref" in magnitudes
 
 
 # ── Capa 2: validación opcional contra archivos reales ────────────────────
@@ -394,3 +405,56 @@ class TestArchivoRealElectrones12MeV:
         assert DosisService.Ks_factor(e["a0"], e["a1"], e["a2"], m1m2) == round(c["ks"], 4)
         r50w = DosisService.r50_quality(e["r50_medido"])
         assert DosisService.interpolar_r50("N34001", r50w) == round(c["kQ"], 5)
+
+
+# Las 4 energías de electrones de un mismo mes/máquina (H3.2) -- corpus 2024,
+# Junio/iX. OJO: el plan original asumía "los 4 dan Q/zref exactos"; verificado
+# contra el archivo real que NO es así -- 6 MeV trae el override clínico de
+# zref=1.4 igual que casi todos los demás meses (ver comentario en
+# CELDAS_CALCULADAS_ELECTRONES). Esta clase documenta el patrón real, no la
+# suposición inicial.
+CARPETA_JUNIO_ELECTRONES = os.path.join(
+    CARPETA_REAL, "Archivos QA/2024/Junio/IX/Electrones")
+ENERGIAS_JUNIO = {
+    "6 MeV":  ("TRS-398 6 MeV.xls", False),   # False = zref NO exacto (override 1.4)
+    "9 MeV":  ("TRS-398 9 MeV-.xls", True),
+    "12 MeV": ("TRS-398 12 MeV.xls", True),
+    "15 MeV": ("TRS-398 15 MeV.xls", True),
+}
+
+
+@pytest.mark.skipif(not os.path.isdir(CARPETA_JUNIO_ELECTRONES),
+                    reason="corpus 2024 no disponible en esta máquina")
+class TestArchivoRealElectronesJunioLas4Energias:
+    """Q(R50) exacto en las 4 energías; zref exacto en 9/12/15 MeV pero NO en
+    6 MeV (convención clínica fija de esta institución, confirmada en
+    prácticamente todos los meses de 2024 -- no es un bug ni una excepción
+    aislada de este mes)."""
+
+    @pytest.mark.parametrize("energia,exacto_zref",
+                             [(e, ok) for e, (_, ok) in ENERGIAS_JUNIO.items()])
+    def test_beam_quality_r50_siempre_exacto(self, energia, exacto_zref):
+        archivo, _ = ENERGIAS_JUNIO[energia]
+        datos = leer_trs398(os.path.join(CARPETA_JUNIO_ELECTRONES, archivo))
+        r50 = datos["entradas"]["r50_medido"]
+        q_calc = 1.029 * r50 - 0.06
+        assert abs(datos["calculados"]["beam_quality_r50"] - q_calc) < 0.001
+
+    @pytest.mark.parametrize("energia,exacto_zref",
+                             [(e, ok) for e, (_, ok) in ENERGIAS_JUNIO.items()])
+    def test_zref_exacto_salvo_override_clinico_6mev(self, energia, exacto_zref):
+        archivo, _ = ENERGIAS_JUNIO[energia]
+        datos = leer_trs398(os.path.join(CARPETA_JUNIO_ELECTRONES, archivo))
+        r50 = datos["entradas"]["r50_medido"]
+        q_calc = 1.029 * r50 - 0.06
+        zref_calc = 0.6 * q_calc - 0.1
+        zref_hoja = datos["calculados"]["zref"]
+        if exacto_zref:
+            assert abs(zref_hoja - zref_calc) < 0.001, (
+                f"{energia}: se esperaba fórmula exacta, no un override")
+        else:
+            assert zref_hoja == 1.4, (
+                f"{energia}: se esperaba el override clínico conocido (1.4)")
+            assert abs(zref_hoja - zref_calc) > 0.01, (
+                f"{energia}: el override debería diferir de la fórmula "
+                f"(si ahora coincide, esta hoja ya no es el caso documentado)")

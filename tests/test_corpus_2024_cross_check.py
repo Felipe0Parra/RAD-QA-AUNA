@@ -101,13 +101,21 @@ class TestIXElectronesSiempreVerde:
     """iX electrones (Roos/TN34001 en la config de oro, N34001 en filas
     históricas del corpus): las 53 hojas deben seguir siendo 100% verdes
     (E1-E3 ya lo corrigieron; este test evita que una regresión futura pase
-    inadvertida)."""
+    inadvertida).
+
+    H3.2 (auditoría 2026-07-14) añadió zref al comparador. Verificado
+    archivo por archivo: Enero-Abril/2024 siguen la fórmula exacta; desde
+    Mayo/2024 el físico adoptó un valor clínico fijo (zref=1.4) para TODAS
+    las hojas de 6 MeV -- NO es un patrón por energía/mes sino un cambio de
+    convención a mitad de año. `test_todas_las_hojas_electrones_ix_comparan_verde`
+    tolera ÚNICAMENTE ese valor exacto (1.4), no "cualquier DIF en 6 MeV" --
+    así una regresión real seguiría fallando aunque coincida con esas fechas."""
 
     def test_hay_archivos_electrones_ix(self, archivos_por_acelerador):
         archivos = [r for r in archivos_por_acelerador["iX"] if "Electrones" in r.parts]
         assert len(archivos) >= 40, "se esperaban ~53 hojas de electrones iX"
 
-    def test_todas_las_hojas_electrones_ix_comparan_verde(self, archivos_por_acelerador):
+    def test_ninguna_hoja_electrones_ix_queda_no_comparable(self, archivos_por_acelerador):
         for ruta in archivos_por_acelerador["iX"]:
             if "Electrones" not in ruta.parts:
                 continue
@@ -115,7 +123,22 @@ class TestIXElectronesSiempreVerde:
             assert tipo_haz == "electrones", ruta
             for f in filas:
                 assert f["comparable"], f"{ruta.name}: {f['magnitud']} no comparable"
-                assert f["ok"], f"{ruta.name}: {f['magnitud']} difiere ({f['diferencia_rel']:.3%})"
+
+    def test_todas_las_hojas_electrones_ix_comparan_verde(self, archivos_por_acelerador):
+        for ruta in archivos_por_acelerador["iX"]:
+            if "Electrones" not in ruta.parts:
+                continue
+            _, filas = _comparar_archivo(ruta)
+            for f in filas:
+                if f["ok"]:
+                    continue
+                es_override_clinico_conocido = (
+                    f["magnitud"] == "zref" and f["excel"] is not None
+                    and abs(f["excel"] - 1.4) < 0.001)
+                assert es_override_clinico_conocido, (
+                    f"{ruta.name}: {f['magnitud']} difiere "
+                    f"({f['diferencia_rel']:.3%}) y no es el override "
+                    f"clínico de zref=1.4 conocido")
 
 
 class TestIXFotonesSinNoComparables:
