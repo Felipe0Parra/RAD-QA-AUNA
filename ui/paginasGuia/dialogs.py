@@ -2677,6 +2677,26 @@ class DialogCalculadoraDosis(QDialog):
         aviso.exec_()
         return aviso.clickedButton() is btn_salir
 
+    def _confirmar_registro_existente(self, fecha, acelerador):
+        """H2.3: ya existe un registro guardado para esta fecha+acelerador --
+        pregunta antes de agregar una nueva versión. Aislado en su propio
+        método (regla 5, mismo patrón que `_confirmar_reemplazo_reporte_
+        diario` de H2.2) para que los tests puedan sustituirlo sin disparar
+        un QMessageBox modal real.
+
+        A diferencia del reporte diario (H2.2, que hace DELETE+INSERT),
+        aquí NUNCA se borra nada: "Sí" agrega una fila nueva (conserva el
+        historial; `buscar_por_fecha` ya toma la más reciente vía `ORDER BY
+        id DESC LIMIT 1`); "No" cancela el guardado sin perder lo tecleado.
+        """
+        respuesta = QMessageBox.question(
+            self, "Registro existente",
+            f"Ya existe un registro de {fecha} para {acelerador}.\n\n"
+            "¿Guardar una nueva versión? Se conserva el historial; la "
+            "lectura más reciente será la que se guarde ahora.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        return respuesta == QMessageBox.Yes
+
     def _usuario_actual(self):
         """Nombre del físico logueado, para el audit trail (H2.4).
 
@@ -2777,6 +2797,15 @@ class DialogCalculadoraDosis(QDialog):
             etiquetas = [self._ETIQUETAS_CAMPOS.get(c, c) for c in faltantes]
             if self._avisar_formulario_incompleto(etiquetas):
                 self.reject()
+            return False
+
+        # H2.3 (versionado consciente): si ya existe un registro para esta
+        # fecha+acelerador, preguntar ANTES de generar el reporte/guardar
+        # (evita generar un PDF de un guardado que el físico termine
+        # cancelando). No se borra nada aquí -- ver _confirmar_registro_existente.
+        existente = DosisService.buscar_por_fecha(datos["Fecha"], datos["Acelerador"])
+        if existente and not self._confirmar_registro_existente(
+                datos["Fecha"], datos["Acelerador"]):
             return False
 
             # Generate report

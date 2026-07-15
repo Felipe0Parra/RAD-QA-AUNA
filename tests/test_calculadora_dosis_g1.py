@@ -17,6 +17,7 @@ _avisar_formulario_incompleto se sustituye por un espía en vez de dejar que
 abra un QMessageBox modal real (con exec_() colgaría la corrida offscreen).
 """
 import os
+import sqlite3
 import tempfile
 
 import pytest
@@ -186,6 +187,79 @@ class TestFormularioCompletoCierra:
         datos_bd = dosis_service_mod.DosisService.buscar_por_fecha(fecha, d.acelerador_actual)
         assert datos_bd is not None
         assert datos_bd["dosis_maxima"] not in (None, "")
+
+
+class TestH23RegistroExistente:
+    """H2.3: versionado consciente -- guardar dos veces la MISMA
+    fecha+acelerador pregunta antes de agregar una fila nueva (nunca borra,
+    a diferencia del reporte diario de H2.2, que sí reemplaza con
+    DELETE+INSERT). "No" cancela sin insertar; "Sí" agrega una versión
+    nueva y buscar_por_fecha (ORDER BY id DESC LIMIT 1) trae la más
+    reciente."""
+
+    def _contar_filas(self, bd_temporal, fecha, acelerador):
+        con = sqlite3.connect(bd_temporal)
+        try:
+            return con.execute(
+                "SELECT COUNT(*) FROM calculadora_dosimetrica WHERE Fecha=? AND Acelerador=?",
+                (fecha, acelerador)).fetchone()[0]
+        finally:
+            con.close()
+
+    def test_sin_registro_previo_no_pregunta(self, dialogo, monkeypatch):
+        llamadas = []
+        monkeypatch.setattr(
+            dialogo, "_confirmar_registro_existente",
+            lambda *a, **k: llamadas.append((a, k)) or True)
+        d = llenar_fotones_completo(dialogo)
+
+        assert d.guardar_db() is True
+        assert llamadas == [], "el primer guardado no debe preguntar nada"
+
+    def test_segundo_guardado_con_no_cancela_sin_insertar(self, dialogo, bd_temporal, monkeypatch):
+        d = llenar_fotones_completo(dialogo)
+        assert d.guardar_db() is True  # primer guardado, sin registro previo
+        fecha = d.date_edit.date().toString("dd/MM/yyyy")
+        assert self._contar_filas(bd_temporal, fecha, d.acelerador_actual) == 1
+
+        monkeypatch.setattr(d, "_confirmar_registro_existente", lambda *a, **k: False)
+        d.Zmax.setText("1.9")  # si se colara, distinguiria el intento cancelado
+
+        resultado = d.guardar_db()
+
+        assert resultado is False
+        assert self._contar_filas(bd_temporal, fecha, d.acelerador_actual) == 1
+
+    def test_segundo_guardado_con_si_agrega_version_nueva(self, dialogo, bd_temporal, monkeypatch):
+        d = llenar_fotones_completo(dialogo)
+        assert d.guardar_db() is True  # primer guardado, sin registro previo
+        fecha = d.date_edit.date().toString("dd/MM/yyyy")
+
+        monkeypatch.setattr(d, "_confirmar_registro_existente", lambda *a, **k: True)
+        d.Zmax.setText("1.9")  # marca la "nueva version"
+
+        resultado = d.guardar_db()
+
+        assert resultado is True
+        assert self._contar_filas(bd_temporal, fecha, d.acelerador_actual) == 2
+        recuperado = dosis_service_mod.DosisService.buscar_por_fecha(fecha, d.acelerador_actual)
+        assert recuperado["Zmax"] == "1.9", (
+            "buscar_por_fecha debe devolver la version mas reciente")
+
+    def test_pregunta_recibe_fecha_y_acelerador_correctos(self, dialogo, monkeypatch):
+        d = llenar_fotones_completo(dialogo)
+        assert d.guardar_db() is True
+
+        capturado = {}
+        monkeypatch.setattr(
+            d, "_confirmar_registro_existente",
+            lambda fecha, acelerador: capturado.update(
+                fecha=fecha, acelerador=acelerador) or False)
+
+        d.guardar_db()
+
+        fecha_esperada = d.date_edit.date().toString("dd/MM/yyyy")
+        assert capturado == {"fecha": fecha_esperada, "acelerador": d.acelerador_actual}
 
 
 class TestH24AuditoriaCalculadora:
