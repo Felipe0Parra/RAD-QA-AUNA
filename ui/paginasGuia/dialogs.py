@@ -3228,15 +3228,33 @@ class DialogCalculadoraDosis(QDialog):
                 w.deleteLater()
         
         colores = ["#5b9ea8"]
-        
+
+        grupo_anterior = None
         for i, energia in enumerate(energias):
-            btn = QPushButton(f"{energia.upper()}")
+            # H3.3 (auditoría 2026-07-14): etiqueta de grupo "Fotones:" /
+            # "Electrones:" antes del primer botón de cada tipo -- las
+            # energías de fotones (Nmv) y electrones (Nmev) venían mezcladas
+            # sin distinción visual.
+            grupo = "Electrones" if "mev" in energia.lower() else "Fotones"
+            if grupo != grupo_anterior:
+                lbl_grupo = QLabel(f"{grupo}:")
+                lbl_grupo.setStyleSheet("font-weight: bold;")
+                self.layout_asignar.addWidget(lbl_grupo)
+                grupo_anterior = grupo
+
+            # "6MV"/"6MEV" (energia.upper()) eran legibles pero fáciles de
+            # confundir a primera vista -- ahora "6 MV"/"6 MeV". Sin conflicto
+            # de orden entre los dos .replace: "mv" nunca aparece como
+            # substring dentro de "Nmev" (las letras no son adyacentes:
+            # m-e-v, no m-v), verificado contra las 6 energías reales.
+            etiqueta = energia.replace("mev", " MeV").replace("mv", " MV")
+            btn = QPushButton(etiqueta)
             color = colores[i % len(colores)]
             #self.estilo_boton(btn, color)
             # F3: ver tooltip de btn_ok -- este botón asigna la dosis al
             # formulario mensual pero NO guarda el registro de la calculadora.
             btn.setToolTip(
-                f"Asigna la dosis calculada al campo de {energia.upper()} del "
+                f"Asigna la dosis calculada al campo de {etiqueta} del "
                 "formulario mensual.\nNO guarda este cálculo en el registro "
                 "de la calculadora -- para eso, use \"Aceptar y Cerrar\".")
             btn.clicked.connect(lambda _, e=energia: self.emitir_dosis(e))
@@ -3264,8 +3282,11 @@ class DialogCalculadoraDosis(QDialog):
                 raise ValueError("dosis_maxima no positiva o no calculada")
             valor = dosis_gy_mu * 100
             self.dosis_asignada.emit(energia, valor)
+            # H3.3: misma etiqueta legible de los botones ("6 MV"/"6 MeV"),
+            # no energia.upper() ("6MV"/"6MEV").
+            etiqueta = energia.replace("mev", " MeV").replace("mv", " MV")
             QMessageBox.information(self, "✓ Éxito",
-                f"Dosis asignada a {energia.upper()}: {valor:.4f} cGy/MU")
+                f"Dosis asignada a {etiqueta}: {valor:.4f} cGy/MU")
         except ValueError:
             QMessageBox.warning(self, "⚠ Error", "Dosis inválida o no calculada")
     

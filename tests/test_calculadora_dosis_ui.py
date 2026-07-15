@@ -19,7 +19,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel
 
 import ui.paginasGuia.dialogs as dialogs_mod
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
@@ -679,3 +679,67 @@ class TestFlujoElectronesRoos:
         d.Kq0r50_widget.setText("0.912")
         d.R50.setText("2.397")
         assert d.Kq0r50_widget.text() == "0.912"
+
+
+class TestH33BotonesEnergiaLegibles:
+    """H3.3 (auditoría 2026-07-14): antes "6MV"/"6MEV" (energia.upper()) --
+    legible pero fácil de confundir con lectura rápida. Ahora "6 MV"/"6 MeV",
+    con etiquetas de grupo "Fotones:"/"Electrones:" antes del primer botón
+    de cada tipo."""
+
+    ENERGIAS_IX = ["6mv", "15mv", "6mev", "9mev", "12mev", "15mev"]
+
+    @pytest.fixture
+    def dialogo_ix_completo(self, app, monkeypatch):
+        monkeypatch.setattr(
+            dialogs_mod.EquiposService, "obtener_modelos_unicos",
+            staticmethod(lambda: [{"model": e["model"], "equip_type": e["equip_type"]}
+                                  for e in EQUIPOS]))
+        monkeypatch.setattr(
+            dialogs_mod.EquiposService, "obtener_series_por_modelo",
+            staticmethod(lambda m: [e for e in EQUIPOS if e["model"] == m]))
+        monkeypatch.setattr(
+            dialogs_mod.EquiposService, "obtener_por_id",
+            staticmethod(lambda i: next((e for e in EQUIPOS if e["id"] == i), None)))
+        for tipo in ("information", "warning", "critical"):
+            monkeypatch.setattr(dialogs_mod.QMessageBox, tipo, staticmethod(lambda *a, **k: None))
+        d = DialogCalculadoraDosis(energias=self.ENERGIAS_IX, parent=VentanaIX())
+        yield d
+        d.deleteLater()
+
+    def _widgets_asignar(self, d):
+        widgets = []
+        for i in range(d.layout_asignar.count()):
+            w = d.layout_asignar.itemAt(i).widget()
+            if w is not None:
+                widgets.append(w)
+        return widgets
+
+    def test_etiquetas_de_botones_legibles(self, dialogo_ix_completo):
+        botones = [w for w in self._widgets_asignar(dialogo_ix_completo)
+                   if isinstance(w, QPushButton)]
+        assert [b.text() for b in botones] == [
+            "6 MV", "15 MV", "6 MeV", "9 MeV", "12 MeV", "15 MeV"]
+
+    def test_grupos_fotones_electrones_antes_del_primer_boton(self, dialogo_ix_completo):
+        widgets = self._widgets_asignar(dialogo_ix_completo)
+        textos = [w.text() for w in widgets]
+        assert textos == [
+            "Fotones:", "6 MV", "15 MV",
+            "Electrones:", "6 MeV", "9 MeV", "12 MeV", "15 MeV",
+        ]
+        etiquetas_grupo = [w for w in widgets if isinstance(w, QLabel)]
+        assert [e.text() for e in etiquetas_grupo] == ["Fotones:", "Electrones:"]
+
+    def test_boton_emite_energia_cruda_no_la_etiqueta(self, dialogo_ix_completo):
+        """El texto visible cambió (H3.3) pero emitir_dosis debe seguir
+        recibiendo la clave cruda ("6mev", no "6 MeV") -- es la que usa para
+        ubicar el widget ln_dosis_ref_cgy_um_{energia} del formulario."""
+        d = dialogo_ix_completo
+        emitidos = []
+        d.dosis_asignada.connect(lambda e, v: emitidos.append(e))
+        boton_6mev = next(w for w in self._widgets_asignar(d)
+                          if isinstance(w, QPushButton) and w.text() == "6 MeV")
+        d.dosis_maxima.setText("0.01")  # necesario para que emitir_dosis no aborte
+        boton_6mev.click()
+        assert emitidos == ["6mev"]
