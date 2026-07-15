@@ -610,7 +610,7 @@ from mcc_PTW_read import mcc_read
 from models.PDF.reporte_calculadora_dos import generar_reporte_calibracion
 from services.trs398_excel import leer_trs398, comparar_trs398
 from services.audit_minimo import registrar as _registrar_auditoria
-import services.dosis_service as _dosis_service_mod
+from data.ManejoDatos import conection as _conection_mod
 import pandas as pd
 class DialogCalculadoraDosis(QDialog):
     dosis_asignada = pyqtSignal(str, float)
@@ -2803,17 +2803,19 @@ class DialogCalculadoraDosis(QDialog):
     
         
         if exito:
-            # ruta_db explícita: la calculadora guarda vía DosisService (su
-            # propia conexión, no Conexion().conectar() -- "doble patrón de
-            # conexión", H2.5 pendiente). Sin esto, la auditoría resolvería
-            # la ruta de conection.py y caería en una BD distinta a la que
-            # de verdad recibió el guardado (bug real encontrado y corregido
-            # al implementar esta misma tarea -- ver test_audit_minimo.py).
+            # ruta_db explícita (defensiva, TEMA C del PLAN_HI): la calculadora
+            # guarda vía DosisService (su propia conexión, no
+            # Conexion().conectar() -- "doble patrón de conexión"). Desde
+            # HI-3, DosisService también resuelve la ruta vía este mismo
+            # módulo conection (ya no una copia por valor), así que esto es
+            # la MISMA fuente que usó el guardado -- ya no dos caminos que
+            # puedan divergir (bug real encontrado y corregido al implementar
+            # H2.4 -- ver test_audit_minimo.py).
             _registrar_auditoria(
                 self._usuario_actual(), "guardar", "calculadora_dosimetrica",
                 ref=f"{datos.get('Fecha')}|{datos.get('Acelerador')}",
                 detalle=f"Tipo_de_radiacion={datos.get('Tipo_de_radiacion')}",
-                ruta_db=_dosis_service_mod.ruta_base_datos())
+                ruta_db=_conection_mod.ruta_base_datos())
             QMessageBox.information(self, "Success", "Datos cargados exitosamente")
         else:
             QMessageBox.warning(self, "Error", "Failed to save dosimetry data to database")

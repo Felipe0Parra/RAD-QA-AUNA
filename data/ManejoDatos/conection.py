@@ -31,6 +31,19 @@ def ruta_base_datos():
     return ruta_datos('BaseDatosQA.db')
 
 
+def aplicar_pragmas_conexion(con):
+    """H2.5 (auditoría 2026-07-14): WAL + busy_timeout, en UN solo sitio (antes
+    estaban duplicados en las 3 fábricas de conexión -> riesgo de
+    desincronización, TEMA B del PLAN_HI). journal_mode=WAL elimina el
+    bloqueo lector<->escritor; busy_timeout=30000 hace que un segundo
+    escritor espere en vez de fallar con 'database is locked' (doble patrón
+    de conexión de esta app: el singleton persistente de Conexion conviviendo
+    con conexiones nuevas por llamada en conectar()/DosisService)."""
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=30000")
+    return con
+
+
 class Conexion():
     _instance = None  # Variable de clase para almacenar una única instancia de la conexión
     
@@ -46,6 +59,7 @@ class Conexion():
         #print("Inicialización de la base de datos (Archivo: conection.py)")
         try:
             self.con = sqlite3.connect(ruta_base_datos(), check_same_thread=False)  # Evita errores de hilos
+            aplicar_pragmas_conexion(self.con)
             self.createTable()
             #self.eliminar_tablas_cambio_fuente()
             self.crearTablasCambioFuente()
@@ -1248,7 +1262,9 @@ class Conexion():
 
     def conectar(self):
         try:
-            return sqlite3.connect(ruta_base_datos(), check_same_thread=False)
+            con = sqlite3.connect(ruta_base_datos(), check_same_thread=False)
+            aplicar_pragmas_conexion(con)
+            return con
         except Exception as e:
             print("Error al obtener conexión nueva:", e)
             return None

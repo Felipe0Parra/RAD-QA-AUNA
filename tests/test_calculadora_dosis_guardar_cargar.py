@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import QApplication, QWidget
 
 import ui.paginasGuia.dialogs as dialogs_mod
 import services.dosis_service as dosis_service_mod
+import data.ManejoDatos.conection as conection_mod
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 
 EQUIPO_N31010 = {"id": 76, "equip_type": "Cámara de ionización", "model": "N31010",
@@ -43,7 +44,9 @@ def app():
 @pytest.fixture
 def bd_temporal(monkeypatch):
     ruta = tempfile.mktemp(suffix=".db")
-    monkeypatch.setattr(dosis_service_mod, "ruta_base_datos", lambda: ruta)
+    # HI-3: dosis_service.py ahora importa el MÓDULO conection (no la función
+    # por valor) -- basta parchear conection_mod.ruta_base_datos.
+    monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
     yield ruta
     if os.path.exists(ruta):
         os.remove(ruta)
