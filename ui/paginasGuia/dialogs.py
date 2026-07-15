@@ -609,6 +609,8 @@ from mcc_PTW_read import mcc_read
 
 from models.PDF.reporte_calculadora_dos import generar_reporte_calibracion
 from services.trs398_excel import leer_trs398, comparar_trs398
+from services.audit_minimo import registrar as _registrar_auditoria
+import services.dosis_service as _dosis_service_mod
 import pandas as pd
 class DialogCalculadoraDosis(QDialog):
     dosis_asignada = pyqtSignal(str, float)
@@ -2675,6 +2677,21 @@ class DialogCalculadoraDosis(QDialog):
         aviso.exec_()
         return aviso.clickedButton() is btn_salir
 
+    def _usuario_actual(self):
+        """Nombre del físico logueado, para el audit trail (H2.4).
+
+        `self.main_window` es el formulario mensual que abrió la
+        calculadora (`abrir_calculadora`, seiscientos_mensual.py) y trae
+        `self.user_id._nombre` desde el login -- mismo dato que usa
+        `add_info` (load.py). Puede no existir (tests con un QWidget
+        genérico como padre, o si algún día se abre sin ese contexto):
+        devolver None es preferible a reventar, la auditoría es best-effort.
+        """
+        try:
+            return self.main_window.user_id._nombre
+        except AttributeError:
+            return None
+
     def guardar_db(self):
         """
         Save dosimetry data to database using the separate database service.
@@ -2786,6 +2803,17 @@ class DialogCalculadoraDosis(QDialog):
     
         
         if exito:
+            # ruta_db explícita: la calculadora guarda vía DosisService (su
+            # propia conexión, no Conexion().conectar() -- "doble patrón de
+            # conexión", H2.5 pendiente). Sin esto, la auditoría resolvería
+            # la ruta de conection.py y caería en una BD distinta a la que
+            # de verdad recibió el guardado (bug real encontrado y corregido
+            # al implementar esta misma tarea -- ver test_audit_minimo.py).
+            _registrar_auditoria(
+                self._usuario_actual(), "guardar", "calculadora_dosimetrica",
+                ref=f"{datos.get('Fecha')}|{datos.get('Acelerador')}",
+                detalle=f"Tipo_de_radiacion={datos.get('Tipo_de_radiacion')}",
+                ruta_db=_dosis_service_mod.ruta_base_datos())
             QMessageBox.information(self, "Success", "Datos cargados exitosamente")
         else:
             QMessageBox.warning(self, "Error", "Failed to save dosimetry data to database")

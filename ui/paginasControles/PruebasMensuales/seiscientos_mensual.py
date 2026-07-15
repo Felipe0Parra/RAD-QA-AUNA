@@ -17,6 +17,7 @@ from matplotlib.figure import Figure
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 from mcc_PTW_read.mcc_read import agregar_carpeta
 from services.mcc_metrics import calcular_simetria_planicidad
+from services.audit_minimo import registrar as _registrar_auditoria
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 from services.MLCs_calibration_service import (
@@ -2483,6 +2484,12 @@ class PruebaMensual600(PruebaBasico):
             print('Entra a subir tabla en fieldSize')
             datos = []
             loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=3, anual=False, id=False, id_energia=None)
+            # H2.4: guardado real en BD del tamaño de campo (el botón
+            # "Guardar"/guardar_tabla de arriba solo escribe un borrador
+            # JSON local, ver H2.1 -- este es el que sube a la BD).
+            _registrar_auditoria(
+                getattr(getattr(self, "user_id", None), "_nombre", None),
+                "guardar", nombre_tabla, ref=ref)
             #self.bloquearboton(btn_guardar)
             #btn_salvar.hide()
             self._actualizar_tabla_despues_subida()

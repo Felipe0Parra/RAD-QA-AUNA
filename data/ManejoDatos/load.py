@@ -9,6 +9,7 @@ from PyQt5.QtSql import QSqlQuery
 from pathlib import Path
 from PyQt5.QtGui import QPixmap
 from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar
+from services.audit_minimo import registrar as _registrar_auditoria
 def guardar_imagen(imagen_path):
     """
     Convierte una imagen en BLOB para guardarla en la base de datos.
@@ -126,18 +127,20 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
         # INSERT se mantiene (decisión de producto existente), pero ahora
         # requiere confirmación explícita si ya hay un registro.
         cursor.execute(f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ?", (fecha_actual,))
-        if cursor.fetchone()[0] > 0:
+        es_reemplazo = cursor.fetchone()[0] > 0
+        if es_reemplazo:
             fecha_legible = self.date_box.date().toString("dd/MM/yyyy")
             if not _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha_legible):
                 return
-            # TODO-H2.4: registrar en audit_log (usuario, "reemplazo",
-            # nombre_tabla, fecha_actual) -- ver services/audit_minimo.py.
+            # H2.4: el reemplazo confirmado en H2.2 queda en audit_log.
+            _registrar_auditoria(user_id, "reemplazo", nombre_tabla, ref=fecha_actual)
 
         cursor.execute(f""" DELETE FROM {nombre_tabla} WHERE DATE(date) = ? """, (fecha_actual,))
         # Ejecutar la inserción
         sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
         cursor.execute(sql, lista)
         conn.commit()
+        _registrar_auditoria(user_id, "guardar", nombre_tabla, ref=fecha_actual)
         QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
 
         if isinstance(boolean_columns, list):
@@ -445,6 +448,11 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
         cursor.execute(sql, datos)
         conn.commit()
         print("Datos guardados correctamente.")
+        # H2.4: guardado mensual (600/iX, tabla única -- el multi-energía de
+        # iX tiene su propio registro en subirlineasmensuales_ix).
+        _registrar_auditoria(
+            getattr(getattr(self, "user_id", None), "_nombre", None),
+            "guardar", nombre_tabla, ref=ref)
     except Exception as ex:
         traceback.print_exc()
         print("Error al guardar:", ex)

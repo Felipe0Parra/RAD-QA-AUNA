@@ -383,6 +383,20 @@ class Conexion():
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
         )"""
 
+        # H2.4 (auditoría 2026-07-14): audit trail mínimo -- quién/qué/cuándo
+        # en los puntos de guardado. Antes de esto, services/auditorias.py y
+        # decoradores_audit.py existían pero 100% comentados; esta tabla NUNCA
+        # se creaba. Ver services/audit_minimo.py (helper único, best-effort).
+        sql_create_table15 = """CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            usuario TEXT,
+            accion TEXT NOT NULL,
+            tabla TEXT,
+            ref TEXT,
+            detalle TEXT
+        )"""
+
         cur = self.con.cursor()
         cur.execute(sql_create_table1)
         cur.execute(sql_create_table2)
@@ -400,6 +414,7 @@ class Conexion():
         cur.execute(sql_create_table12)
         cur.execute(sql_create_table13)
         cur.execute(sql_create_table14)
+        cur.execute(sql_create_table15)
         cur.close()
         self.createAdmin()
 

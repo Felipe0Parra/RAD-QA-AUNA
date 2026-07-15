@@ -185,6 +185,39 @@ class TestFormularioCompletoCierra:
         assert datos_bd["dosis_maxima"] not in (None, "")
 
 
+class TestH24AuditoriaCalculadora:
+    """H2.4: guardar_db debe dejar rastro en audit_log al guardar con éxito
+    (y NO al fallar validación) -- verifica el cableado, no el helper
+    (services/audit_minimo.py ya tiene su propia suite aislada)."""
+
+    def test_guardado_exitoso_llama_a_la_auditoria(self, dialogo, monkeypatch):
+        llamadas = []
+        monkeypatch.setattr(
+            dialogs_mod, "_registrar_auditoria",
+            lambda *a, **k: llamadas.append((a, k)))
+        d = llenar_fotones_completo(dialogo)
+
+        assert d.guardar_db() is True
+
+        assert len(llamadas) == 1
+        args, kwargs = llamadas[0]
+        assert args[1] == "guardar"
+        assert args[2] == "calculadora_dosimetrica"
+        assert kwargs["ref"] == f"{d.date_edit.date().toString('dd/MM/yyyy')}|{d.acelerador_actual}"
+
+    def test_formulario_incompleto_no_llama_a_la_auditoria(self, dialogo, monkeypatch):
+        llamadas = []
+        monkeypatch.setattr(
+            dialogs_mod, "_registrar_auditoria",
+            lambda *a, **k: llamadas.append((a, k)))
+        d = llenar_fotones_completo(dialogo)
+        d.unidades_monitor.setText("")  # rompe un campo exigido
+        monkeypatch.setattr(d, "_avisar_formulario_incompleto", lambda etiquetas: False)
+
+        assert d.guardar_db() is False
+        assert llamadas == []
+
+
 class TestEtiquetasLegibles:
     """El aviso debe usar nombres amigables, no claves crudas de columna."""
 

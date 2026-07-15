@@ -1,6 +1,7 @@
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 from data.ManejoDatos.load import encontrar_columnas
 from data.ManejoDatos.conection import Conexion
+from services.audit_minimo import registrar as _registrar_auditoria
 from PyQt5.QtWidgets import (QMessageBox, QGridLayout, QWidget, QSplitter, QHeaderView, QSizePolicy, QTableWidget, QTableWidgetItem,
                             QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QDialog, QLineEdit, QComboBox)
 from PyQt5.QtCore import Qt, QDate
@@ -200,11 +201,15 @@ class Config(PruebaBasico):
         # Calcular vigencia usando función existente
         
         cursor.execute("""
-            INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, t_cal, p_cal, h_cal, 
+            INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, t_cal, p_cal, h_cal,
                         v1, activo, vigente,  imagen_certificado )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, lista)
         conn.commit()
+        # H2.4: alta de equipo -- ref = "modelo/serie" (lista[1]/lista[2]).
+        _registrar_auditoria(
+            getattr(getattr(self, "user_id", None), "_nombre", None),
+            "guardar", "equipos", ref=f"{lista[1]}/{lista[2]}")
         QMessageBox.information(self, "Éxito", "Datos insertados correctamente en la base de datos.")
 
     def actualizar_unidades_calibracion(self, tipo=None):
@@ -832,6 +837,14 @@ class Config(PruebaBasico):
 
         conn.commit()
         conn.close()
+
+        # H2.4: edición de equipo -- detalle distingue el UPDATE de
+        # activo/vigente del INSERT de un nuevo registro de calibración.
+        _registrar_auditoria(
+            getattr(getattr(self, "user_id", None), "_nombre", None),
+            "actualizar", "equipos", ref=f"{modelo}/{serie}",
+            detalle=("solo activo/vigente" if solo_cambio_activo
+                     else "; ".join(cambios_detectados)))
 
         QMessageBox.information(self, "Éxito", "Los cambios se han guardado correctamente.")
         self.cargartabla()
