@@ -212,6 +212,13 @@ class PruebaBasico(QWidget):
                 setattr(self, nombre, QDateEdit())
                 getattr(self, nombre).setCalendarPopup(True)
                 getattr(self, nombre).setDate(QDate.currentDate())
+                # H3.5: con el formato corto "MM/yyyy" (combo de mes de los
+                # formularios mensuales) el ancho natural del widget baja de
+                # ~87px y la flecha del calendario se come el espacio del
+                # texto (verificado offscreen: "07/2026" queda cortado en
+                # "07/202"). Con dd/MM/yyyy (formularios diarios) el ancho
+                # natural ya supera este mínimo, así que no cambia nada ahí.
+                getattr(self, nombre).setMinimumWidth(100)
 
             elif widget_type == 'QDateTimeEdit':
                 setattr(self, nombre, QDateTimeEdit())
