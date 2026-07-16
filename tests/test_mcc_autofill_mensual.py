@@ -311,6 +311,52 @@ class TestSeleccionarCarpetaMCC:
         assert "calidad" in avisos[0][2].lower()
         assert "simetría/planicidad" in avisos[0][2]
 
+    def test_aviso_explica_ambas_formulas_cuando_se_llenan_las_2(self, app, tmp_path, monkeypatch):
+        """H4.2: el aviso explica el principio de cálculo de lo que se
+        autollenó -- distinguiendo que calidad es un protocolo PUBLICADO
+        (IAEA TRS-398) y simetría/planicidad es un ajuste calibrado propio."""
+        _escribir_mcc(tmp_path, "seis.mcc", [
+            _bloque_scan(1, "PDD", "6.00", "X", "28-Feb-2026 10:55:00", FILAS_PDD_6MV),
+            _bloque_scan(2, "INPLANE_PROFILE", "6.00", "X", "28-Feb-2026 11:00:00", FILAS_PERFIL_6MV),
+            _bloque_scan(3, "CROSSPLANE_PROFILE", "6.00", "X", "28-Feb-2026 11:01:00", FILAS_PERFIL_6MV),
+        ])
+        obj = _instancia_pelada(["6mv"], con_calidad=True)
+        monkeypatch.setattr(mensual_mod.QFileDialog, "getExistingDirectory",
+                            staticmethod(lambda *a, **k: str(tmp_path)))
+        avisos = []
+        monkeypatch.setattr(mensual_mod.QMessageBox, "information",
+                            staticmethod(lambda *a, **k: avisos.append(a)))
+
+        obj.seleccionar_carpeta_mcc()
+
+        mensaje = avisos[0][2]
+        assert "1.2661" in mensaje and "0.0595" in mensaje  # fórmula de calidad
+        assert "IAEA TRS-398" in mensaje
+        assert "máx/mín" in mensaje or "max/mín" in mensaje  # fórmula de planicidad
+        assert "AJUSTE CALIBRADO" in mensaje
+
+    def test_aviso_no_menciona_formula_de_calidad_si_no_hubo_pdd(self, app, tmp_path, monkeypatch):
+        """Contraste: sin PDD (solo simetría/planicidad), el aviso NO debe
+        traer la fórmula de calidad -- solo se explica lo que realmente se
+        autollenó en esta carpeta."""
+        _escribir_mcc(tmp_path, "seis.mcc", [
+            _bloque_scan(1, "INPLANE_PROFILE", "6.00", "X", "28-Feb-2026 11:00:00", FILAS_PERFIL_6MV),
+            _bloque_scan(2, "CROSSPLANE_PROFILE", "6.00", "X", "28-Feb-2026 11:01:00", FILAS_PERFIL_6MV),
+        ])
+        obj = _instancia_pelada(["6mv"], con_calidad=True)
+        monkeypatch.setattr(mensual_mod.QFileDialog, "getExistingDirectory",
+                            staticmethod(lambda *a, **k: str(tmp_path)))
+        avisos = []
+        monkeypatch.setattr(mensual_mod.QMessageBox, "information",
+                            staticmethod(lambda *a, **k: avisos.append(a)))
+
+        obj.seleccionar_carpeta_mcc()
+
+        mensaje = avisos[0][2]
+        assert "1.2661" not in mensaje
+        assert "IAEA TRS-398" not in mensaje
+        assert "AJUSTE CALIBRADO" in mensaje
+
     def test_pdd_de_electrones_no_llena_calidad(self, app, tmp_path, monkeypatch):
         """H4.4 sigue sin fórmula: un PDD de electrones NUNCA debe llenar
         ln_calidad_j2_j1_<energia> (que ni siquiera se crea en este test)."""

@@ -16,7 +16,9 @@ from resources.utils.matplotlib_lazy import get_matplotlib_components
 from matplotlib.figure import Figure
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 from mcc_PTW_read.mcc_read import agregar_carpeta
-from services.mcc_metrics import calcular_simetria_planicidad, calcular_calidad_fotones
+from services.mcc_metrics import (
+    calcular_simetria_planicidad, calcular_calidad_fotones,
+    RATIO_SIMETRIA, RATIO_PLANICIDAD)
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
@@ -1839,13 +1841,37 @@ class PruebaMensual600(PruebaBasico):
                 partes.append("simetría/planicidad (" + ", ".join(sorted(energias_sim_plan)) + ")")
             if energias_calidad:
                 partes.append("calidad TPR20,10 (" + ", ".join(sorted(energias_calidad)) + ")")
+
+            # H4.2: explicar el principio de cálculo -- solo de lo que
+            # realmente se autollenó en ESTA carpeta. Se distingue a
+            # propósito cuál fórmula es un ajuste propio (simetría/
+            # planicidad) y cuál es un protocolo publicado (calidad, IAEA
+            # TRS-398 -- confirmado H4.1 citado en el catálogo PTW de
+            # detectores), para que el físico sepa cuánto pesa cada una.
+            explicaciones = []
+            if energias_sim_plan:
+                explicaciones.append(
+                    "• Simetría: diferencia de puntos espejo del perfil "
+                    f"(zona central {int(RATIO_SIMETRIA*100)}% del campo). "
+                    "Planicidad: 100·(máx/mín − 1) "
+                    f"(zona central {int(RATIO_PLANICIDAD*100)}%). Ambas son "
+                    "un AJUSTE CALIBRADO por este proyecto contra los "
+                    "registros históricos de dosimetriaMen -- no un "
+                    "protocolo publicado.")
+            if energias_calidad:
+                explicaciones.append(
+                    "• Calidad (fotones): TPR20,10 = 1.2661·(M20/M10) − "
+                    "0.0595, con M20/M10 del PDD a 200/100 mm de "
+                    "profundidad. Esta SÍ es la fórmula publicada en IAEA "
+                    "TRS-398 (citada en el catálogo de detectores PTW).")
+
             QMessageBox.information(
                 self, "Autollenado desde .mcc",
                 "Se autollenó (SUGERIDO, verifique antes de guardar): "
-                + "; ".join(partes) + "."
-                "\n\nEstos valores vienen de fórmulas calibradas/validadas "
-                "contra mediciones históricas -- revíselos igual que "
-                "revisaría una medición manual antes de guardar.")
+                + "; ".join(partes) + ".\n\n"
+                + "\n\n".join(explicaciones) +
+                "\n\nRevíselos igual que revisaría una medición manual "
+                "antes de guardar.")
         else:
             QMessageBox.warning(
                 self, "Sin energías reconocidas",
