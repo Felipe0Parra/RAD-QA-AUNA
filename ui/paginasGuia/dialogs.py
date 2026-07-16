@@ -1490,6 +1490,14 @@ class DialogCalculadoraDosis(QDialog):
         # permite desmarcar luego por código, pero no hace falta: volver a
         # fotones también usa SSD como caso normal.
         self.electrones.toggled.connect(lambda c: self.SSD.setChecked(True) if c else None)
+        # I6 (pedido del físico 16-07): fotones también nace con SSD marcado
+        # -- es la geometría de rutina en esta clínica -- pero SIN ocultar el
+        # box (geometry_box se muestra con fotones, línea de arriba): el
+        # físico lo ve marcado y puede constatarlo. A diferencia de
+        # electrones (SSD obligatorio por Rev.1 Tabla 19), aquí es un default
+        # de conveniencia. Con I2, marcar SSD+fotones muestra automáticamente
+        # el campo PDD de fotones que la dosis máxima SSD necesita.
+        self.fotones.toggled.connect(lambda c: self.SSD.setChecked(True) if c else None)
         
         # Calibración
         calib_box, calib_layout = self.crear_bloque("Datos de Calibración", "#5b9ea8")

@@ -92,12 +92,12 @@ def _espiar_accept_reject(d, monkeypatch):
 def llenar_fotones_completo(d, marcar_ssd=True):
     """Llena TODOS los campos que guardar_db exige para fotones (10x10).
 
-    marcar_ssd=False deja Tipo_de_medicion en None a propósito (para el test
-    de etiquetas legibles) -- SSD vive en un QButtonGroup exclusivo de un
-    solo miembro (SAD está comentado, hallazgo D1-H2): una vez marcado con
-    setChecked(True), un setChecked(False) posterior NO lo desmarca (Qt
-    garantiza que un grupo exclusivo con un botón ya marcado no se quede sin
-    ninguno), así que hay que dejarlo sin marcar desde el principio.
+    marcar_ssd quedó VESTIGIAL con I6 (2026-07-16): marcar fotones ya marca
+    SSD por código (pedido del físico), así que Tipo_de_medicion nunca queda
+    en None por esa vía -- el test de etiquetas legibles ahora provoca el
+    faltante vaciando Zmax (anotación manual sin cascada). El parámetro se
+    conserva para no tocar todos los call-sites; ambos valores dejan SSD
+    marcado.
     """
     idx = d.combo_modelos.findData(EQUIPO_FOTONES_ORO["model"])
     d.combo_modelos.setCurrentIndex(idx)
@@ -299,8 +299,11 @@ class TestEtiquetasLegibles:
     """El aviso debe usar nombres amigables, no claves crudas de columna."""
 
     def test_mensaje_usa_etiqueta_legible_no_clave_cruda(self, dialogo, monkeypatch):
-        # marcar_ssd=False -> Tipo_de_medicion queda None (campo exigido).
-        d = llenar_fotones_completo(dialogo, marcar_ssd=False)
+        # I6 dejó Tipo_de_medicion siempre lleno (fotones auto-marca SSD),
+        # así que el faltante se provoca con Zmax: anotación manual sin
+        # cascada -- ningún otro campo la llena por sí solo.
+        d = llenar_fotones_completo(dialogo)
+        d.Zmax.clear()
 
         capturado = {}
         monkeypatch.setattr(
@@ -310,8 +313,8 @@ class TestEtiquetasLegibles:
         d.guardar_db()
 
         etiquetas = capturado.get("etiquetas", [])
-        assert "Tipo de medición (SSD)" in etiquetas
-        assert "Tipo_de_medicion" not in etiquetas
+        assert "Profundidad de dosis máxima (zmax)" in etiquetas
+        assert "Zmax" not in etiquetas
 
     def test_todas_las_etiquetas_de_campos_siempre_requeridos_existen(self):
         """Ningún campo siempre-requerido queda sin traducción (evita que el

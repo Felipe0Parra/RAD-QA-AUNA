@@ -116,11 +116,17 @@ class TestElectronesAutoMarcaSSD:
         dialogo.electrones.setChecked(True)
         assert dialogo.SSD.isChecked() is True
 
-    def test_marcar_fotones_no_marca_ssd_por_si_solo(self, dialogo):
-        """Fotones solo hace visible el geometry_box; el físico sigue
-        eligiendo SSD a mano en ese caso (no cambia con H1.1)."""
+    def test_marcar_fotones_tambien_marca_ssd(self, dialogo):
+        """I6 (pedido del físico 16-07, INVIERTE el contrato anterior de
+        H1.1): fotones también nace con SSD marcado -- es la geometría de
+        rutina -- pero el box queda VISIBLE para que el físico lo constate
+        (a diferencia de electrones, donde el box permanece oculto)."""
         dialogo.fotones.setChecked(True)
-        assert dialogo.SSD.isChecked() is False
+        assert dialogo.SSD.isChecked() is True
+        assert not dialogo.geometry_box.isHidden()
+        # y con I2, el PDD de fotones aparece de una vez (lo exige la
+        # dosis máxima en geometría SSD)
+        assert not dialogo.pddzref.isHidden()
 
     def test_volver_a_fotones_tras_electrones_deja_ssd_marcado(self, dialogo):
         """QButtonGroup exclusivo: una vez marcado, no se puede desmarcar
