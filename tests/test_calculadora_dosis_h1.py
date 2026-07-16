@@ -103,7 +103,9 @@ def llenar_electrones_completo(d, marcar_ssd_manual=False):
         campo.setText("20.52")
     d.R50.setText("5.127")
     d.pddzrefE.setText("99.3")
-    d.Zref.setText("3.0")
+    # I3: Zref ya NO se teclea -- se autollena de la cadena R50 -> Q(R50) ->
+    # zref (0.6*R50,w - 0.1). Que el guardado pase sin tocarlo es parte de
+    # lo que estos tests verifican ahora.
     d.Zmax.setText("2.7")
     return d
 
@@ -194,3 +196,58 @@ class TestI2PddUnico:
         assert dialogo.pdd_zref.text() != dialogo.pdd_zrefE.text()
         assert "FOTONES" in dialogo.pdd_zref.text()
         assert "ELECTRONES" in dialogo.pdd_zrefE.text()
+
+
+class TestI3ZrefElectrones:
+    """I3 (PLAN_FASE_I, 2026-07-16): en electrones, el Zref de Resultados
+    Finales se autollena desde la cadena R50 -> Q(R50) -> zrefR50 y se oculta
+    (era re-teclear la misma cantidad, reporte del físico 16-07). En fotones
+    sigue visible y manual.
+    """
+
+    def test_oculto_en_electrones_visible_en_fotones(self, dialogo):
+        assert not dialogo.Zref.isHidden()  # estado inicial: visible
+        dialogo.electrones.setChecked(True)
+        assert dialogo.Zref.isHidden()
+        assert dialogo.lbl_zref.isHidden()
+        dialogo.fotones.setChecked(True)
+        assert not dialogo.Zref.isHidden()
+        assert not dialogo.lbl_zref.isHidden()
+
+    def test_se_autollena_del_r50(self, dialogo):
+        dialogo.electrones.setChecked(True)
+        dialogo.R50.setText("5.127")
+        assert dialogo.zrefR50.text() != ""
+        assert dialogo.Zref.text() == dialogo.zrefR50.text()
+
+    def test_r50_antes_de_marcar_electrones_tambien_sincroniza(self, dialogo):
+        """La sincronización no depende del orden R50/tipo de haz."""
+        dialogo.R50.setText("5.127")
+        dialogo.electrones.setChecked(True)
+        assert dialogo.Zref.text() == dialogo.zrefR50.text() != ""
+
+    def test_guardar_electrones_sin_teclear_zref(self, dialogo):
+        """El flujo completo guarda sin que el físico toque Zref, y la BD
+        recibe el valor calculado (la validación F3 sigue completa: nunca
+        campo-requerido-invisible)."""
+        d = llenar_electrones_completo(dialogo)
+        assert d.Zref.text() == d.zrefR50.text() != ""
+        assert d.guardar_db() is True
+
+        fecha = d.date_edit.date().toString("dd/MM/yyyy")
+        datos_bd = dosis_service_mod.DosisService.buscar_por_fecha(
+            fecha, d.acelerador_actual)
+        assert datos_bd is not None
+        assert str(datos_bd["Zref"]) == d.zrefR50.text()
+
+    def test_volver_a_fotones_limpia_el_zref_de_electrones(self, dialogo):
+        """Un zref de electrones (~1-3 g/cm²) no es un zref de fotones: al
+        cambiar de haz el valor autollenado se limpia para que el físico
+        ingrese el suyo (10.0 / 5.0)."""
+        dialogo.electrones.setChecked(True)
+        dialogo.R50.setText("5.127")
+        assert dialogo.Zref.text() != ""
+
+        dialogo.fotones.setChecked(True)
+        assert dialogo.Zref.text() == ""
+        assert not dialogo.Zref.isHidden()

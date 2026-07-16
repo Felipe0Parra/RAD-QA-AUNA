@@ -543,15 +543,18 @@ class TestValidacionFormularioCompleto:
             fecha, original.acelerador_actual) is not None
 
     def test_falta_un_solo_campo_bloquea_el_guardado(self, dialogo_factory, monkeypatch):
-        """Zref/Zmax son anotación manual sin cascada de cálculo -- ningún
-        otro campo los llena por sí solo. Si el físico olvida uno, debe
+        """En FOTONES, Zref/Zmax son anotación manual sin cascada de cálculo
+        -- ningún otro campo los llena por sí solo (en electrones, desde I3,
+        Zref sí se autollena del R50). Si el físico olvida uno, debe
         bloquear (no basta con que el resto de la cadena esté completa)."""
         avisos = self._espiar_avisos(monkeypatch)
         d = llenar_flujo_fotones_completo(dialogo_factory())
         d.Zref.clear()
         d.guardar_db()
         assert avisos, "debía avisar con Zref vacío"
-        assert "Profundidad de referencia (zref)" in avisos[0][1]
+        # I3 renombró la etiqueta amigable; lo estable es el prefijo.
+        assert any(e.startswith("Profundidad de referencia (zref")
+                   for e in avisos[0][1]), avisos[0][1]
         fecha = d.date_edit.date().toString("dd/MM/yyyy")
         assert dosis_service_mod.DosisService.buscar_por_fecha(fecha, d.acelerador_actual) is None
 

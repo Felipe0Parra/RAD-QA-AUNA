@@ -1967,9 +1967,12 @@ class DialogCalculadoraDosis(QDialog):
         
         
         # Profundidades
-        lbl_zref = QLabel("Zref - Profundidad de referencia (g/cm²)")
+        # I3: promovido a self.* -- en electrones este campo se oculta (la
+        # profundidad de referencia es la MISMA cantidad que zrefR50, ya
+        # calculada de 0.6*R50,w - 0.1) y se necesita alternar su visibilidad.
+        self.lbl_zref = QLabel("Zref - Profundidad de referencia (g/cm²)")
         #self.estilo_label(lbl_zref)
-        result_layout.addWidget(lbl_zref)
+        result_layout.addWidget(self.lbl_zref)
         
         self.Zref = QLineEdit()
         self.Zref.setPlaceholderText("Ej: 10.0")
@@ -2067,6 +2070,9 @@ class DialogCalculadoraDosis(QDialog):
         # electrones a fotones, SSD sigue marcado (H1.1 no lo desmarca) y el
         # PDD de fotones debe reaparecer sin esperar otro clic en SSD.
         self.fotones.toggled.connect(self.mostrar_pdd)
+        # I3: el Zref manual de Resultados se oculta/autollena en electrones.
+        self.electrones.toggled.connect(self._actualizar_visibilidad_zref)
+        self.fotones.toggled.connect(self._actualizar_visibilidad_zref)
         self.pddzrefE.textChanged.connect(self.calcular_dosis_maxima)
         
         # Dosis Máxima (RESULTADO FINAL)
@@ -2666,7 +2672,7 @@ class DialogCalculadoraDosis(QDialog):
         "a2": "Coeficiente a2",
         "ks": "Factor de recombinación Ks",
         "Mq": "Lectura corregida Mq",
-        "Zref": "Profundidad de referencia (zref)",
+        "Zref": "Profundidad de referencia (zref; en electrones se calcula sola del R50)",
         "Zmax": "Profundidad de dosis máxima (zmax)",
         "Kq_0": "Factor de calidad del haz (kQ)",
         "Dzref": "Dosis en zref",
@@ -3137,6 +3143,26 @@ class DialogCalculadoraDosis(QDialog):
         self.pdd_zrefE.setVisible(es_electrones)
         self.pddzrefE.setVisible(es_electrones)
         self.Kq0r50_widget.setVisible(es_electrones)
+
+    def _actualizar_visibilidad_zref(self, *_):
+        """I3: el Zref de Resultados Finales se oculta en electrones (ahí es
+        la misma cantidad que zrefR50, autollenada -- pedirlo a mano era
+        re-teclear un valor ya calculado); en fotones sigue siendo entrada
+        manual legítima (10.0 / 5.0 g/cm²).
+        """
+        es_electrones = self.electrones.isChecked()
+        self.lbl_zref.setVisible(not es_electrones)
+        self.Zref.setVisible(not es_electrones)
+        if es_electrones:
+            # Sincronizar ya, por si el R50 se tecleó antes de marcar el haz.
+            if self.zrefR50.text():
+                self.Zref.setText(self.zrefR50.text())
+        else:
+            # Al volver a fotones, si Zref quedó con el valor autollenado de
+            # electrones (~1.3-3 g/cm²) se limpia: no es un zref de fotones.
+            # Un valor tecleado a mano por el físico no se toca.
+            if self.Zref.text() and self.Zref.text() == self.zrefR50.text():
+                self.Zref.clear()
     
     def mostrar_tmr(self, checked):
         self.tmr_zref.setVisible(checked)
@@ -3158,9 +3184,19 @@ class DialogCalculadoraDosis(QDialog):
             r50w = self.QualityR50.text()
             q_r50 = DosisService.r50_depth(float(r50w))
             self.zrefR50.setText(str(q_r50))
+            # I3: en electrones, el "Zref" de Resultados Finales (metadato
+            # que va a BD/PDF y que la validación F3 exige) es esta MISMA
+            # cantidad -- se autollena para que el físico no re-teclee el
+            # valor que la app acaba de calcular dos bloques más arriba.
+            # OJO: nunca ocultar este campo sin llenarlo (campo requerido
+            # invisible = guardado bloqueado, la trampa que H1.1 corrigió).
+            if self.electrones.isChecked():
+                self.Zref.setText(str(q_r50))
         except Exception as e:
             print(e)
             self.zrefR50.clear()
+            if self.electrones.isChecked():
+                self.Zref.clear()
         
     
     def calcular_dosis_maxima(self):
