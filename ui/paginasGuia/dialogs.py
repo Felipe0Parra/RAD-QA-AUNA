@@ -610,6 +610,7 @@ from mcc_PTW_read import mcc_read
 from models.PDF.reporte_calculadora_dos import generar_reporte_calibracion
 from services.trs398_excel import leer_trs398, comparar_trs398
 from services.audit_minimo import registrar as _registrar_auditoria
+from ui.util_fechas import ancho_minimo_fecha  # I5
 from data.ManejoDatos import conection as _conection_mod
 import pandas as pd
 class DialogCalculadoraDosis(QDialog):
@@ -1302,6 +1303,10 @@ class DialogCalculadoraDosis(QDialog):
         # -- lo mostrado ahora coincide con lo guardado en cualquier máquina.
         self.date_edit.setDisplayFormat("dd/MM/yyyy")
         self.date_edit.setDate(QDate.currentDate())
+        # I5: piso calculado de la métrica de fuente real (este widget nunca
+        # tuvo mínimo -- el reporte del físico 16-07 incluía la flecha del
+        # calendario sobre el texto también aquí, no solo en el formulario).
+        self.date_edit.setMinimumWidth(ancho_minimo_fecha(self.date_edit))
         fecha_layout.addWidget(self.date_edit)
         self.date_edit.dateChanged.connect(self.on_fecha_cambiada)
         self.col1.addWidget(fecha_box)

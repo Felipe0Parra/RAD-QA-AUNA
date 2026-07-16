@@ -35,6 +35,10 @@ hidden_imports = [
     "services.mcc_metrics",
     "mcc_PTW_read.mcc_read",
 
+    # I5: ancho mínimo de fechas por métrica de fuente. Import estático
+    # desde dialogs/PruebasDiarias; listado por la misma defensa de arriba.
+    "ui.util_fechas",
+
     # MODELOS
     "models.PDF.reportes",
 ]

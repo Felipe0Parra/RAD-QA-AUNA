@@ -793,3 +793,15 @@ class TestH34FechaCalculadoraDesdeFormulario:
         d = dialogo_factory(fecha_inicial=QDate(2026, 7, 16))
         assert d.date_edit.displayFormat() == "dd/MM/yyyy"
         assert d.date_edit.text() == "01/07/2026"
+
+    def test_i5_ancho_minimo_de_la_fecha_cubre_el_texto(self, dialogo_factory):
+        """I5 (2026-07-16): el date_edit de la calculadora nunca tuvo ancho
+        mínimo (H3.5 lo excluyó a propósito) y el físico reportó la flecha
+        del calendario sobre el texto también aquí. El piso debe salir de la
+        métrica de fuente REAL del widget (nunca px fijos: los 100px de H3.5
+        quedaron cortos con la fuente de Windows)."""
+        d = dialogo_factory(fecha_inicial=QDate(2026, 7, 16))
+        fm = d.date_edit.fontMetrics()
+        # texto dd/MM/yyyy + drop-down 20 + padding 10 + bordes 4
+        necesario = fm.horizontalAdvance("00/00/0000") + 34
+        assert d.date_edit.minimumWidth() >= necesario

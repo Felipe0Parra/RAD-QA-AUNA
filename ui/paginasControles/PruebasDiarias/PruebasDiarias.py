@@ -7,6 +7,7 @@ from data.ManejoDatos.lectorWidgets import DataFront  #ya
 from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar, DialogAdminPermisoEditar
 from data.ManejoDatos.load import add_info, conectarfueradeservicio
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
+from ui.util_fechas import ancho_minimo_fecha  # I5
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QRadioButton, QLabel, QLineEdit, 
                             QComboBox, QAbstractItemDelegate, QTableWidget, QTableWidgetItem, QHeaderView, 
                             QSizePolicy, QDateEdit, QDateTimeEdit, QSplitter, QMessageBox, QAbstractItemView, 
@@ -212,13 +213,16 @@ class PruebaBasico(QWidget):
                 setattr(self, nombre, QDateEdit())
                 getattr(self, nombre).setCalendarPopup(True)
                 getattr(self, nombre).setDate(QDate.currentDate())
-                # H3.5: con el formato corto "MM/yyyy" (combo de mes de los
-                # formularios mensuales) el ancho natural del widget baja de
-                # ~87px y la flecha del calendario se come el espacio del
-                # texto (verificado offscreen: "07/2026" queda cortado en
-                # "07/202"). Con dd/MM/yyyy (formularios diarios) el ancho
-                # natural ya supera este mínimo, así que no cambia nada ahí.
-                getattr(self, nombre).setMinimumWidth(100)
+                # H3.5/I5: sin un piso, la flecha del calendario se come el
+                # espacio del texto cuando el layout aprieta el widget. Los
+                # 100px fijos de H3.5 quedaron cortos con la fuente real de
+                # Windows (reporte del físico 16-07): el mínimo se calcula
+                # ahora de la métrica de fuente del propio widget, con el
+                # formato más ancho en uso (dd/MM/yyyy) porque los
+                # formularios mensuales cambian a "MM/yyyy" DESPUÉS de crear.
+                getattr(self, nombre).setMinimumWidth(
+                    ancho_minimo_fecha(getattr(self, nombre),
+                                       formato="dd/MM/yyyy"))
 
             elif widget_type == 'QDateTimeEdit':
                 setattr(self, nombre, QDateTimeEdit())
