@@ -16,7 +16,7 @@ from resources.utils.matplotlib_lazy import get_matplotlib_components
 from matplotlib.figure import Figure
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 from mcc_PTW_read.mcc_read import agregar_carpeta
-from services.mcc_metrics import calcular_simetria_planicidad
+from services.mcc_metrics import calcular_simetria_planicidad, calcular_calidad_fotones
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
@@ -1782,16 +1782,21 @@ class PruebaMensual600(PruebaBasico):
     _TAMANO_CAMPO_MM = 100.0
 
     def seleccionar_carpeta_mcc(self):
-        """Autollena simetría/planicidad a partir de una carpeta de escaneos
-        .mcc (un mes+máquina; en iX, Fotones y Electrones están en carpetas
+        """Autollena simetría/planicidad (y, para fotones, la calidad
+        TPR20,10 -- H4.1) a partir de una carpeta de escaneos .mcc (un
+        mes+máquina; en iX, Fotones y Electrones están en carpetas
         separadas -- se puede llamar dos veces, una por carpeta). Filtra a
         campo 10x10 (ver _TAMANO_CAMPO_MM).
 
-        La fórmula (services/mcc_metrics.py) es un ajuste EMPÍRICO calibrado
-        contra dosimetriaMen real, no un protocolo estándar publicado -- por
-        eso los valores quedan marcados como sugeridos (tooltip + aviso) y
+        Simetría/planicidad: ajuste EMPÍRICO calibrado contra dosimetriaMen
+        real, no un protocolo estándar publicado. Calidad (fotones): SÍ es
+        IAEA TRS-398 (ver calcular_calidad_fotones) -- pero igual queda
+        marcada como sugerida, por consistencia con el resto del autollenado
+        y porque el .mcc puede traer un PDD de un escaneo repetido/erróneo.
+        En ambos casos: tooltip + aviso al cargar, y
         _confirmar_campos_mcc_sin_revisar() exige confirmación antes de
-        guardar si el físico no los tocó."""
+        guardar si el físico no los tocó. NUNCA se llena la calculadora de
+        dosis -- solo el formulario mensual (ver dialogs.py: sin relación)."""
         carpeta = QFileDialog.getExistingDirectory(
             self, "Seleccionar carpeta de escaneos .mcc")
         if not carpeta:
@@ -1807,32 +1812,46 @@ class PruebaMensual600(PruebaBasico):
         if not hasattr(self, "_campos_mcc_sugeridos"):
             self._campos_mcc_sugeridos = set()
 
-        energias_llenadas = []
+        energias_sim_plan = []
+        energias_calidad = []
         for energia, curvas in resultado["datos"].items():
-            if "INPLANE_PROFILE" not in curvas or "CROSSPLANE_PROFILE" not in curvas:
-                continue
-            try:
-                valores = calcular_simetria_planicidad(curvas)
-            except (ValueError, ZeroDivisionError, IndexError):
-                continue
-            if self._autollenar_energia_mcc(energia, valores):
-                energias_llenadas.append(energia)
+            if "INPLANE_PROFILE" in curvas and "CROSSPLANE_PROFILE" in curvas:
+                try:
+                    valores = calcular_simetria_planicidad(curvas)
+                except (ValueError, ZeroDivisionError, IndexError):
+                    valores = None
+                if valores is not None and self._autollenar_energia_mcc(energia, valores):
+                    energias_sim_plan.append(energia)
 
-        if energias_llenadas:
+            # H4.1: calidad (fotones) desde el PDD -- nunca para electrones
+            # (calidad de electrones es H4.4, sin fórmula confirmada).
+            if "PDD" in curvas and not energia.endswith("mev"):
+                try:
+                    calidad = calcular_calidad_fotones(curvas["PDD"])
+                except (ValueError, ZeroDivisionError, IndexError):
+                    calidad = None
+                if calidad is not None and self._autollenar_calidad_mcc(energia, calidad):
+                    energias_calidad.append(energia)
+
+        if energias_sim_plan or energias_calidad:
+            partes = []
+            if energias_sim_plan:
+                partes.append("simetría/planicidad (" + ", ".join(sorted(energias_sim_plan)) + ")")
+            if energias_calidad:
+                partes.append("calidad TPR20,10 (" + ", ".join(sorted(energias_calidad)) + ")")
             QMessageBox.information(
                 self, "Autollenado desde .mcc",
-                "Se autollenaron simetría/planicidad (SUGERIDO, verifique "
-                f"antes de guardar) para: {', '.join(sorted(energias_llenadas))}."
-                "\n\nEstos valores vienen de una fórmula calibrada contra "
-                "mediciones históricas, no de un protocolo estándar "
-                "publicado -- revíselos igual que revisaría una medición "
-                "manual antes de guardar.")
+                "Se autollenó (SUGERIDO, verifique antes de guardar): "
+                + "; ".join(partes) + "."
+                "\n\nEstos valores vienen de fórmulas calibradas/validadas "
+                "contra mediciones históricas -- revíselos igual que "
+                "revisaría una medición manual antes de guardar.")
         else:
             QMessageBox.warning(
                 self, "Sin energías reconocidas",
                 "No se encontraron perfiles INPLANE y CROSSPLANE completos "
-                "para ninguna energía de este formulario en la carpeta "
-                "seleccionada.")
+                "(ni un PDD de fotones) para ninguna energía de este "
+                "formulario en la carpeta seleccionada.")
 
     def _autollenar_energia_mcc(self, energia, valores):
         """Escribe los 4 campos crudos de una energía si existen en este
@@ -1867,6 +1886,31 @@ class PruebaMensual600(PruebaBasico):
                 lambda _texto, c=campo, n=nombre_campo: self._marcar_campo_mcc_revisado(c, n))
         return True
 
+    def _autollenar_calidad_mcc(self, energia, valor):
+        """H4.1 (auditoría 2026-07-16): autollena la calidad TPR20,10 de
+        fotones desde el PDD del .mcc (calcular_calidad_fotones, IAEA
+        TRS-398). Análogo a _autollenar_energia_mcc pero para un solo campo
+        -- reusa el mismo mecanismo de "sugerido" (tooltip + pendientes +
+        gate de confirmación). Devuelve True si el campo existe en este
+        formulario (False si, ej., se llama para una energía de electrones
+        o para un formulario que no la tiene)."""
+        nombre_campo = f"ln_calidad_pdd20_10_{energia}"
+        if not hasattr(self, nombre_campo):
+            return False
+        if not hasattr(self, "_campos_mcc_sugeridos"):
+            self._campos_mcc_sugeridos = set()
+
+        campo = getattr(self, nombre_campo)
+        campo.setText(str(valor))
+        campo.setStyleSheet(self._ESTILO_SUGERIDO_MCC)
+        campo.setToolTip(
+            "Autollenado desde .mcc (TPR20,10 = 1.2661*PDD20,10 - 0.0595, "
+            "IAEA TRS-398) -- verifique este valor. Editarlo confirma que lo revisó.")
+        self._campos_mcc_sugeridos.add(nombre_campo)
+        campo.textEdited.connect(
+            lambda _texto, c=campo, n=nombre_campo: self._marcar_campo_mcc_revisado(c, n))
+        return True
+
     def _marcar_campo_mcc_revisado(self, campo, nombre_campo):
         campo.setToolTip("")
         self._campos_mcc_sugeridos.discard(nombre_campo)
@@ -1880,9 +1924,9 @@ class PruebaMensual600(PruebaBasico):
             return True
         respuesta = QMessageBox.question(
             self, "Valores autollenados sin revisar",
-            f"Hay {len(pendientes)} campo(s) de simetría/planicidad "
-            "autollenados desde .mcc que no ha revisado (fórmula calibrada, "
-            "no un protocolo oficial).\n\n¿Guardar de todas formas?",
+            f"Hay {len(pendientes)} campo(s) autollenados desde .mcc "
+            "(simetría/planicidad y/o calidad) que no ha revisado.\n\n"
+            "¿Guardar de todas formas?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         return respuesta == QMessageBox.Yes
 

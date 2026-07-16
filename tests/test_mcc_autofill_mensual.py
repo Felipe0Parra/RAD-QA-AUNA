@@ -34,10 +34,12 @@ def app():
     return QApplication.instance() or QApplication([])
 
 
-def _instancia_pelada(energias):
+def _instancia_pelada(energias, con_calidad=False):
     """PruebaMensual600 sin su __init__ pesado (BD/Excel), con los
     QLineEdit ln_simetria_*/ln_planicidad_* de las energías dadas (simula
     600 con ["6mv"] o iX con las 6 energías, según lo que pase el test).
+    con_calidad=True agrega también ln_calidad_pdd20_10_<energia> (H4.1) --
+    separado del resto porque solo aplica a energías de fotones.
 
     PyQt5 exige que el objeto C++ subyacente quede construido -- __new__ a
     secas revienta con "super-class __init__() ... was never called" en
@@ -51,6 +53,8 @@ def _instancia_pelada(energias):
         for prefijo in ("ln_simetria_inplane_", "ln_simetria_crossplane_",
                         "ln_planicidad_inplane_", "ln_planicidad_crossplane_"):
             setattr(obj, f"{prefijo}{energia}", QLineEdit())
+        if con_calidad:
+            setattr(obj, f"ln_calidad_pdd20_10_{energia}", QLineEdit())
     return obj
 
 
@@ -89,6 +93,58 @@ class TestAutollenarEnergiaMCC:
 
         assert aplico is False
         assert not hasattr(obj, "_campos_mcc_sugeridos") or not obj._campos_mcc_sugeridos
+
+
+class TestAutollenarCalidadMCC:
+    """H4.1 (auditoría 2026-07-16): autollenado de calidad TPR20,10
+    (fotones) desde el .mcc -- análogo a TestAutollenarEnergiaMCC pero para
+    un solo campo. Reusa _campos_mcc_sugeridos/_marcar_campo_mcc_revisado
+    (mismo mecanismo, sin código nuevo para el gate de confirmación)."""
+
+    def test_llena_el_campo_y_lo_marca_pendiente(self, app):
+        obj = _instancia_pelada(["6mv"], con_calidad=True)
+
+        aplico = obj._autollenar_calidad_mcc("6mv", 0.6676)
+
+        assert aplico is True
+        assert obj.ln_calidad_pdd20_10_6mv.text() == "0.6676"
+        assert obj._campos_mcc_sugeridos == {"ln_calidad_pdd20_10_6mv"}
+
+    def test_pone_tooltip_de_aviso(self, app):
+        obj = _instancia_pelada(["6mv"], con_calidad=True)
+
+        obj._autollenar_calidad_mcc("6mv", 0.6676)
+
+        assert "verifique" in obj.ln_calidad_pdd20_10_6mv.toolTip().lower()
+
+    def test_energia_o_campo_ausente_devuelve_false(self, app):
+        """Formulario sin el campo de calidad para esa energía (ej.: 600
+        real, que sí tiene ln_calidad_pdd20_10_6mv -- se simula con una
+        instancia sin con_calidad para representar el caso ausente)."""
+        obj = _instancia_pelada(["6mv"], con_calidad=False)
+
+        aplico = obj._autollenar_calidad_mcc("6mv", 0.6676)
+
+        assert aplico is False
+        assert not hasattr(obj, "_campos_mcc_sugeridos") or not obj._campos_mcc_sugeridos
+
+    def test_editar_el_campo_lo_saca_de_pendientes(self, app):
+        obj = _instancia_pelada(["6mv"], con_calidad=True)
+        obj._autollenar_calidad_mcc("6mv", 0.6676)
+        campo = obj.ln_calidad_pdd20_10_6mv
+
+        campo.textEdited.emit("0.6700")
+
+        assert "ln_calidad_pdd20_10_6mv" not in obj._campos_mcc_sugeridos
+        assert campo.toolTip() == ""
+
+    def test_confirmar_campos_sin_revisar_tambien_cubre_calidad(self, app, monkeypatch):
+        obj = _instancia_pelada(["6mv"], con_calidad=True)
+        obj._autollenar_calidad_mcc("6mv", 0.6676)
+        monkeypatch.setattr(mensual_mod.QMessageBox, "question",
+                            staticmethod(lambda *a, **k: QMessageBox.No))
+
+        assert obj._confirmar_campos_mcc_sin_revisar() is False
 
 
 class TestMarcarCampoRevisado:
@@ -173,6 +229,14 @@ def _escribir_mcc(tmp_path, nombre, bloques):
 FILAS_PERFIL_6MV = [(str(p), f"{v:.4f}E+00", "0.29") for p, v in
                      [(-50, 1.2), (-20, 7.5), (0, 7.7), (20, 7.4), (50, 1.5)]]
 
+# H4.1: PDD sintético con puntos EXACTOS en 100/200mm -- M10=100.0, M20=66.0
+# -> TPR20,10 = 1.2661*0.66 - 0.0595 = 0.7761 (mismo caso que
+# test_mcc_metrics.py::TestCalidadFotonesSintetico, para no tener que
+# recalcular a mano dos veces).
+FILAS_PDD_6MV = [(str(p), f"{v:.4f}E+00", "0.29") for p, v in
+                  [(0, 100.0), (100, 100.0), (200, 66.0), (250, 55.0)]]
+CALIDAD_ESPERADA_PDD_6MV = 0.7761
+
 
 class TestSeleccionarCarpetaMCC:
     def test_cancelar_dialogo_no_hace_nada(self, app, tmp_path, monkeypatch):
@@ -223,6 +287,48 @@ class TestSeleccionarCarpetaMCC:
         obj.seleccionar_carpeta_mcc()
 
         assert any("Sin energías" in a[1] for a in avisos_warning)
+
+    def test_pdd_llena_calidad_y_el_aviso_lo_menciona(self, app, tmp_path, monkeypatch):
+        """H4.1: una carpeta con PDD (además de INPLANE/CROSSPLANE) llena
+        también la calidad TPR20,10, y el aviso único menciona ambos."""
+        _escribir_mcc(tmp_path, "seis.mcc", [
+            _bloque_scan(1, "PDD", "6.00", "X", "28-Feb-2026 10:55:00", FILAS_PDD_6MV),
+            _bloque_scan(2, "INPLANE_PROFILE", "6.00", "X", "28-Feb-2026 11:00:00", FILAS_PERFIL_6MV),
+            _bloque_scan(3, "CROSSPLANE_PROFILE", "6.00", "X", "28-Feb-2026 11:01:00", FILAS_PERFIL_6MV),
+        ])
+        obj = _instancia_pelada(["6mv"], con_calidad=True)
+        monkeypatch.setattr(mensual_mod.QFileDialog, "getExistingDirectory",
+                            staticmethod(lambda *a, **k: str(tmp_path)))
+        avisos = []
+        monkeypatch.setattr(mensual_mod.QMessageBox, "information",
+                            staticmethod(lambda *a, **k: avisos.append(a)))
+
+        obj.seleccionar_carpeta_mcc()
+
+        assert obj.ln_calidad_pdd20_10_6mv.text() == str(CALIDAD_ESPERADA_PDD_6MV)
+        assert obj.ln_simetria_inplane_6mv.text() != ""  # sigue funcionando junto con calidad
+        assert len(avisos) == 1
+        assert "calidad" in avisos[0][2].lower()
+        assert "simetría/planicidad" in avisos[0][2]
+
+    def test_pdd_de_electrones_no_llena_calidad(self, app, tmp_path, monkeypatch):
+        """H4.4 sigue sin fórmula: un PDD de electrones NUNCA debe llenar
+        ln_calidad_j2_j1_<energia> (que ni siquiera se crea en este test)."""
+        _escribir_mcc(tmp_path, "electrones.mcc", [
+            _bloque_scan(1, "PDD", "9.00", "EL", "28-Feb-2026 10:55:00", FILAS_PDD_6MV),
+            _bloque_scan(2, "INPLANE_PROFILE", "9.00", "EL", "28-Feb-2026 11:00:00", FILAS_PERFIL_6MV),
+            _bloque_scan(3, "CROSSPLANE_PROFILE", "9.00", "EL", "28-Feb-2026 11:01:00", FILAS_PERFIL_6MV),
+        ])
+        obj = _instancia_pelada(["9mev"], con_calidad=False)
+        obj.ln_calidad_j2_j1_9mev = QLineEdit()
+        monkeypatch.setattr(mensual_mod.QFileDialog, "getExistingDirectory",
+                            staticmethod(lambda *a, **k: str(tmp_path)))
+        monkeypatch.setattr(mensual_mod.QMessageBox, "information",
+                            staticmethod(lambda *a, **k: None))
+
+        obj.seleccionar_carpeta_mcc()
+
+        assert obj.ln_calidad_j2_j1_9mev.text() == ""
 
     def test_archivo_roto_avisa_pero_no_impide_el_resto(self, app, tmp_path, monkeypatch):
         _escribir_mcc(tmp_path, "bueno.mcc", [

@@ -31,6 +31,7 @@ import pytest
 from mcc_PTW_read.mcc_read import EscaneoMCC, agregar_carpeta
 from services.mcc_metrics import (
     calcular_planicidad, calcular_simetria, calcular_simetria_planicidad,
+    calcular_calidad_fotones,
 )
 from _corpus import mes_primeros  # HI-0: fuente única de rutas del corpus
 
@@ -112,6 +113,119 @@ class TestSinteticoSensato:
 
         with pytest.raises(KeyError):
             calcular_simetria_planicidad(curvas)
+
+
+def _pdd(posiciones_mm, col2):
+    return EscaneoMCC(curve_type="PDD", meas_date=datetime(2026, 1, 1),
+                       energia="6mv", modalidad="X", posiciones=list(posiciones_mm),
+                       col2=list(col2), col3=[], archivo="sintetico")
+
+
+class TestCalidadFotonesSintetico:
+    """H4.1 (auditoría 2026-07-16): a diferencia de simetría/planicidad, esta
+    fórmula ES un protocolo publicado (IAEA TRS-398 -- ver docstring de
+    calcular_calidad_fotones), así que aquí SÍ se puede verificar el
+    resultado exacto a mano, no solo "sensato"."""
+
+    def test_valor_exacto_con_puntos_justo_en_100_y_200mm(self):
+        # M10 = 100.0 en pos=100mm, M20 = 66.0 en pos=200mm (sin necesidad de
+        # interpolar -- los puntos caen exactos): TPR20,10 = 1.2661*0.66 -
+        # 0.0595 = 0.776126 -> 0.7761.
+        pdd = _pdd([0, 50, 100, 150, 200, 250], [100.0, 100.0, 100.0, 80.0, 66.0, 55.0])
+
+        assert calcular_calidad_fotones(pdd) == 0.7761
+
+    def test_interpola_cuando_no_hay_punto_exacto(self):
+        # M10 interpolado entre (90,100.0) y (110,90.0) -> 95.0 en pos=100.
+        # M20 interpolado entre (190,70.0) y (210,60.0) -> 65.0 en pos=200.
+        pdd = _pdd([0, 90, 110, 190, 210], [100.0, 100.0, 90.0, 70.0, 60.0])
+
+        m10, m20 = 95.0, 65.0
+        esperado = round(1.2661 * (m20 / m10) - 0.0595, 4)
+        assert calcular_calidad_fotones(pdd) == esperado
+
+    def test_orden_de_las_posiciones_no_importa(self):
+        """np.interp exige x creciente -- el cálculo debe ordenar primero
+        (los .mcc reales no siempre traen las posiciones ya ordenadas)."""
+        pdd_ordenado = _pdd([0, 100, 200], [100.0, 100.0, 66.0])
+        pdd_desordenado = _pdd([200, 0, 100], [66.0, 100.0, 100.0])
+
+        assert calcular_calidad_fotones(pdd_ordenado) == calcular_calidad_fotones(pdd_desordenado)
+
+
+REFS_ORO_FOTONES = {16: ("Febrero", "IX"), 13: ("Marzo", "IX"), 30: ("Mayo", "iX"),
+                     35: ("Junio", "iX"), 22: ("Abril", None), 38: ("Junio", None)}
+
+
+def _valores_oro_calidad():
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    try:
+        cur = con.cursor()
+        cur.execute("""SELECT ref, energia, calidad_pdd20_10 FROM dosimetriaMen
+                       WHERE ref IN (16,13,30,35,22,38) AND energia LIKE '%mv'""")
+        return cur.fetchall()
+    finally:
+        con.close()
+
+
+def _carpeta_fotones_de(ref):
+    mes, ix_nombre = REFS_ORO_FOTONES[ref]
+    if ix_nombre is None:
+        return mes_primeros(mes, "600")
+    return mes_primeros(mes, "IX", "Fotones")
+
+
+def _corpus_oro_fotones_disponible():
+    if not os.path.exists(DB):
+        return False
+    for ref, (mes, ix_nombre) in REFS_ORO_FOTONES.items():
+        maquina = "600" if ix_nombre is None else "IX"
+        sub = None if ix_nombre is None else "Fotones"
+        if mes_primeros(mes, maquina, sub) is None:
+            return False
+    return True
+
+
+@pytest.mark.skipif(not _corpus_oro_fotones_disponible(),
+                    reason="corpus de oro (PrimerosMeses/Fotones) y/o BD no disponibles en esta máquina")
+class TestCalidadFotonesContraDosimetriaMenReal:
+    """H4.1: validación contra las mismas 6 referencias de oro que D4.1b,
+    filtradas a fotones (calidad de electrones es H4.4, sin fórmula
+    todavía). Ver services/mcc_metrics.py para el detalle de la
+    calibración (8/10 exactas a 4 decimales; ref 16/Febrero difiere por
+    escaneos de PDD repetidos el mismo día, no por un error de fórmula)."""
+
+    @staticmethod
+    @pytest.fixture(scope="class")
+    def comparaciones():
+        _cache = {}
+        resultado = []
+        for ref, energia, calidad_ptw in _valores_oro_calidad():
+            carpeta = _carpeta_fotones_de(ref)
+            if carpeta not in _cache:
+                _cache[carpeta] = agregar_carpeta(carpeta)
+            curvas = _cache[carpeta]["datos"].get(energia)
+            if not curvas or "PDD" not in curvas:
+                continue
+            calc = calcular_calidad_fotones(curvas["PDD"])
+            resultado.append((ref, energia, calc, calidad_ptw))
+        return resultado
+
+    def test_hay_datos_para_las_10_filas_de_oro_de_fotones(self, comparaciones):
+        assert len(comparaciones) == 10
+
+    def test_al_menos_8_de_10_exactas_a_4_decimales(self, comparaciones):
+        exactas = [(ref, energia) for ref, energia, calc, ptw in comparaciones
+                   if abs(calc - ptw) < 1e-4]
+        assert len(exactas) >= 8, (
+            f"solo {len(exactas)}/10 exactas -- revisar fórmula/interpolación: {comparaciones}")
+
+    def test_ninguna_desviacion_mayor_a_1_porciento(self, comparaciones):
+        """Cota floja: protege contra una regresión gorda (formula/columna
+        equivocada), no contra el ruido de escaneos repetidos puntuales."""
+        peores = [(ref, energia, calc, ptw) for ref, energia, calc, ptw in comparaciones
+                  if abs(calc - ptw) > 0.01]
+        assert peores == [], f"desviaciones > 1% (revisar fórmula): {peores}"
 
 
 # ── Capa 2: validación contra dosimetriaMen (patrón de oro real) ──────────

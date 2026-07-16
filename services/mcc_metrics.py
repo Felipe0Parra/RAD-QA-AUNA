@@ -82,3 +82,43 @@ def calcular_simetria_planicidad(curvas):
         "planicidad_inplane": calcular_planicidad(inplane),
         "planicidad_crossplane": calcular_planicidad(crossplane),
     }
+
+
+def calcular_calidad_fotones(escaneo_pdd):
+    """TPR20,10 (calidad de haces de FOTONES) desde un PDD medido -- H4.1,
+    auditoría 2026-07-16.
+
+    A diferencia de simetria/planicidad (ajuste EMPIRICO propio, sin
+    protocolo publicado -- ver docstring del modulo), esta formula SI es un
+    protocolo estandar publicado, citado textualmente en el catalogo PTW
+    (~/Documents/Archivos_UseApp/Archivos QA/NormaYEquipos_pdf/
+    DETECTORS_Cat_en_16522900_16.pdf, pag. 84, seccion "4.1 IAEA TRS-398",
+    ec. 4-2) y en IAEA TRS-398 directamente:
+
+        TPR20,10 = 1.2661 * PDD20,10 - 0.0595
+
+    donde PDD20,10 = M20/M10, la razon entre las lecturas del PDD a 20 cm y
+    10 cm de profundidad (SSD=100cm, campo 10x10 en la superficie del
+    fantoma -- las mismas condiciones con las que se mide el PDD del .mcc).
+    Como es una RAZON, la normalizacion al maximo de la curva se cancela
+    algebraicamente -- por eso aqui se interpola col2 (dosis relativa cruda,
+    ver EscaneoMCC) directamente a 200/100 mm sin normalizar.
+
+    Valido SOLO para haces de fotones aplanados (FF); no se llama para
+    electrones (calidad de electrones es R50, formula distinta, y los
+    valores de "calidad" de electrones en dosimetriaMen -- H4.4 -- ni
+    siquiera son R50: pregunta abierta al fisico, sin formula todavia).
+
+    Validado (2026-07-16) contra las filas de oro de dosimetriaMen
+    (refs 16/13/30/35/22/38, columna calidad_pdd20_10, fotones 6mv/15mv):
+    8 de 10 exactas a 4 decimales; las 2 de ref 16/Febrero difieren en
+    ~0.005 (esa carpeta tiene escaneos de PDD repetidos el mismo dia --
+    ver docstring de mcc_PTW_read/mcc_read.py sobre el caso "E06 PDDCRIN" --
+    la transcripcion manual del fisico pudo venir del otro escaneo)."""
+    posiciones = np.asarray(escaneo_pdd.posiciones, dtype=float)
+    valores = np.asarray(escaneo_pdd.col2, dtype=float)
+    orden = np.argsort(posiciones)
+    posiciones, valores = posiciones[orden], valores[orden]
+    m10 = np.interp(100.0, posiciones, valores)
+    m20 = np.interp(200.0, posiciones, valores)
+    return round(1.2661 * (m20 / m10) - 0.0595, 4)
