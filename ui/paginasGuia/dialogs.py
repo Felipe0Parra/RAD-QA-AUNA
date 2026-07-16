@@ -2322,25 +2322,52 @@ class DialogCalculadoraDosis(QDialog):
         try:
             # Get selected date in format 'dd/MM/yyyy'
             fecha_seleccionada = self.date_edit.date().toString("dd/MM/yyyy")
-            
-            # Get current equipment ID if selected
-            equipo_id = self.combo_series.currentData() if self.combo_series.currentData() else None
-            
-            # Search database for data matching this date
-            datos = DosisService.buscar_por_fecha(fecha_seleccionada, equipo_id)
-            
+
+            # I1: se busca filtrando por MÁQUINA (self.acelerador_actual), no
+            # por el dato del combo de series -- el segundo parámetro de
+            # buscar_por_fecha es el Acelerador ("IX"/"Seiscientos"/"Hc").
+            # El código anterior pasaba equipo_id (un entero del catálogo):
+            # al abrir el diálogo era None (traía registros de CUALQUIER
+            # máquina) y con serie elegida nunca hacía match.
+            datos = DosisService.buscar_por_fecha(
+                fecha_seleccionada, self.acelerador_actual)
+
             if datos:
-                # Data found - populate the UI fields
-                self.cargar_datos_desde_db(datos)
-                print(f"Data loaded for date: {fecha_seleccionada}")
+                # I1: NUNCA recargar en silencio. Antes, el setDate de
+                # fecha_inicial (H3.4) disparaba esta ruta al abrir y el
+                # registro recién guardado con "Aceptar y cerrar" reaparecía
+                # completo ("valores pegados", reporte del físico 16-07).
+                # Cargar un registro guardado ahora es una decisión explícita.
+                if self._confirmar_carga_registro(fecha_seleccionada):
+                    self.cargar_datos_desde_db(datos)
+                    print(f"Data loaded for date: {fecha_seleccionada}")
             else:
                 # No data found
                 print(f"No data found for date: {fecha_seleccionada}")
-                
+
         except Exception as e:
             print(f"Error in date change handler: {e}")
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Error", f"Error loading data for selected date: {e}")
+
+    def _confirmar_carga_registro(self, fecha):
+        """I1: hay un registro guardado para la fecha elegida en esta máquina
+        -- pregunta antes de volcarlo sobre el formulario. Aislado en su
+        propio método (mismo patrón que `_confirmar_registro_existente` de
+        H2.3) para que los tests puedan sustituirlo sin disparar un
+        QMessageBox modal real.
+
+        Default No: el caso más frecuente es abrir la calculadora para un
+        cálculo NUEVO (y "No" tampoco borra nada de lo ya tecleado); "Sí"
+        cubre la consulta/edición de un registro histórico (D2.2/E4).
+        """
+        respuesta = QMessageBox.question(
+            self, "Registro guardado",
+            f"Ya existe un registro guardado del {fecha} para esta máquina.\n\n"
+            "¿Cargarlo en la calculadora? Si va a hacer un cálculo nuevo, "
+            "elija No (no se borra nada).",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        return respuesta == QMessageBox.Yes
 
 
     def cargar_datos_desde_db(self, datos: dict):

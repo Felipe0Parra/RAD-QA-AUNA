@@ -351,12 +351,15 @@ class DosisService():
     @classmethod
     def buscar_por_fecha(cls, fecha: str, acelerador: str):
         """
-        Search for dosimetry data by date and optionally by equipment ID
-        
+        Search for dosimetry data by date, optionally filtered by accelerator
+
         Args:
             fecha: Date in format 'dd/MM/yyyy' or similar
-            equipo_id: Optional equipment ID to filter results
-            
+            acelerador: Accelerator name as stored in the Acelerador column
+                ("IX"/"Seiscientos"/"Hc"), or None to match any machine.
+                (I1: el docstring anterior decía "equipo_id" y ese error de
+                nombre indujo a pasar el id del catálogo desde la UI.)
+
         Returns:
             Dict with dosimetry data if found, None otherwise
         """
