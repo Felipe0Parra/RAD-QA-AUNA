@@ -1295,7 +1295,13 @@ class DialogCalculadoraDosis(QDialog):
         
         self.date_edit = QDateEdit(self)
         self.date_edit.setCalendarPopup(True)   # abre calendario
-        self.date_edit.setDate(QDate.currentDate())  
+        # I4: formato SIEMPRE explícito. Sin esto, QDateEdit usa el formato
+        # corto del locale del SO (en un Windows en inglés: "M/d/yy" ->
+        # "7/1/26", que leído en español parece 7-ene-26). El registro se
+        # guarda internamente como dd/MM/yyyy (on_fecha_cambiada/guardar_db)
+        # -- lo mostrado ahora coincide con lo guardado en cualquier máquina.
+        self.date_edit.setDisplayFormat("dd/MM/yyyy")
+        self.date_edit.setDate(QDate.currentDate())
         fecha_layout.addWidget(self.date_edit)
         self.date_edit.dateChanged.connect(self.on_fecha_cambiada)
         self.col1.addWidget(fecha_box)

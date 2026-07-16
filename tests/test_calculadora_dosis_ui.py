@@ -782,3 +782,14 @@ class TestH34FechaCalculadoraDesdeFormulario:
         fecha_formulario = QDate(2026, 3, 31)  # día 31, mes elegido: marzo
         d = dialogo_factory(fecha_inicial=fecha_formulario)
         assert d.date_edit.date() == QDate(2026, 3, 1)
+
+    def test_i4_formato_de_fecha_explicito_no_del_locale(self, dialogo_factory):
+        """I4 (2026-07-16): sin setDisplayFormat, QDateEdit muestra el formato
+        corto del LOCALE del SO (en un Windows en inglés, "M/d/yy": la fecha
+        del formulario se veía "7/1/26", ilegible en español -- por eso el
+        físico reportó que 'la fecha no era la del formulario' aunque H3.4 sí
+        fijaba el mes correcto). El formato visible debe ser el mismo que el
+        interno de guardado (dd/MM/yyyy), en cualquier máquina."""
+        d = dialogo_factory(fecha_inicial=QDate(2026, 7, 16))
+        assert d.date_edit.displayFormat() == "dd/MM/yyyy"
+        assert d.date_edit.text() == "01/07/2026"
