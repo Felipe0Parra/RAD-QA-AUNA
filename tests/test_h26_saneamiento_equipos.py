@@ -128,6 +128,44 @@ class TestRetiroYDeduplicacion:
         assert fila == {"activo": 0, "vigente": 0}
 
 
+class TestCorreccionTCalPCalPozo:
+    """H2.10: mismo bug que TestCorreccionTCalPCal (N30013/N31014) pero en
+    el pozo A972662 -- se encontró al investigar por qué desapareció del
+    selector de braquiterapia tras el saneamiento H2.6."""
+    def test_corrige_condiciones_ambientales_a_referencia(self, bd_temporal):
+        _insertar_equipo(bd_temporal, 16, equip_type="Cámara de pozo",
+                         model="HDR1000 Plus", serie="A972662",
+                         calibr_fact=466700, t_cal=21.4, p_cal=98.52,
+                         activo=1, vigente=1)
+
+        aplicar_saneamiento(bd_temporal, usuario="test")
+
+        fila = _leer_equipo(bd_temporal, 16, "t_cal", "p_cal", "activo", "vigente")
+        assert fila["t_cal"] == 22.0
+        assert fila["p_cal"] == 101.325
+        # la fila sigue vigente/activa -- el fix es de valor, no de estado
+        assert fila["activo"] == 1
+        assert fila["vigente"] == 1
+
+
+class TestDobleVigenteElectrometro:
+    """H2.10: el electrómetro CDX-2000B/B091982 tenía dos filas vigentes a
+    la vez (id18 de 2024 e id79, la recalibración 2026) -- una sola vigente
+    por serie."""
+    def test_fila_vieja_queda_historica(self, bd_temporal):
+        _insertar_equipo(bd_temporal, 18, equip_type="Electrómetro",
+                         model="CDX-2000B", serie="B091982", calibr_fact=1,
+                         fecha_calibr="05/02/2024", activo=1, vigente=1)
+
+        aplicar_saneamiento(bd_temporal, usuario="test")
+
+        fila = _leer_equipo(bd_temporal, 18, "vigente", "activo")
+        assert fila["vigente"] == 0
+        # activo no cambia -- el equipo sigue existiendo, solo deja de ser
+        # "la" calibración vigente (la 2026 lo es)
+        assert fila["activo"] == 1
+
+
 class TestIdempotencia:
     def test_segunda_corrida_no_cambia_nada(self, bd_temporal):
         _insertar_equipo(bd_temporal, 13, equip_type="Cámara de ionización",

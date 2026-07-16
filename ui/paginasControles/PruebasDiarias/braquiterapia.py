@@ -15,6 +15,7 @@ from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 from ui.paginasControles.PruebasMensuales.PruebasMensuales import PruebaMensualBraq
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
+from services.equipos_service import EquiposService
 from PyQt5.QtWidgets import (QHBoxLayout, QVBoxLayout, QWidget, QToolBox, QPushButton, QLabel, QComboBox, QTableWidget, 
                             QTableWidgetItem, QMessageBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout, QDialog,
                             QDateEdit, QSplitter)
@@ -2062,31 +2063,19 @@ class Linealidad(PruebaBasico):
         self.line_cal_elec = self.widgets['electrometro']
     
     def _cargar_modelos_camara_pozo(self):
-        """Carga modelos de cámara de pozo usando gestor optimizado"""
-        consulta = """
-            SELECT DISTINCT model FROM equipos 
-            WHERE equip_type='Cámara de pozo' AND activo=1
-            AND id IN (SELECT MAX(id) FROM equipos GROUP BY serie)
-        """
+        """Carga modelos de cámara de pozo (fila actual por vigente, H2.10)"""
         try:
-            resultados = gestor_db.ejecutar_consulta_con_cache(consulta, usar_cache=True)
-            modelos_pozo = [row[0] for row in resultados]
+            modelos_pozo = EquiposService.modelos_actuales('Cámara de pozo')
             self.combo_modelo.addItems(modelos_pozo)
             #logger.debug(f"Cargados {len(modelos_pozo)} modelos de cámara de pozo")
         except Exception as e:
             #logger.error(f"Error cargando modelos de cámara: {e}")
             raise
-    
+
     def _cargar_modelos_electrometro(self):
-        """Carga modelos de electrómetro usando gestor optimizado"""
-        consulta = """
-            SELECT DISTINCT model FROM equipos 
-            WHERE equip_type='Electrómetro' AND activo=1
-            AND id IN (SELECT MAX(id) FROM equipos GROUP BY serie)
-        """
+        """Carga modelos de electrómetro (fila actual por vigente, H2.10)"""
         try:
-            resultados = gestor_db.ejecutar_consulta_con_cache(consulta, usar_cache=True)
-            modelos_elec = [row[0] for row in resultados]
+            modelos_elec = EquiposService.modelos_actuales('Electrómetro')
             self.combo_modelo_elec.addItems(modelos_elec)
             #logger.debug(f"Cargados {len(modelos_elec)} modelos de electrómetro")
         except Exception as e:
@@ -2127,13 +2116,8 @@ class Linealidad(PruebaBasico):
         self.combo_serie.addItem("Seleccionar Serie...")
     
     def _obtener_series_equipo(self, tipo_equipo: str, modelo: str) -> List[Tuple]:
-        """Obtiene series de un equipo específico usando BD optimizada"""
-        consulta = """
-            SELECT serie, activo, vigente FROM equipos 
-            WHERE equip_type=? AND model=?
-            AND id IN (SELECT MAX(id) FROM equipos GROUP BY serie)
-        """
-        return gestor_db.ejecutar_consulta_con_cache(consulta, (tipo_equipo, modelo))
+        """Series de un equipo específico (fila actual por vigente, H2.10)"""
+        return EquiposService.series_actuales(tipo_equipo, modelo)
     
     def _poblar_combo_series(self, series_data: List[Tuple]):
         """Puebla el combo de series con indicadores visuales"""
@@ -2168,48 +2152,30 @@ class Linealidad(PruebaBasico):
         if not serie or serie == "Seleccionar Serie...":
             return
 
-        conn = Conexion().conectar()
-        cur = conn.cursor()
-        cur.execute("""SELECT calibr_fact
-                    FROM equipos 
-                    WHERE equip_type='Cámara de pozo' AND model=? AND serie=?
-                    AND id IN (
-                    SELECT MAX(id) FROM equipos GROUP BY serie)
-                    """,(modelo, serie))
-        row = cur.fetchone()
-        if row:
-            calibr_fact = row[0]
-            self.line_cal.setText(str(calibr_fact))
+        datos = EquiposService.calibracion_actual('Cámara de pozo', modelo, serie)
+        if datos:
+            self.line_cal.setText(str(datos["calibr_fact"]))
 
     def on_modelo_elec_cambio(self, modelo):
-        """Cuando selecciona un modelo de electrómetro, llenar las series (solo última versión por serie)"""
+        """Cuando selecciona un modelo de electrómetro, llenar las series (fila actual por vigente, H2.10)"""
         self.combo_serie_elec.clear()
         self.combo_serie_elec.addItem("Seleccionar Serie...")
 
-        conn = Conexion().conectar()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT serie, activo, vigente FROM equipos
-            WHERE equip_type='Electrómetro' AND model=?
-            AND id IN (
-                SELECT MAX(id) FROM equipos GROUP BY serie
-            )
-        """, (modelo,))
-        equipos_data = cur.fetchall()
-        
+        equipos_data = EquiposService.series_actuales('Electrómetro', modelo)
+
         # Solo agregar equipos activos
         series_activas = []
         equipos_no_vigentes = []
-        
+
         for row in equipos_data:
             serie, activo, vigente = row
             if activo == 1.0:  # Solo equipos activos
                 series_activas.append(serie)
                 if vigente == 0.0:  # Si no está vigente, recordarlo
                     equipos_no_vigentes.append(serie)
-        
+
         self.combo_serie_elec.addItems(series_activas)
-        
+
         # Marcar en rojo los no vigentes y agregar indicador visual
         for serie in equipos_no_vigentes:
             index = self.combo_serie_elec.findText(serie)
@@ -2219,8 +2185,7 @@ class Linealidad(PruebaBasico):
                 #item.setData(Qt.BackgroundRole, QColor(255, 240, 240))  # Fondo ligeramente rojizo
                 item.setText(f"⚠️ {serie} (VENCIDO)")  # Modificar el texto para ser más visible
                 item.setToolTip("⚠️ Calibración vencida - Requiere recalibración")  # Tooltip
-        
-        conn.close()
+
     def button_click(self):
         #print("Entra a la función button_click en la clase PruebaDiariaBraq en braquiterapia.py")
         #self.fuera_servicio.clicked.connect(self.reasignar_botonySERVICIO)
@@ -2398,19 +2363,9 @@ class Linealidad(PruebaBasico):
         if not serie or serie == "Seleccionar Serie...":
             return
 
-        conn = Conexion().conectar()
-        cur = conn.cursor()
-        cur.execute("""SELECT calibr_fact
-                    FROM equipos 
-                    WHERE equip_type='Electrómetro' AND model=? AND serie=?
-                    AND id IN (
-                        SELECT MAX(id) FROM equipos GROUP BY serie
-                    )
-                """,(modelo, serie))
-        row = cur.fetchone()
-        if row:
-            calibr_fact = row[0]
-            self.line_cal_elec.setText(str(calibr_fact))
+        datos = EquiposService.calibracion_actual('Electrómetro', modelo, serie)
+        if datos:
+            self.line_cal_elec.setText(str(datos["calibr_fact"]))
 
     def generar_tablas(self, titulos):
         if hasattr(self, 'tabla_medidas_widget'):

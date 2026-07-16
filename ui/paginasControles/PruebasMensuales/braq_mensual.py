@@ -8,6 +8,7 @@ from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 from data.ManejoDatos.load import (mostrar_db_mensualBraqui, verificar_editar, verificar_eliminar, guardarEdicion,
                                     cancelarEdicion, guardar_resultado_CambioFuente)
 from data.ManejoDatos.conection import Conexion
+from services.equipos_service import EquiposService
 from analisisImagenes.ActividadFuente import  *
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 import traceback
@@ -396,17 +397,8 @@ class PruebaMensualBraq(PruebaBasico):
         self.line_cal     = self.widgets['calibracion']   # QLineEdit calibración
         self.line_cal_elec = self.widgets['electrometro']  # QLineEdit calibración electómetro
         
-        # Llenar modelos cámara de pozo (solo activos)
-        conn = Conexion().conectar()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT DISTINCT model FROM equipos 
-            WHERE equip_type='Cámara de pozo' AND activo=1
-            AND id IN (
-                SELECT MAX(id) FROM equipos GROUP BY serie
-            )
-        """)
-        modelos_pozo = [row[0] for row in cur.fetchall()]
+        # Llenar modelos cámara de pozo (fila actual por vigente, H2.10)
+        modelos_pozo = EquiposService.modelos_actuales('Cámara de pozo')
         self.combo_modelo.addItems(modelos_pozo)
 
         # Conectar señales
@@ -419,46 +411,28 @@ class PruebaMensualBraq(PruebaBasico):
         self.combo_serie_elec  = self.widgets['serie_ele']     # QComboBox serie electómetro
         self.line_cal_elec     = self.widgets['electrometro']  # QLineEdit calibración electómetro
 
-        # Llenar modelos electómetro (solo activos)
-        cur.execute("""
-            SELECT DISTINCT model FROM equipos 
-            WHERE equip_type='Electrómetro' AND activo=1
-            AND id IN (
-                SELECT MAX(id) FROM equipos GROUP BY serie
-            )
-        """)
-        modelos_elec = [row[0] for row in cur.fetchall()]
+        # Llenar modelos electómetro (fila actual por vigente, H2.10)
+        modelos_elec = EquiposService.modelos_actuales('Electrómetro')
         self.combo_modelo_elec.addItems(modelos_elec)
 
         # Conectar señales
         self.combo_modelo_elec.currentTextChanged.connect(self.on_modelo_elec_cambio)
         self.combo_serie_elec.currentTextChanged.connect(self.on_serie_elec_cambio)
-        
-        conn.close()
 
     def on_modelo_pozo_cambio(self, modelo):
 
         print("\non_modelo_pozo_cambio called with modelo:", modelo)
 
-        """Cuando seleccionan un modelo de cámara de pozo, llenar las series"""
+        """Cuando seleccionan un modelo de cámara de pozo, llenar las series (fila actual por vigente, H2.10)"""
         self.combo_serie.clear()
         self.combo_serie.addItem("Seleccionar Serie...")
 
-        conn = Conexion().conectar()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT serie, activo, vigente FROM equipos 
-            WHERE equip_type='Cámara de pozo' AND model=?
-            AND id IN (
-                SELECT MAX(id) FROM equipos GROUP BY serie
-            )
-        """, (modelo,))
-        equipos_data = cur.fetchall()
-        
+        equipos_data = EquiposService.series_actuales('Cámara de pozo', modelo)
+
         # Solo agregar equipos activos
         series_activas = []
         equipos_no_vigentes = []
-        
+
         for row in equipos_data:
             serie, activo, vigente = row
             print(modelo, serie, activo, vigente)
@@ -466,9 +440,9 @@ class PruebaMensualBraq(PruebaBasico):
                 series_activas.append(serie)
                 if vigente == 0.0:  # Si no está vigente, recordarlo
                     equipos_no_vigentes.append(serie)
-        
+
         self.combo_serie.addItems(series_activas)
-        
+
         # Marcar en rojo los no vigentes y agregar indicador visual
         for serie in equipos_no_vigentes:
             index = self.combo_serie.findText(serie)
@@ -478,9 +452,6 @@ class PruebaMensualBraq(PruebaBasico):
                 #item.setData(Qt.BackgroundRole, QColor(255, 240, 240))  # Fondo ligeramente rojizo
                 item.setText(f"⚠️ {serie} (VENCIDO)")  # Modificar el texto para ser más visible
                 item.setToolTip("⚠️ Calibración vencida - Requiere recalibración")  # Tooltip
-                
-        
-        conn.close()
 
     def on_serie_pozo_cambio(self, serie):
         """Cuando seleccionan serie de cámara de pozo, llenar valores de calibración"""
@@ -491,18 +462,10 @@ class PruebaMensualBraq(PruebaBasico):
         if not serie or serie == "Seleccionar Serie...":
             return
 
-        conn = Conexion().conectar()
-        cur = conn.cursor()
-        cur.execute("""SELECT calibr_fact, t_cal, p_cal, h_cal
-                    FROM equipos 
-                    WHERE equip_type='Cámara de pozo' AND model=? AND serie=?
-                    AND id IN (
-                    SELECT MAX(id) FROM equipos GROUP BY serie)
-                    """,(modelo, serie))
-        row = cur.fetchone()
-        if row:
-            calibr_fact = row[0]
-            t_cal, p_cal, h_cal = row[1], row[2], row[3]
+        datos = EquiposService.calibracion_actual('Cámara de pozo', modelo, serie)
+        if datos:
+            calibr_fact = datos["calibr_fact"]
+            t_cal, p_cal, h_cal = datos["t_cal"], datos["p_cal"], datos["h_cal"]
             p_cal = round(float(p_cal)*7.50062,2)
             self.line_cal.setText(str(calibr_fact))
             self.t0.setText(str(t_cal))
@@ -513,34 +476,25 @@ class PruebaMensualBraq(PruebaBasico):
   
         
     def on_modelo_elec_cambio(self, modelo):
-        """Cuando selecciona un modelo de electrómetro, llenar las series (solo última versión por serie)"""
+        """Cuando selecciona un modelo de electrómetro, llenar las series (fila actual por vigente, H2.10)"""
         self.combo_serie_elec.clear()
         self.combo_serie_elec.addItem("Seleccionar Serie...")
 
-        conn = Conexion().conectar()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT serie, activo, vigente FROM equipos
-            WHERE equip_type='Electrómetro' AND model=?
-            AND id IN (
-                SELECT MAX(id) FROM equipos GROUP BY serie
-            )
-        """, (modelo,))
-        equipos_data = cur.fetchall()
-        
+        equipos_data = EquiposService.series_actuales('Electrómetro', modelo)
+
         # Solo agregar equipos activos
         series_activas = []
         equipos_no_vigentes = []
-        
+
         for row in equipos_data:
             serie, activo, vigente = row
             if activo == 1.0:  # Solo equipos activos
                 series_activas.append(serie)
                 if vigente == 0.0:  # Si no está vigente, recordarlo
                     equipos_no_vigentes.append(serie)
-        
+
         self.combo_serie_elec.addItems(series_activas)
-        
+
         # Marcar en rojo los no vigentes y agregar indicador visual
         for serie in equipos_no_vigentes:
             index = self.combo_serie_elec.findText(serie)
@@ -550,8 +504,6 @@ class PruebaMensualBraq(PruebaBasico):
                 #item.setData(Qt.BackgroundRole, QColor(255, 240, 240))  # Fondo ligeramente rojizo
                 item.setText(f"⚠️ {serie} (VENCIDO)")  # Modificar el texto para ser más visible
                 item.setToolTip("⚠️ Calibración vencida - Requiere recalibración")  # Tooltip
-        
-        conn.close()
 
     def on_serie_elec_cambio(self, serie):
         """Cuando seleccionan serie de electrómetro, llenar factor de calibración"""
@@ -561,19 +513,9 @@ class PruebaMensualBraq(PruebaBasico):
         if not serie or serie == "Seleccionar Serie...":
             return
 
-        conn = Conexion().conectar()
-        cur = conn.cursor()
-        cur.execute("""SELECT calibr_fact
-                    FROM equipos 
-                    WHERE equip_type='Electrómetro' AND model=? AND serie=?
-                    AND id IN (
-                        SELECT MAX(id) FROM equipos GROUP BY serie
-                    )
-                """,(modelo, serie))
-        row = cur.fetchone()
-        if row:
-            calibr_fact = row[0]
-            self.line_cal_elec.setText(str(calibr_fact))
+        datos = EquiposService.calibracion_actual('Electrómetro', modelo, serie)
+        if datos:
+            self.line_cal_elec.setText(str(datos["calibr_fact"]))
 
     """Crea la tabla en la que se puede ingresar las medidas de los máximos de la cámara                                                                                                                                """
     def generar_tabla_medidas(self):

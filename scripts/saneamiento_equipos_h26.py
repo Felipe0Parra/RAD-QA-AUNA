@@ -1,4 +1,5 @@
-"""Saneamiento del catálogo `equipos` (H2.6, PLAN_FASE_H, 2026-07-16).
+"""Saneamiento del catálogo `equipos` (H2.6, PLAN_FASE_H, 2026-07-16;
+extendido en H2.10, mismo día, hallazgo posterior a H2.6).
 
 Origen de los cambios: 7 certificados de calibración reales (ADCL University
 of Wisconsin + PTW-Freiburg, compilados por el físico en
@@ -6,7 +7,7 @@ of Wisconsin + PTW-Freiburg, compilados por el físico en
 `equipos` en `AUNA_2026_2/BaseDatosQA.db`. Cada cambio de esta lista está
 justificado por un certificado o por confirmación explícita del físico
 (nunca por criterio propio sobre un valor clínico) -- ver el detalle en
-CLAUDE.md, entrada "H2.6 EJECUTADA".
+CLAUDE.md, entradas "H2.6 EJECUTADA" y "H2.10 EJECUTADA".
 
 Cambios, por categoría:
   1. Unificación TN->N (misma cámara física, dos prefijos en el catálogo):
@@ -32,6 +33,20 @@ Cambios, por categoría:
   5. Deduplicación de filas idénticas (N31022 x5, N31010/1822 x2, N34001/1069
      x2, electrómetro CDX-2000B x2): se conserva la más completa (con
      fabricante), el resto queda histórico.
+  6. (H2.10) Pozo A972662 vigente (id 16): mismo bug que el punto 2 pero en
+     el coeficiente de calibración de pozo (Air Kerma Strength) -- t_cal/
+     p_cal tenían las condiciones AMBIENTALES (21.4°C/98.52 kPa) en vez de
+     las de REFERENCIA del certificado HDR12115 (22°C/101.325 kPa). El
+     valor 466700 y la fecha 07/02/2024 ya estaban correctos (H2.6 solo
+     arregló la escala, no las condiciones). Hoy este campo es solo de
+     referencia visual (no se lee en ninguna fórmula), pero debe quedar
+     correcto igual -- es una magnitud clínicamente esencial (fuerza de
+     kerma en aire de la fuente de Ir-192), no un dato decorativo.
+  7. (H2.10) Electrómetro CDX-2000B/B091982: la fila id 18 (calibración
+     05/02/2024) seguía con vigente=1 al mismo tiempo que la fila id 79
+     (recalibración 17/03/2026, también vigente=1) -- dos vigentes
+     simultáneas para la misma serie. Se marca id 18 histórica
+     (vigente=0); id 79 queda como la única vigente.
 
 Política deliberada: NUNCA se borra una fila (conservar todo el histórico,
 igual que en la fusión de BD de 2026-07-03). Las filas redundantes quedan
@@ -157,6 +172,22 @@ CAMBIOS = [
                          "recalibracion 2026) -- queda historico",
      "antes": {"activo": 1, "vigente": 1},
      "despues": {"activo": 0, "vigente": 0}},
+
+    {"id": 16, "motivo": "(H2.10) Pozo A972662 vigente: t_cal/p_cal tenian "
+                         "las condiciones AMBIENTALES (21.4C/98.52kPa) en "
+                         "vez de las de REFERENCIA (22C/101.325kPa, ver "
+                         "certificado HDR12115) -- mismo bug que id13/id7, "
+                         "hallado al investigar por que A972662 desaparecio "
+                         "del selector de braquiterapia tras H2.6",
+     "antes": {"t_cal": 21.4, "p_cal": 98.52},
+     "despues": {"t_cal": 22.0, "p_cal": 101.325}},
+    {"id": 18, "motivo": "(H2.10) Electrometro CDX-2000B/B091982: fila "
+                         "vieja (05/02/2024) seguia vigente=1 a la vez que "
+                         "la recalibracion id79 (17/03/2026, tambien "
+                         "vigente=1) -- dos vigentes simultaneas para la "
+                         "misma serie; queda historica",
+     "antes": {"vigente": 1},
+     "despues": {"vigente": 0}},
 ]
 
 
