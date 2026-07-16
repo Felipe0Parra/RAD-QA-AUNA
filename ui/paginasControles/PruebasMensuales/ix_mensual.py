@@ -231,7 +231,14 @@ class PruebaMensualIX(PruebaMensual600):
                 cursor.execute(sql, datos)
 
             else:
-                columnas_update = [col for col in columnas if col not in ("ref", "energia")]
+                # H2.8 (auditoría 2026-07-16): UPDATE solo de columnas con
+                # widget presente en ESTA energía -- mismo fix que
+                # subirlineasmensuales (load.py); ver ahí el caso concreto
+                # (panel MLCS de Halcyon) que motivó el cambio.
+                columnas_update = [col for col in columnas
+                                    if col not in ("ref", "energia") and col in campos_db]
+                if not columnas_update:
+                    continue
                 set_clause = ", ".join([f"{col} = ?" for col in columnas_update])
 
                 sql = f"""
@@ -240,7 +247,7 @@ class PruebaMensualIX(PruebaMensual600):
                     WHERE ref = ? AND energia = ?
                 """
 
-                datos_update = [campos_db.get(col, None) for col in columnas_update]
+                datos_update = [campos_db[col] for col in columnas_update]
                 datos_update.extend([ref, energia])
 
                 cursor.execute(sql, datos_update)

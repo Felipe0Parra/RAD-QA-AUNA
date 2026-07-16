@@ -209,12 +209,20 @@ class PruebaMensualHc(PruebaMensual600):
 
         try:
             # 1. Constancia del haz de radiación
-            # Configura los widgets en el layout de category5
             self.addsomething(self.category3, df, "dosimetria",
                             "dosimetriaMen", 0, ref=self.ref)
-            self.addsomething(self.category5, df, "mlcs",
-                            "dosimetriaMen", 0, ref=self.ref)
-            # Agrega category5 como item al subtool3
+            # H2.8 (auditoría 2026-07-16): category5 ("mlcs") en Halcyon solo
+            # tiene el widget suelto `ln_action_tolerance` -- a diferencia
+            # del iX, Halcyon NUNCA tuvo el panel real de análisis Picket
+            # Fence (título, botón de subir imagen, `_configurar_mlcs`, que
+            # aquí ni se llama). Conectarlo a addsomething/"Subir" lo trataba
+            # como un campo más de dosimetriaMen: como "action_tolerance" no
+            # es ninguna columna real de esa tabla, pulsar "Subir" ahí
+            # ponía en NULL (via UPDATE) toda la dosimetría ya guardada del
+            # mes. Se desconecta del guardado hasta que se construya el
+            # análisis real (ver PLAN_FASE_H, H2.9 propuesta) -- el campo
+            # queda visible pero sin botón ni guardado, igual de
+            # no-funcional que antes, sin el riesgo de borrar datos.
             self.subtool1.addItem(self.category3, "Constancia del haz de radiación")
             self.subtool2.addItem(self.category5, "MLCs")
         except Exception as e:

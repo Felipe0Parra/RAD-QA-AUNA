@@ -461,10 +461,23 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
     if cursor.fetchone() is None:
         sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
     else:
-        set_clause = ", ".join([f"{col} = ?" for col in columnas_lista if col != "ref"])
+        # H2.8 (auditoría 2026-07-16): el UPDATE SOLO toca columnas con un
+        # widget presente en ESTE guardado -- antes ponía en NULL cualquier
+        # columna del esquema sin widget correspondiente (p.ej. el panel
+        # MLCS de Halcyon, con un único widget ajeno a dosimetriaMen, borraba
+        # TODA la dosimetría ya guardada de ese mes con solo pulsar "Subir"
+        # ahí). Si este guardado no aporta NINGUNA columna real, no hay nada
+        # que actualizar -- no se toca la fila existente.
+        columnas_a_actualizar = [col for col in columnas_lista
+                                  if col != "ref" and col in valores_por_columna]
+        if not columnas_a_actualizar:
+            print(f"Nada que actualizar en {nombre_tabla} para ref={ref} "
+                  "(ningún widget de este guardado corresponde a una columna real).")
+            cursor.close()
+            return
+        set_clause = ", ".join([f"{col} = ?" for col in columnas_a_actualizar])
         sql = f"UPDATE {nombre_tabla} SET {set_clause} WHERE ref = ?"
-        datos.pop(0)
-        datos.append(ref)
+        datos = [valores_por_columna[col] for col in columnas_a_actualizar] + [ref]
 
     try:
         cursor.execute(sql, datos)
