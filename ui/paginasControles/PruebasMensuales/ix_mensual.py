@@ -2,11 +2,9 @@ from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QPushButton, QSplitter, QMess
 from PyQt5.QtCore import Qt, QDate
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual
-from data.ManejoDatos.load import mostrar_controles_mensuales, encontrar_columnas
+from data.ManejoDatos.load import mostrar_controles_mensuales, encontrar_columnas, widget_a_columna
 from data.ManejoDatos.conection import Conexion
-from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
-import json, traceback
-import os
+import traceback
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 from services.audit_minimo import registrar as _registrar_auditoria
 
@@ -158,51 +156,37 @@ class PruebaMensualIX(PruebaMensual600):
         # print(f"Valores revisados {leidos}")
         return not campos_vacios
     
+    def _campos_de_energia(self, df_lines, energia):
+        """Widgets de dosimetría que pertenecen a UNA energía del iX: los que
+        llevan su sufijo (todos lo llevan en la hoja del iX, tolerancias y
+        val_teo incluidos) más el de observaciones, que es compartido.
+
+        H2.7: antes el filtro incluía ln_tolerancia_* de TODAS las energías
+        (con la vieja normalización local eran claves inertes que no
+        colisionaban); con la normalización compartida `widget_a_columna`
+        (que quita CUALQUIER sufijo de energía) habrían colisionado entre
+        energías -- por eso el filtro exige el sufijo de ESTA energía."""
+        return [
+            c for c in df_lines
+            if c.endswith("_" + energia) or c == "ln_observaciones_dosi"
+        ]
+
     def subirlineasmensuales_ix(self, nombre_tabla, num_delet, ref, usarid, df_lines):
         print("\nEntra a subirlineasmensuales_ix de la clase PruebaMensualIX")
-        
-        ENERGIAS_IX = ["6mv", "15mv", "6mev", "9mev", "12mev", "15mev"]
-
-        def normalizar_nombre(nombre, energia):
-            """
-            Quita prefijo 'ln_' y el sufijo '_energia' cuando corresponda.
-            Mapea nombres especiales.
-            Ej:
-                ln_dosis_ref_cgy_um_6mv -> dosis_ref_cgy_um
-                ln_tolerancia_dosis     -> tolerancia_dosis
-                ln_calidad_j2_j1_6mv    -> calidad_pdd20_10
-                val_teo_6mv             -> val_teo
-            """
-            # --- Casos especiales ---
-            if nombre.startswith("ln_calidad_j2_j1_"):
-                nombre = nombre.replace("ln_calidad_j2_j1_", "calidad_pdd20_10_")
-
-            # --- Limpieza genérica ---
-            nombre = nombre.replace("ln_", "")
-            
-            # Quitar sufijo de energía si existe
-            if nombre.endswith("_" + energia):
-                nombre = nombre[:-(len(energia)+1)]
-
-            return nombre
 
         conn = Conexion().conectar()
         cursor = conn.cursor()
 
-        for energia in ENERGIAS_IX:
+        for energia in self.ENERGIAS:
             # --- 1. Filtrar los QLineEdit que corresponden a esta energía ---
-            campos_energia = [
-                c for c in df_lines
-                if (c.endswith("_" + energia)) or
-                (c.startswith("ln_tolerancia_")) or
-                (c.startswith("val_teo_") and c.endswith("_" + energia)) or
-                (c == "ln_observaciones_dosi")
-            ]
+            campos_energia = self._campos_de_energia(df_lines, energia)
 
             # --- 2. Convertirlos en {columna_sql: valor} ---
+            # widget_a_columna: la MISMA normalización que usa la recarga
+            # (_cargar_dosimetria_bd_ix) y el guardado del 600 -- H2.7.
             campos_db = {}
             for line in campos_energia:
-                col = normalizar_nombre(line, energia)
+                col = widget_a_columna(line)
                 dato = getattr(self, line).text().strip()
                 if not dato:
                     campos_db[col] = None
@@ -269,83 +253,72 @@ class PruebaMensualIX(PruebaMensual600):
         QMessageBox.information(self, "Éxito", "Datos guardados en la base de datos.")
         cursor.close()
 
-    def addsomething_ix(self, layout, df, typee, filename, nombre_tabla, datos_eliminar, ref, usarid=False):
+    def _cargar_dosimetria_bd_ix(self, df_lines, nombre_tabla, ref):
+        """Rellena los widgets de dosimetría del iX desde la BD, POR NOMBRE
+        de columna (H2.7). Devuelve True si había al menos una energía
+        guardada.
+
+        Antes este mapeo era POSICIONAL (una lista fija de 14 nombres de
+        widget contra row[1:14], que son solo 13 valores) y además asumía un
+        orden de columnas que no es el de la BD de producción (que tiene
+        val_teo_dosis Y val_teo_calidad): al reabrir un control guardado,
+        TODOS los campos después de val_teo se mostraban corridos una
+        posición -- p. ej. la "calidad" mostraba la tolerancia de dosis. Ese
+        es el "dato que se carga solo en calidad y no es lo que guardé" que
+        el físico reportó el 14-07. Mapear por nombre con la misma
+        `widget_a_columna` del guardado hace imposible que vuelvan a
+        divergir."""
+        conn = Conexion().conectar()
+        cursor = conn.cursor()
+        encontrado = False
+        for energia in self.ENERGIAS:
+            cursor.execute(
+                f"SELECT * FROM {nombre_tabla} WHERE ref = ? AND energia = ?",
+                (ref, energia))
+            row = cursor.fetchone()
+            if row is None:
+                continue
+            encontrado = True
+            fila = dict(zip([d[0] for d in cursor.description], row))
+            for line_name in self._campos_de_energia(df_lines, energia):
+                col = widget_a_columna(line_name)
+                if col in fila and hasattr(self, line_name):
+                    valor = fila[col]
+                    getattr(self, line_name).setText(
+                        str(valor) if valor is not None else "")
+        cursor.close()
+        return encontrado
+
+    def addsomething_ix(self, layout, df, typee, nombre_tabla, datos_eliminar, ref, usarid=False):
         print("\nEntra a addsomething_ix de la clase PruebaMensualIX")
         """
-        Versión de addsomething para IX.
-        Maneja las 5 energías distintas, guardando cada set de QLineEdit en la tabla con un campo extra 'energia'.
-        Incluye campos de tolerancia (ln_tolerancia_*), que son comunes a todas las energías.
+        Versión de addsomething para IX: maneja las 6 energías, guardando
+        cada set de QLineEdit en la tabla con un campo extra 'energia'.
+
+        H2.7 (decisión del físico 2026-07-15): se eliminó el borrador JSON
+        local (botón "Guardar" + carga al abrir). La BD, vía "Subir"
+        (INSERT/UPDATE por ref+energia), es la ÚNICA fuente. De paso esto
+        elimina de raíz la inconsistencia que tenía el iX: el borrador se
+        cargaba DESPUÉS de la BD y la pisaba (en 600/Halcyon la BD ganaba).
         """
-        ENERGIAS_IX = ["6mv", "15mv", "6mev", "9mev", "12mev","15mev"]
-
-        # [0] Anclar el JSON de campos junto a la BD (independiente del cwd)
-        filename = _conection.ruta_datos(filename)
-
         # [1] Filtra QLineEdit para la prueba "dosimetria"
         df_lines = df.loc[(df.widget_type.str.contains('QLineEdit')) & (df.prueba == f'{typee}')]['nombres']
         df_lines = [line for line in df_lines]
-        
-        #print(f"\nPrueba: {typee}")
-        #print(f"\nCampos QLineEdit para {typee} en {nombre_tabla} (IX):\n →:df_lines: {df_lines}")
+
         layout = layout.layout()
 
-        # [2] Intentar cargar desde BD (para cada energía)
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
+        # [2] Cargar lo ya guardado en BD (si existe), por nombre de columna
+        self._cargar_dosimetria_bd_ix(df_lines, nombre_tabla, ref)
 
-        datos_existentes = {}
-        for energia in ENERGIAS_IX:
-            cursor.execute(f"SELECT * FROM {nombre_tabla} WHERE ref = ? AND energia = ?", (ref, energia))
-            row = cursor.fetchone()
-            #print(f"Consulta en addsomething_ix: {row}")
-            if row:
-                datos_existentes[energia] = row
-
-        if datos_existentes:
-            # rellenar y bloquear
-            for energia in ENERGIAS_IX:
-                if energia in datos_existentes:
-                    row = datos_existentes[energia]
-                    # row[1:14] son los campos de datos, row[14] es energia
-                    datos = list(row)[1:14]  # campos de datos (sin ref y energia)
-                    # Mapeo especial para calidad
-                    campos_energia = [
-                        f"val_teo_{energia}",
-                        f"ln_dosis_ref_cgy_um_{energia}",
-                        f"ln_discrepancia_dosis_{energia}",
-                        f"ln_tolerancia_dosis_{energia}",
-                        f"ln_calidad_pdd20_10_{energia}" if f"ln_calidad_pdd20_10_{energia}" in df_lines else f"ln_calidad_j2_j1_{energia}",
-                        f"ln_discrepancia_calidad_{energia}",
-                        f"ln_tolerancia_calidad_{energia}",
-                        f"ln_simetria_inplane_{energia}",
-                        f"ln_simetria_crossplane_{energia}",
-                        f"ln_tolerancia_simetria_{energia}",
-                        f"ln_planicidad_inplane_{energia}",
-                        f"ln_planicidad_crossplane_{energia}",
-                        f"ln_tolerancia_planicidad_{energia}",
-                        'ln_observaciones_dosi'
-                    ]
-                    # Solo usa los widgets que existen en df_lines
-                    campos_energia = [c for c in campos_energia if c in df_lines]
-                    for line_name, valor in zip(campos_energia, datos):
-                        campo = getattr(self, line_name)
-                        #campo.setReadOnly(True)
-                        campo.setText(str(valor) if valor is not None else "")
-            #print(f"\nCampos energia: { campos_energia}")
-            #print(f"\nDatos existentes: {datos_existentes}")
-        
- 
-        # [3] Crear botones si no hay datos en BD
+        # [3] Crear botones
         if layout is not None:
             buttonLayout = QHBoxLayout()
             btn_guardar = QPushButton("Subir")
-            btn_salvar = QPushButton("Guardar")
             # D4.2 (PLAN_FASE_K_D4.md): autollenado de simetría/planicidad
             # desde .mcc -- seleccionar_carpeta_mcc es de PruebaMensual600
             # (compartido con 600, ver docstring ahí).
             self.btn_mcc = QPushButton("Cargar carpeta .mcc")
             self.btn_mcc.clicked.connect(self.seleccionar_carpeta_mcc)
-            buttonLayout.addWidget(btn_salvar)
             buttonLayout.addWidget(btn_guardar)
             buttonLayout.addWidget(self.btn_mcc)
             btn_calculadora = QPushButton("Calculadora de Dosis")
@@ -363,35 +336,7 @@ class PruebaMensualIX(PruebaMensual600):
             else:
                 btn_guardar.setEnabled(True)
 
-        # [4] Intentar cargar desde JSON -- SOLO si el _contexto (equipo+mes)
-        # coincide con el actual (H2.1, auditoría 2026-07-14): antes un
-        # borrador de dict/lista sin contexto se cargaba siempre, aunque
-        # fuera de otro mes -- "la calidad que se carga sola" que reportó
-        # el físico. Formato viejo (sin "_contexto") se trata como
-        # sin-contexto y NO se carga (ver _extraer_campos_de_borrador).
-        try:
-            with open(filename, "r") as f:
-                datos_cargados = json.load(f)
-            campos = self._extraer_campos_de_borrador(datos_cargados)
-            if campos:
-                for line_name, valor in campos.items():
-                    if hasattr(self, line_name):
-                        getattr(self, line_name).setText(str(valor) if valor is not None else "")
-        except Exception as e:
-            print("Error al cargar datos:", e)
-
-        # [5] Guardar en JSON local (dict envuelto en _contexto/campos -- H2.1)
-        def guardar_lines():
-            campos = {
-                line: getattr(self, line).text().strip()
-                for line in df_lines
-            }
-            datos_guardar = {"_contexto": self._contexto_borrador(), "campos": campos}
-            with open(filename, "w") as f:
-                json.dump(datos_guardar, f, indent=4)
-            updateSubirButton()
-
-        # [6] Subir a BD (para cada energía)
+        # [4] Subir a BD (para cada energía)
         def subir():
             if not self._confirmar_campos_mcc_sin_revisar():
                 return
@@ -399,7 +344,7 @@ class PruebaMensualIX(PruebaMensual600):
                 subidos = []
                 self.subirlineasmensuales_ix(nombre_tabla, datos_eliminar, ref=ref, usarid=usarid, df_lines=df_lines)
                 for line in df_lines:
-                  
+
                     dato = getattr(self, line)
                     dato.setReadOnly(False)
                     subidos.append(dato.text().strip() if dato.text().strip() else None)
@@ -408,23 +353,12 @@ class PruebaMensualIX(PruebaMensual600):
             except Exception as e:
                 print("Error al subir datos IX:", e)
                 return
-           # self.bloquearboton(btn_guardar)
-            #btn_salvar.hide()
             mostrar_controles_mensuales(None, self.tabla, equipo_filtrar=self.equipo_f)
 
         btn_guardar.clicked.connect(subir)
-        #btn_guardar.clicked.connect()
-        # self._actualizar_tabla_despues_subida()
-        # btn_guardar.clicked.connect(lambda: self.cargarDatosEditados(self.item, self.old_value, "aceleradorlineal_ix"))
-        # btn_guardar.clicked.connect(lambda: load_table(self, self.boolean_colums, self.dosis_ix, 'aceleradorlineal_ix'))
-        # accept_edit.clicked.connect(lambda:asignar_encabezados(self, 'aceleradorlineal_ix'))
-        
-        
-        # self.cancel_edit.clicked.connect(lambda: self.cancelarEdicion(self.item, self.old_value))
-        btn_salvar.clicked.connect(guardar_lines)
-        
+
         for line in df_lines:
-         
+
             if line != "observaciones":
                 dato = getattr(self, line)
                 dato.textChanged.connect(updateSubirButton)

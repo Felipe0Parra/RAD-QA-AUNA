@@ -352,11 +352,16 @@ class Conexion():
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
         )  
         """
-        # Tabla de datos relacionados con la dosis
+        # Tabla de datos relacionados con la dosis.
+        # H2.7: el DDL decía `val_teo_discrepancia`, pero la BD de PRODUCCIÓN
+        # tiene `val_teo_dosis` + `val_teo_calidad` -- toda BD fresca (tests,
+        # instalación nueva) nacía con un esquema divergente del real. Se
+        # alinea con producción (CREATE IF NOT EXISTS: no toca BDs existentes).
         sql_create_table12 = """
         CREATE TABLE IF NOT EXISTS dosimetriaMen (
             ref INTEGER,
-            val_teo_discrepancia REAL,
+            val_teo_dosis REAL,
+            val_teo_calidad REAL,
             dosis_ref_cgy_um INTEGER,
             discrepancia_dosis INTEGER,
             tolerancia_dosis INTEGER,

@@ -175,9 +175,8 @@ class PruebaAnualIX(PruebaAnual600):
         try:
             button_layout = QHBoxLayout()
             btn_guardar = QPushButton("Subir")
-            btn_salvar = QPushButton("Guardar")
-            
-            button_layout.addWidget(btn_salvar)
+            # H2.7: el botón "Guardar" (borrador JSON local,
+            # _guardar_tabla_optimizada) se eliminó -- BD única fuente.
             button_layout.addWidget(btn_guardar)
             layout.addLayout(button_layout)
 
@@ -225,11 +224,9 @@ class PruebaAnualIX(PruebaAnual600):
                     )
                 
                 self.bloquearboton(btn_guardar)
-                btn_salvar.hide()
                 self._actualizar_tabla_despues_subida()
                 print(f"Tabla(s) {nombre_tabla} subida(s) correctamente")
 
-            btn_salvar.clicked.connect(lambda: self._guardar_tabla_optimizada(table, nombre_tabla))
             btn_guardar.clicked.connect(guardar_todas_fse)
         except Exception as e:
             print(f"Error agregando botones: {e}")

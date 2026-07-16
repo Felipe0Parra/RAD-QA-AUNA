@@ -192,7 +192,7 @@ class PruebaAnualHalcyon(PruebaAnual600):
                 lay_contenedor_ad = self.category5.layout()
 
             self.addsomething(self.category5, self.df, "aspectos_dosimetricos",
-                            "dosimetria.json", "HC_dosimetria_anual", 0, ref=self.ref, usarid=True, anual=True)
+                            "HC_dosimetria_anual", 0, ref=self.ref, usarid=True, anual=True)
 
             btn_reporte = QPushButton("Generar Reporte PDF")
             lay_contenedor_ad.addWidget(btn_reporte)

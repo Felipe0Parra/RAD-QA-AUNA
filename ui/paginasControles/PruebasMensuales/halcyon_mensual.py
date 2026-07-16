@@ -211,9 +211,9 @@ class PruebaMensualHc(PruebaMensual600):
             # 1. Constancia del haz de radiación
             # Configura los widgets en el layout de category5
             self.addsomething(self.category3, df, "dosimetria",
-                            "dosimetria.json", "dosimetriaMen", 0, ref=self.ref)
+                            "dosimetriaMen", 0, ref=self.ref)
             self.addsomething(self.category5, df, "mlcs",
-                            "dosimetria.json", "dosimetriaMen", 0, ref=self.ref)
+                            "dosimetriaMen", 0, ref=self.ref)
             # Agrega category5 como item al subtool3
             self.subtool1.addItem(self.category3, "Constancia del haz de radiación")
             self.subtool2.addItem(self.category5, "MLCs")

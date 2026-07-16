@@ -383,6 +383,28 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
 ENERGIAS = {"6mv", "15mv", "6mev", "9mev", "12mev", "15mev", "9mv"}  # energías
 
 def widget_a_columna(line, energias=ENERGIAS):
+    """ÚNICA traducción nombre-de-widget -> columna de dosimetriaMen, usada
+    tanto al GUARDAR (subirlineasmensuales / subirlineasmensuales_ix) como al
+    CARGAR (_rellenar_campos / _cargar_dosimetria_bd_ix). H2.7: antes cada
+    ruta tenía su propia normalización (una función anidada en el iX, un
+    removeprefix en la carga del 600) y ya habían divergido -- la carga del
+    600 buscaba columnas con el nombre del widget sin normalizar (no
+    encontraba ninguna) y la del iX mapeaba POR POSICIÓN (valores corridos).
+
+    Casos especiales:
+    - lbl_*: tablas tipo `preguntas`, la columna es el nombre sin prefijo.
+    - ln_calidad_j2_j1_{e} (electrones) y ln_calidad_pdd20_10_{e} (fotones)
+      son el MISMO concepto y comparten la columna calidad_pdd20_10.
+    - val_teo_{e} es la CALIDAD teórica (ver discrepancias():
+      VALORES_REFERENCIA_CALIDAD -- 0.665/0.761/... coincide con la columna
+      val_teo_calidad de la BD de producción, no con val_teo_dosis).
+    """
+    if line.startswith("lbl_"):
+        return line.removeprefix("lbl_")
+    if line.startswith("ln_calidad_j2_j1_"):
+        line = line.replace("ln_calidad_j2_j1_", "ln_calidad_pdd20_10_")
+    if line.startswith("val_teo_"):
+        return "val_teo_calidad"
     nombre = line.removeprefix("ln_")
     for e in energias:
         if nombre.endswith(f"_{e}"):

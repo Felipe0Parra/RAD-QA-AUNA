@@ -8,9 +8,8 @@ from PyQt5.QtGui import QColor
 from models.PDF.pdf import generar_reporte_mlc_pdf, generar_reporte_starshot_pdf
 from data.ManejoDatos.load import *
 from data.ManejoDatos.conection import Conexion
-from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
 from data.ManejoDatos.Tablas_Anuales.tablas_anuales import mostrar_controles_anuales
-import os, json, traceback, sqlite3
+import os, traceback, sqlite3
 from functools import lru_cache
 from analisisImagenes.Analisis_PlacaCuadrada import analizar_cuadrado2,  generar_reporte_completo
 from resources.utils.matplotlib_lazy import get_matplotlib_components
@@ -78,48 +77,6 @@ class DatabaseManager:
                 pass
         self._connections.clear()
 
-# Caché para archivos JSON
-class FileCache:
-    _cache = {}
-    _cache_timestamps = {}
-    
-    @classmethod # el classmethod es necesario para acceder a variables de clase
-    def obtener_datos_json(cls, filename):
-        """Obtiene datos JSON desde caché o archivo"""
-        try:
-            file_path = os.path.abspath(filename)
-            if not os.path.exists(file_path):
-                return None
-                
-            file_mtime = os.path.getmtime(file_path)
-            
-            # Verificar si está en caché y no ha cambiado
-            if (file_path in cls._cache and 
-                file_path in cls._cache_timestamps and
-                cls._cache_timestamps[file_path] == file_mtime):
-                return cls._cache[file_path]
-            
-            # Leer archivo y actualizar caché
-            with open(file_path, "r", encoding='utf-8') as f:
-                data = json.load(f)
-                cls._cache[file_path] = data
-                cls._cache_timestamps[file_path] = file_mtime
-                return data
-                
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Error al leer archivo JSON {filename}: {e}")
-            return None
-        except Exception as e:
-            print(f"Error inesperado al leer {filename}: {e}")
-            
-            return None
-    
-    @classmethod
-    def limpiar_cache(cls):
-        """Limpia el caché de archivos"""
-        cls._cache.clear()
-        cls._cache_timestamps.clear()
-
 # Clase principal para el control mensual del Clinac 600
 class PruebaMensual600(PruebaBasico):
     # Constantes de configuración
@@ -170,8 +127,7 @@ class PruebaMensual600(PruebaBasico):
         print(equipo_f)
         # Gestores optimizados
         self.db_manager = DatabaseManager()
-        self.file_cache = FileCache()
-        
+
         # Referencias débiles para evitar referencias circulares
         self._cleanup_refs = []
         
@@ -224,11 +180,7 @@ class PruebaMensual600(PruebaBasico):
                 if timer and timer.isActive():
                     timer.stop()
             self._debounce_timers.clear()
-            
-            # Limpiar caché de archivos
-            if hasattr(self, 'file_cache'):
-                self.file_cache.limpiar_cache()
-            
+
             # Limpiar caché de modelos
             if hasattr(self, '_model_cache'):
                 self._model_cache.clear()
@@ -810,28 +762,23 @@ class PruebaMensual600(PruebaBasico):
             # Configurar aspectos mecánicos
             self.addsomething(
                 layout=self.category3, df=self.df, typee="aspectos mecanicos",
-                filename="preguntas.json", nombre_tabla='preguntas',
-                datos_eliminar=1, ref=self.ref
+                nombre_tabla='preguntas', datos_eliminar=1, ref=self.ref
             )
             # self.addsomething(
             #     layout=self.category5, df=self.df, typee="mlcs",
-            #     filename="preguntas.json", nombre_tabla='preguntas',
-            #     datos_eliminar=1, ref=self.ref
+            #     nombre_tabla='preguntas', datos_eliminar=1, ref=self.ref
             # )
-          
-            
-            
-        
+
             # Configurar dosimetría
             if hasattr(self, 'esIX') and self.esIX:
                 print("Configurando dosimetría para equipo IX")
                 self.addsomething_ix(self.category4, self.df, "dosimetria",
-                                 "dosimetria.json", "dosimetriaMen", 0, ref=self.ref, usarid=True)
-        
-             
+                                 "dosimetriaMen", 0, ref=self.ref, usarid=True)
+
+
             else:
                 self.addsomething(self.category4, self.df, "dosimetria",
-                                "dosimetria.json", "dosimetriaMen", 0, ref=self.ref)
+                                "dosimetriaMen", 0, ref=self.ref)
                 
                
             
@@ -1668,37 +1615,30 @@ class PruebaMensual600(PruebaBasico):
     
     
     # Añade widgets de tipo QLineEdit a un layout específico, con funcionalidad de carga y guardado de datos
-    def addsomething(self, layout, df, typee, filename, nombre_tabla, datos_eliminar, ref, usarid=False, anual=False):
-        """Añade widgets QLineEdit con funcionalidad optimizada de carga y guardado"""
-        try:
-            # [0] Anclar el JSON de campos junto a la BD (independiente del cwd)
-            filename = _conection.ruta_datos(filename)
+    def addsomething(self, layout, df, typee, nombre_tabla, datos_eliminar, ref, usarid=False, anual=False):
+        """Añade los QLineEdit de una prueba y los conecta al guardado en BD.
 
+        H2.7 (decisión del físico 2026-07-15): se eliminó el borrador JSON
+        local (botón "Guardar" + carga al abrir). La BD, vía el botón
+        "Subir" (INSERT si no existe / UPDATE si existe), es la ÚNICA fuente:
+        sin datos pegados de otro mes ni borradores que pisen lo guardado."""
+        try:
             # [1] Filtrar campos QLineEdit desde DataFrame
             df_lines = self._obtener_lineEdit(df, typee)
-            
+
             if not df_lines:
                 print(f"No se encontraron campos QLineEdit para {typee}")
                 return
-            
-            # [2] Intentar cargar desde BD
-            datos_en_bd = self._cargar_de_bd(df_lines, nombre_tabla, ref)
-            
-            # [3] Si NO hay datos en BD, cargar desde JSON
-            if not datos_en_bd:
-                self._cargar_json_cache(df_lines, filename)
-            
-            # [4] Crear botones UNA SOLA VEZ (después de cargar datos)
-            btn_guardar, btn_salvar, btn_calculadora = self._crear_accion_botones(layout)
-            
-            # [5] Configurar eventos SIEMPRE (sin importar si había datos o no)
-            self._configurar_eventos_campos(df_lines, btn_guardar, btn_salvar, filename, nombre_tabla, datos_eliminar, ref, usarid, anual=anual)
-            
-        except FileNotFoundError as e:
-            
-            print(f"Archivo no encontrado: {filename} - {e}")
-        except json.JSONDecodeError as e:
-            print(f"Error de formato JSON en {filename}: {e}")
+
+            # [2] Cargar lo ya guardado en BD (si existe)
+            self._cargar_de_bd(df_lines, nombre_tabla, ref)
+
+            # [3] Crear botones UNA SOLA VEZ (después de cargar datos)
+            btn_guardar, btn_calculadora = self._crear_accion_botones(layout)
+
+            # [4] Configurar eventos SIEMPRE (sin importar si había datos o no)
+            self._configurar_eventos_campos(df_lines, btn_guardar, nombre_tabla, datos_eliminar, ref, usarid, anual=anual)
+
         except ValueError as e:
             print(f"Error de validación en addsomething: {e}")
         except Exception as e:
@@ -1761,38 +1701,40 @@ class PruebaMensual600(PruebaBasico):
             if prueba1:
                 fila = prueba1[0]  # primera fila
                 datos_dict = dict(zip(nombres_columnas, fila))
-                self._rellenar_campos(df_lines, datos_dict, readonly=False)
+                self._rellenar_campos(df_lines, datos_dict, readonly=False,
+                                      nombre_tabla=nombre_tabla)
                 return True
         except Exception as e:
             print(f"Error al cargar desde BD: {e}")
         return False
 
-    def _procesar_datos_bd(self, prueba1, nombre_tabla):
-        """Procesa datos de la base de datos según el tipo de tabla"""
-        datos = prueba1
-        if nombre_tabla == 'dosimetriaMen':
-            datos = [t[1:] for t in datos]
-        else:
-            datos = [t[1:-1] for t in datos]
-        return list(datos[0])
-
-    def _rellenar_campos(self, df_lines, datos, readonly=False):
-        """Rellena campos con datos y establece modo de solo lectura si es necesario"""
+    def _rellenar_campos(self, df_lines, datos, readonly=False, nombre_tabla=None):
+        """Rellena los widgets desde un dict {columna_bd: valor}. H2.7: el
+        nombre de columna se deriva con la MISMA regla que usa el guardado
+        (subirlineasmensuales): widget_a_columna para dosimetriaMen,
+        removeprefix('lbl_') para el resto -- antes esta carga buscaba la
+        columna con el nombre crudo del widget (ln_dosis_ref_cgy_um_6mv) y
+        no encontraba NINGÚN campo de dosimetría al reabrir un control ya
+        guardado (solo observaciones sobrevivía)."""
         for line_name in df_lines:
-            nombre_col = line_name.removeprefix("lbl_")
+            if nombre_tabla == "dosimetriaMen":
+                nombre_col = widget_a_columna(line_name)
+            else:
+                nombre_col = line_name.removeprefix("lbl_")
             valor = datos.get(nombre_col)
-            
+
             campo = getattr(self, line_name, None)
             if campo and valor is not None:
                 campo.setReadOnly(readonly)
                 campo.setText(str(valor))
 
     def _crear_accion_botones(self, layout):
-        """Crea bot ones de acción optimizados, de subir y guardar"""
+        """Crea los botones de acción. H2.7: solo queda "Subir" (guardado
+        real en BD) -- el botón "Guardar" (borrador JSON local) se eliminó
+        por decisión del físico (2026-07-15)."""
         layout = layout.layout()
         buttonLayout = QHBoxLayout()
         btn_guardar = QPushButton("Subir")
-        btn_salvar = QPushButton("Guardar")
         btn_calculadora = None
 
 # Verificar condiciones para mostrar calculadora
@@ -1816,15 +1758,12 @@ class PruebaMensual600(PruebaBasico):
             buttonLayout.addWidget(self.btn_cargar_mcc)
 
         btn_guardar.setEnabled(True)
-        
-        buttonLayout.addWidget(btn_salvar)
-        buttonLayout.addWidget(btn_guardar)
-       
-        layout.addLayout(buttonLayout, 62, 0)
-       
-        
 
-        return btn_guardar, btn_salvar, btn_calculadora
+        buttonLayout.addWidget(btn_guardar)
+
+        layout.addLayout(buttonLayout, 62, 0)
+
+        return btn_guardar, btn_calculadora
 
     # ── D4.2: autollenado de simetría/planicidad desde .mcc ────────────────
     # Compartido entre PruebaMensual600 (6mv únicamente) y PruebaMensualIX
@@ -1947,55 +1886,13 @@ class PruebaMensual600(PruebaBasico):
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         return respuesta == QMessageBox.Yes
 
-    def _contexto_borrador(self):
-        """Clave de contexto (equipo+mes) para los borradores JSON -- H2.1
-        (auditoría 2026-07-14): antes dosimetria.json/tamano_campo.json eran
-        UN SOLO archivo por app (sin distinguir mes ni equipo), así que un
-        borrador de junio "aparecía" al abrir julio (hallazgo del físico en
-        producción). Si equipo_f/date_box no están listos todavía, devuelve
-        un contexto que nunca calza -- más seguro que heredar datos de otra
-        sesión."""
-        equipo = getattr(self, "equipo_f", None)
-        fecha = None
-        if hasattr(self, "date_box"):
-            try:
-                fecha = self.date_box.date().toString("MM/yyyy")
-            except Exception:
-                fecha = None
-        return {"equipo": equipo, "fecha": fecha}
-
-    def _extraer_campos_de_borrador(self, datos_cargados):
-        """Devuelve los "campos" de un borrador JSON SOLO si su "_contexto"
-        coincide con el equipo+mes actuales. Formato viejo (dict plano o
-        lista, sin "_contexto") se trata como sin-contexto y NO se carga --
-        se pierde un borrador viejo una sola vez, pero es más seguro que
-        heredarlo a ciegas en el mes/equipo equivocado."""
-        if not isinstance(datos_cargados, dict) or "_contexto" not in datos_cargados:
-            return None
-        if datos_cargados["_contexto"] != self._contexto_borrador():
-            return None
-        return datos_cargados.get("campos")
-
-    def _cargar_json_cache(self, df_lines, filename):
-        """Carga datos desde JSON usando caché mejorado"""
-        try:
-            datos_cargados = self.file_cache.obtener_datos_json(filename)
-            if datos_cargados:
-                campos = self._extraer_campos_de_borrador(datos_cargados)
-                if campos:
-                    self._rellenar_campos(df_lines, campos)
-                    print("Datos cargados desde JSON (caché).")
-        except Exception as e:
-
-            print(f"Error al cargar JSON: {e}")
-
-    def _configurar_eventos_campos(self, df_lines, btn_guardar, btn_salvar, filename, nombre_tabla, datos_eliminar, ref, usarid, anual=False):
+    def _configurar_eventos_campos(self, df_lines, btn_guardar, nombre_tabla, datos_eliminar, ref, usarid, anual=False):
         """Configura eventos de campos con debouncing"""
         def updateSubirButton():
             """Actualiza estado del botón subir con validación optimizada"""
             filtered_lines = [line for line in df_lines if line not in ("observaciones", "ln_observaciones_dosi")]
             self.df_lines = filtered_lines
-            
+
             if self.checkLineEdits(): # Si todos los campos están llenos
                 btn_guardar.setEnabled(True)
             else:
@@ -2010,8 +1907,7 @@ class PruebaMensual600(PruebaBasico):
                     self._configurar_eventos(campo, updateSubirButton, f"update_{line}")
 
         # Configurar acciones de botones
-        btn_guardar.clicked.connect(lambda: self._subir_optimizado(df_lines, nombre_tabla, datos_eliminar, ref, usarid, btn_guardar, btn_salvar, anual=anual))
-        btn_salvar.clicked.connect(lambda: self._guardar_optimizado(df_lines, filename, updateSubirButton))
+        btn_guardar.clicked.connect(lambda: self._subir_optimizado(df_lines, nombre_tabla, datos_eliminar, ref, usarid, anual=anual))
        # btn_calculadora.clicked.connect(self.abrir_calculadora)
 
     def _configurar_eventos(self, widget, callback, timer_key, delay=1000):
@@ -2031,7 +1927,7 @@ class PruebaMensual600(PruebaBasico):
         else:
             widget.textChanged.connect(debounced_callback)
 
-    def _subir_optimizado(self, df_lines, nombre_tabla, datos_eliminar, ref, usarid, btn_guardar, btn_salvar,anual=False):
+    def _subir_optimizado(self, df_lines, nombre_tabla, datos_eliminar, ref, usarid, anual=False):
         """Método optimizado para subir datos con mejor manejo de errores"""
         if not self._confirmar_campos_mcc_sin_revisar():
             return
@@ -2046,11 +1942,7 @@ class PruebaMensual600(PruebaBasico):
                 campo = getattr(self, line, None)
                 if campo:
                     campo.setReadOnly(False)
-            
-            # Desactivar controles tras subida exitosa
-            #self.bloquearboton(btn_guardar)
-            btn_salvar.show()
-            
+
             # Actualizar tabla según el tipo de control
             self._actualizar_tabla_despues_subida()
             print("Datos subidos correctamente")
@@ -2068,49 +1960,6 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error inesperado al subir datos: {e}")
             traceback.print_exc()
             QMessageBox.critical(self, "Error", "Error inesperado al subir datos.")
-
-    def _guardar_optimizado(self, df_lines, filename, update_callback):
-        """Método optimizado para guardar datos localmente"""
-        try:
-            # H2.1 (auditoría 2026-07-14): dict por nombre de campo, envuelto
-            # en _contexto/campos -- antes era una LISTA plana, que
-            # _rellenar_campos (dict.get por columna) nunca podía releer
-            # (el intento de carga fallaba en silencio con AttributeError,
-            # atrapado por el except de _cargar_json_cache): el "Guardar"
-            # de este formulario no restauraba nada. De paso, _contexto
-            # (equipo+mes) evita que un borrador de otro mes se cargue solo.
-            campos = {}
-            for line in df_lines:
-                campo = getattr(self, line, None)
-                campos[line] = campo.text().strip() if campo else ""
-            datos_guardar = {"_contexto": self._contexto_borrador(), "campos": campos}
-
-            # Guardar con manejo de errores mejorado
-            os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
-
-            with open(filename, "w", encoding='utf-8') as f:
-                json.dump(datos_guardar, f, indent=4, ensure_ascii=False)
-            
-            print(f"Datos guardados en {filename}")
-            
-            # Limpiar caché para forzar recarga
-            if hasattr(self.file_cache, '_cache'):
-                cache_key = os.path.abspath(filename)
-                self.file_cache._cache.pop(cache_key, None)
-                self.file_cache._cache_timestamps.pop(cache_key, None)
-            
-            # Actualizar estado de botones
-            update_callback()
-            
-        except PermissionError as e:
-            print(f"Error de permisos al guardar {filename}: {e}")
-            QMessageBox.warning(self, "Error de Permisos", f"No se puede escribir en {filename}")
-        except IOError as e:
-            print(f"Error de E/S al guardar {filename}: {e}")
-            QMessageBox.warning(self, "Error de Archivo", f"Error al escribir archivo {filename}")
-        except Exception as e:
-            print(f"Error inesperado al guardar {filename}: {e}")
-            traceback.print_exc()
 
     def createSimpleTable1(self, rows, cols, headers, datos, nombre_tabla, ref, botones=True, pdd=None,
                             id_energia=None, id=False):
@@ -2141,8 +1990,6 @@ class PruebaMensual600(PruebaBasico):
                 readonly_mode = False
                 self._llenar_tabla_bd(table, datos_tabla['data'])
                 #table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            elif datos_tabla['source'] == 'json':
-                self._llenar_tabla_json(table, datos_tabla['data'])
             else:
                 self._llenar_tabla_defaults(table, datos_tabla['data'] if nombre_tabla != "HC_precision_posicion_multilaminas_anual" else datos, editar_primera_columna=True)
             
@@ -2173,26 +2020,21 @@ class PruebaMensual600(PruebaBasico):
             return self._crear_tabla_fallback(rows, cols, headers, datos)
 
     def _cargar_datos_tabla(self, nombre_tabla, ref, datos_default, pdd=None, id_energia=None, id = False):
-        """Carga datos desde BD, JSON o defaults con prioridad"""
+        """Carga datos desde BD o defaults (H2.7: el nivel intermedio de
+        borrador JSON local se eliminó -- la BD es la única fuente)"""
         try:
             # 1. Intentar cargar desde BD
             datos_bd = self.pruebatalas(nombre_tabla, ref, pdd=pdd, id_energia=id_energia, id=id)
             #print(f"Datos desde BD para {nombre_tabla}: {datos_bd}")
-            
+
             if datos_bd:
                 return {'source': 'database', 'data': datos_bd}
-            
-            # 2. Intentar cargar desde JSON con caché
-            filename = _conection.ruta_datos(f"{nombre_tabla}.json")
-            datos_json = self.file_cache.obtener_datos_json(filename)
-            if datos_json:
-                return {'source': 'json', 'data': datos_json}
-            
-            # 3. Usar datos por defecto
+
+            # 2. Usar datos por defecto
             return {'source': 'default', 'data': datos_default}
-            
+
         except Exception as e:
-           
+
             print(f"Error cargando datos para {nombre_tabla}: {e}")
             return {'source': 'default', 'data': datos_default}
 
@@ -2219,21 +2061,6 @@ class PruebaMensual600(PruebaBasico):
            
             print(f"Error llenando tabla desde BD: {e}")
 
-    def _llenar_tabla_json(self, table, datos_json):
-        """Llena tabla con datos de JSON optimizadamente"""
-        try:
-            for fila, fila_datos in enumerate(datos_json):
-                if fila >= table.rowCount():
-                    break
-                for columna, dato in enumerate(fila_datos[:table.columnCount()]):
-                    item = QTableWidgetItem(str(dato))
-                    if columna == 0:
-                        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                    table.setItem(fila, columna, item)
-        except Exception as e:
-           
-            print(f"Error llenando tabla desde JSON: {e}")
-
     def _llenar_tabla_defaults(self, table, datos_default, editar_primera_columna=False):
         """Llena tabla con datos por defecto optimizadamente"""
         try:
@@ -2251,20 +2078,17 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error llenando tabla con defaults: {e}")
 
     def _agregar_botones_tabla(self, layout, table, nombre_tabla, ref, id=None, id_energia=None):
-        """Agrega botones de acción a la tabla optimizadamente"""
+        """Agrega el botón de subida a BD (H2.7: el "Guardar" de borrador
+        JSON local se eliminó)"""
         try:
             button_layout = QHBoxLayout()
             btn_guardar = QPushButton("Subir")
-            btn_salvar = QPushButton("Guardar")
-            
-            button_layout.addWidget(btn_salvar)
+
             button_layout.addWidget(btn_guardar)
             layout.addLayout(button_layout)
-            
-            # Conectar eventos optimizados
-            btn_salvar.clicked.connect(lambda: self._guardar_tabla_optimizada(table, nombre_tabla))
-            btn_guardar.clicked.connect(lambda: self._subir_tabla_optimizada(table, nombre_tabla, ref, btn_guardar, btn_salvar, id=id, id_energia=id_energia))
-            
+
+            btn_guardar.clicked.connect(lambda: self._subir_tabla_optimizada(table, nombre_tabla, ref, id=id, id_energia=id_energia))
+
         except Exception as e:
             print(f"Error agregando botones: {e}")
 
@@ -2281,43 +2105,7 @@ class PruebaMensual600(PruebaBasico):
         layout.addWidget(table)
         return widget, table
     
-    def _guardar_tabla_optimizada(self, table, nombre_tabla):
-        """Guarda datos de tabla en JSON de manera optimizada"""
-        try:
-            filename = _conection.ruta_datos(f"{nombre_tabla}.json")
-            datos_guardar = []
-            
-            for i in range(table.rowCount()):
-                fila = []
-                for j in range(table.columnCount()):
-                    item = table.item(i, j)
-                    fila.append(item.text().strip() if item and item.text() else "")
-                datos_guardar.append(fila)
-            
-            # Crear directorio si no existe
-            os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
-            
-            # Guardar con codificación UTF-8
-            with open(filename, "w", encoding='utf-8') as f:
-                json.dump(datos_guardar, f, indent=4, ensure_ascii=False)
-            
-            # Limpiar caché para forzar recarga
-            if hasattr(self.file_cache, '_cache'):
-                cache_key = os.path.abspath(filename)
-                self.file_cache._cache.pop(cache_key, None)
-                self.file_cache._cache_timestamps.pop(cache_key, None)
-            
-            print(f"Tabla {nombre_tabla} guardada correctamente")
-            
-        except PermissionError as e:
-            print(f"Error de permisos al guardar tabla {nombre_tabla}: {e}")
-            QMessageBox.warning(self, "Error de Permisos", f"No se puede escribir el archivo {nombre_tabla}.json")
-        except Exception as e:
-            print(f"Error guardando tabla {nombre_tabla}: {e}")
-            traceback.print_exc()
-            QMessageBox.critical(self, "Error", f"Error al guardar tabla: {str(e)}")
-
-    def _subir_tabla_optimizada(self, table, nombre_tabla, ref, btn_guardar, btn_salvar, id=False, id_energia=None):
+    def _subir_tabla_optimizada(self, table, nombre_tabla, ref, id=False, id_energia=None):
         """Sube datos de tabla a BD de manera optimizada"""
         try:
             datos = []
@@ -2335,10 +2123,6 @@ class PruebaMensual600(PruebaBasico):
                 print(f"Subiendo tabla {nombre_tabla} sin id_energia")
                 print(f"Los argumentos son: nombre_tabla={nombre_tabla}, ref={ref}, anual={anual}, id={id}")
                 loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=anual, id=id, id_energia=id_energia)
-
-            # Deshabilitar controles tras subida exitosa
-            #self.bloquearboton(btn_guardar)
-            #btn_salvar.hide()
 
             # Actualizar tabla principal
             self._actualizar_tabla_despues_subida()
@@ -2416,20 +2200,12 @@ class PruebaMensual600(PruebaBasico):
         
         prueba1 = self.pruebatalas(nombre_tabla, reference)
         #print(f'Prueba1 en {nombre_tabla} es: {prueba1}')
-        
-        filename = _conection.ruta_datos(f"{nombre_tabla}.json")
+
+        # H2.7: sin fallback a borrador JSON -- o hay mediciones guardadas en
+        # BD (Subir) o la tabla nace vacía (H1.3).
         if prueba1 is not None and prueba1 != []:
             datos = prueba1
             datos = [t[1:] for t in datos]
-        elif os.path.exists(filename):
-            with open(filename, "r") as f:
-                datos_cargados = json.load(f)
-            # H2.1 (auditoría 2026-07-14): solo se carga si el _contexto
-            # (equipo+mes) coincide -- si no, se queda con el default vacío
-            # de arriba (H1.3) en vez de heredar mediciones de otro mes.
-            campos = self._extraer_campos_de_borrador(datos_cargados)
-            if campos is not None:
-                datos = campos
 
         for fila, fila_datos in enumerate(datos, start=3):
             for columna, dato in enumerate(fila_datos):
@@ -2450,60 +2226,28 @@ class PruebaMensual600(PruebaBasico):
         #     widget.setLayout(layout)
         #     return widget
         
-        # Botón para guardar la tabla
+        # Botón de subida a BD (H2.7: el "Guardar" de borrador JSON local se
+        # eliminó -- Subir es la única forma de persistir, y hace
+        # DELETE+INSERT por ref vía loadtablacomplex).
         self.buttonLayout = QHBoxLayout()
         btn_guardar = QPushButton("Subir")
-        btn_salvar = QPushButton("Guardar")
-        self.buttonLayout.addWidget(btn_salvar)
         self.buttonLayout.addWidget(btn_guardar)
         layout.addLayout(self.buttonLayout)
-        
-        widget.setLayout(layout)
-        
-        # Guardar la tabla al cerrarse la app o en algún botón
-        def guardar_tabla():
-            # Suponiendo que table es el QTableWidget creado en fieldSize()
-            datos_guardar = []
-            # Se asume que las filas 0, 1 y 2 son encabezados y las filas de datos comienzan en la fila 3.
-            for fila in range(3, table.rowCount()):
-                dato_col = []
-                for columna in range(0, table.columnCount()):
-                    # Extraer solo los datos que te interesan. Por ejemplo, columna 0 y columna 1.
-                    dato_col0 = table.item(fila, columna).text() if table.item(fila, columna) is not None else ""
-                    # Agregar la pareja a la lista
-                    dato_col.append(dato_col0)
-                
-                datos_guardar.append(dato_col)
 
-            # H2.1: envuelto en _contexto/campos -- ver _extraer_campos_de_borrador.
-            with open(_conection.ruta_datos(f"{nombre_tabla}.json"), "w") as f:
-                json.dump({"_contexto": self._contexto_borrador(), "campos": datos_guardar}, f, indent=4)
-
-            #print("Datos de fieldSize guardados:", datos_guardar)
-            
         def subir_tabla():
             print('Entra a subir tabla en fieldSize')
             datos = []
             loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=3, anual=False, id=False, id_energia=None)
-            # H2.4: guardado real en BD del tamaño de campo (el botón
-            # "Guardar"/guardar_tabla de arriba solo escribe un borrador
-            # JSON local, ver H2.1 -- este es el que sube a la BD).
+            # H2.4: registro de auditoría del guardado real en BD.
             _registrar_auditoria(
                 getattr(getattr(self, "user_id", None), "_nombre", None),
                 "guardar", nombre_tabla, ref=ref)
-            #self.bloquearboton(btn_guardar)
-            #btn_salvar.hide()
             self._actualizar_tabla_despues_subida()
             QMessageBox.information(self, "", "Tabla cargada correctamente")
             print(f"\nLa variable equipo_f en la función fieldSize es: {self.equipo_f}")
-        # Guardamos la función para poder llamarla luego si quieres
-        #setattr(self, f"guardar_{nombre_tabla}", guardar_tabla)
-        #setattr(self, f"subir_{nombre_tabla}", subir_tabla)
-        
-        btn_salvar.clicked.connect(guardar_tabla)
+
         btn_guardar.clicked.connect(subir_tabla)
-        
-        
+
         widget.setLayout(layout)
         return widget
     
@@ -3001,8 +2745,8 @@ class PruebaMensual600(PruebaBasico):
             if layout is not None:
                 buttonLayout = QHBoxLayout()
                 btn_guardar = QPushButton("Subir")
-                btn_salvar = QPushButton("Guardar")
-                buttonLayout.addWidget(btn_salvar)
+                # H2.7: el "Guardar" de esta sección escribía un equipos.json
+                # que NINGÚN código releía (borrador huérfano) -- eliminado.
                 buttonLayout.addWidget(btn_guardar)
                 layout.addLayout(buttonLayout, 23, 0)
                 #print("Botones creados en condición combobox (equipos)")
@@ -3023,29 +2767,11 @@ class PruebaMensual600(PruebaBasico):
                         else:
                             return
                     self.subirtodo_modificado(datos)
-                    #self.bloquearboton(btn_guardar)
-                    print(f'Botón {btn_guardar.text()} deshabilitado')
-                    #btn_salvar.hide()
                     QMessageBox.information(self, "", "Datos subidos correctamente")
                     self._actualizar_tabla_despues_subida()
                     #print(f"\nLa variable equipo_f en la función botonescomboboox equipos es: {self.equipo_f}")
 
-                def guardar():
-                    datos = []
-                    for widget in combobox:
-                        if isinstance(widget, QComboBox):
-                            texto = widget.currentText()
-                        elif isinstance(widget, QLineEdit):
-                            texto = widget.text()
-                        else:
-                            return
-                        datos.append(texto)
-                    with open("equipos.json", "w") as f:
-                        json.dump(datos, f, indent=4)
-                    print("Datos salvados en JSON.")
-
                 btn_guardar.clicked.connect(subir)
-                btn_salvar.clicked.connect(guardar)
 
         # --------------------------------------------------------------------------------------
         # Caso: cuñas (combos_seguridad)
@@ -3063,8 +2789,8 @@ class PruebaMensual600(PruebaBasico):
                     #print("Botón especial IX creado")
                 else:
                     btn_guardar = QPushButton("Subir")
-                    btn_salvar = QPushButton("Guardar")
-                    buttonLayout.addWidget(btn_salvar)
+                    # H2.7: el "Guardar" de cuñas era un no-op (pass) --
+                    # eliminado junto con el resto de botones de borrador.
                     buttonLayout.addWidget(btn_guardar)
                     layout.addLayout(buttonLayout, 23, 0)
                     #print("Botones creados en condición combos_seguridad")
@@ -3073,19 +2799,10 @@ class PruebaMensual600(PruebaBasico):
                         print(f"\n ........ Entra a botonescombobox.subir() en {self.__class__.__name__} ........")
                         self.subir_control_cunas(self.combos_seguridad, self.df_seg_line)
                         print("Se llama a subir_control_cunas en 600")
-                        #self.bloquearboton(btn_guardar)
-                        print(f'Botón {btn_guardar.text()} deshabilitado')
-                        #btn_salvar.hide()
                         self._actualizar_tabla_despues_subida()
                         print(f"\nLa variable equipo_f en la función bombobox cuñas es: {self.equipo_f}")
 
-                    def guardar():
-                        # opcional: guardar combos de seguridad en JSON
-                        pass
-
                     btn_guardar.clicked.connect(subir)
-                    #QMessageBox.information(self, "", "Tabla cargada correctamente")
-                    btn_salvar.clicked.connect(guardar)
 
     def subirtodo_modificado(self, datos):
         """
@@ -3448,71 +3165,6 @@ class PruebaMensual600(PruebaBasico):
                 }
             """)
 
-    def JsonGuardado(self, combenu, nombre_tabla):
-        #print('Entro a traer info')
-        #print(f'Los combenu son: {combenu}')
-        
-        ruta_json = _conection.ruta_datos(f"{nombre_tabla}.json")
-        if os.path.exists(ruta_json):
-            with open(ruta_json, "r") as f:
-                results = json.load(f)
-        else:
-            return
-        
-        for i, (widget, value) in enumerate(zip(combenu, results)):
-            if isinstance(widget, QComboBox):
-                widget.blockSignals(True)
-                widget.setEnabled(True)
-                widget.setCurrentText(value)
-                #print("ComboBox seleccionado:", widget.currentText())
-                widget.blockSignals(False)
-                # Si es el primer combobox de un grupo, actualizar el dependiente con el valor del JSON
-                if i % 3 == 0 and (i+1) < len(results):
-                    self.setEquipoDesdeJSON(widget, combenu[i+1], results[i+1])
-            elif isinstance(widget, QLineEdit):
-                widget.setText(value)
-                #print("QLineEdit contiene:", value)
-            else:
-                return
-        #print(f'Los resultados son: {results}')
-        return True # Indica que se encontraron datos y se asignaron correctamente
-
-    def setEquipoDesdeJSON(self, main_combo, nextu, valor_dependiente):
-        # Obtener la lista de items para la combo dependiente con información de vigencia
-        series_data = self.obtenerSeriesConVigencia(main_combo.currentText())
-        series_activas = []
-        series_no_vigentes = []
-        
-        for serie, vigente, activo in series_data:
-            if activo == 1:  # Solo equipos activos
-                series_activas.append(serie)
-                if vigente == 0:  # Si no está vigente, recordarlo
-                    series_no_vigentes.append(serie)
-        
-        series_activas.insert(0, 'Seleccionar...')
-        
-        dep_combo = nextu
-        dep_combo.blockSignals(True)
-        dep_combo.clear()
-        dep_combo.addItems(series_activas)
-        
-        # Establecer el valor obtenido del JSON, si existe en la lista; de lo contrario, se agrega
-        if valor_dependiente not in series_activas:
-            dep_combo.addItem(valor_dependiente)
-        dep_combo.setCurrentText(valor_dependiente)
-        
-        # Marcar en rojo los equipos no vigentes
-        for serie in series_no_vigentes:
-            index_serie = dep_combo.findText(serie)
-            if index_serie != -1:
-                item = dep_combo.model().item(index_serie)
-                item.setForeground(QColor(255, 0, 0))  # Texto rojo
-                item.setData(Qt.BackgroundRole, QColor(255, 240, 240))  # Fondo rojizo
-                item.setText(f"⚠️ {serie} (VENCIDO)")  # Agregar indicador visual
-                item.setToolTip("⚠️ Calibración vencida - Requiere recalibración")
-        
-        dep_combo.blockSignals(False)
-    
     @lru_cache(maxsize=50)
     def pruebatalas(self, nombre_tabla, ref, pdd = None, id_energia = None, id = False):
         """Consulta optimizada de tablas con caché y mejor manejo de errores"""
