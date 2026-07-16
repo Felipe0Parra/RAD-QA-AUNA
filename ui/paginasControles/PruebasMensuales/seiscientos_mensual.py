@@ -1800,7 +1800,9 @@ class PruebaMensual600(PruebaBasico):
         guardar si el físico no los tocó. NUNCA se llena la calculadora de
         dosis -- solo el formulario mensual (ver dialogs.py: sin relación)."""
         carpeta = QFileDialog.getExistingDirectory(
-            self, "Seleccionar carpeta de escaneos .mcc")
+            self,
+            "Seleccionar carpeta de escaneos .mcc "
+            "(el explorador solo muestra carpetas, no los archivos .mcc — es normal)")
         if not carpeta:
             return
 

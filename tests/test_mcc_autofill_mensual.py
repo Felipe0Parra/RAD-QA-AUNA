@@ -248,6 +248,21 @@ class TestSeleccionarCarpetaMCC:
 
         assert obj.ln_simetria_inplane_6mv.text() == ""
 
+    def test_dialogo_aclara_que_no_lista_archivos(self, app, tmp_path, monkeypatch):
+        obj = _instancia_pelada(["6mv"])
+        capturado = {}
+
+        def _falso_dialogo(*args, **kwargs):
+            capturado["titulo"] = args[1]
+            return ""
+
+        monkeypatch.setattr(mensual_mod.QFileDialog, "getExistingDirectory",
+                            staticmethod(_falso_dialogo))
+
+        obj.seleccionar_carpeta_mcc()
+
+        assert "no los archivos .mcc" in capturado["titulo"]
+
     def test_carpeta_valida_llena_los_campos_y_avisa(self, app, tmp_path, monkeypatch):
         _escribir_mcc(tmp_path, "seis.mcc", [
             _bloque_scan(1, "INPLANE_PROFILE", "6.00", "X", "28-Feb-2026 11:00:00", FILAS_PERFIL_6MV),
