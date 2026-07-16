@@ -2020,7 +2020,10 @@ class DialogCalculadoraDosis(QDialog):
         self.MQvar.textChanged.connect(self.Dzref_calc)
         
         # PDD para SSD (Fotones)
-        self.pdd_zref = QLabel("PDD(Zref) - Porcentaje de dosis (%) - Campo 10×10 cm")
+        # I2: etiqueta diferenciada de la de electrones -- eran idénticas y
+        # cuando ambos campos quedaban visibles a la vez (efecto lateral del
+        # auto-SSD de H1.1) se veían como un campo duplicado.
+        self.pdd_zref = QLabel("PDD(Zref) FOTONES - Porcentaje de dosis (%) - Campo 10×10 cm")
         #self.estilo_label(self.pdd_zref)
         self.pdd_zref.setVisible(False)
         result_layout.addWidget(self.pdd_zref)
@@ -2048,7 +2051,7 @@ class DialogCalculadoraDosis(QDialog):
         #self.SAD.toggled.connect(self.mostrar_tmr)
         
         # PDD para Electrones
-        self.pdd_zrefE = QLabel("PDD(Zref) - Porcentaje de dosis (%) - Campo 10×10 cm")
+        self.pdd_zrefE = QLabel("PDD(Zref) ELECTRONES - Porcentaje de dosis (%) - Campo 10×10 cm")
         #self.estilo_label(self.pdd_zrefE)
         self.pdd_zrefE.setVisible(False)
         result_layout.addWidget(self.pdd_zrefE)
@@ -2060,6 +2063,10 @@ class DialogCalculadoraDosis(QDialog):
         result_layout.addWidget(self.pddzrefE)
         
         self.electrones.toggled.connect(self.mostrar_pddE)
+        # I2: fotones también recalcula la visibilidad -- al volver de
+        # electrones a fotones, SSD sigue marcado (H1.1 no lo desmarca) y el
+        # PDD de fotones debe reaparecer sin esperar otro clic en SSD.
+        self.fotones.toggled.connect(self.mostrar_pdd)
         self.pddzrefE.textChanged.connect(self.calcular_dosis_maxima)
         
         # Dosis Máxima (RESULTADO FINAL)
@@ -3106,17 +3113,30 @@ class DialogCalculadoraDosis(QDialog):
             print(e)
             self.lDV1_prom.clear()
     def mostrar_pdd(self, checked):
-        self.pdd_zref.setVisible(checked)
-        self.pddzref.setVisible(checked)
-    
+        self._actualizar_visibilidad_pdd()
+
     def mostrarWidget_PDD_Fotones(self, checked):
-        
+
         self.Kq_0.setVisible(checked)
-    
+
     def mostrar_pddE(self, checked):
-        self.pdd_zrefE.setVisible(checked)
-        self.pddzrefE.setVisible(checked)
-        self.Kq0r50_widget.setVisible(checked)
+        self._actualizar_visibilidad_pdd()
+
+    def _actualizar_visibilidad_pdd(self):
+        """I2: fuente única de la visibilidad de los dos campos PDD(Zref).
+
+        Antes cada campo se mostraba por su propia señal aislada: SSD.toggled
+        mostraba el de FOTONES sin mirar el tipo de haz, y el auto-SSD de
+        H1.1 (electrones marca SSD por código) los dejaba VISIBLES A LA VEZ
+        -- el "campo PDD duplicado" que reportó el físico el 16-07. Derivar
+        ambos del estado completo hace imposible ese solape por construcción.
+        """
+        es_electrones = self.electrones.isChecked()
+        self.pdd_zref.setVisible(self.SSD.isChecked() and self.fotones.isChecked())
+        self.pddzref.setVisible(self.SSD.isChecked() and self.fotones.isChecked())
+        self.pdd_zrefE.setVisible(es_electrones)
+        self.pddzrefE.setVisible(es_electrones)
+        self.Kq0r50_widget.setVisible(es_electrones)
     
     def mostrar_tmr(self, checked):
         self.tmr_zref.setVisible(checked)

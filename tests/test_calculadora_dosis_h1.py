@@ -141,3 +141,56 @@ class TestElectronesAutoMarcaSSD:
         datos_bd = dosis_service_mod.DosisService.buscar_por_fecha(fecha, d.acelerador_actual)
         assert datos_bd is not None
         assert datos_bd["Tipo_de_medicion"] == "SSD"
+
+
+class TestI2PddUnico:
+    """I2 (PLAN_FASE_I, 2026-07-16): un solo campo PDD(Zref) visible a la vez.
+
+    El auto-SSD de H1.1 disparaba `SSD.toggled -> mostrar_pdd` (PDD de
+    FOTONES) a la vez que `electrones.toggled -> mostrar_pddE` (PDD de
+    electrones); con etiquetas idénticas, el físico veía la casilla
+    "duplicada" (reporte 16-07). `_actualizar_visibilidad_pdd` deriva ahora
+    ambos campos del estado completo. Se usa isHidden() y no isVisible()
+    (convención K-fix.1: isVisible exige la cadena de ancestros mapeada,
+    falsa en offscreen sin .show()).
+    """
+
+    def test_electrones_muestra_solo_pdd_electrones(self, dialogo):
+        """El caso del físico: electrones no debe mostrar el PDD de fotones."""
+        dialogo.electrones.setChecked(True)
+
+        assert not dialogo.pddzrefE.isHidden()
+        assert not dialogo.pdd_zrefE.isHidden()
+        assert dialogo.pddzref.isHidden(), "PDD de fotones visible en electrones (duplicado H1.1)"
+        assert dialogo.pdd_zref.isHidden()
+        # H1.1 no debe regresar: SSD sigue auto-marcado (guardado requiere)
+        assert dialogo.SSD.isChecked() is True
+
+    def test_fotones_con_ssd_muestra_solo_pdd_fotones(self, dialogo):
+        dialogo.fotones.setChecked(True)
+        dialogo.SSD.setChecked(True)
+
+        assert not dialogo.pddzref.isHidden()
+        assert not dialogo.pdd_zref.isHidden()
+        assert dialogo.pddzrefE.isHidden()
+        assert dialogo.pdd_zrefE.isHidden()
+
+    def test_alternar_haz_no_deja_residuos(self, dialogo):
+        """E -> F -> E: en cada estado hay UN solo PDD visible (SSD queda
+        marcado tras pasar por electrones -- quirk documentado de H1.1 -- y
+        aun así el PDD de fotones no debe filtrarse al estado de electrones).
+        """
+        dialogo.electrones.setChecked(True)
+        dialogo.fotones.setChecked(True)  # SSD sigue marcado (H1.1)
+        assert not dialogo.pddzref.isHidden()
+        assert dialogo.pddzrefE.isHidden()
+
+        dialogo.electrones.setChecked(True)
+        assert not dialogo.pddzrefE.isHidden()
+        assert dialogo.pddzref.isHidden()
+
+    def test_etiquetas_diferenciadas(self, dialogo):
+        """Nunca más dos campos con el mismo nombre en pantalla."""
+        assert dialogo.pdd_zref.text() != dialogo.pdd_zrefE.text()
+        assert "FOTONES" in dialogo.pdd_zref.text()
+        assert "ELECTRONES" in dialogo.pdd_zrefE.text()
