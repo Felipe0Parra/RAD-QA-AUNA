@@ -3718,6 +3718,15 @@ def guardarEdicion(dlg, tabla_widget, nombre_tabla, id_ref):
             error_msg = query.lastError().text()
             print(f" ! Error en query: {error_msg}")
             raise Exception(error_msg)
+
+        # A3 (PLAN_AUDITORIA_DOS_EJES_21-07): edición in-place -- el valor
+        # anterior ya se conoce en esta función (old_value, arriba), así que
+        # no hace falta un SELECT extra para dejar "col: viejo→nuevo".
+        _registrar_auditoria(
+            _usuario_actual(dlg), "editar", table_name,
+            ref="|".join(str(v) for v in valor_where),
+            detalle=f"{col_name}: {old_value!r} → {new_value!r}")
+
         QMessageBox.information(dlg, "Éxito", "Registro actualizado correctamente.")
         print("UPDATE ejecutado correctamente")
 
