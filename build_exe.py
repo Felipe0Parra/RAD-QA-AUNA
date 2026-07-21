@@ -18,8 +18,6 @@ hidden_imports = [
     "data.ManejoDatos.Tablas_Anuales.tablas_anuales",
     "ui.paginasControles.PruebasDiarias.PruebasDiarias",
     "services.MLCs_calibration_service",
-    "services.auditorias",
-    "services.decoradores_audit",
 
     # ANALISIS
     "analisisImagenes.Analisis_Catphan_TAC",
