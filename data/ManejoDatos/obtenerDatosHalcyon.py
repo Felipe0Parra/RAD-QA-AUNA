@@ -56,7 +56,20 @@ def addInfo2(self, user):
         
     return df_widgets
 
+RUTA_MPC_POR_DEFECTO = r"\\VARIANDB\Va_Transfer\TDS\HAL1161\MPCChecks"
+
 PATRON_CARPETA_MPC = re.compile(r'(\d{4}-\d{2}-\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{4})')
+
+
+def ruta_mpc_halcyon():
+    """Ruta base de los reportes MPC del Halcyon.
+
+    Lee `RADQA_HALCYON_MPC` si está definida (para probar con una copia local
+    de reportes, p.ej. en Windows sin acceso al share del hospital); si no,
+    usa la ruta de red real -- en producción nadie define esa variable, así
+    que el comportamiento queda igual que antes.
+    """
+    return os.environ.get("RADQA_HALCYON_MPC", RUTA_MPC_POR_DEFECTO)
 
 
 def _results_csv_tiene_datos(carpeta):
@@ -120,7 +133,7 @@ def seleccionar_carpeta_mpc(ruta_base, fecha):
 
 def addInfo(self, fecha, user):
 
-    ruta_actual = r"\\VARIANDB\Va_Transfer\TDS\HAL1161\MPCChecks"
+    ruta_actual = ruta_mpc_halcyon()
 
     print("Listando carpetas...")
     folder_found = seleccionar_carpeta_mpc(ruta_actual, fecha)
