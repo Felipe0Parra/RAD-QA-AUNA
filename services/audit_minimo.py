@@ -37,6 +37,20 @@ _DDL_AUDIT_LOG = """
 """
 
 
+def usuario_actual(obj):
+    """Nombre del usuario logueado, leído de `obj.user_id._nombre`.
+
+    Centraliza el patrón `getattr(getattr(obj, "user_id", None), "_nombre",
+    None)` que estaba copiado igual en cada call-site de guardado (equipos,
+    mensuales) -- un único lugar para resolverlo reduce el riesgo de que un
+    call-site nuevo lo haga distinto y termine con `usuario=NULL` en
+    `audit_log` (A1, PLAN_AUDITORIA_DOS_EJES_21-07.md). Devolver None si no
+    existe es preferible a reventar, igual que `registrar()`: la auditoría
+    es best-effort.
+    """
+    return getattr(getattr(obj, "user_id", None), "_nombre", None)
+
+
 def registrar(usuario, accion, tabla=None, ref=None, detalle="", ruta_db=None):
     """Inserta una fila en audit_log. Nunca lanza (ver docstring del módulo).
 

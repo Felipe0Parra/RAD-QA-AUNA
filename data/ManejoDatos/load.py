@@ -10,6 +10,7 @@ from pathlib import Path
 from PyQt5.QtGui import QPixmap
 from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar
 from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import usuario_actual as _usuario_actual
 def guardar_imagen(imagen_path):
     """
     Convierte una imagen en BLOB para guardarla en la base de datos.
@@ -485,9 +486,7 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
         print("Datos guardados correctamente.")
         # H2.4: guardado mensual (600/iX, tabla única -- el multi-energía de
         # iX tiene su propio registro en subirlineasmensuales_ix).
-        _registrar_auditoria(
-            getattr(getattr(self, "user_id", None), "_nombre", None),
-            "guardar", nombre_tabla, ref=ref)
+        _registrar_auditoria(_usuario_actual(self), "guardar", nombre_tabla, ref=ref)
     except Exception as ex:
         traceback.print_exc()
         print("Error al guardar:", ex)

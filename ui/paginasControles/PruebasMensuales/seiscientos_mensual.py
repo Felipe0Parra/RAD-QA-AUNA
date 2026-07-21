@@ -20,6 +20,7 @@ from services.mcc_metrics import (
     calcular_simetria_planicidad, calcular_calidad_fotones,
     RATIO_SIMETRIA, RATIO_PLANICIDAD)
 from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import usuario_actual as _usuario_actual
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 from services.MLCs_calibration_service import (
@@ -2311,9 +2312,7 @@ class PruebaMensual600(PruebaBasico):
             datos = []
             loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=3, anual=False, id=False, id_energia=None)
             # H2.4: registro de auditoría del guardado real en BD.
-            _registrar_auditoria(
-                getattr(getattr(self, "user_id", None), "_nombre", None),
-                "guardar", nombre_tabla, ref=ref)
+            _registrar_auditoria(_usuario_actual(self), "guardar", nombre_tabla, ref=ref)
             self._actualizar_tabla_despues_subida()
             QMessageBox.information(self, "", "Tabla cargada correctamente")
             print(f"\nLa variable equipo_f en la función fieldSize es: {self.equipo_f}")
