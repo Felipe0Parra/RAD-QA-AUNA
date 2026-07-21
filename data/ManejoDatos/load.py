@@ -3849,6 +3849,16 @@ def verificar_eliminarCT(self, tabla_widget, nombre_tabla, id_ref=None):
     respuesta = dialogo.exec()
     eliminarRegistroCT(self, tabla_widget) if respuesta == QDialog.DialogCode.Accepted else None
     
+def _serializar_fila_actual(query):
+    """Texto 'col=valor; col=valor; ...' de la fila actual de `query` (tras
+    next()) -- A2 (PLAN_AUDITORIA_DOS_EJES_21-07.md): el DELETE aquí es
+    físico, así que esto va en `detalle` de audit_log para poder reconstruir
+    qué se borró. Cadena vacía si no hay fila (nada que serializar)."""
+    record = query.record()
+    return "; ".join(
+        f"{record.fieldName(i)}={query.value(i)}" for i in range(record.count()))
+
+
 def eliminarRegistroCT(dlg, tabla_widget):
     from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 
@@ -3877,6 +3887,15 @@ def eliminarRegistroCT(dlg, tabla_widget):
     db = PruebaBasico().opeenDatabase()
 
     try:
+        # A2: capturar la fila de `controles` ANTES de borrar -- es el
+        # registro raíz de esta sesión; las tablas de detalle cascadean
+        # desde él (categoría ③, PLAN_AUDITORIA_DOS_EJES_21-07.md §3.3).
+        query_fila = QSqlQuery(db)
+        query_fila.prepare("SELECT * FROM controles WHERE id = ?")
+        query_fila.addBindValue(id_sesion)
+        query_fila.exec_()
+        fila_controles = _serializar_fila_actual(query_fila) if query_fila.next() else ""
+
         # Obtener ids de pruebas asociadas a esta sesión específica
         query = QSqlQuery(db)
         query.prepare("SELECT id_prueba FROM pruebas WHERE id_sesion = ?")
@@ -3913,6 +3932,10 @@ def eliminarRegistroCT(dlg, tabla_widget):
         q.prepare("DELETE FROM controles WHERE id = ?")
         q.addBindValue(id_sesion)
         q.exec_()
+
+        _registrar_auditoria(
+            _usuario_actual(dlg), "eliminar", "controles", ref=str(id_sesion),
+            detalle=f"CT diario ({mes_control}); cascada pruebas+7 tablas de detalle; {fila_controles}")
 
         tabla_widget.removeRow(row)
         QMessageBox.information(dlg, "Éxito", "Control eliminado")
@@ -3965,6 +3988,14 @@ def eliminarRegistroCT_anual(dlg, tabla_widget):
     db = PruebaBasico().opeenDatabase()
 
     try:
+        # A2: capturar la fila de `controles` ANTES de borrar (mismo criterio
+        # que eliminarRegistroCT -- ver su comentario).
+        query_fila = QSqlQuery(db)
+        query_fila.prepare("SELECT * FROM controles WHERE id = ?")
+        query_fila.addBindValue(id_sesion)
+        query_fila.exec_()
+        fila_controles = _serializar_fila_actual(query_fila) if query_fila.next() else ""
+
         query = QSqlQuery(db)
         query.prepare("SELECT id_prueba FROM pruebas WHERE id_sesion = ?")
         query.addBindValue(id_sesion)
@@ -3998,6 +4029,10 @@ def eliminarRegistroCT_anual(dlg, tabla_widget):
         q.prepare("DELETE FROM controles WHERE id = ?")
         q.addBindValue(id_sesion)
         q.exec_()
+
+        _registrar_auditoria(
+            _usuario_actual(dlg), "eliminar", "controles", ref=str(id_sesion),
+            detalle=f"CT anual ({year_control}); cascada pruebas+7 tablas de detalle; {fila_controles}")
 
         tabla_widget.removeRow(row)
         QMessageBox.information(dlg, "Éxito", "Control anual eliminado")
@@ -4052,6 +4087,15 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
         query = QSqlQuery(db)
         query.exec_("PRAGMA foreign_keys = ON;")
 
+        # A2: capturar la fila ANTES de borrar -- el DELETE es físico, sin
+        # esto no quedaría forma de reconstruir qué se eliminó.
+        query_fila = QSqlQuery(db)
+        query_fila.prepare(f'SELECT * FROM "{table_name}" WHERE {id_where}')
+        for v in valor_where:
+            query_fila.addBindValue(v)
+        query_fila.exec_()
+        fila_borrada = _serializar_fila_actual(query_fila) if query_fila.next() else ""
+
         sql = f'DELETE FROM "{table_name}" WHERE {id_where}'
         query.prepare(sql)
         for v in valor_where:
@@ -4061,6 +4105,9 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
             error_msg = query.lastError().text()
             print(f" ! Error en DELETE: {error_msg}")
             raise Exception(error_msg)
+
+        _registrar_auditoria(_usuario_actual(dlg), "eliminar", table_name,
+                             ref=str(row_id), detalle=fila_borrada)
 
         QMessageBox.information(dlg, "Éxito", "Registro eliminado correctamente.")
         tabla_widget.removeRow(row)
