@@ -11,6 +11,8 @@ from PyQt5.QtGui import QPixmap
 from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
+from services.audit_minimo import (
+    ACCION_GUARDAR, ACCION_REEMPLAZO, ACCION_EDITAR, ACCION_ELIMINAR)
 def guardar_imagen(imagen_path):
     """
     Convierte una imagen en BLOB para guardarla en la base de datos.
@@ -134,14 +136,14 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             if not _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha_legible):
                 return
             # H2.4: el reemplazo confirmado en H2.2 queda en audit_log.
-            _registrar_auditoria(user_id, "reemplazo", nombre_tabla, ref=fecha_actual)
+            _registrar_auditoria(user_id, ACCION_REEMPLAZO, nombre_tabla, ref=fecha_actual)
 
         cursor.execute(f""" DELETE FROM {nombre_tabla} WHERE DATE(date) = ? """, (fecha_actual,))
         # Ejecutar la inserción
         sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
         cursor.execute(sql, lista)
         conn.commit()
-        _registrar_auditoria(user_id, "guardar", nombre_tabla, ref=fecha_actual)
+        _registrar_auditoria(user_id, ACCION_GUARDAR, nombre_tabla, ref=fecha_actual)
         QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
 
         if isinstance(boolean_columns, list):
@@ -486,7 +488,7 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
         print("Datos guardados correctamente.")
         # H2.4: guardado mensual (600/iX, tabla única -- el multi-energía de
         # iX tiene su propio registro en subirlineasmensuales_ix).
-        _registrar_auditoria(_usuario_actual(self), "guardar", nombre_tabla, ref=ref)
+        _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, nombre_tabla, ref=ref)
     except Exception as ex:
         traceback.print_exc()
         print("Error al guardar:", ex)
@@ -3723,7 +3725,7 @@ def guardarEdicion(dlg, tabla_widget, nombre_tabla, id_ref):
         # anterior ya se conoce en esta función (old_value, arriba), así que
         # no hace falta un SELECT extra para dejar "col: viejo→nuevo".
         _registrar_auditoria(
-            _usuario_actual(dlg), "editar", table_name,
+            _usuario_actual(dlg), ACCION_EDITAR, table_name,
             ref="|".join(str(v) for v in valor_where),
             detalle=f"{col_name}: {old_value!r} → {new_value!r}")
 
@@ -3943,7 +3945,7 @@ def eliminarRegistroCT(dlg, tabla_widget):
         q.exec_()
 
         _registrar_auditoria(
-            _usuario_actual(dlg), "eliminar", "controles", ref=str(id_sesion),
+            _usuario_actual(dlg), ACCION_ELIMINAR, "controles", ref=str(id_sesion),
             detalle=f"CT diario ({mes_control}); cascada pruebas+7 tablas de detalle; {fila_controles}")
 
         tabla_widget.removeRow(row)
@@ -4040,7 +4042,7 @@ def eliminarRegistroCT_anual(dlg, tabla_widget):
         q.exec_()
 
         _registrar_auditoria(
-            _usuario_actual(dlg), "eliminar", "controles", ref=str(id_sesion),
+            _usuario_actual(dlg), ACCION_ELIMINAR, "controles", ref=str(id_sesion),
             detalle=f"CT anual ({year_control}); cascada pruebas+7 tablas de detalle; {fila_controles}")
 
         tabla_widget.removeRow(row)
@@ -4115,7 +4117,7 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
             print(f" ! Error en DELETE: {error_msg}")
             raise Exception(error_msg)
 
-        _registrar_auditoria(_usuario_actual(dlg), "eliminar", table_name,
+        _registrar_auditoria(_usuario_actual(dlg), ACCION_ELIMINAR, table_name,
                              ref=str(row_id), detalle=fila_borrada)
 
         QMessageBox.information(dlg, "Éxito", "Registro eliminado correctamente.")

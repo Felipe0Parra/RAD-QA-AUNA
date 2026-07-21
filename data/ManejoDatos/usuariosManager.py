@@ -2,6 +2,7 @@ import data.ManejoDatos.conection as con
 from data.ManejoDatos.user import Usuario
 from data.ManejoDatos.encriptarInfo import encrypt_data, decrypt_data
 from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import ACCION_LOGIN, ACCION_LOGOUT
 
 class UsuarioData():
 
@@ -24,7 +25,7 @@ class UsuarioData():
                         # -- se audita con el fullname (fila[3]), la misma
                         # identidad que usuario_actual() lee en el resto de
                         # la app (user_id._nombre).
-                        _registrar_auditoria(fila[3], "login", detalle="OK")
+                        _registrar_auditoria(fila[3], ACCION_LOGIN, detalle="OK")
                         return Usuario(username=fila[1], password=stored_password, fullname=fila[3])
                     else:
                         #print("Contraseña incorrecta.")
@@ -32,13 +33,13 @@ class UsuarioData():
                         # Se audita con el usuario INTENTADO (username._usuario)
                         # -- todavía no hay un fullname válido que usar, y
                         # quién intentó (aunque falló) es justo lo relevante.
-                        _registrar_auditoria(username._usuario, "login",
+                        _registrar_auditoria(username._usuario, ACCION_LOGIN,
                                              detalle="contraseña incorrecta")
                         return None
                 else:
 
                     print("Usuario no encontrado.")
-                    _registrar_auditoria(username._usuario, "login",
+                    _registrar_auditoria(username._usuario, ACCION_LOGIN,
                                          detalle="usuario no encontrado")
                     return None
         except Exception as e:
@@ -49,7 +50,7 @@ class UsuarioData():
 
     def logout(self, nombre_usuario):
         """Deja rastro de cierre de sesión (A4, PLAN_AUDITORIA_DOS_EJES_21-07.md)."""
-        _registrar_auditoria(nombre_usuario, "logout")
+        _registrar_auditoria(nombre_usuario, ACCION_LOGOUT)
     
     def add_user(self, username: Usuario):
         try:

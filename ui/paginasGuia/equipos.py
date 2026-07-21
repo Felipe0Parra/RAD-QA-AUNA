@@ -3,6 +3,7 @@ from data.ManejoDatos.load import encontrar_columnas
 from data.ManejoDatos.conection import Conexion
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
+from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR
 from PyQt5.QtWidgets import (QMessageBox, QGridLayout, QWidget, QSplitter, QHeaderView, QSizePolicy, QTableWidget, QTableWidgetItem,
                             QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QDialog, QLineEdit, QComboBox)
 from PyQt5.QtCore import Qt, QDate
@@ -208,7 +209,7 @@ class Config(PruebaBasico):
         """, lista)
         conn.commit()
         # H2.4: alta de equipo -- ref = "modelo/serie" (lista[1]/lista[2]).
-        _registrar_auditoria(_usuario_actual(self), "guardar", "equipos",
+        _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "equipos",
                              ref=f"{lista[1]}/{lista[2]}")
         QMessageBox.information(self, "Éxito", "Datos insertados correctamente en la base de datos.")
 
@@ -841,7 +842,7 @@ class Config(PruebaBasico):
         # H2.4: edición de equipo -- detalle distingue el UPDATE de
         # activo/vigente del INSERT de un nuevo registro de calibración.
         _registrar_auditoria(
-            _usuario_actual(self), "actualizar", "equipos", ref=f"{modelo}/{serie}",
+            _usuario_actual(self), ACCION_ACTUALIZAR, "equipos", ref=f"{modelo}/{serie}",
             detalle=("solo activo/vigente" if solo_cambio_activo
                      else "; ".join(cambios_detectados)))
 

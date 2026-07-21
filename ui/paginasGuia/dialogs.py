@@ -610,6 +610,7 @@ from mcc_PTW_read import mcc_read
 from models.PDF.reporte_calculadora_dos import generar_reporte_calibracion
 from services.trs398_excel import leer_trs398, comparar_trs398
 from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import ACCION_GUARDAR
 from ui.util_fechas import ancho_minimo_fecha  # I5
 from data.ManejoDatos import conection as _conection_mod
 import pandas as pd
@@ -2900,7 +2901,7 @@ class DialogCalculadoraDosis(QDialog):
             # puedan divergir (bug real encontrado y corregido al implementar
             # H2.4 -- ver test_audit_minimo.py).
             _registrar_auditoria(
-                self._usuario_actual(), "guardar", "calculadora_dosimetrica",
+                self._usuario_actual(), ACCION_GUARDAR, "calculadora_dosimetrica",
                 ref=f"{datos.get('Fecha')}|{datos.get('Acelerador')}",
                 detalle=f"Tipo_de_radiacion={datos.get('Tipo_de_radiacion')}",
                 ruta_db=_conection_mod.ruta_base_datos())

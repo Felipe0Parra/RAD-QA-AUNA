@@ -8,6 +8,7 @@ import traceback
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
+from services.audit_minimo import ACCION_GUARDAR
 
 
 class PruebaMensualIX(PruebaMensual600):
@@ -254,7 +255,7 @@ class PruebaMensualIX(PruebaMensual600):
                 cursor.execute(sql, datos_update)
 
         conn.commit()
-        _registrar_auditoria(_usuario_actual(self), "guardar", nombre_tabla, ref=ref,
+        _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, nombre_tabla, ref=ref,
                              detalle="mensual iX (todas las energías)")
         QMessageBox.information(self, "Éxito", "Datos guardados en la base de datos.")
         cursor.close()

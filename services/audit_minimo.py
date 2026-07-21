@@ -36,6 +36,18 @@ _DDL_AUDIT_LOG = """
     )
 """
 
+# A5 (PLAN_AUDITORIA_DOS_EJES_21-07): vocabulario cerrado de acciones -- antes
+# cada call-site escribía su propio string suelto ("guardar", "eliminar"...);
+# un typo nuevo (p.ej. "elimnar") habría quedado invisible en `audit_log` sin
+# que nada lo detectara. Cubre exactamente los 7 verbos ya en uso.
+ACCION_GUARDAR = "guardar"
+ACCION_REEMPLAZO = "reemplazo"
+ACCION_ACTUALIZAR = "actualizar"
+ACCION_EDITAR = "editar"
+ACCION_ELIMINAR = "eliminar"
+ACCION_LOGIN = "login"
+ACCION_LOGOUT = "logout"
+
 
 def usuario_actual(obj):
     """Nombre del usuario logueado, leído de `obj.user_id._nombre`.
