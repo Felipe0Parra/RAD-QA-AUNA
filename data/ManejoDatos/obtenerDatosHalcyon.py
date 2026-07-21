@@ -1,8 +1,9 @@
 import os
-import re 
+import re
 import pandas as pd
 from PyQt5.QtWidgets import QMessageBox, QFileDialog
 import data.ManejoDatos.conection as con
+from services.audit_minimo import registrar as _registrar_auditoria
 
 def addSpace(cadena):
     """Agrega un espacio antes de cada letra mayúscula en una cadena, excepto la inicial."""
@@ -176,11 +177,15 @@ def addInfo(self, fecha, user):
                 print("Ya existe la fecha")
             else:
                 createDB(df_csv, fecha, user)
+                _registrar_auditoria(
+                    user, "guardar", "halcyon", ref=fecha,
+                    detalle=f"carpeta MPC: {os.path.basename(folder_found)}"
+                )
     except Exception as e:
         import traceback
         traceback.print_exc()
         print(f"Error al agregar datos de la fecha: {fecha}:", e)
-        
+
     return df_widgets
 
 def addInfoWidgets(df):
