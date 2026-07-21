@@ -55,40 +55,97 @@ def addInfo2(self, user):
         
     return df_widgets
 
-def addInfo(self, fecha, user):
-    
-    ruta_actual = r"\\VARIANDB\Va_Transfer\TDS\HAL1161\MPCChecks"
-    pattern = re.compile(r'(\d{4}-\d{2}-\d{2})-(\d{2}-\d{2})')
+PATRON_CARPETA_MPC = re.compile(r'(\d{4}-\d{2}-\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{4})')
 
-    folder_found = None
-    max_time = -1
 
+def _results_csv_tiene_datos(carpeta):
+    """True si `carpeta` tiene Results.csv con al menos una fila de datos.
+
+    Una corrida abortada del MPC no genera Results.csv; una parcial lo genera
+    con solo la línea de cabecera. Solo una corrida completa trae filas de
+    datos detrás de la cabecera -- por eso este es el marcador de completitud
+    (confirmado con carpetas reales del Halcyon, ver PLAN_HALCYON_SELECCION_
+    CARPETA_21-07.md). Se leen solo las dos primeras líneas, no toda la
+    carpeta (~124 MB con las imágenes .xim).
+    """
+    ruta_csv = os.path.join(carpeta, 'Results.csv')
     try:
-        print("Listando carpetas...")
-        for carpeta in os.listdir(ruta_actual):
-            ruta_carpeta = os.path.join(ruta_actual, carpeta)
-            if os.path.isdir(ruta_carpeta):
-                match = pattern.search(carpeta)
-                if match and match.group(1) == fecha:
-                    hour, minute = map(int, match.group(2).split('-'))
-                    current_time = hour * 60 + minute
-                    if current_time > max_time:
-                        max_time = current_time
-                        folder_found = ruta_carpeta
-                    print(f"Candidata: {ruta_carpeta}")
-    except Exception as e:
-        print(f"Error al listar carpetas: {e}")
-        QMessageBox.critical(self, "Error", f"No se pudo acceder a la ruta.\n{e}")
-        return
+        with open(ruta_csv, 'r', encoding='utf-8', errors='ignore') as f:
+            f.readline()  # cabecera
+            segunda_linea = f.readline()
+    except OSError:
+        return False
+    return bool(segunda_linea.strip())
+
+
+def carpetas_mpc_de_fecha(ruta_base, fecha):
+    """Carpetas MPC de `fecha`, ordenadas de más antigua a más reciente.
+
+    Discrimina por día PRIMERO (solo entran candidatas cuyo nombre trae
+    exactamente esa fecha) -- la completitud se evalúa después, entre esas
+    candidatas, nunca a través de fechas distintas. Puede lanzar OSError si
+    `ruta_base` no es accesible; se deja propagar para que quien llama decida
+    cómo informarlo (red caída vs. sin datos para la fecha son cosas distintas).
+    """
+    candidatas = []
+    for carpeta in os.listdir(ruta_base):
+        ruta_carpeta = os.path.join(ruta_base, carpeta)
+        if not os.path.isdir(ruta_carpeta):
+            continue
+        match = PATRON_CARPETA_MPC.search(carpeta)
+        if not match or match.group(1) != fecha:
+            continue
+        clave_orden = match.group(2) + match.group(3) + match.group(4) + match.group(5)
+        candidatas.append((clave_orden, ruta_carpeta))
+    candidatas.sort(key=lambda par: par[0])
+    return [ruta for _, ruta in candidatas]
+
+
+def seleccionar_carpeta_mpc(ruta_base, fecha):
+    """Carpeta MPC correcta de `fecha`: la más reciente entre las COMPLETAS.
+
+    Nunca lanza -- ante cualquier problema para listar `ruta_base` devuelve
+    None, igual que si no hay ninguna corrida completa para esa fecha.
+    """
+    try:
+        candidatas = carpetas_mpc_de_fecha(ruta_base, fecha)
+    except OSError:
+        return None
+    completas = [c for c in candidatas if _results_csv_tiene_datos(c)]
+    if not completas:
+        return None
+    return completas[-1]
+
+
+def addInfo(self, fecha, user):
+
+    ruta_actual = r"\\VARIANDB\Va_Transfer\TDS\HAL1161\MPCChecks"
+
+    print("Listando carpetas...")
+    folder_found = seleccionar_carpeta_mpc(ruta_actual, fecha)
 
     if folder_found:
         print(f"Carpeta encontrada: {folder_found}")
         QMessageBox.information(self, "Encontrada", f"Se encontró la carpeta:\n{folder_found}")
     else:
-        print("No se encontró carpeta para esa fecha.")
-        QMessageBox.warning(self, "No encontrada", "No se encontró una carpeta para esa fecha.")
+        try:
+            candidatas = carpetas_mpc_de_fecha(ruta_actual, fecha)
+        except Exception as e:
+            print(f"Error al listar carpetas: {e}")
+            QMessageBox.critical(self, "Error", f"No se pudo acceder a la ruta.\n{e}")
+            return
+        if candidatas:
+            print(f"Hay {len(candidatas)} carpeta(s) para {fecha}, ninguna corrida completa.")
+            QMessageBox.warning(
+                self, "Sin corrida completa",
+                f"Hay {len(candidatas)} carpeta(s) para el {fecha} pero ninguna corrida "
+                f"del MPC está completa (falta Results.csv con datos). Revise el equipo."
+            )
+        else:
+            print("No se encontró carpeta para esa fecha.")
+            QMessageBox.warning(self, "No encontrada", "No se encontró una carpeta para esa fecha.")
         return
-    
+
     nombre_archivo = os.path.join(folder_found,'Results.csv')
     
     try:
