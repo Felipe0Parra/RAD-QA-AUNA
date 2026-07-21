@@ -18,6 +18,8 @@ except Exception:
         raise
 import sys, os, shutil, importlib
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
+from data.ManejoDatos.usuariosManager import UsuarioData
+from services.audit_minimo import usuario_actual as _usuario_actual
 
 class Menuu(QWidget):
     finished = pyqtSignal()
@@ -371,9 +373,11 @@ class MainWindow(QMainWindow):
     def __init__(self, user_id):
         #print("MainWindow             __init__ called")
         super().__init__()
-        #self.user_id = user_id
-        
-        self.Tab(user_id) 
+        # A4 (PLAN_AUDITORIA_DOS_EJES_21-07): antes quedaba comentado -- sin
+        # esto, cerrar() no tenía forma de saber quién cierra sesión.
+        self.user_id = user_id
+
+        self.Tab(user_id)
         self.estilo()
         self.showMaximized()
         self.settings()
@@ -492,6 +496,7 @@ class MainWindow(QMainWindow):
             widget_real.finished.connect(self.cerrar)
 
     def cerrar(self):
+        UsuarioData().logout(_usuario_actual(self))
         self.reRun_signal.emit()
         self.close()
 
