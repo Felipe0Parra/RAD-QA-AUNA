@@ -3,7 +3,23 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
+from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import ACCION_ELIMINAR, usuario_actual as _usuario_actual
 import traceback
+
+
+def _serializar_fila_actual(query):
+    """Texto 'col=valor; col=valor; ...' de la fila actual de `query` (tras
+    next()) -- A2-bis (PLAN_AUDITORIA_DOS_EJES_21-07.md §8.1 H1): el DELETE
+    de eliminarfilas() es físico y hasta ahora no dejaba NINGÚN rastro (ni
+    siquiera el que A2 sí dejó en load.py para las rutas mensual/anual/CT --
+    A2 nunca cubrió las tablas DIARIAS, que viven en este archivo). Mismo
+    patrón que `_serializar_fila_actual` de load.py. Cadena vacía si no hay
+    fila (nada que serializar).
+    """
+    record = query.record()
+    return "; ".join(
+        f"{record.fieldName(i)}={query.value(i)}" for i in range(record.count()))
 
 def load_table(self, boolean_keys=None, dosis=None, maquina=""):
     try:
@@ -161,10 +177,24 @@ def eliminarfilas(self, maquina):
         QMessageBox.critical(self, "Error", f"No se pudo conectar a la base de datos: {db.lastError().text()}")
         return
 
+    # A2-bis (§8.1 H1): capturar la fila ANTES de borrarla -- el DELETE de
+    # abajo es físico y sin esto no queda ninguna forma de reconstruir qué
+    # se perdió ("no parece quedar rastro del registro eliminado", reporte
+    # del físico 22-07).
+    query_fila = QSqlQuery()
+    query_fila.prepare(f'SELECT * FROM {maquina} WHERE id = ?')
+    query_fila.addBindValue(pac_id)
+    query_fila.exec()
+    fila_borrada = _serializar_fila_actual(query_fila) if query_fila.next() else ""
+
     query = QSqlQuery()
     query.prepare(f'DELETE FROM {maquina} WHERE id = ?')
     query.addBindValue(pac_id)
 
     if not query.exec():  # En PyQt5, exec() devuelve False si falla
         QMessageBox.critical(self, "Error", "Falló la eliminación: " + query.lastError().text())
+    else:
+        _registrar_auditoria(
+            _usuario_actual(self), ACCION_ELIMINAR, maquina, ref=str(pac_id),
+            detalle=fila_borrada)
 
