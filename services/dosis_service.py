@@ -271,7 +271,9 @@ class DosisService():
                     dosis_maxima TEXT,
                     protocolo_trs398 TEXT DEFAULT '2000',
                     r50_medido TEXT,
-                    pdd_zref_electrones TEXT
+                    pdd_zref_electrones TEXT,
+                    energia TEXT,
+                    vigente INTEGER DEFAULT 0
                 )
             """
 
@@ -285,6 +287,17 @@ class DosisService():
                                    "r50_medido", "TEXT")
             cls._asegurar_columna(cursor, "calculadora_dosimetrica",
                                    "pdd_zref_electrones", "TEXT")
+            # B3.1 (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.7): cada cálculo es
+            # para una energía y radiación particular (self.electrones/
+            # fotones ya distingue radiación en Tipo_de_radiacion); "energia"
+            # identifica CUÁL energía, y "vigente" marca cuál es la última
+            # versión por (Acelerador, energia) -- ver guardar_datos. La fila
+            # legacy id=1 (anterior a esta fase) queda con energia=NULL y
+            # vigente=0 vía el DEFAULT, sin necesidad de un UPDATE (B3.8).
+            cls._asegurar_columna(cursor, "calculadora_dosimetrica",
+                                   "energia", "TEXT")
+            cls._asegurar_columna(cursor, "calculadora_dosimetrica",
+                                   "vigente", "INTEGER DEFAULT 0")
             conn.commit()
             conn.close()
             return True
