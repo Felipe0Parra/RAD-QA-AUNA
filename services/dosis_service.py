@@ -391,16 +391,25 @@ class DosisService():
             return False
     
     @classmethod
-    def buscar_por_fecha(cls, fecha: str, acelerador: str):
+    def buscar_por_fecha(cls, fecha: str, acelerador: str, energia: str = None):
         """
         Search for dosimetry data by date, optionally filtered by accelerator
+        and (B3.4/B3.5) by energia.
 
         Args:
             fecha: Date in format 'dd/MM/yyyy' or similar
             acelerador: Accelerator name as stored in the Acelerador column
-                ("IX"/"Seiscientos"/"Hc"), or None to match any machine.
+                ("IX"/"Seiscientos"/"Hc" o ya el nombre canónico), o None
+                para no filtrar por máquina.
                 (I1: el docstring anterior decía "equipo_id" y ese error de
                 nombre indujo a pasar el id del catálogo desde la UI.)
+            energia: filtro adicional opcional (PLAN_AUDITORIA_DOS_EJES_21-07
+                §7.7): sin él, el comportamiento es idéntico al anterior a
+                B3 -- Fecha+Acelerador nada más, sin distinguir energía (el
+                hallazgo P1/B3 documentaba la colisión real: fotones y
+                electrones del mismo día+máquina se pisaban al recargar).
+                Con él, la clave real de versionado (Acelerador, energia)
+                queda completa.
 
         Returns:
             Dict with dosimetry data if found, None otherwise
@@ -410,37 +419,69 @@ class DosisService():
             conn.row_factory = sqlite3.Row  # Enable column access by name
             cursor = conn.cursor()
 
+            condiciones = ["Fecha = ?"]
+            parametros = [fecha]
             if acelerador is not None:
                 # B3-N: mismo criterio de normalización que guardar_datos --
                 # el llamador puede pasar el código corto de la calculadora
                 # ("IX"/"Hc"/"Seiscientos") o ya el nombre canónico.
-                acelerador = nombre_canonico(acelerador)
-                query = """
-                    SELECT * FROM calculadora_dosimetrica
-                    WHERE Fecha = ? AND Acelerador = ?
-                    ORDER BY id DESC
-                    LIMIT 1
-                """
-                cursor.execute(query, (fecha, acelerador))
-            else:
-                query = """
-                    SELECT * FROM calculadora_dosimetrica 
-                    WHERE Fecha = ?
-                    ORDER BY id DESC
-                    LIMIT 1
-                """
-                cursor.execute(query, (fecha,))
-            
+                condiciones.append("Acelerador = ?")
+                parametros.append(nombre_canonico(acelerador))
+            if energia is not None:
+                condiciones.append("energia = ?")
+                parametros.append(energia)
+
+            query = f"""
+                SELECT * FROM calculadora_dosimetrica
+                WHERE {' AND '.join(condiciones)}
+                ORDER BY id DESC
+                LIMIT 1
+            """
+            cursor.execute(query, parametros)
+
             row = cursor.fetchone()
             conn.close()
-            
+
             if row:
                 # Convert Row object to dictionary
                 return dict(row)
             else:
                 print(f"No data found for date: {fecha}")
                 return None
-                
+
+        except Exception as e:
+            print(f"Error searching database: {e}")
+            return None
+
+    @classmethod
+    def buscar_vigente(cls, acelerador: str, energia: str):
+        """La fila VIGENTE (vigente=1) para (Acelerador, energia) -- la
+        clave real del versionado B3.3, sin importar cuándo se guardó.
+
+        A diferencia de buscar_por_fecha (pensada para "qué se guardó ESTE
+        día"), esta es la consulta para "cuál es el cálculo vigente de ESTA
+        energía en ESTE acelerador" -- la que necesita el botón "Cargar
+        cálculo" (B3-e) para traer la última versión de una clave elegida
+        en el menú en cascada.
+        """
+        try:
+            conn = cls._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT * FROM calculadora_dosimetrica
+                WHERE Acelerador = ? AND energia = ? AND vigente = 1
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (nombre_canonico(acelerador), energia))
+
+            row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else None
+
         except Exception as e:
             print(f"Error searching database: {e}")
             return None

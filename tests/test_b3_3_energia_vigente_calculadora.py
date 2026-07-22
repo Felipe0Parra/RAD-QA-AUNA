@@ -189,13 +189,16 @@ class TestBanderaVigentePorAceleradorYEnergia:
         d1.emitir_dosis("6mv")
         assert d1.guardar_db() is True
 
-        # NOTA (queda para B3.4/B3.5): _confirmar_registro_existente hoy
-        # dispara por Fecha+Acelerador nada más -- todavía no distingue
-        # energia, así que guardar un 15mv el mismo día "choca" con el 6mv
-        # recién guardado aunque sean claves distintas. B3.4/B3.5 debe
-        # afinar esa pregunta a la clave real (Acelerador, energia).
+        # B3.4/B3.5: la clave real es (Acelerador, energia) -- guardar 15mv
+        # el mismo día que ya se guardó 6mv NO debe disparar "ya existe un
+        # registro" (son cálculos distintos); si _confirmar_registro_existente
+        # se llamara aquí, este monkeypatch la haría fallar el test (False
+        # cancelaría el guardado), así que su ausencia prueba el fix.
+        monkeypatch.setattr(
+            dialogs_mod.DialogCalculadoraDosis, "_confirmar_registro_existente",
+            lambda *a, **k: (_ for _ in ()).throw(
+                AssertionError("no debía preguntar: energia distinta = clave distinta")))
         d2 = _llenar_fotones_completo(dialogo_factory())
-        monkeypatch.setattr(d2, "_confirmar_registro_existente", lambda *a, **k: True)
         d2.emitir_dosis("15mv")
         d2.Zmax.setText("1.9")
         assert d2.guardar_db() is True

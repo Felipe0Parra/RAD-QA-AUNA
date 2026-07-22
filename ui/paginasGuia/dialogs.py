@@ -2756,21 +2756,28 @@ class DialogCalculadoraDosis(QDialog):
         aviso.exec_()
         return aviso.clickedButton() is btn_salir
 
-    def _confirmar_registro_existente(self, fecha, acelerador):
-        """H2.3: ya existe un registro guardado para esta fecha+acelerador --
-        pregunta antes de agregar una nueva versión. Aislado en su propio
-        método (regla 5, mismo patrón que `_confirmar_reemplazo_reporte_
-        diario` de H2.2) para que los tests puedan sustituirlo sin disparar
-        un QMessageBox modal real.
+    def _confirmar_registro_existente(self, fecha, acelerador, energia=None):
+        """H2.3: ya existe un registro guardado para esta fecha+acelerador
+        (+energia, B3.4/B3.5) -- pregunta antes de agregar una nueva
+        versión. Aislado en su propio método (regla 5, mismo patrón que
+        `_confirmar_reemplazo_reporte_diario` de H2.2) para que los tests
+        puedan sustituirlo sin disparar un QMessageBox modal real.
 
         A diferencia del reporte diario (H2.2, que hace DELETE+INSERT),
         aquí NUNCA se borra nada: "Sí" agrega una fila nueva (conserva el
         historial; `buscar_por_fecha` ya toma la más reciente vía `ORDER BY
         id DESC LIMIT 1`); "No" cancela el guardado sin perder lo tecleado.
+
+        `energia` (B3.4/B3.5, PLAN_AUDITORIA_DOS_EJES_21-07.md §7.7): la
+        clave real es (Acelerador, energia), no solo Acelerador -- guardar
+        6MV y luego 15MV el mismo día ya NO dispara esta pregunta (son
+        cálculos distintos); guardar_db ya llama a buscar_por_fecha con la
+        energía, así que `energia is not None` aquí solo aporta el texto.
         """
+        detalle_clave = acelerador if not energia else f"{acelerador} ({energia})"
         respuesta = QMessageBox.question(
             self, "Registro existente",
-            f"Ya existe un registro de {fecha} para {acelerador}.\n\n"
+            f"Ya existe un registro de {fecha} para {detalle_clave}.\n\n"
             "¿Guardar una nueva versión? Se conserva el historial; la "
             "lectura más reciente será la que se guarde ahora.",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -2888,9 +2895,10 @@ class DialogCalculadoraDosis(QDialog):
         # fecha+acelerador, preguntar ANTES de generar el reporte/guardar
         # (evita generar un PDF de un guardado que el físico termine
         # cancelando). No se borra nada aquí -- ver _confirmar_registro_existente.
-        existente = DosisService.buscar_por_fecha(datos["Fecha"], datos["Acelerador"])
+        existente = DosisService.buscar_por_fecha(
+            datos["Fecha"], datos["Acelerador"], datos.get("energia"))
         if existente and not self._confirmar_registro_existente(
-                datos["Fecha"], datos["Acelerador"]):
+                datos["Fecha"], datos["Acelerador"], datos.get("energia")):
             return False
 
             # Generate report

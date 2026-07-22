@@ -250,20 +250,25 @@ class TestH23RegistroExistente:
         assert recuperado["Zmax"] == "1.9", (
             "buscar_por_fecha debe devolver la version mas reciente")
 
-    def test_pregunta_recibe_fecha_y_acelerador_correctos(self, dialogo, monkeypatch):
+    def test_pregunta_recibe_fecha_acelerador_y_energia_correctos(self, dialogo, monkeypatch):
+        """B3.4/B3.5: la clave real es (Acelerador, energia), no solo
+        Acelerador -- guardar_db debe pasar la energía asignada con el botón
+        (emitir_dosis) a la pregunta de "ya existe un registro"."""
         d = llenar_fotones_completo(dialogo)
+        d.emitir_dosis("6mv")
         assert d.guardar_db() is True
 
         capturado = {}
         monkeypatch.setattr(
             d, "_confirmar_registro_existente",
-            lambda fecha, acelerador: capturado.update(
-                fecha=fecha, acelerador=acelerador) or False)
+            lambda fecha, acelerador, energia=None: capturado.update(
+                fecha=fecha, acelerador=acelerador, energia=energia) or False)
 
         d.guardar_db()
 
         fecha_esperada = d.date_edit.date().toString("dd/MM/yyyy")
-        assert capturado == {"fecha": fecha_esperada, "acelerador": d.acelerador_actual}
+        assert capturado == {
+            "fecha": fecha_esperada, "acelerador": d.acelerador_actual, "energia": "6mv"}
 
 
 class TestH24AuditoriaCalculadora:
