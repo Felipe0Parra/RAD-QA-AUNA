@@ -47,6 +47,12 @@ ACCION_EDITAR = "editar"
 ACCION_ELIMINAR = "eliminar"
 ACCION_LOGIN = "login"
 ACCION_LOGOUT = "logout"
+# A8 (§8.1 H3, PLAN_AUDITORIA_DOS_EJES_21-07): re-autenticación para AUTORIZAR
+# una operación (los diálogos DialogAdminPermiso*), no para iniciar sesión.
+# Antes usaba ACCION_LOGIN y ensuciaba el rastro: 36 de 72 filas del audit_log
+# del rebuild 22-07 eran "login", la mitad de ellas simples confirmaciones de
+# permiso -- el físico las leía como "mi borrado quedó registrado como login".
+ACCION_AUTORIZACION = "autorizacion"
 
 
 def usuario_actual(obj):

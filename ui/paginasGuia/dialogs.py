@@ -6,6 +6,7 @@ from PyQt5.QtGui import QPixmap, QIcon, QColor
 from data.ManejoDatos.user import Usuario
 from data.ManejoDatos.usuariosManager import UsuarioData
 from services.permisos import es_admin_equivalente
+from services.audit_minimo import ACCION_AUTORIZACION
 from mcc_PTW_read import mcc_read
 "   Creación de nuevas cuentas                                                                                                          "
 class DialogAdminPermiso(QDialog):
@@ -122,7 +123,8 @@ class DialogAdminPermiso(QDialog):
         if self.admin_user.text() and self.admin_password.text():
             user = Usuario(self.admin_user.text(), self.admin_password.text())
             usuData = UsuarioData()
-            self.res = usuData.login(user)
+            # A8: esto AUTORIZA una operación, no abre sesión.
+            self.res = usuData.login(user, ACCION_AUTORIZACION)
             if self.res and es_admin_equivalente(self.admin_user.text()):
                 self.labelwarnign.setText('')
                 self.accept()
@@ -249,7 +251,8 @@ class DialogAdminPermiso2(QDialog):
         if self.admin_user.text() and self.admin_password.text():
             user = Usuario(self.admin_user.text(), self.admin_password.text())
             usuData = UsuarioData()
-            self.res = usuData.login(user)
+            # A8: esto AUTORIZA una operación, no abre sesión.
+            self.res = usuData.login(user, ACCION_AUTORIZACION)
             if self.res and es_admin_equivalente(self.admin_user.text()):
                 self.labelwarnign.setText('')
                 self.accept()
@@ -376,7 +379,8 @@ class DialogAdminPermisoEliminar(QDialog):
         if self.admin_user.text() and self.admin_password.text():
             user = Usuario(self.admin_user.text(), self.admin_password.text())
             usuData = UsuarioData()
-            self.res = usuData.login(user)
+            # A8: esto AUTORIZA una operación, no abre sesión.
+            self.res = usuData.login(user, ACCION_AUTORIZACION)
             if self.res:
                 self.labelwarnign.setText('')
                 self.accept()
@@ -500,7 +504,8 @@ class DialogAdminPermisoEditar(QDialog):
         if self.admin_user.text() and self.admin_password.text():
             user = Usuario(self.admin_user.text(), self.admin_password.text())
             usuData = UsuarioData()
-            self.res = usuData.login(user)
+            # A8: esto AUTORIZA una operación, no abre sesión.
+            self.res = usuData.login(user, ACCION_AUTORIZACION)
             if self.res:
                 self.labelwarnign.setText('')
                 self.accept()

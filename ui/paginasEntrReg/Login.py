@@ -222,8 +222,14 @@ class LoginPage(QMainWindow):
             print("El usuario canceló o cerró la ventana")
     
     def authenticateUser(self):
-        if self.verify():
-            user_id = self.verify()
+        # A9 (§8.1 H4, PLAN_AUDITORIA_DOS_EJES_21-07): antes se llamaba
+        # self.verify() DOS veces -- una en el `if` y otra para asignar
+        # user_id --. Cada verify() ejecuta UsuarioData.login(), que audita,
+        # así que cada inicio de sesión dejaba DOS filas `login` idénticas al
+        # segundo en audit_log (pares 24/25, 26/27, 30/31... en la BD del
+        # rebuild 22-07) y validaba la contraseña dos veces.
+        user_id = self.verify()
+        if user_id:
             #print(f"Usuario autenticado con ID: {user_id}")
             self.login_successful.emit(user_id)
             

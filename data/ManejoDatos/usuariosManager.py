@@ -2,11 +2,22 @@ import data.ManejoDatos.conection as con
 from data.ManejoDatos.user import Usuario
 from data.ManejoDatos.encriptarInfo import encrypt_data, decrypt_data
 from services.audit_minimo import registrar as _registrar_auditoria
-from services.audit_minimo import ACCION_LOGIN, ACCION_LOGOUT
+from services.audit_minimo import ACCION_LOGIN, ACCION_LOGOUT, ACCION_AUTORIZACION
 
 class UsuarioData():
 
-    def login(self, username: Usuario):
+    def login(self, username: Usuario, accion=ACCION_LOGIN):
+        """Valida credenciales y deja rastro en `audit_log`.
+
+        `accion` (A8, §8.1 H3 del PLAN_AUDITORIA_DOS_EJES_21-07): qué se está
+        registrando. Por defecto `ACCION_LOGIN` (inicio de sesión real, desde
+        Login.py). Los diálogos `DialogAdminPermiso*` pasan
+        `ACCION_AUTORIZACION` porque NO están abriendo sesión: están
+        confirmando permiso para una operación puntual (editar/eliminar/crear
+        usuario). Antes todos escribían "login", y como las rutas diarias no
+        auditaban su propia operación (H1/H2), ese login quedaba como ÚNICO
+        rastro -- de ahí el reporte "mi borrado aparece como un login".
+        """
         try:
             with con.Conexion().conectar() as db:  # Cierra la conexión automáticamente
                 cursor = db.cursor()
@@ -25,7 +36,7 @@ class UsuarioData():
                         # -- se audita con el fullname (fila[3]), la misma
                         # identidad que usuario_actual() lee en el resto de
                         # la app (user_id._nombre).
-                        _registrar_auditoria(fila[3], ACCION_LOGIN, detalle="OK")
+                        _registrar_auditoria(fila[3], accion, detalle="OK")
                         return Usuario(username=fila[1], password=stored_password, fullname=fila[3])
                     else:
                         #print("Contraseña incorrecta.")
@@ -33,13 +44,13 @@ class UsuarioData():
                         # Se audita con el usuario INTENTADO (username._usuario)
                         # -- todavía no hay un fullname válido que usar, y
                         # quién intentó (aunque falló) es justo lo relevante.
-                        _registrar_auditoria(username._usuario, ACCION_LOGIN,
+                        _registrar_auditoria(username._usuario, accion,
                                              detalle="contraseña incorrecta")
                         return None
                 else:
 
                     print("Usuario no encontrado.")
-                    _registrar_auditoria(username._usuario, ACCION_LOGIN,
+                    _registrar_auditoria(username._usuario, accion,
                                          detalle="usuario no encontrado")
                     return None
         except Exception as e:

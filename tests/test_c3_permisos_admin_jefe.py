@@ -22,7 +22,10 @@ def app():
 
 
 def _mock_login(usuarios_validos):
-    def _login(self, user):
+    # `accion` (A8): los diálogos de permiso pasan ACCION_AUTORIZACION como 2º
+    # posicional. El mock la acepta y la ignora -- qué acción se registra lo
+    # cubre test_a8_a9_rastro_login_limpio.py; aquí solo importa el permiso.
+    def _login(self, user, accion=None):
         if user._usuario in usuarios_validos:
             return Usuario(username=user._usuario, password=user._clave)
         return None
