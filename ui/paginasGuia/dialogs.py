@@ -1328,7 +1328,19 @@ class DialogCalculadoraDosis(QDialog):
         # calendario sobre el texto también aquí, no solo en el formulario).
         self.date_edit.setMinimumWidth(ancho_minimo_fecha(self.date_edit))
         fecha_layout.addWidget(self.date_edit)
-        self.date_edit.dateChanged.connect(self.on_fecha_cambiada)
+
+        # B3-e (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.7e): reemplaza la carga
+        # automática al cambiar de fecha (I1, retirada -- ver
+        # mostrar_menu_cargar_calculo). date_edit queda solo como selector
+        # de fecha para un cálculo NUEVO.
+        self.btn_cargar_calculo = QPushButton("📂 Cargar cálculo")
+        self.btn_cargar_calculo.setToolTip(
+            "Carga un cálculo VIGENTE guardado este mes para este "
+            "acelerador, elegido por energía. No borra lo ya tecleado "
+            "hasta que elija una energía con datos guardados.")
+        self.btn_cargar_calculo.clicked.connect(self.mostrar_menu_cargar_calculo)
+        fecha_layout.addWidget(self.btn_cargar_calculo)
+
         self.col1.addWidget(fecha_box)
         
         equipo_box, equipo_layout = self.crear_bloque("Selección de Equipo", "#5b9ea8")
@@ -2366,61 +2378,49 @@ class DialogCalculadoraDosis(QDialog):
         self.pressure_0.clear()
         self.equipo_id = None
         self.datos_equipo = None
-    def on_fecha_cambiada(self):
+    def mostrar_menu_cargar_calculo(self):
+        """B3-e (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.7e): menú en cascada con
+        las energías del acelerador (self.energias, agrupadas Fotones/
+        Electrones -- mismo criterio visual que construir_botones_asignacion).
+        Reemplaza la carga automática al cambiar de fecha (I1, retirada):
+        cargar un registro guardado ahora es siempre una decisión explícita
+        del físico, nunca un efecto secundario de mover el selector de fecha.
         """
-        Executed when the date selector changes.
-        Searches the database for data related to that date and maps values to UI fields.
+        menu = QMenu(self)
+        grupo_anterior = None
+        for energia in self.energias:
+            grupo = "Electrones" if "mev" in energia.lower() else "Fotones"
+            if grupo != grupo_anterior:
+                if grupo_anterior is not None:
+                    menu.addSeparator()
+                encabezado = menu.addAction(f"{grupo}:")
+                encabezado.setEnabled(False)
+                grupo_anterior = grupo
+            etiqueta = energia.replace("mev", " MeV").replace("mv", " MV")
+            menu.addAction(etiqueta, lambda _checked=False, e=energia: self._cargar_calculo_del_mes(e))
+        menu.exec_(self.btn_cargar_calculo.mapToGlobal(
+            self.btn_cargar_calculo.rect().bottomLeft()))
+
+    def _cargar_calculo_del_mes(self, energia):
+        """Trae el cálculo VIGENTE de (self.acelerador_actual, energia) cuya
+        Fecha cae en el mes/año de self.date_edit, y lo carga con
+        cargar_datos_desde_db (reutilizado, sin cambios). ⚠️ Decisión de
+        arquitecto (§7.7e del plan): el alcance es por MES -- coherente con
+        que dosimetriaMen es por control mensual y con "en ese mes
+        particular" -- aunque la bandera `vigente` en sí no tiene mes en su
+        identidad (solo Acelerador+energia, ver DosisService.buscar_vigente).
         """
-        try:
-            # Get selected date in format 'dd/MM/yyyy'
-            fecha_seleccionada = self.date_edit.date().toString("dd/MM/yyyy")
-
-            # I1: se busca filtrando por MÁQUINA (self.acelerador_actual), no
-            # por el dato del combo de series -- el segundo parámetro de
-            # buscar_por_fecha es el Acelerador ("IX"/"Seiscientos"/"Hc").
-            # El código anterior pasaba equipo_id (un entero del catálogo):
-            # al abrir el diálogo era None (traía registros de CUALQUIER
-            # máquina) y con serie elegida nunca hacía match.
-            datos = DosisService.buscar_por_fecha(
-                fecha_seleccionada, self.acelerador_actual)
-
-            if datos:
-                # I1: NUNCA recargar en silencio. Antes, el setDate de
-                # fecha_inicial (H3.4) disparaba esta ruta al abrir y el
-                # registro recién guardado con "Aceptar y cerrar" reaparecía
-                # completo ("valores pegados", reporte del físico 16-07).
-                # Cargar un registro guardado ahora es una decisión explícita.
-                if self._confirmar_carga_registro(fecha_seleccionada):
-                    self.cargar_datos_desde_db(datos)
-                    print(f"Data loaded for date: {fecha_seleccionada}")
-            else:
-                # No data found
-                print(f"No data found for date: {fecha_seleccionada}")
-
-        except Exception as e:
-            print(f"Error in date change handler: {e}")
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "Error", f"Error loading data for selected date: {e}")
-
-    def _confirmar_carga_registro(self, fecha):
-        """I1: hay un registro guardado para la fecha elegida en esta máquina
-        -- pregunta antes de volcarlo sobre el formulario. Aislado en su
-        propio método (mismo patrón que `_confirmar_registro_existente` de
-        H2.3) para que los tests puedan sustituirlo sin disparar un
-        QMessageBox modal real.
-
-        Default No: el caso más frecuente es abrir la calculadora para un
-        cálculo NUEVO (y "No" tampoco borra nada de lo ya tecleado); "Sí"
-        cubre la consulta/edición de un registro histórico (D2.2/E4).
-        """
-        respuesta = QMessageBox.question(
-            self, "Registro guardado",
-            f"Ya existe un registro guardado del {fecha} para esta máquina.\n\n"
-            "¿Cargarlo en la calculadora? Si va a hacer un cálculo nuevo, "
-            "elija No (no se borra nada).",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        return respuesta == QMessageBox.Yes
-
+        fecha_actual = self.date_edit.date()
+        datos = DosisService.buscar_vigente_del_mes(
+            self.acelerador_actual, energia, fecha_actual.month(), fecha_actual.year())
+        etiqueta = energia.replace("mev", " MeV").replace("mv", " MV")
+        if datos is None:
+            QMessageBox.information(
+                self, "Sin cálculo vigente",
+                f"No hay un cálculo vigente de {etiqueta} guardado en "
+                f"{fecha_actual.toString('MM/yyyy')} para este acelerador.")
+            return
+        self.cargar_datos_desde_db(datos)
 
     def cargar_datos_desde_db(self, datos: dict):
         """

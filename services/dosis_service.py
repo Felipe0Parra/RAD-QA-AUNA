@@ -485,7 +485,44 @@ class DosisService():
         except Exception as e:
             print(f"Error searching database: {e}")
             return None
-    
+
+    @classmethod
+    def buscar_vigente_del_mes(cls, acelerador: str, energia: str, mes: int, anio: int):
+        """La fila vigente=1 de (Acelerador, energia), solo si su Fecha cae
+        en el mes/año dados (B3-e, PLAN_AUDITORIA_DOS_EJES_21-07.md §7.7e):
+        el botón "Cargar cálculo" se abre desde un mes particular y debe
+        traer lo vigente DE ESE MES -- si la última versión de esa clave es
+        de otro mes, no es "la de este mes" y no aparece aquí (sigue
+        accesible sin filtro de mes vía buscar_vigente).
+
+        Fecha se guarda como texto "dd/MM/yyyy" (nunca ISO, ver guardar_db);
+        se filtra por el sufijo "/MM/aaaa" en vez de parsear la fecha
+        completa.
+        """
+        try:
+            conn = cls._get_connection()
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            sufijo_mes = f"/{int(mes):02d}/{int(anio):04d}"
+            cursor.execute(
+                """
+                SELECT * FROM calculadora_dosimetrica
+                WHERE Acelerador = ? AND energia = ? AND vigente = 1
+                      AND Fecha LIKE ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (nombre_canonico(acelerador), energia, f"%{sufijo_mes}"))
+
+            row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else None
+
+        except Exception as e:
+            print(f"Error searching database: {e}")
+            return None
+
     @classmethod
     def obtener_fechas_disponibles(cls, acelerador):
         """
