@@ -32,10 +32,13 @@ def nombre_canonico(nombre):
     histórico de `controles.equipo`).
 
     Si `nombre` no es una variante reconocida (p. ej. "Tomógrafo", fuera del
-    dominio de la calculadora, o None/""), se devuelve sin cambios -- nunca
-    lanza ni inventa un valor.
+    dominio de la calculadora), o no es un string no vacío (None, "", o un
+    id numérico de otro catálogo colado por error -- caso real:
+    dialogs.py pasa combo_series.currentData(), un id entero, a
+    obtener_fechas_disponibles), se devuelve sin cambios -- nunca lanza ni
+    inventa un valor.
     """
-    if not nombre:
+    if not nombre or not isinstance(nombre, str):
         return nombre
     return NOMBRES_CANONICOS.get(nombre.strip().lower(), nombre)
 

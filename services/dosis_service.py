@@ -1,6 +1,7 @@
 from data.GraficasyTablas.calculadora_dosis_Tablas import *
 from services.dosis_service_calculations import *
 from data.ManejoDatos import conection as _conection
+from services.nombres_acelerador import nombre_canonico
 import sqlite3
 from typing import Optional, Dict, List
 class DosisService():
@@ -325,38 +326,66 @@ class DosisService():
     def guardar_datos(cls, datos: Dict) -> bool:
         """
         Save dosimetry data to database
-        
+
         Args:
             datos: Dictionary containing all dosimetry measurements
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
         try:
             # Ensure table exists
             cls.crear_tabla()
-            
+
             conn = cls._get_connection()
             cursor = conn.cursor()
-            
+
+            # B3-N: el Acelerador se normaliza SIEMPRE al nombre canónico
+            # (Clinac 600/Clinac iX/Halcyon) antes de guardar, sin importar
+            # qué representación traiga el llamador (código corto "IX"/"Hc"/
+            # "Seiscientos" de la calculadora, o ya el nombre completo).
+            # buscar_por_fecha/obtener_fechas_disponibles normalizan igual
+            # su parámetro de búsqueda, así que ambos lados quedan
+            # consistentes sin importar qué forma haya usado cada caller.
+            if datos.get("Acelerador"):
+                datos = dict(datos, Acelerador=nombre_canonico(datos["Acelerador"]))
+
+            # B3.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.7d): si el registro
+            # trae Acelerador+energia, es una versión nueva de esa clave --
+            # baja la vigente anterior e inserta esta como vigente=1, en la
+            # MISMA transacción (un solo commit más abajo cubre ambas
+            # sentencias). Nunca se borra nada: las filas históricas quedan
+            # completas, solo se mueve la bandera. Sin energia (llamadas que
+            # no vienen de la calculadora ya migrada, o la fila legacy),
+            # el comportamiento es el de siempre: INSERT liso, vigente queda
+            # en su DEFAULT (0).
+            acelerador = datos.get("Acelerador")
+            energia = datos.get("energia")
+            if acelerador and energia:
+                cursor.execute(
+                    "UPDATE calculadora_dosimetrica SET vigente = 0 "
+                    "WHERE Acelerador = ? AND energia = ?",
+                    (acelerador, energia))
+                datos = dict(datos, vigente=1)
+
             # Prepare data for insertion
             columnas = list(datos.keys())
             valores = list(datos.values())
-            
+
             # Create query with placeholders
             placeholders = ', '.join(['?'] * len(valores))
             query_insert = f"""
-                INSERT INTO calculadora_dosimetrica ({', '.join(columnas)}) 
+                INSERT INTO calculadora_dosimetrica ({', '.join(columnas)})
                 VALUES ({placeholders})
             """
-            
+
             cursor.execute(query_insert, valores)
             conn.commit()
             conn.close()
-            
+
             print(f"Data saved successfully for date: {datos.get('Fecha', 'Unknown')}")
             return True
-            
+
         except Exception as e:
             print(f"Error saving to database: {e}")
             return False
@@ -380,10 +409,14 @@ class DosisService():
             conn = cls._get_connection()
             conn.row_factory = sqlite3.Row  # Enable column access by name
             cursor = conn.cursor()
-            
+
             if acelerador is not None:
+                # B3-N: mismo criterio de normalización que guardar_datos --
+                # el llamador puede pasar el código corto de la calculadora
+                # ("IX"/"Hc"/"Seiscientos") o ya el nombre canónico.
+                acelerador = nombre_canonico(acelerador)
                 query = """
-                    SELECT * FROM calculadora_dosimetrica 
+                    SELECT * FROM calculadora_dosimetrica
                     WHERE Fecha = ? AND Acelerador = ?
                     ORDER BY id DESC
                     LIMIT 1
@@ -419,10 +452,11 @@ class DosisService():
         try:
             conn = cls._get_connection()
             cursor = conn.cursor()
-            
+
             if acelerador is not None:
+                acelerador = nombre_canonico(acelerador)
                 query = """
-                    SELECT DISTINCT Fecha FROM calculadora_dosimetrica 
+                    SELECT DISTINCT Fecha FROM calculadora_dosimetrica
                     WHERE Acelerador = ?
                     ORDER BY id DESC
                 """

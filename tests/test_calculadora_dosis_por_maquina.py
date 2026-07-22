@@ -28,6 +28,7 @@ import ui.paginasGuia.dialogs as dialogs_mod
 import services.dosis_service as dosis_service_mod
 import data.ManejoDatos.conection as conection_mod
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
+from services.nombres_acelerador import nombre_canonico
 
 # Configuración de oro (PLAN_FASE_F0_GATE.md §5, confirmada por el usuario
 # 2026-07-10): misma cámara de fotones en las 3 máquinas; serie 1822 (NO 1825,
@@ -188,7 +189,11 @@ class TestFotonesConfigDeOroPorMaquina:
         assert datos_bd is not None, (
             f"registro no encontrado buscando por Acelerador={original.acelerador_actual!r} "
             f"-- ¿guardó con un valor de Acelerador distinto?")
-        assert datos_bd["Acelerador"] == acelerador_esperado
+        # B3-N: lo guardado es el nombre CANÓNICO (Clinac 600/Clinac iX/
+        # Halcyon), aunque acelerador_actual siga siendo el código corto de
+        # la calculadora -- buscar_por_fecha normaliza el parámetro de
+        # búsqueda, así que el registro se encuentra igual (línea 186-190).
+        assert datos_bd["Acelerador"] == nombre_canonico(acelerador_esperado)
         assert datos_bd["Modelo_equipo"] == "N31010"
         # Numero_serie persiste el ID del combo_series (currentData()), no el
         # string de serie -- nombre de columna heredado, algo engañoso.
@@ -219,7 +224,8 @@ class TestElectronesConfigDeOroSoloIX:
         fecha = original.date_edit.date().toString("dd/MM/yyyy")
         datos_bd = dosis_service_mod.DosisService.buscar_por_fecha(fecha, original.acelerador_actual)
         assert datos_bd is not None
-        assert datos_bd["Acelerador"] == "IX"
+        # B3-N: canónico ("Clinac iX"), no el código corto de la calculadora.
+        assert datos_bd["Acelerador"] == "Clinac iX"
         assert datos_bd["Tipo_de_radiacion"] == "Electrones"
         assert datos_bd["Modelo_equipo"] == "TN34001"
         assert datos_bd["r50_medido"] == "5.127"

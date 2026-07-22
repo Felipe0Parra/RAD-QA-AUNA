@@ -198,11 +198,15 @@ class TestH23RegistroExistente:
     reciente."""
 
     def _contar_filas(self, bd_temporal, fecha, acelerador):
+        # B3-N: guardar_datos normaliza Acelerador al nombre canónico antes
+        # de insertar -- esta consulta cruda (a propósito, para verificar
+        # la fila REAL sin pasar por el service) debe normalizar igual.
+        from services.nombres_acelerador import nombre_canonico
         con = sqlite3.connect(bd_temporal)
         try:
             return con.execute(
                 "SELECT COUNT(*) FROM calculadora_dosimetrica WHERE Fecha=? AND Acelerador=?",
-                (fecha, acelerador)).fetchone()[0]
+                (fecha, nombre_canonico(acelerador))).fetchone()[0]
         finally:
             con.close()
 

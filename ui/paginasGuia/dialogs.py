@@ -620,6 +620,7 @@ from models.PDF.reporte_calculadora_dos import generar_reporte_calibracion
 from services.trs398_excel import leer_trs398, comparar_trs398
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
+from services.nombres_acelerador import mismo_acelerador
 from ui.util_fechas import ancho_minimo_fecha  # I5
 from data.ManejoDatos import conection as _conection_mod
 import pandas as pd
@@ -849,6 +850,10 @@ class DialogCalculadoraDosis(QDialog):
         print("Dialog llamado desde:", type(self.main_window).__name__)
         self.datos_equipo = None
         self.energias = energias or []
+        # B3.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.7c): qué energía se
+        # asignó con los botones de abajo (construir_botones_asignacion /
+        # emitir_dosis) -- se persiste recién en guardar_db, al aceptar.
+        self.energia_calculo = None
         self.acelerador = type(self.main_window).__name__
      
    
@@ -2420,7 +2425,12 @@ class DialogCalculadoraDosis(QDialog):
             datos: Dictionary containing dosimetry data from database
         """
         try:
-            if datos.get('Acelerador') == self.acelerador_actual:
+            # B3-N: datos['Acelerador'] viene de buscar_por_fecha -- ya el
+            # nombre canónico guardado (Clinac 600/Clinac iX/Halcyon), sin
+            # importar que self.acelerador_actual siga siendo el código
+            # corto de la calculadora ("IX"/"Hc"/"Seiscientos"). Comparar
+            # tal cual (==) siempre habría fallado tras B3.3.
+            if mismo_acelerador(datos.get('Acelerador'), self.acelerador_actual):
                 # Block signals temporarily to avoid triggering calculations while loading
                 self.blockSignals(True)
 
@@ -2859,6 +2869,12 @@ class DialogCalculadoraDosis(QDialog):
             # persisten aparte: se derivan de R50 + modelo + protocolo.
             "r50_medido": self.R50.text(),
             "pdd_zref_electrones": self.pddzrefE.text(),
+            # B3.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.7c): la energía
+            # asignada con los botones de arriba (emitir_dosis); None si el
+            # físico no pulsó ninguno -- guardar_datos no exige este campo,
+            # queda NULL y la fila no entra en el esquema de vigencia
+            # (Acelerador, energia), igual que la fila legacy (B3.8).
+            "energia": self.energia_calculo,
         }
 
         faltantes = self._campos_faltantes(datos)
@@ -3462,6 +3478,11 @@ class DialogCalculadoraDosis(QDialog):
                 raise ValueError("dosis_maxima no positiva o no calculada")
             valor = dosis_gy_mu * 100
             self.dosis_asignada.emit(energia, valor)
+            # B3.3: qué energía generó ESTE cálculo -- se persiste en
+            # guardar_db al aceptar (no aquí; este botón sigue sin guardar
+            # nada en la BD, solo alimenta el formulario mensual). Si se
+            # pulsa más de un botón antes de cerrar, gana el último.
+            self.energia_calculo = energia
             # H3.3: misma etiqueta legible de los botones ("6 MV"/"6 MeV"),
             # no energia.upper() ("6MV"/"6MEV").
             etiqueta = energia.replace("mev", " MeV").replace("mv", " MV")
