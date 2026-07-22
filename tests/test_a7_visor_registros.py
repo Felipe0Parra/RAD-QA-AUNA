@@ -6,10 +6,9 @@ Antes de esta tarea, `console_logs.Registros` importaba `AuditEngine`
 antes de llegar siquiera a instanciar nada -- y consultaba columnas que
 nunca existieron en el `audit_log` real (`username/action/module/status/
 detail` en vez de `usuario/accion/tabla/ref/detalle`, el esquema real de
-`services/audit_minimo.py`). El widget sigue sin estar conectado a la UI
-(pestaña "Registros" comentada en `mainpages.py` -- decisión de producto
-aparte, no de esta limpieza), pero ahora es importable, instanciable y lee
-el esquema real.
+`services/audit_minimo.py`). Esta tarea lo dejó importable, instanciable y
+leyendo el esquema real; la pestaña "Registros" se habilitó después, en A11
+(ver test_a11_pestana_registros.py).
 """
 import pytest
 from PyQt5.QtWidgets import QApplication

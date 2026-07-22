@@ -419,7 +419,13 @@ class MainWindow(QMainWindow):
             ("Tomógrafo", lambda: Menuu("Tomógrafo", user_id)),
             ("Equipos", lambda: self._crear_config()),
             ("Excel", lambda: self.ExportarExcel()),  # Ejemplo de otra pestaña
-            #("Registros", lambda: self.Registros())
+            # A11 (§8.1 H6, PLAN_AUDITORIA_DOS_EJES_21-07): visible para
+            # cualquier usuario logueado, igual que el resto de pestañas --
+            # ninguna otra está restringida por rol hoy, y es un visor de
+            # SOLO LECTURA (no otorga ningún permiso nuevo). Si más adelante
+            # se decide limitarlo (p.ej. a es_admin_equivalente), este es el
+            # punto de entrada.
+            ("Registros", lambda: self.Registros()),
         ]
         self._tab_instancias = {}
 
@@ -461,15 +467,16 @@ class MainWindow(QMainWindow):
             print(f"✗ Error importando ExportarExcel: {e}")
             return QWidget()  # Widget vacío como fallback
         
-    # def Registros(self):
-    #     """Importa y crea la vista de exportación a Excel."""
-    #     try: 
-    #         modulo = importlib.import_module("ui.paginasGuia.console_logs")
-    #         Console_logs = getattr(modulo, "Registros")
-    #         return Console_logs()
-    #     except Exception as e:
-    #         print(f"✗ Error registros auditorias: {e}")
-    #         return QWidget()  # Widget vacío como fallback
+    def Registros(self):
+        """Importa y crea el visor de audit_log (A7 lo dejó correcto; A11 lo
+        habilita en la UI, PLAN_AUDITORIA_DOS_EJES_21-07 §8.1 H6)."""
+        try:
+            modulo = importlib.import_module("ui.paginasGuia.console_logs")
+            Console_logs = getattr(modulo, "Registros")
+            return Console_logs()
+        except Exception as e:
+            print(f"✗ Error registros auditorias: {e}")
+            return QWidget()  # Widget vacío como fallback
 
     def _cargar_pestania_diferida(self, indice):
         """Carga la pestaña solicitada únicamente cuando el usuario la visita."""

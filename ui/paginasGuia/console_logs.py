@@ -7,11 +7,12 @@ Antes de esta tarea, este archivo importaba `AuditEngine`
 existieron en el `audit_log` real (`username/action/module/status/detail` en
 vez de `usuario/accion/tabla/ref/detalle`, el esquema real de
 `services/audit_minimo.py`). El widget nunca estuvo conectado a la UI: la
-pestaña "Registros" y el método que la crea siguen comentados en
-`mainpages.py` -- arreglarlo aquí lo deja correcto y usable, pero activar la
-pestaña es una decisión de producto aparte (¿quién debería poder ver esto?
-¿todos o solo un admin?, y hoy no existe ningún concepto de rol de sesión
-real para responderlo), no parte de esta limpieza.
+pestaña "Registros" y el método que la crea seguían comentados en
+`mainpages.py` -- A7 lo dejó correcto y usable.
+
+A11 (§8.1 H6, PLAN_AUDITORIA_DOS_EJES_21-07): habilitada en `mainpages.py`,
+visible para cualquier usuario logueado -- es un visor de SOLO LECTURA y
+ninguna otra pestaña está restringida por rol hoy.
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
