@@ -5,6 +5,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QDate
 from PyQt5.QtGui import QPixmap, QIcon, QColor
 from data.ManejoDatos.user import Usuario
 from data.ManejoDatos.usuariosManager import UsuarioData
+from services.permisos import es_admin_equivalente
 from mcc_PTW_read import mcc_read
 "   Creación de nuevas cuentas                                                                                                          "
 class DialogAdminPermiso(QDialog):
@@ -38,9 +39,10 @@ class DialogAdminPermiso(QDialog):
         subtitle_label.setWordWrap(True)
 
         # Línea de usuario
+        # C3 (2026-07-21): editable -- admin o el físico en jefe pueden
+        # autorizar con su propio usuario (ver services/permisos.py)
         self.admin_user = QLineEdit(self)
         self.admin_user.setText("admin")
-        self.admin_user.setReadOnly(True)
 
         # Línea de contraseña
         self.admin_password = QLineEdit(self)
@@ -121,9 +123,12 @@ class DialogAdminPermiso(QDialog):
             user = Usuario(self.admin_user.text(), self.admin_password.text())
             usuData = UsuarioData()
             self.res = usuData.login(user)
-            if self.res:
+            if self.res and es_admin_equivalente(self.admin_user.text()):
                 self.labelwarnign.setText('')
                 self.accept()
+            elif self.res:
+                self.labelwarnign.setText('Este usuario no tiene permisos administrativos')
+                self.admin_user.setFocus()
             else:
                 self.labelwarnign.setText('Verifique la contraseña por favor')
                 self.admin_user.setFocus()
@@ -161,9 +166,10 @@ class DialogAdminPermiso2(QDialog):
         subtitle_label.setWordWrap(True)
 
         # Línea de usuario
+        # C3 (2026-07-21): editable -- admin o el físico en jefe pueden
+        # autorizar con su propio usuario (ver services/permisos.py)
         self.admin_user = QLineEdit(self)
         self.admin_user.setText("admin")
-        self.admin_user.setReadOnly(True)
 
         # Línea de contraseña
         self.admin_password = QLineEdit(self)
@@ -244,10 +250,13 @@ class DialogAdminPermiso2(QDialog):
             user = Usuario(self.admin_user.text(), self.admin_password.text())
             usuData = UsuarioData()
             self.res = usuData.login(user)
-            if self.res:
+            if self.res and es_admin_equivalente(self.admin_user.text()):
                 self.labelwarnign.setText('')
                 self.accept()
                 
+            elif self.res:
+                self.labelwarnign.setText('Este usuario no tiene permisos administrativos')
+                self.admin_user.setFocus()
             else:
                 self.labelwarnign.setText('Verifique la contraseña por favor')
                 self.admin_user.setFocus()
