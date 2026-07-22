@@ -7,6 +7,8 @@ from data.ManejoDatos.lectorWidgets import DataFront  #ya
 from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar, DialogAdminPermisoEditar
 from data.ManejoDatos.load import add_info, conectarfueradeservicio
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
+from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import ACCION_EDITAR, usuario_actual as _usuario_actual
 from ui.util_fechas import ancho_minimo_fecha  # I5
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QRadioButton, QLabel, QLineEdit, 
                             QComboBox, QAbstractItemDelegate, QTableWidget, QTableWidgetItem, QHeaderView, 
@@ -742,6 +744,16 @@ class PruebaBasico(QWidget):
                                 "el cambio NO se guardó. Recargue la tabla e intente de nuevo.")
         else:
             db.commit()
+            # A3-bis (§8.1 H2, PLAN_AUDITORIA_DOS_EJES_21-07): la edición
+            # DIARIA no dejaba ningún rastro -- A3 solo cubrió editar_tablas
+            # (load.py, rutas mensual/anual). El físico la veía aparecer como
+            # un "login" (era la reautenticación de DialogAdminPermisoEditar,
+            # ver A8) y sospechaba, con razón, que el cambio real no quedaba
+            # registrado en ningún lado.
+            _registrar_auditoria(
+                _usuario_actual(self), ACCION_EDITAR, database,
+                ref=str(id_value),
+                detalle=f"{column_name}: '{old_value}' → {new_value}")
             QMessageBox.information(self, "Éxito", "Registro actualizado correctamente.")
 
         db.close()
