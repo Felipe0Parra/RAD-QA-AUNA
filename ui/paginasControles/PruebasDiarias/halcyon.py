@@ -301,15 +301,21 @@ class PruebaDiariaHc(PruebaBasico):
             self.limit2.dateChanged.connect(lambda _, grafica = grafica: self.plotter(grafica))
 
         self.search_bar.textChanged.connect(self.filtrarTabla)  # Conectar evento de búsqueda
-        
-        
-        self.edit_table.clicked.connect(self.verificar_editar)
-        self.accept_edit.clicked.connect(lambda: self.cargarDatosEditados(self.item, self.old_value, "halcyon"))
-        #self.accept_edit.clicked.connect(lambda: load_table(self, 'halcyon'))
-        self.cancel_edit.clicked.connect(lambda:asignar_encabezados(self, 'halcyon'))
-        
-        
-        self.cancel_edit.clicked.connect(lambda: self.cancelarEdicion(self.item, self.old_value))
+
+
+        # A10 (§8.1 H5, PLAN_AUDITORIA_DOS_EJES_21-07): sin edición manual en
+        # el diario del Halcyon -- decisión del físico (2026-07-22): el
+        # registro se carga solo desde los archivos MPC
+        # (obtenerDatosHalcyon.py), así que no tiene sentido editarlo a mano.
+        # Antes "editar" reusaba verificar_editar()/edicionTabla()
+        # (PruebasDiarias.py), que revienta con AttributeError porque esta
+        # clase nunca definió self.boolean_colums (existe en seiscientos.py/
+        # IX.py, no aquí) -- el físico lo vio como "pide credenciales pero no
+        # pasa". En vez de agregar ese atributo, se deshabilita el botón.
+        self.edit_table.setEnabled(False)
+        self.edit_table.setToolTip(
+            "El registro diario del Halcyon se carga automáticamente desde "
+            "los archivos MPC y no se edita manualmente.")
 
         
     def mostrar_submenu(self):
