@@ -12,7 +12,7 @@ from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import (
-    ACCION_GUARDAR, ACCION_REEMPLAZO, ACCION_EDITAR, ACCION_ELIMINAR)
+    ACCION_GUARDAR, ACCION_REEMPLAZO, ACCION_EDITAR, ACCION_ELIMINAR, ACCION_ANULAR)
 from services.fechas_control import mismo_mes as _mismo_mes
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
@@ -3951,65 +3951,41 @@ def eliminarRegistroCT(dlg, tabla_widget):
     db = PruebaBasico().opeenDatabase()
 
     try:
-        # A2: capturar la fila de `controles` ANTES de borrar -- es el
-        # registro raíz de esta sesión; las tablas de detalle cascadean
-        # desde él (categoría ③, PLAN_AUDITORIA_DOS_EJES_21-07.md §3.3).
+        # A2: capturar la fila de `controles` ANTES de anular -- deja
+        # constancia de qué estado tenía el control al anularse.
         query_fila = QSqlQuery(db)
         query_fila.prepare("SELECT * FROM controles WHERE id = ?")
         query_fila.addBindValue(id_sesion)
         query_fila.exec_()
         fila_controles = _serializar_fila_actual(query_fila) if query_fila.next() else ""
 
-        # Obtener ids de pruebas asociadas a esta sesión específica
-        query = QSqlQuery(db)
-        query.prepare("SELECT id_prueba FROM pruebas WHERE id_sesion = ?")
-        query.addBindValue(id_sesion)
-        query.exec_()
-
-        ids = []
-        while query.next():
-            ids.append(query.value(0))
-
-        for pid in ids:
-            for tabla in [
-                "espesor_corte",
-                "tamano_pixel",
-                "resolucion_contraste",
-                "resolucion_espacial",
-                "valores_ct",
-                "linealidad_ct",
-                "uniformidad_ruido"
-            ]:
-                q = QSqlQuery(db)
-                q.prepare(f"DELETE FROM {tabla} WHERE id_prueba = ?")
-                q.addBindValue(pid)
-                q.exec_()
-
-        # Eliminar pruebas de esta sesión
+        # C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md / PLAN_AUDITORIA_DOS_EJES
+        # §7 P4): el físico pidió soft-delete ("no veo ningún soft-delete,
+        # ¿dónde queda el registro borrado?"). Anular (activo=0) en vez de
+        # DELETE -- `pruebas` y las 7 tablas de resultados CT YA NO se
+        # borran: quedan colgadas del mismo id_sesion, recuperables si el
+        # control se reactiva. Antes se borraban físicamente (7 DELETE + el
+        # de pruebas), lo que iba contra la regla del proyecto de nunca
+        # eliminar registros históricos.
         q = QSqlQuery(db)
-        q.prepare("DELETE FROM pruebas WHERE id_sesion = ?")
+        q.prepare("UPDATE controles SET activo = 0 WHERE id = ?")
         q.addBindValue(id_sesion)
-        q.exec_()
-
-        # Eliminar el control en sí
-        q = QSqlQuery(db)
-        q.prepare("DELETE FROM controles WHERE id = ?")
-        q.addBindValue(id_sesion)
-        q.exec_()
+        if not q.exec_():
+            raise Exception(q.lastError().text())
 
         _registrar_auditoria(
-            _usuario_actual(dlg), ACCION_ELIMINAR, "controles", ref=str(id_sesion),
-            detalle=f"CT diario ({mes_control}); cascada pruebas+7 tablas de detalle; {fila_controles}")
+            _usuario_actual(dlg), ACCION_ANULAR, "controles", ref=str(id_sesion),
+            detalle=f"CT diario ({mes_control}); {fila_controles}")
 
         tabla_widget.removeRow(row)
-        QMessageBox.information(dlg, "Éxito", "Control eliminado")
+        QMessageBox.information(dlg, "Éxito", "Control anulado")
 
     except Exception as e:
         QMessageBox.critical(dlg, "Error", str(e))
     finally:
         db.close()
-        
-        
+
+
 
 def verificar_eliminarCT_anual(self, tabla_widget, nombre_tabla, id_ref=None):
     
@@ -4052,7 +4028,7 @@ def eliminarRegistroCT_anual(dlg, tabla_widget):
     db = PruebaBasico().opeenDatabase()
 
     try:
-        # A2: capturar la fila de `controles` ANTES de borrar (mismo criterio
+        # A2: capturar la fila de `controles` ANTES de anular (mismo criterio
         # que eliminarRegistroCT -- ver su comentario).
         query_fila = QSqlQuery(db)
         query_fila.prepare("SELECT * FROM controles WHERE id = ?")
@@ -4060,46 +4036,22 @@ def eliminarRegistroCT_anual(dlg, tabla_widget):
         query_fila.exec_()
         fila_controles = _serializar_fila_actual(query_fila) if query_fila.next() else ""
 
-        query = QSqlQuery(db)
-        query.prepare("SELECT id_prueba FROM pruebas WHERE id_sesion = ?")
-        query.addBindValue(id_sesion)
-        query.exec_()
-
-        ids = []
-        while query.next():
-            ids.append(query.value(0))
-
-        for pid in ids:
-            for tabla in [
-                "espesor_corte",
-                "tamano_pixel",
-                "resolucion_contraste",
-                "resolucion_espacial",
-                "valores_ct",
-                "linealidad_ct",
-                "uniformidad_ruido"
-            ]:
-                q = QSqlQuery(db)
-                q.prepare(f"DELETE FROM {tabla} WHERE id_prueba = ?")
-                q.addBindValue(pid)
-                q.exec_()
-
+        # C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md / PLAN_AUDITORIA_DOS_EJES
+        # §7 P4): anular en vez de borrar (mismo criterio que
+        # eliminarRegistroCT -- ver su comentario). Las 7 tablas de detalle
+        # CT + pruebas quedan intactas, colgadas del mismo id_sesion.
         q = QSqlQuery(db)
-        q.prepare("DELETE FROM pruebas WHERE id_sesion = ?")
+        q.prepare("UPDATE controles SET activo = 0 WHERE id = ?")
         q.addBindValue(id_sesion)
-        q.exec_()
-
-        q = QSqlQuery(db)
-        q.prepare("DELETE FROM controles WHERE id = ?")
-        q.addBindValue(id_sesion)
-        q.exec_()
+        if not q.exec_():
+            raise Exception(q.lastError().text())
 
         _registrar_auditoria(
-            _usuario_actual(dlg), ACCION_ELIMINAR, "controles", ref=str(id_sesion),
-            detalle=f"CT anual ({year_control}); cascada pruebas+7 tablas de detalle; {fila_controles}")
+            _usuario_actual(dlg), ACCION_ANULAR, "controles", ref=str(id_sesion),
+            detalle=f"CT anual ({year_control}); {fila_controles}")
 
         tabla_widget.removeRow(row)
-        QMessageBox.information(dlg, "Éxito", "Control anual eliminado")
+        QMessageBox.information(dlg, "Éxito", "Control anual anulado")
 
     except Exception as e:
         QMessageBox.critical(dlg, "Error", str(e))
@@ -4146,36 +4098,56 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
 
         print(f"→ Eliminando en tabla {table_name}, WHERE {id_where}, valores {valor_where}")
 
-        # --- Ejecutar DELETE ---
+        # --- Ejecutar la operación ---
         db = PruebaBasico().opeenDatabase()
         query = QSqlQuery(db)
         query.exec_("PRAGMA foreign_keys = ON;")
 
-        # A2: capturar la fila ANTES de borrar -- el DELETE es físico, sin
-        # esto no quedaría forma de reconstruir qué se eliminó.
+        # A2: capturar la fila ANTES de anular/borrar -- si sigue siendo un
+        # DELETE físico (tablas de detalle/catálogo), es la única forma de
+        # reconstruir qué se eliminó.
         query_fila = QSqlQuery(db)
         query_fila.prepare(f'SELECT * FROM "{table_name}" WHERE {id_where}')
         for v in valor_where:
             query_fila.addBindValue(v)
         query_fila.exec_()
-        fila_borrada = _serializar_fila_actual(query_fila) if query_fila.next() else ""
+        existe = query_fila.next()
+        fila_actual = _serializar_fila_actual(query_fila) if existe else ""
 
-        sql = f'DELETE FROM "{table_name}" WHERE {id_where}'
+        # C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md / PLAN_AUDITORIA_DOS_EJES
+        # §7 P4): "controles" es la raíz de la jerarquía mensual/anual/CT --
+        # el físico pidió soft-delete ("no veo ningún soft-delete"). Anular
+        # (activo=0) en vez de DELETE: las tablas de detalle (dosimetriaMen,
+        # preguntas, tamano_campo, etc.) NUNCA se tocan, quedan colgadas del
+        # mismo id. Cualquier OTRA tabla (subtablas vía "Ver tabla",
+        # catálogos como TipoCalibracion/LinealidadBraquiterapia) sigue con
+        # DELETE físico -- fuera del alcance de esta tarea, ya auditado (A2).
+        if table_name == "controles":
+            if not existe:
+                raise Exception("No se encontró el registro a eliminar")
+            sql = 'UPDATE controles SET activo = 0 WHERE "id" = ?'
+            accion = ACCION_ANULAR
+            mensaje_exito = "Registro anulado correctamente."
+        else:
+            sql = f'DELETE FROM "{table_name}" WHERE {id_where}'
+            accion = ACCION_ELIMINAR
+            mensaje_exito = "Registro eliminado correctamente."
+
         query.prepare(sql)
         for v in valor_where:
             query.addBindValue(v)
 
         if not query.exec_():
             error_msg = query.lastError().text()
-            print(f" ! Error en DELETE: {error_msg}")
+            print(f" ! Error en {sql.split()[0]}: {error_msg}")
             raise Exception(error_msg)
 
-        _registrar_auditoria(_usuario_actual(dlg), ACCION_ELIMINAR, table_name,
-                             ref=str(row_id), detalle=fila_borrada)
+        _registrar_auditoria(_usuario_actual(dlg), accion, table_name,
+                             ref=str(row_id), detalle=fila_actual)
 
-        QMessageBox.information(dlg, "Éxito", "Registro eliminado correctamente.")
+        QMessageBox.information(dlg, "Éxito", mensaje_exito)
         tabla_widget.removeRow(row)
-        print("DELETE ejecutado correctamente")
+        print(f"{sql.split()[0]} ejecutado correctamente")
 
     except Exception as e:
         traceback.print_exc()

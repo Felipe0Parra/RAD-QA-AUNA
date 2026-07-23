@@ -45,6 +45,13 @@ ACCION_REEMPLAZO = "reemplazo"
 ACCION_ACTUALIZAR = "actualizar"
 ACCION_EDITAR = "editar"
 ACCION_ELIMINAR = "eliminar"
+# C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md / PLAN_AUDITORIA_DOS_EJES_21-07
+# §7 P4): "eliminar" un control (la raíz de la jerarquía mensual/anual/CT) ya
+# no es un DELETE físico -- es anular (activo=0), recuperable. Un verbo
+# propio evita que el audit_log confunda "se anuló, el dato sigue ahí" con
+# "se borró de verdad, sin rastro" (que sigue aplicando a tablas de detalle
+# y catálogos, fuera del alcance de esta tarea).
+ACCION_ANULAR = "anular"
 ACCION_LOGIN = "login"
 ACCION_LOGOUT = "logout"
 # A8 (§8.1 H3, PLAN_AUDITORIA_DOS_EJES_21-07): re-autenticación para AUTORIZAR

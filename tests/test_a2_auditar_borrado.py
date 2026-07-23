@@ -3,11 +3,16 @@
 Antes de esta tarea, `eliminarRegistro`/`eliminarRegistroCT`/
 `eliminarRegistroCT_anual` (load.py) hacían DELETE físico sin llamar
 `registrar()` -- un control de QC podía desaparecer sin dejar rastro de
-quién lo borró, cuándo, ni qué contenía. Ahora cada uno, tras el DELETE
-exitoso, registra `"eliminar"` con la fila borrada SERIALIZADA en `detalle`
--- la única forma de reconstruir algo que ya no está en la BD, porque el
-borrado sigue siendo físico (decisión de producto aparte, pregunta abierta
-§4.4 del plan).
+quién lo borró, cuándo, ni qué contenía. Ahora cada uno, tras la operación
+exitosa, registra la fila SERIALIZADA en `detalle`.
+
+C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): las 3 funciones, cuando la
+tabla es "controles" (la raíz de la jerarquía mensual/anual/CT), YA NO
+hacen DELETE físico -- anulan (`activo = 0`, acción `"anular"`). El físico
+señaló que no había ningún soft-delete ("¿dónde queda el registro borrado
+en caso de querer reponerlo?"); estos tests quedan actualizados para el
+nuevo comportamiento (ver test_c2_soft_delete_controles.py para la cobertura
+completa: tablas de detalle intactas, filtrado en los listados, etc.).
 
 Usa `QSqlDatabase` real (QSQLITE) porque estas 3 funciones usan
 `PruebaBasico().opeenDatabase()`, un patrón de conexión Qt aparte del
@@ -90,7 +95,7 @@ def _no_confirmar_qmessagebox(monkeypatch):
 
 
 class TestEliminarRegistroAuditaElBorrado:
-    def test_borra_y_audita_con_la_fila_serializada(self, app, bd_temporal, monkeypatch):
+    def test_anula_controles_y_audita_con_la_fila_serializada(self, app, bd_temporal, monkeypatch):
         con = sqlite3.connect(bd_temporal)
         con.execute(
             "INSERT INTO controles (id, equipo, control, fecha, user_id) "
@@ -104,24 +109,24 @@ class TestEliminarRegistroAuditaElBorrado:
         eliminarRegistro(_DlgFalso(), tabla, "controles")
 
         con = sqlite3.connect(bd_temporal)
-        quedan = con.execute("SELECT COUNT(*) FROM controles").fetchone()[0]
+        fila = con.execute("SELECT COUNT(*), activo FROM controles").fetchone()
         con.close()
-        assert quedan == 0, "el DELETE debe seguir funcionando igual que antes"
+        assert fila[0] == 1, "C2: anular ya no borra la fila -- queda como histórico"
+        assert fila[1] == 0, "la fila debe quedar marcada activo=0"
 
         filas = _audit_log(bd_temporal)
         assert len(filas) == 1
         usuario, accion, tabla_auditada, ref, detalle = filas[0]
         assert usuario == "Físico de Prueba"
-        assert accion == "eliminar"
+        assert accion == "anular"
         assert tabla_auditada == "controles"
         assert ref == "1"
         assert "equipo=Halcyon" in detalle, (
-            "detalle debe traer la fila borrada serializada -- es la única "
-            "forma de reconstruir un registro que un DELETE físico ya quitó")
+            "detalle debe traer la fila serializada tal como estaba al anularse")
 
 
 class TestEliminarRegistroCTAuditaLaSesion:
-    def test_borra_y_audita_la_fila_de_controles(self, app, bd_temporal, monkeypatch):
+    def test_anula_y_audita_la_fila_de_controles(self, app, bd_temporal, monkeypatch):
         con = sqlite3.connect(bd_temporal)
         con.execute(
             "INSERT INTO controles (id, equipo, control, fecha, user_id) "
@@ -135,22 +140,23 @@ class TestEliminarRegistroCTAuditaLaSesion:
         eliminarRegistroCT(_DlgFalso(), tabla)
 
         con = sqlite3.connect(bd_temporal)
-        quedan = con.execute("SELECT COUNT(*) FROM controles").fetchone()[0]
+        fila = con.execute("SELECT COUNT(*), activo FROM controles").fetchone()
         con.close()
-        assert quedan == 0
+        assert fila[0] == 1, "C2: anular ya no borra la fila"
+        assert fila[1] == 0
 
         filas = _audit_log(bd_temporal)
         assert len(filas) == 1
         usuario, accion, tabla_auditada, ref, detalle = filas[0]
         assert usuario == "Físico de Prueba"
-        assert accion == "eliminar"
+        assert accion == "anular"
         assert tabla_auditada == "controles"
         assert ref == "5"
         assert "CT diario" in detalle and "equipo=TAC" in detalle
 
 
 class TestEliminarRegistroCTAnualAuditaLaSesion:
-    def test_borra_y_audita_la_fila_de_controles(self, app, bd_temporal, monkeypatch):
+    def test_anula_y_audita_la_fila_de_controles(self, app, bd_temporal, monkeypatch):
         con = sqlite3.connect(bd_temporal)
         con.execute(
             "INSERT INTO controles (id, equipo, control, fecha, user_id) "
@@ -164,15 +170,16 @@ class TestEliminarRegistroCTAnualAuditaLaSesion:
         eliminarRegistroCT_anual(_DlgFalso(), tabla)
 
         con = sqlite3.connect(bd_temporal)
-        quedan = con.execute("SELECT COUNT(*) FROM controles").fetchone()[0]
+        fila = con.execute("SELECT COUNT(*), activo FROM controles").fetchone()
         con.close()
-        assert quedan == 0
+        assert fila[0] == 1, "C2: anular ya no borra la fila"
+        assert fila[1] == 0
 
         filas = _audit_log(bd_temporal)
         assert len(filas) == 1
         usuario, accion, tabla_auditada, ref, detalle = filas[0]
         assert usuario == "Físico de Prueba"
-        assert accion == "eliminar"
+        assert accion == "anular"
         assert tabla_auditada == "controles"
         assert ref == "7"
         assert "CT anual" in detalle and "equipo=TAC" in detalle
