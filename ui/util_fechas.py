@@ -10,6 +10,8 @@ FUENTE del propio widget en runtime.
 """
 import re
 
+from PyQt5.QtCore import QDate
+
 # Decoración fija alrededor del texto, según resources/estilo.qss:
 # QDateEdit::drop-down width 20px + padding 5px por lado + borde 2px por
 # lado, más una holgura pequeña contra redondeos de DPI fraccionario.
@@ -26,12 +28,32 @@ def ancho_minimo_fecha(date_edit, formato=None):
     widget.
 
     formato: si se omite se usa el displayFormat() actual del widget. Los
-    formularios mensuales cambian el formato a "MM/yyyy" DESPUÉS de crear el
-    widget (seiscientos_mensual), así que el creador genérico pasa el más
-    ancho de los formatos en uso ("dd/MM/yyyy") para cubrir ambos casos.
+    formularios mensuales cambian el formato DESPUÉS de crear el widget
+    (seiscientos_mensual) -- desde F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md) a
+    "dd/MM/yyyy" (antes "MM/yyyy"), así que el creador genérico pasa el más
+    ancho de los formatos en uso para cubrir ambos casos.
     """
     fmt = formato or date_edit.displayFormat()
     # "dd/MM/yyyy" -> "00/00/0000": cada letra de formato ocupa ~1 dígito.
     muestra = re.sub(r"[A-Za-z]", "0", fmt)
     fm = date_edit.fontMetrics()
     return fm.horizontalAdvance(muestra) + RESERVA_DECORACION_PX
+
+
+def fecha_control_a_qdate(fecha_texto):
+    """Convierte un texto de `controles.fecha` a QDate, tolerando el formato
+    viejo sin día ("MM/yyyy", controles anteriores a F3) y el nuevo con día
+    ("dd/MM/yyyy", PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4). Se prueba
+    primero el formato con día porque Qt rechaza como inválido un texto que
+    no calza exactamente ese patrón (verificado: "07/2026" contra
+    "dd/MM/yyyy" da isValid()==False, nunca un día inventado) -- solo si
+    falla se intenta el formato viejo, con día 1. Si ninguno calza, devuelve
+    la fecha actual (mismo resultado que un `setDate` fallido dejaría antes
+    de esta función: el widget no queda con una fecha inválida)."""
+    fecha_con_dia = QDate.fromString(fecha_texto, "dd/MM/yyyy")
+    if fecha_con_dia.isValid():
+        return fecha_con_dia
+    fecha_sin_dia = QDate.fromString(fecha_texto, "MM/yyyy")
+    if fecha_sin_dia.isValid():
+        return QDate(fecha_sin_dia.year(), fecha_sin_dia.month(), 1)
+    return QDate.currentDate()

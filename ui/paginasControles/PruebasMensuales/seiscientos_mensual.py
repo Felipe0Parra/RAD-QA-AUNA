@@ -23,6 +23,7 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR
 from services.fechas_control import mismo_mes as _mismo_mes
+from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 from services.MLCs_calibration_service import (
@@ -286,9 +287,11 @@ class PruebaMensual600(PruebaBasico):
             self.main_layout = self.layout()
         
         # Configuración de la caja de selección de fecha:
-        # Se establece el formato para mostrar únicamente mes y año, se asigna la fecha actual 
-        # y se habilita el popup del calendario.
-        self.date_box.setDisplayFormat("MM/yyyy")
+        # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): se muestra y guarda
+        # el día real -- antes solo mes/año, lo que forzaba a la calculadora
+        # abierta desde aquí a asumir siempre el día 1 (ver F5) y no dejaba
+        # trazabilidad de en qué día se hizo el control.
+        self.date_box.setDisplayFormat("dd/MM/yyyy")
         #self.date_box.setDate(QDate.currentDate())
         #self.date_box.setCalendarPopup(True)
 
@@ -331,7 +334,7 @@ class PruebaMensual600(PruebaBasico):
         # Crea un botón para iniciar el control mensual y lo agrega al layout general
         self.iniciar = QPushButton(inputs_maquina[2])
         self.general_layout.addWidget(self.iniciar)
-        self.iniciar.clicked.connect(lambda: print("Fecha seleccionada:", self.date_box.date().toString("MM/yyyy"))) 
+        self.iniciar.clicked.connect(lambda: print("Fecha seleccionada:", self.date_box.date().toString("dd/MM/yyyy"))) 
         # Agrega un stretch al layout principal para alinear los widgets hacia la parte superior
         self.main_layout.addStretch()
         
@@ -454,22 +457,54 @@ class PruebaMensual600(PruebaBasico):
         self.iniGUI(inputs_maquina=inputs_maquina)
         self.button_click()
             
-    # Limpia los layouts y crea una nueva referencia de control en la base de datos 
+    # Limpia los layouts y crea una nueva referencia de control en la base de datos
     def limpiar_layout(self, layouts, user_id, maquina, user_id_f2=None,  nombre_fisico1=None, nombre_fisico2=None):
-    
+
         fecha = self.date_box.date()
-        fecha = fecha.toString("MM/yyyy")
+        # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): se guarda el día
+        # real elegido -- antes se descartaba con "MM/yyyy". create_control
+        # (F2) ya identifica el control por (equipo, mes, año), así que
+        # elegir cualquier día del mes correcto encuentra el mismo registro.
+        fecha = fecha.toString("dd/MM/yyyy")
         for layout in layouts:
             while layout.count():
-            
+
                 child = layout.takeAt(0)
                 if child.widget():
                     child.widget().deleteLater()
         print(f"user_id_f2 antes de create_control: {user_id_f2}")
         self.ref = create_control(self, maquina=maquina, fecha=fecha, user_id=nombre_fisico1, user_id_f2=user_id_f2)
-        self.fecha_control = fecha
+        # F3: si create_control encontró un control YA EXISTENTE (de otro
+        # día del mismo mes, o de una fecha histórica en formato viejo),
+        # self.fecha_control debe reflejar el día REAL guardado en la BD,
+        # no el día que se acaba de elegir para buscar -- si no, reabrir un
+        # control corrompería su día de referencia (nombres de PDF,
+        # búsqueda del reporte, fecha mostrada) con el día de la reapertura.
+        self.fecha_control = self._fecha_real_del_control(self.ref) or fecha
         self.nombre_fisico1 = nombre_fisico1
         self.nombre_fisico2 = nombre_fisico2
+
+    def _fecha_real_del_control(self, control_id):
+        """Lee `controles.fecha` tal como quedó guardada para `control_id`
+        (F3) -- fuente de verdad para self.fecha_control, en vez de asumir
+        que es la fecha recién elegida en date_box."""
+        if not control_id:
+            return None
+        try:
+            conn = self.db_manager.obtener_conexion() if hasattr(self, 'equipo_f') and self.equipo_f != 'Tomógrafo' else Conexion().conectar()
+            cursor = conn.cursor()
+            cursor.execute("SELECT fecha FROM controles WHERE id = ?", (control_id,))
+            fila = cursor.fetchone()
+            return fila[0] if fila else None
+        except Exception as e:
+            print(f"Error leyendo fecha real del control {control_id}: {e}")
+            return None
+
+    def _fecha_control_para_nombre_archivo(self):
+        """`self.fecha_control` para usar en un nombre de archivo sugerido
+        (F3, SS4.4): con el día incluido, la fecha trae dos "/" -- un
+        QFileDialog los interpreta como separador de ruta, no como texto."""
+        return (self.fecha_control or "").replace("/", "-")
 
         
         #print(f"ID Sesión: {self.ref}")
@@ -506,7 +541,9 @@ class PruebaMensual600(PruebaBasico):
             for i in range(self.general_layout.count()):
                 test_control_layout.layout().addItem(self.general_layout.itemAt(i))
         if hasattr(self, 'fecha_control'):
-            fecha = QDate.fromString(self.fecha_control, 'MM/yyyy')
+            # F3: parser tolerante -- fecha_control puede traer día (nuevo,
+            # dd/MM/yyyy) o no (registros históricos, MM/yyyy).
+            fecha = _fecha_control_a_qdate(self.fecha_control)
             self.date_box.setDate(fecha)
         if hasattr(self, 'nombre_fisico1'):
             index = self.fisico1.findText(self.nombre_fisico1)
@@ -602,11 +639,11 @@ class PruebaMensual600(PruebaBasico):
             encabezado_result = self.setupBox(archivo, inputs_maquina[0])
             #print(f"Encabezado configurado: {type(encabezado_result)}")
             
-            # Configurar fecha
+            # Configurar fecha (F3: ver preINIGI, mismo formato con día)
             # nea = self.date_box.date().toString('MM/yyyy')
             # nueva_fecha = QDate.fromString(nea, 'MM/yyyy')
             # self.date_box.setDate(nueva_fecha)
-            self.date_box.setDisplayFormat("MM/yyyy")
+            self.date_box.setDisplayFormat("dd/MM/yyyy")
 
             self.general_layout.addWidget(toolbox)
 
@@ -1132,8 +1169,8 @@ class PruebaMensual600(PruebaBasico):
         def _on_generar_pdf():
             from PyQt5.QtWidgets import QFileDialog, QMessageBox
             path, _ = QFileDialog.getSaveFileName(
-                self, "Guardar reporte MLC", 
-                f"QA_MLC_{self.fecha_control}.pdf",
+                self, "Guardar reporte MLC",
+                f"QA_MLC_{self._fecha_control_para_nombre_archivo()}.pdf",
                 "PDF (*.pdf)"
             )
             if not path:
@@ -1555,7 +1592,7 @@ class PruebaMensual600(PruebaBasico):
             from PyQt5.QtWidgets import QFileDialog, QMessageBox
             path, _ = QFileDialog.getSaveFileName(
                 self, "Guardar reporte Starshot",
-                f"QA_Starshot_{self.fecha_control}.pdf",
+                f"QA_Starshot_{self._fecha_control_para_nombre_archivo()}.pdf",
                 "PDF (*.pdf)"
             )
             if not path:
@@ -3560,7 +3597,13 @@ class PruebaMensual600(PruebaBasico):
 
     def generar_reporte_pdf(self):
         from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual, obtener_diccionario_600
-        fecha = self.date_box.date().toString("MM/yyyy")  # O el formato de fecha que uses
+        # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS4.3): reportes_mensuales
+        # busca el control con "fecha = ?" EXACTA -- pasar aquí una fecha
+        # derivada de date_box sin día ("MM/yyyy") ya no coincidiría con lo
+        # guardado en `controles.fecha` (que ahora sí trae día). self.fecha_control
+        # es la fecha REAL del registro (la escribió limpiar_layout leyendo
+        # de la BD, no una nueva derivación), así que es la que hay que usar.
+        fecha = self.fecha_control if hasattr(self, 'fecha_control') else self.date_box.date().toString("dd/MM/yyyy")
         maquina = self.equipo_f  # O el atributo que corresponda a tu máquina
         diccionario = obtener_diccionario_600()  # O el que corresponda
         guardarPDF_mensual(self, fecha, maquina, diccionario=diccionario)

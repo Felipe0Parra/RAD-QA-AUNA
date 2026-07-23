@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import (QWidget, QPushButton, QToolBox, QSplitter)
 from PyQt5.QtCore import Qt, QDate
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from data.ManejoDatos.load import mostrar_controles_mensuales
+from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 
 class PruebaMensualHc(PruebaMensual600):
     def __init__(self, user_id):
@@ -30,7 +31,10 @@ class PruebaMensualHc(PruebaMensual600):
         test_control_layout.setLayout(self.general_layout)
 
         if hasattr(self, 'fecha_control'):
-            fecha = QDate.fromString(self.fecha_control, 'MM/yyyy')
+            # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): parser
+            # tolerante -- fecha_control puede traer día (nuevo) o no
+            # (registros históricos).
+            fecha = _fecha_control_a_qdate(self.fecha_control)
             self.date_box.setDate(fecha)
         if hasattr(self, 'nombre_fisico1'):
             index = self.fisico1.findText(self.nombre_fisico1)
@@ -72,10 +76,9 @@ class PruebaMensualHc(PruebaMensual600):
 
         # Encabezado general
         _ = self.setupBox(archivo, self.lista_maquina[0])
-        nea = self.date_box.date().toString('MM/yyyy')
-        nueva_fecha = QDate.fromString(nea, 'MM/yyyy')
-        self.date_box.setDate(nueva_fecha)
-        self.date_box.setDisplayFormat("MM/yyyy")
+        # F3: se conserva el día ya elegido en date_box -- antes este
+        # roundtrip (fecha -> texto "MM/yyyy" -> fecha) lo descartaba.
+        self.date_box.setDisplayFormat("dd/MM/yyyy")
 
         self.general_layout.addWidget(toolbox)
 

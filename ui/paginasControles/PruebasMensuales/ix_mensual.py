@@ -9,6 +9,7 @@ from ui.paginasGuia.dialogs import DialogCalculadoraDosis
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR
+from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 
 
 class PruebaMensualIX(PruebaMensual600):
@@ -70,9 +71,12 @@ class PruebaMensualIX(PruebaMensual600):
         # Agregar el splitter al layout principal
         self.main_layout.addWidget(splitter)
         if hasattr(self, 'fecha_control'):
-            fecha = QDate.fromString(self.fecha_control, 'MM/yyyy')
+            # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): parser
+            # tolerante -- fecha_control puede traer día (nuevo) o no
+            # (registros históricos).
+            fecha = _fecha_control_a_qdate(self.fecha_control)
             self.date_box.setDate(fecha)
-                
+
         # Desconectar todos las conexiones previas
         while self.btn_guardar_ix.receivers(self.btn_guardar_ix.clicked) > 0:
             try:

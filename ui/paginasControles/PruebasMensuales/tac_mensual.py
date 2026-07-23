@@ -4,6 +4,7 @@ from PyQt5.QtWidgets    import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTabl
 from PyQt5.QtCore import Qt, QDate, QTime, QTimer
 from PyQt5.QtGui import QColor, QFont, QPixmap
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
+from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.catphan_TAC.leer_dicom import VisualizadorDicom
 from analisisImagenes.Analisis_Catphan_TAC import *
@@ -475,7 +476,11 @@ class PruebaMensualTAC(PruebaMensual600):
         test_control_layout.setLayout(self.general_layout)
 
         if hasattr(self, 'fecha_control'):
-            fecha = QDate.fromString(self.fecha_control, 'MM/yyyy')
+            # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS4.7): TAC hereda de
+            # PruebaMensual600 y comparte date_box/fecha_control -- mismo
+            # parser tolerante que el resto de mensuales, para que un
+            # fecha_control con o sin día se muestre bien.
+            fecha = _fecha_control_a_qdate(self.fecha_control)
             self.date_box.setDate(fecha)
         if hasattr(self, 'nombre_fisico1'):
             index = self.fisico1.findText(self.nombre_fisico1)
@@ -2810,7 +2815,10 @@ class PruebaMensualTAC(PruebaMensual600):
 
     def generar_reporte_pdf(self):
         from models.PDF.Imagenes.reportes_control_sistema_imagenes import generar_reporte_sistema_imagenes
-        fecha = self.date_box.date().toString("MM/yyyy")  # O el formato de fecha que uses
+        # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS4.3): reportes_control_sistema_imagenes
+        # busca el control con "fecha = ?" EXACTA -- usar la fecha REAL del
+        # registro (self.fecha_control), no una derivada sin día de date_box.
+        fecha = self.fecha_control if hasattr(self, 'fecha_control') else self.date_box.date().toString("dd/MM/yyyy")
         maquina = self.equipo_f  # O el atributo que corresponda a tu máquina
         usuario = str(self.user_id)  # O el atributo que corresponda a tu usuario
         generar_reporte_sistema_imagenes(self, fecha, maquina, usuario, ref=self.ref, sistema_imagenes=True)
