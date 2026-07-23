@@ -10,6 +10,8 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
+from services.ventana_edicion import puede_editarse as _puede_editarse_control
+from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
 
 
 class PruebaMensualIX(PruebaMensual600):
@@ -179,6 +181,13 @@ class PruebaMensualIX(PruebaMensual600):
 
     def subirlineasmensuales_ix(self, nombre_tabla, num_delet, ref, usarid, df_lines):
         print("\nEntra a subirlineasmensuales_ix de la clase PruebaMensualIX")
+
+        # F4b (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4, tarea C1): mismo
+        # guard que subirlineasmensuales (load.py) -- ventana de 2 meses
+        # desde la creación del control, decisión del físico.
+        if not _puede_editarse_control(ref):
+            QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(ref))
+            return
 
         conn = Conexion().conectar()
         cursor = conn.cursor()

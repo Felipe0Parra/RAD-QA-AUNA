@@ -15,6 +15,8 @@ from services.audit_minimo import (
     ACCION_GUARDAR, ACCION_REEMPLAZO, ACCION_EDITAR, ACCION_ELIMINAR)
 from services.fechas_control import mismo_mes as _mismo_mes
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
+from services.ventana_edicion import puede_editarse as _puede_editarse_control
+from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
 def guardar_imagen(imagen_path):
     """
     Convierte una imagen en BLOB para guardarla en la base de datos.
@@ -460,6 +462,13 @@ def widget_a_columna(line, energias=ENERGIAS):
     return nombre
 
 def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=0, anual=False):
+    # F4b (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4, tarea C1): un control
+    # mensual de QC solo admite UPDATE dentro de la ventana de 2 meses
+    # desde su creación -- decisión del físico. Anual queda fuera (su
+    # create_control es otro, sin ancla de auditoría; el plan no lo cubre).
+    if not anual and not _puede_editarse_control(ref):
+        QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(ref))
+        return
     conn = Conexion().conectar()
     cursor = conn.cursor()
 
