@@ -1856,22 +1856,24 @@ class DialogCalculadoraDosis(QDialog):
         
         self.col2.addWidget(pol_box)
         
-        pdd_box, pdd_layout = self.crear_bloque("PDD a profundidad", "#5b9ea8")
+        # T1 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS1.3): este bloque existía
+        # con los widgets creados pero NUNCA agregado a ningún layout visible
+        # (los pdd_layout.addWidget/col2.addWidget de abajo estaban
+        # comentados) -- entradas fantasma que se guardaban y restauraban
+        # sin que el físico pudiera verlas ni tocarlas. Ahora alimentan el
+        # cálculo automático de TPR20,10 (T2, ecuación 4-2 IAEA TRS-398).
+        pdd_box, pdd_layout = self.crear_bloque("PDD para calidad del haz (TPR20,10)", "#5b9ea8")
         self.pdd20 = QLineEdit()
         self.pdd10 = QLineEdit()
         self.layout_pdd = pdd_box
         self.fotones.toggled.connect(self.mostrarWidget_PDD_Fotones)
-        lbl_pdd = QLabel("PDD a 20cm y a 10cm (%)")
-        #self.estilo_label(lbl_pdd, bold=True)
+        lbl_pdd = QLabel("PDD a 20 cm y a 10 cm (%) -- campo 10x10 cm, SSD 100 cm")
         self.pdd20.setPlaceholderText("PDD a 20 cm (%)")
         self.pdd10.setPlaceholderText("PDD a 10 cm (%)")
-        #self.estilo_entrada(self.pdd20)
-        #self.estilo_entrada(self.pdd10)
-        #pdd_layout.addWidget(lbl_pdd)
-        #pdd_layout.addWidget(self.pdd20)
-        #pdd_layout.addWidget(self.pdd10)
-        #self.col2.addWidget(pdd_box)
-        #self.layout_pdd.setVisible(False)
+        pdd_layout.addWidget(lbl_pdd)
+        pdd_layout.addWidget(self.pdd20)
+        pdd_layout.addWidget(self.pdd10)
+        self.col2.addWidget(pdd_box)
         
         #########################################################
         
@@ -2656,10 +2658,13 @@ class DialogCalculadoraDosis(QDialog):
     # completos", en respuesta al hallazgo de que el único registro real de
     # producción se guardó casi vacío (sin validación previa). Se EXCLUYEN 3
     # casos donde exigirlos sería imposible o incoherente:
-    #   - pdd10/pdd20: los widgets existen pero su bloque completo
-    #     (pdd_box/pdd_layout) nunca se agrega a ningún layout visible -- el
-    #     físico no puede verlos ni llenarlos. Alimentan la ruta muerta de kQ0
-    #     vía Q0/A (hallazgo D1-H2, congelada). No se activan aquí.
+    #   - pdd10/pdd20: desde T1 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md) el
+    #     bloque SÍ es visible (fotones, salvo Halcyon) y alimenta el cálculo
+    #     automático de TPR20,10 -- pero el TPR20,10 (Kq_0 vía tpr2010) se
+    #     puede seguir tecleando A MANO sin pasar por el PDD (requisito
+    #     explícito del físico: "sin restringir el llenado manual").
+    #     Exigir pdd10/pdd20 bloquearía ese camino manual, válido y ya en
+    #     uso.
     #   - tmrzref: solo aplica a geometría SAD, desactivada (comentada en
     #     calcular_dosis_maxima) -- no tiene forma de llenarse hoy.
     #   - pddzref (fotones) / r50_medido+pdd_zref_electrones (electrones):
@@ -3225,6 +3230,12 @@ class DialogCalculadoraDosis(QDialog):
         self.pdd_zrefE.setVisible(es_electrones)
         self.pddzrefE.setVisible(es_electrones)
         self.Kq0r50_widget.setVisible(es_electrones)
+        # T1 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS1.3/SS4.1): PDD 20/10 para
+        # derivar TPR20,10 -- solo fotones; el Halcyon (FFF) queda excluido
+        # a propósito (decisión del físico 2026-07-23: la ecuación 4-2 del
+        # catálogo PTW está validada solo para haces aplanados).
+        self.layout_pdd.setVisible(
+            self.fotones.isChecked() and not mismo_acelerador(self.acelerador_actual, "Halcyon"))
 
     def _actualizar_visibilidad_zref(self, *_):
         """I3: el Zref de Resultados Finales se oculta en electrones (ahí es
