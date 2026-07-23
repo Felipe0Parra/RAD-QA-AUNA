@@ -270,6 +270,54 @@ class TestH23RegistroExistente:
         assert capturado == {
             "fecha": fecha_esperada, "acelerador": d.acelerador_actual, "energia": "6mv"}
 
+    def test_dia_distinto_del_mismo_mes_con_energia_igual_pregunta(self, dialogo, monkeypatch):
+        """F6b (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS7.6): con F5 la
+        calculadora hereda el día real del formulario mensual -- guardar el
+        día 5 y luego el día 20 del MISMO mes, misma energía, ya no coinciden
+        en fecha exacta. Antes de F6b el aviso dejaba de saltar en ese caso
+        (regresión real); ahora se pregunta por (Acelerador, energía, mes),
+        no por fecha exacta."""
+        from PyQt5.QtCore import QDate
+        d = llenar_fotones_completo(dialogo)
+        d.date_edit.setDate(QDate(2026, 7, 5))
+        d.emitir_dosis("6mv")
+        assert d.guardar_db() is True
+
+        d.date_edit.setDate(QDate(2026, 7, 20))
+        capturado = {}
+        monkeypatch.setattr(
+            d, "_confirmar_registro_existente",
+            lambda fecha, acelerador, energia=None: capturado.update(
+                fecha=fecha, acelerador=acelerador, energia=energia) or False)
+
+        resultado = d.guardar_db()
+
+        assert capturado, "debía preguntar -- ya hay un vigente de 6mv este mes"
+        assert capturado["fecha"] == "05/07/2026", (
+            "debe mostrar la fecha REAL del vigente encontrado, no el día "
+            "que se acaba de elegir para guardar")
+        assert resultado is False  # el mock devuelve False -> cancela
+
+    def test_mes_distinto_con_energia_igual_no_pregunta(self, dialogo, monkeypatch):
+        """El alcance es por MES (igual que 'Cargar cálculo', B3-e) -- un
+        vigente de junio no debe disparar el aviso al guardar en julio."""
+        from PyQt5.QtCore import QDate
+        d = llenar_fotones_completo(dialogo)
+        d.date_edit.setDate(QDate(2026, 6, 10))
+        d.emitir_dosis("6mv")
+        assert d.guardar_db() is True
+
+        d.date_edit.setDate(QDate(2026, 7, 10))
+        llamadas = []
+        monkeypatch.setattr(
+            d, "_confirmar_registro_existente",
+            lambda *a, **k: llamadas.append(1) or False)
+
+        resultado = d.guardar_db()
+
+        assert llamadas == []
+        assert resultado is True
+
 
 class TestH24AuditoriaCalculadora:
     """H2.4: guardar_db debe dejar rastro en audit_log al guardar con éxito

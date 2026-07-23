@@ -626,6 +626,7 @@ from services.trs398_excel import leer_trs398, comparar_trs398
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
 from services.nombres_acelerador import mismo_acelerador
+from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from ui.util_fechas import ancho_minimo_fecha  # I5
 from data.ManejoDatos import conection as _conection_mod
 import pandas as pd
@@ -2906,14 +2907,27 @@ class DialogCalculadoraDosis(QDialog):
                 self.reject()
             return False
 
-        # H2.3 (versionado consciente): si ya existe un registro para esta
-        # fecha+acelerador, preguntar ANTES de generar el reporte/guardar
-        # (evita generar un PDF de un guardado que el físico termine
-        # cancelando). No se borra nada aquí -- ver _confirmar_registro_existente.
-        existente = DosisService.buscar_por_fecha(
-            datos["Fecha"], datos["Acelerador"], datos.get("energia"))
+        # H2.3 (versionado consciente) + F6b (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md
+        # SS7.6): antes preguntaba si había un registro con la MISMA fecha
+        # exacta -- con F5 la calculadora hereda el día real del mensual, así
+        # que guardar el día 15 y luego el día 20 del mismo mes ya no
+        # coincidían nunca y el aviso dejaba de saltar. Con energía asignada
+        # (el flujo normal: se pulsó un botón de energía), la pregunta
+        # correcta es "¿ya hay un cálculo VIGENTE de esta energía este mes?"
+        # -- la misma consulta que usa "Cargar cálculo" (B3-e). Sin energía
+        # asignada no hay esa clave -- se conserva el chequeo de siempre
+        # (fecha exacta + acelerador, sin filtro de energía).
+        energia_guardado = datos.get("energia")
+        if energia_guardado:
+            mes_fecha, anio_fecha = _mes_anio_de_fecha(datos["Fecha"])
+            existente = (DosisService.buscar_vigente_del_mes(
+                datos["Acelerador"], energia_guardado, mes_fecha, anio_fecha)
+                if mes_fecha is not None else None)
+        else:
+            existente = DosisService.buscar_por_fecha(datos["Fecha"], datos["Acelerador"])
+        fecha_para_aviso = existente["Fecha"] if existente else datos["Fecha"]
         if existente and not self._confirmar_registro_existente(
-                datos["Fecha"], datos["Acelerador"], datos.get("energia")):
+                fecha_para_aviso, datos["Acelerador"], energia_guardado):
             return False
 
             # Generate report
