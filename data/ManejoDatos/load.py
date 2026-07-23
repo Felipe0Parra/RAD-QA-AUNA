@@ -14,6 +14,7 @@ from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import (
     ACCION_GUARDAR, ACCION_REEMPLAZO, ACCION_EDITAR, ACCION_ELIMINAR)
 from services.fechas_control import mismo_mes as _mismo_mes
+from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 def guardar_imagen(imagen_path):
     """
     Convierte una imagen en BLOB para guardarla en la base de datos.
@@ -249,7 +250,22 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
             
             if hasattr(self, 'equipo_f') and self.equipo_f in ('Tomógrafo', 'Clinac ix', 'Halcyon'):
                 self.old_id = True
-            QMessageBox.information(self, "Éxito", f"Puede seguir con el proceso de llenado de datos del {fecha}.")
+            # F4 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): decisión del
+            # físico -- no se pregunta nada, solo se avisa y se carga. El
+            # aviso menciona la fecha REALMENTE registrada
+            # (fecha_existente), no la fecha elegida para buscar, para que
+            # quede claro que se está continuando un control ya existente.
+            mes_encontrado, anio_encontrado = _mes_anio_de_fecha(fecha_existente)
+            if mes_encontrado is not None:
+                referencia_mes = f"{mes_encontrado:02d}/{anio_encontrado}"
+            else:
+                referencia_mes = fecha_existente
+            QMessageBox.information(
+                self, "Control existente",
+                f"Se cargó el control mensual de {maquina} correspondiente "
+                f"a {referencia_mes}, con fecha registrada {fecha_existente}. "
+                f"Puede continuar el llenado de datos."
+            )
             return control_id
 
         # Insertar nuevo registro
