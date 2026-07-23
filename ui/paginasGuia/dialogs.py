@@ -1557,11 +1557,23 @@ class DialogCalculadoraDosis(QDialog):
         calib_layout.addWidget(self.lbl_tpr2010)
         self.tpr2010 = QLineEdit()
         #self.estilo_entrada(self.tpr2010)
+        # T3: tooltip inicial -- explica de dónde puede salir el valor antes
+        # de que haya ninguno.
+        self.tpr2010.setToolTip(self._TOOLTIP_TPR_SIN_DATO)
         calib_layout.addWidget(self.tpr2010)
 
         self.mostrar_ayuda_tpr2010 = QPushButton('?')
         self.mostrar_ayuda_tpr2010.clicked.connect(self.mostrar_ayuda_parametros_tpr2010)
         self.tpr2010.textChanged.connect(self.actualizar_kCharge)
+        # T2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS1.3): el TPR20,10 se
+        # puede seguir tecleando a mano (requisito del físico). textEdited
+        # solo se emite por interacción real del usuario -- nunca por un
+        # setText() del código -- así que este flag distingue "lo escribió
+        # el físico" de "lo calculó el autollenado desde PDD" sin necesidad
+        # de bloquear señales (mismo principio que _marcar_campo_mcc_revisado
+        # en el mensual, D4.2).
+        self._tpr2010_editado_manualmente = False
+        self.tpr2010.textEdited.connect(self._marcar_tpr2010_editado)
         calib_layout.addWidget(self.mostrar_ayuda_tpr2010)
 
         # G2 (auditoría 2026-07-10): TPR20,10 no aplica a electrones -- su kQ
@@ -2070,6 +2082,12 @@ class DialogCalculadoraDosis(QDialog):
         self.pdd10.textChanged.connect(self.actualizar_kCharge)
         self.pdd20.textChanged.connect(self.actualizar_kCharge)
         self.tpr2010.textChanged.connect(self.actualizar_kCharge)
+        # T2: TPR20,10 = 1.2661*(PDD20/PDD10) - 0.0595 (ec. 4-2, catálogo PTW
+        # DETECTORS_Cat_en_16522900_16.pdf p.84, IAEA TRS-398) -- autollena
+        # tpr2010 mientras el físico no lo haya editado a mano (ver flag
+        # arriba). Nunca bloquea el llenado manual del TPR.
+        self.pdd10.textChanged.connect(self._actualizar_tpr_desde_pdd)
+        self.pdd20.textChanged.connect(self._actualizar_tpr_desde_pdd)
         self.combo_modelos.currentTextChanged.connect(self.actualizar_kCharge)
         
         # Dosis en Zref
@@ -2669,6 +2687,20 @@ class DialogCalculadoraDosis(QDialog):
     #     calcular_dosis_maxima) -- no tiene forma de llenarse hoy.
     #   - pddzref (fotones) / r50_medido+pdd_zref_electrones (electrones):
     #     mutuamente excluyentes según Tipo_de_radiacion.
+    # T3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS1.3): señalización del origen
+    # del TPR20,10 -- sin símbolos de correcto/incorrecto (regla de sesión
+    # del físico, 2026-07-23), solo texto explicando de dónde salió el
+    # número.
+    _TOOLTIP_TPR_AUTOMATICO = (
+        "Calculado automáticamente desde PDD a 20 cm y a 10 cm "
+        "(TPR20,10 = 1.2661 · PDD20,10 − 0.0595, ecuación IAEA TRS-398)."
+    )
+    _TOOLTIP_TPR_MANUAL = "Valor ingresado manualmente."
+    _TOOLTIP_TPR_SIN_DATO = (
+        "Se puede ingresar manualmente o calcular automáticamente "
+        "completando el PDD a 20 cm y a 10 cm."
+    )
+
     _CAMPOS_SIEMPRE_REQUERIDOS = (
         "Fecha", "Acelerador", "equipo_id", "Modelo_equipo", "Numero_serie",
         "factor_calibracion", "Tamano_campo", "Tipo_de_radiacion",
@@ -3440,6 +3472,49 @@ class DialogCalculadoraDosis(QDialog):
                 DosisService.interpolar_kq0(modelo, float(self.tpr2010.text()), protocolo), 5)))
         except ValueError:
             self.Kq_0.clear()  # TPR20,10 vacío o no numérico: kQ auto pendiente
+
+    def _marcar_tpr2010_editado(self, texto):
+        """T2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS1.3): solo se conecta a
+        `textEdited` (interacción real del usuario, nunca un `setText()` del
+        autollenado). Un texto vacío libera el campo de vuelta al
+        autollenado -- "si el físico borra el campo TPR, vuelve a quedar
+        disponible" (requisito explícito)."""
+        self._tpr2010_editado_manualmente = bool(texto.strip())
+        # T3: señalización de origen.
+        self.tpr2010.setToolTip(
+            self._TOOLTIP_TPR_MANUAL if self._tpr2010_editado_manualmente
+            else self._TOOLTIP_TPR_SIN_DATO)
+
+    def _actualizar_tpr_desde_pdd(self, *_):
+        """T2: TPR20,10 = 1.2661*(PDD20/PDD10) - 0.0595 (ec. 4-2, catálogo
+        PTW DETECTORS_Cat_en_16522900_16.pdf p.84, IAEA TRS-398). PDD20,10
+        es el COCIENTE PDD(20)/PDD(10), no una resta. Nunca pisa un TPR
+        tecleado a mano (ver _marcar_tpr2010_editado).
+
+        Excluido en el Halcyon (haz FFF) -- decisión del físico
+        (2026-07-23, SS4.1): la ecuación está validada solo para haces
+        aplanados. T1 ya oculta el bloque PDD ahí, pero los widgets siguen
+        existiendo (p.ej. tras cargar_datos_desde_db de un registro
+        antiguo) -- este guard evita que el cálculo se dispare igual con
+        el bloque oculto."""
+        if mismo_acelerador(self.acelerador_actual, "Halcyon"):
+            return
+        if getattr(self, "_tpr2010_editado_manualmente", False):
+            return
+        try:
+            pdd20 = float(self.pdd20.text())
+            pdd10 = float(self.pdd10.text())
+        except ValueError:
+            return
+        tpr = DosisService.calcular_Q0(pdd20, pdd10)
+        if tpr == 0:
+            # calcular_Q0 devuelve 0 tanto si pdd10==0 (guarda real de
+            # división por cero) como si el resultado matemático fuera
+            # legítimamente 0 -- en cualquier caso no hay un TPR fiable que
+            # escribir, se deja el campo como estaba.
+            return
+        self.tpr2010.setText(str(round(tpr, 4)))
+        self.tpr2010.setToolTip(self._TOOLTIP_TPR_AUTOMATICO)  # T3
 
     def actualizar_v1v2(self):
         try:
