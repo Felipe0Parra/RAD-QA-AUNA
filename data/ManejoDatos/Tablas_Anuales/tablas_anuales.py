@@ -92,6 +92,7 @@ def mostrar_controles_anuales(parent, tableWidget, equipo_filtrar=None):
     FROM controles c
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.control = 'Anual'
+    AND (c.activo IS NULL OR c.activo = 1)
     """
 
     if equipo_filtrar:

@@ -1137,10 +1137,15 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
         LEFT JOIN preguntas p ON cm.id = p.ref
         """
 
+    # C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): un control anulado
+    # (activo=0, ver eliminarRegistro) no debe seguir apareciendo en el
+    # listado -- sigue en la BD (soft-delete), solo se oculta de la vista.
     if equipo_filtrar:
-        query += " WHERE cm.equipo = ? AND cm.control = 'Mensual' ORDER BY cm.fecha DESC"
+        query += (" WHERE cm.equipo = ? AND cm.control = 'Mensual' "
+                  "AND (cm.activo IS NULL OR cm.activo = 1) ORDER BY cm.fecha DESC")
         cursor.execute(query, (equipo_filtrar,))
     else:
+        query += " WHERE (cm.activo IS NULL OR cm.activo = 1)"
         cursor.execute(query)
 
     rows = cursor.fetchall()
@@ -1414,6 +1419,7 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
     FROM controles c
     LEFT JOIN pruebas p ON p.id_sesion = c.id
     WHERE c.equipo = 'Clinac ix' AND c.control = 'Anual'
+        AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
     """)
     print("Usted está aquí mostrar controles imgIX anual ")
@@ -1436,6 +1442,7 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Clinac ix'
     AND c.control = 'Anual'
+    AND (c.activo IS NULL OR c.activo = 1)
     GROUP BY c.id, c.fecha, c.equipo
     ORDER BY c.fecha DESC
     """
@@ -1597,6 +1604,7 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
     FROM controles c
     LEFT JOIN pruebas p ON p.id_sesion = c.id
     WHERE c.equipo = 'Clinac ix' AND c.control = 'Mensual'
+        AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
     """)
     conn.commit()
@@ -1633,7 +1641,8 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
     LEFT JOIN pruebas p ON p.id_sesion = c.id
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Clinac ix'
-    AND c.control = 'Mensual'   
+    AND c.control = 'Mensual'
+    AND (c.activo IS NULL OR c.activo = 1)
     GROUP BY c.id, c.equipo
     ORDER BY c.fecha DESC
     """
@@ -1800,6 +1809,7 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
     FROM controles c
     LEFT JOIN pruebas p ON p.id_sesion = c.id
     WHERE c.equipo = 'Halcyon' AND c.control = 'Anual'
+        AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
     """)
     print("Usted está aquí mostrar controles HC anual ")
@@ -1822,6 +1832,7 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Halcyon'
     AND c.control = 'Anual'
+    AND (c.activo IS NULL OR c.activo = 1)
     GROUP BY c.id, c.fecha, c.equipo
     ORDER BY c.fecha DESC
     """
@@ -1988,6 +1999,7 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
     FROM controles c
     LEFT JOIN pruebas p ON p.id_sesion = c.id
     WHERE c.equipo = 'Halcyon' AND c.control = 'Mensual'
+        AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
     """)
     conn.commit()
@@ -2024,7 +2036,8 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
     LEFT JOIN pruebas p ON p.id_sesion = c.id
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Halcyon'
-    AND c.control = 'Mensual'   
+    AND c.control = 'Mensual'
+    AND (c.activo IS NULL OR c.activo = 1)
     GROUP BY c.id, c.equipo
     ORDER BY c.fecha DESC
     """
@@ -2186,6 +2199,7 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
     FROM controles c
     LEFT JOIN pruebas p ON p.id_sesion = c.id
     WHERE c.equipo = 'Tomógrafo' AND c.control = 'Mensual'
+        AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
     """)
     conn.commit()
@@ -2222,7 +2236,8 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
     LEFT JOIN pruebas p ON p.id_sesion = c.id
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Tomógrafo'
-    AND c.control = 'Mensual'   
+    AND c.control = 'Mensual'
+    AND (c.activo IS NULL OR c.activo = 1)
     GROUP BY c.id, c.equipo
     ORDER BY c.fecha DESC
     """
