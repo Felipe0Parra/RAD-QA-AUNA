@@ -68,6 +68,22 @@ def checkpoint_wal(con):
         print("Error al hacer checkpoint del WAL:", ex)
 
 
+def _asegurar_columna(cursor, tabla, columna, ddl):
+    """Migración mínima idempotente: agrega la columna si no existe.
+
+    Mismo patrón ya usado en DosisService._asegurar_columna
+    (services/dosis_service.py) para calculadora_dosimetrica -- no hay un
+    sistema de migraciones real en el proyecto (deuda conocida); CREATE TABLE
+    IF NOT EXISTS solo cubre bases de datos nuevas, las existentes (copias de
+    producción ya desplegadas) necesitan un ALTER TABLE explícito. Con
+    DEFAULT constante, SQLite hace que las filas ya existentes devuelvan ese
+    valor sin necesidad de un UPDATE.
+    """
+    cols = [c[1] for c in cursor.execute(f"PRAGMA table_info('{tabla}')").fetchall()]
+    if columna not in cols:
+        cursor.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {ddl}")
+
+
 class Conexion():
     _instance = None  # Variable de clase para almacenar una única instancia de la conexión
     
@@ -473,6 +489,14 @@ class Conexion():
         cur.execute(sql_create_table13)
         cur.execute(sql_create_table14)
         cur.execute(sql_create_table15)
+
+        # C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md / PLAN_AUDITORIA_DOS_EJES
+        # §7 P4): "controles" es la raíz de la jerarquía mensual/anual/CT --
+        # migración idempotente (mismo patrón que
+        # DosisService._asegurar_columna), corre en cada arranque, no toca
+        # filas existentes salvo darles el DEFAULT (activas).
+        _asegurar_columna(cur, "controles", "activo", "INTEGER DEFAULT 1")
+
         cur.close()
         self.createAdmin()
 
