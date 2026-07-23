@@ -278,6 +278,21 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
         if hasattr(self, 'equipo_f') and (self.equipo_f == 'Tomógrafo' or self.equipo_f == 'Clinac ix' or self.equipo_f == 'Halcyon') and new_id:
             self.old_id = False
         QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
+
+        # F4c/F4d (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): create_control
+        # nunca dejaba rastro de auditoría -- sin esto, la ventana de
+        # edición de dos meses (F4b) no tendría ancla alguna para ningún
+        # control nuevo. `detalle` es legible (equipo + mes/año), no solo
+        # el id numérico, para que el visor "Registros" no obligue a
+        # cruzar ids contra `controles` a mano.
+        mes_creado, anio_creado = _mes_anio_de_fecha(fecha)
+        if mes_creado is not None:
+            detalle_legible = f"{maquina} -- {tipo_control} {mes_creado:02d}/{anio_creado}"
+        else:
+            detalle_legible = f"{maquina} -- {tipo_control} {fecha}"
+        _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "controles",
+                              ref=new_id, detalle=detalle_legible)
+
         return new_id
 
     except sqlite3.Error as e:
