@@ -70,6 +70,21 @@ class Conexion():
             self.crearTablasHalcyon()  # Crear tablas para controles Halcyon (Anuales y Mensuales)
             self.crearTablasMLCs()
 
+            # R1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): DosisService.crear_tabla()
+            # (que asegura columnas como "energia"/"vigente" via ALTER TABLE)
+            # antes solo se llamaba dentro de guardar_datos -- sobre una BD sin
+            # migrar, cualquier lectura previa (p.ej. el chequeo de duplicado
+            # F6b) reventaba con "no such column: energia" antes del primer
+            # guardado (hallazgo H-C, terminal del físico 2026-07-23).
+            # Import local: dosis_service importa este módulo a nivel de
+            # módulo (`from data.ManejoDatos import conection as _conection`)
+            # -- un import de nivel de módulo aquí sería circular.
+            try:
+                from services.dosis_service import DosisService
+                DosisService.crear_tabla()
+            except Exception as ex_dosis:
+                print("Error asegurando esquema de calculadora_dosimetrica al arranque:", ex_dosis)
+
         except Exception as ex:
             traceback.print_exc()
             print("Error al conectar a la base de datos:", ex)
