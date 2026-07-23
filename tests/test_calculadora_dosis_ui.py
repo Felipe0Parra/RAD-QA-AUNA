@@ -776,12 +776,26 @@ class TestH34FechaCalculadoraDesdeFormulario:
         d = dialogo_factory()
         assert d.date_edit.date() == QDate.currentDate()
 
-    def test_con_fecha_inicial_usa_dia_1_del_mes_elegido(self, dialogo_factory):
-        """El formulario mensual solo registra mes/año (MM/yyyy) -- se fija
-        el día 1, no el día actual (que podría no existir en ese mes)."""
-        fecha_formulario = QDate(2026, 3, 31)  # día 31, mes elegido: marzo
+    def test_con_fecha_inicial_usa_el_dia_real_no_el_dia_1(self, dialogo_factory):
+        """F5 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): desde F3 el
+        formulario mensual guarda el día real -- la calculadora hereda ESE
+        día completo, ya no lo descarta fijando el día 1 (H3.4, retirado)."""
+        fecha_formulario = QDate(2026, 3, 31)
         d = dialogo_factory(fecha_inicial=fecha_formulario)
-        assert d.date_edit.date() == QDate(2026, 3, 1)
+        assert d.date_edit.date() == QDate(2026, 3, 31)
+
+    def test_con_fecha_inicial_queda_bloqueada(self, dialogo_factory):
+        """F5: la fecha heredada del mensual no se puede editar en la
+        calculadora -- siempre debe coincidir con la del formulario que la
+        abrió."""
+        d = dialogo_factory(fecha_inicial=QDate(2026, 7, 16))
+        assert d.date_edit.isReadOnly() is True
+        assert d.date_edit.calendarPopup() is False
+
+    def test_sin_fecha_inicial_sigue_editable(self, dialogo_factory):
+        d = dialogo_factory()
+        assert d.date_edit.isReadOnly() is False
+        assert d.date_edit.calendarPopup() is True
 
     def test_i4_formato_de_fecha_explicito_no_del_locale(self, dialogo_factory):
         """I4 (2026-07-16): sin setDisplayFormat, QDateEdit muestra el formato
@@ -792,7 +806,7 @@ class TestH34FechaCalculadoraDesdeFormulario:
         interno de guardado (dd/MM/yyyy), en cualquier máquina."""
         d = dialogo_factory(fecha_inicial=QDate(2026, 7, 16))
         assert d.date_edit.displayFormat() == "dd/MM/yyyy"
-        assert d.date_edit.text() == "01/07/2026"
+        assert d.date_edit.text() == "16/07/2026"
 
     def test_i5_ancho_minimo_de_la_fecha_cubre_el_texto(self, dialogo_factory):
         """I5 (2026-07-16): el date_edit de la calculadora nunca tuvo ancho

@@ -920,14 +920,24 @@ class DialogCalculadoraDosis(QDialog):
         self._poblar_combo_protocolo()
         self.construir_botones_asignacion(self.energias)
 
-        # H3.4 (auditoría 2026-07-14): si el formulario mensual pasa su
-        # fecha, la calculadora abre en el día 1 de ese mes en vez de
-        # "hoy" (self.date_edit nace con QDate.currentDate() en initGUI).
-        # El formulario mensual solo registra mes/año (MM/yyyy) -- fijar el
-        # día ACTUAL del mes elegido sería arbitrario/confuso (ej. si hoy es
-        # 31 pero el mes elegido no tiene 31 días), así que se usa el día 1.
+        # F5 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): si el formulario
+        # mensual pasa su fecha, la calculadora hereda el DÍA REAL (desde
+        # F3 el mensual ya lo guarda -- antes solo tenía mes/año, por eso
+        # H3.4 forzaba el día 1 aquí) y queda BLOQUEADA: siempre debe
+        # coincidir con la fecha del formulario que la abrió, nunca
+        # divergir por una edición manual en la propia calculadora.
+        # Sin fecha_inicial (uso independiente de la calculadora) el campo
+        # sigue editable, como siempre.
         if fecha_inicial is not None:
-            self.date_edit.setDate(QDate(fecha_inicial.year(), fecha_inicial.month(), 1))
+            self.date_edit.setDate(QDate(
+                fecha_inicial.year(), fecha_inicial.month(), fecha_inicial.day()))
+            self.date_edit.setReadOnly(True)
+            self.date_edit.setCalendarPopup(False)
+            self.date_edit.setToolTip(
+                "Esta fecha viene del formulario mensual que abrió la "
+                "calculadora y siempre coincide con ella -- no se puede "
+                "modificar aquí."
+            )
        
 
     def initGUI(self):
