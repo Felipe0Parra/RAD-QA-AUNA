@@ -36,6 +36,7 @@ test_reporte_diario_h22.py). Objetos "pelados" via __new__ + QWidget.__init__
 """
 import os
 import sqlite3
+from datetime import datetime
 
 import pytest
 
@@ -77,6 +78,28 @@ def bd_temporal(monkeypatch, tmp_path):
 def _sin_avisos(monkeypatch):
     monkeypatch.setattr(QMessageBox, "information",
                         staticmethod(lambda *a, **k: None))
+
+
+def _crear_control_activo(ruta_bd, control_id):
+    """W1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): subirlineasmensuales/_ix
+    ahora exige que el control exista y esté activo (no solo dentro de la
+    ventana de 2 meses) -- estos tests de round-trip usan un `ref` sintético
+    que antes no necesitaba fila propia en `controles`. Se ancla la
+    auditoría de creación a AHORA (no a una fecha fija) para que la ventana
+    de edición de F4b quede siempre abierta, sin importar cuándo corra la
+    suite -- de lo contrario "01/2026" quedaría cerrado (F4b) apenas pasen
+    2 meses calendario desde esa fecha fija."""
+    con = sqlite3.connect(ruta_bd)
+    con.execute(
+        "INSERT INTO controles (id, equipo, control, fecha, user_id) "
+        "VALUES (?, 'Clinac ix', 'Mensual', '01/2026', 'Físico de Prueba')",
+        (control_id,))
+    con.execute(
+        "INSERT INTO audit_log (timestamp, usuario, accion, tabla, ref, detalle) "
+        "VALUES (?, 'Físico de Prueba', 'guardar', 'controles', ?, '')",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(control_id)))
+    con.commit()
+    con.close()
 
 
 class _UsuarioFalso:
@@ -295,6 +318,7 @@ class TestSubirReabrirRoundTripIX:
 
     def test_subir_parcial_reabrir_y_completar(self, app, bd_temporal, monkeypatch):
         _sin_avisos(monkeypatch)
+        _crear_control_activo(bd_temporal, 555)
         obj, df_lines = _pelado_ix(energias=("6mv",))
         obj.ln_dosis_ref_cgy_um_6mv.setText("0.993")
         obj.ln_calidad_pdd20_10_6mv.setText("0.6676")
@@ -327,6 +351,7 @@ class TestSubirReabrirRoundTripIX:
         tolerancia de 6mev en la fila de 6mv. El filtro por sufijo lo evita:
         cada fila recibe SU tolerancia."""
         _sin_avisos(monkeypatch)
+        _crear_control_activo(bd_temporal, 556)
         obj, df_lines = _pelado_ix(energias=("6mv", "6mev"))
         obj.ln_tolerancia_dosis_6mv.setText("2")
         obj.ln_tolerancia_dosis_6mev.setText("3")
@@ -353,6 +378,7 @@ class TestSubirReabrirRoundTrip600:
 
     def test_subir_reabrir_update_sin_duplicar(self, app, bd_temporal, monkeypatch):
         _sin_avisos(monkeypatch)
+        _crear_control_activo(bd_temporal, 444)
         obj = _pelado_600()
         obj.df_lines = DF_LINES_600
         obj.val_teo_6mv.setText("0.665")

@@ -24,6 +24,7 @@ test_h27_bd_unica_mensual.py.
 """
 import os
 import sqlite3
+from datetime import datetime
 
 import pytest
 
@@ -62,6 +63,24 @@ def _sin_avisos(monkeypatch):
                         staticmethod(lambda *a, **k: None))
     monkeypatch.setattr(QMessageBox, "critical",
                         staticmethod(lambda *a, **k: None))
+
+
+def _crear_control_activo(ruta_bd, control_id):
+    """W1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): subirlineasmensuales/_ix
+    ahora exige que el control exista y esté activo. Se ancla la auditoría
+    de creación a AHORA para que la ventana de edición de F4b (2 meses)
+    quede siempre abierta, sin importar cuándo corra la suite."""
+    con = sqlite3.connect(ruta_bd)
+    con.execute(
+        "INSERT INTO controles (id, equipo, control, fecha, user_id) "
+        "VALUES (?, 'Clinac ix', 'Mensual', '01/2026', 'Físico de Prueba')",
+        (control_id,))
+    con.execute(
+        "INSERT INTO audit_log (timestamp, usuario, accion, tabla, ref, detalle) "
+        "VALUES (?, 'Físico de Prueba', 'guardar', 'controles', ?, '')",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(control_id)))
+    con.commit()
+    con.close()
 
 
 def _insertar_fila_completa(ruta_bd, ref, energia="6mv"):
@@ -105,6 +124,7 @@ class TestSubirNoNuleaColumnasAusentes:
 
     def test_guardado_con_campo_huerfano_no_toca_fila_existente(self, app, bd_temporal, monkeypatch):
         _sin_avisos(monkeypatch)
+        _crear_control_activo(bd_temporal, 111)
         valores_originales = _insertar_fila_completa(bd_temporal, ref=111)
 
         obj = _pelado_600()
@@ -128,6 +148,7 @@ class TestSubirNoNuleaColumnasAusentes:
         observaciones) SÍ debe actualizar esos campos -- el fix no vuelve
         "Subir" un no-op general, solo protege columnas sin widget."""
         _sin_avisos(monkeypatch)
+        _crear_control_activo(bd_temporal, 112)
         valores_originales = _insertar_fila_completa(bd_temporal, ref=112)
 
         obj = _pelado_600()
@@ -154,6 +175,7 @@ class TestSubirIxNoNuleaColumnasAusentes:
 
     def test_guardado_sin_widgets_no_toca_energia_existente(self, app, bd_temporal, monkeypatch):
         _sin_avisos(monkeypatch)
+        _crear_control_activo(bd_temporal, 222)
         valores_originales = _insertar_fila_completa(bd_temporal, ref=222, energia="6mv")
 
         obj = _pelado_ix()

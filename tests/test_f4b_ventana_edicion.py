@@ -125,7 +125,11 @@ class TestPuedeEditarse:
         assert puede_editarse(control_id, hoy=date(2026, 9, 6)) is False
 
     def test_sin_ancla_no_bloquea(self, bd_temporal):
-        assert puede_editarse(99999, hoy=date(2026, 12, 1)) is True
+        """El control EXISTE (activo) pero no tiene ninguna fecha
+        reconocible (ni auditoría, ni fecha parseable) -- "sin ancla" es
+        distinto de "no existe" (ver W1: un id que no existe SÍ bloquea)."""
+        control_id = _crear_control(bd_temporal, "Clinac iX", "sin-formato")
+        assert puede_editarse(control_id, hoy=date(2026, 12, 1)) is True
 
     def test_control_id_none_no_bloquea(self, bd_temporal):
         assert puede_editarse(None) is True
@@ -134,6 +138,35 @@ class TestPuedeEditarse:
         control_id = _crear_control(bd_temporal, "Clinac ix", "14/12/2025")
 
         assert puede_editarse(control_id, hoy=date(2026, 7, 23)) is False
+
+
+class TestPuedeEditarseW1ExisteYActivo:
+    """W1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): el incidente real del
+    23-07 -- se anuló/eliminó un control desde otra vista mientras el
+    formulario mensual seguía abierto con el mismo `ref`, y "Subir" seguía
+    escribiendo dosimetría huérfana porque solo se miraba la franja de 2
+    meses, nunca si el control seguía existiendo/activo."""
+
+    def test_control_inexistente_no_es_editable(self, bd_temporal):
+        assert puede_editarse(99999, hoy=date(2026, 12, 1)) is False
+
+    def test_control_anulado_no_es_editable_aunque_este_en_la_ventana(self, bd_temporal):
+        control_id = _crear_control(bd_temporal, "Clinac iX", "05/07/2026")
+        _auditar_creacion(bd_temporal, control_id, "2026-07-05 10:30:00")
+        bd_temporal.execute(
+            "UPDATE controles SET activo = 0 WHERE id = ?", (control_id,))
+        bd_temporal.commit()
+
+        assert puede_editarse(control_id, hoy=date(2026, 7, 10)) is False
+
+    def test_mensaje_distingue_inexistente_de_anulado_de_vencido(self, bd_temporal):
+        assert "ya no existe" in mensaje_bloqueo_edicion(99999)
+
+        control_id = _crear_control(bd_temporal, "Clinac iX", "05/07/2026")
+        bd_temporal.execute(
+            "UPDATE controles SET activo = 0 WHERE id = ?", (control_id,))
+        bd_temporal.commit()
+        assert "anulado" in mensaje_bloqueo_edicion(control_id)
 
 
 class TestMensajeBloqueoEdicion:

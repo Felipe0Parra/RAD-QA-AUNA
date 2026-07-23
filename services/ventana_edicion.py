@@ -84,11 +84,40 @@ def fecha_ancla_de_control(control_id):
     return None, "desconocido"
 
 
+def _estado_control(control_id):
+    """(existe, activo) para `control_id`. Si no hay fila, (False, False).
+
+    W1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): el incidente real del
+    23-07 -- el físico anuló/eliminó un control desde la vista de registros
+    mientras el formulario mensual seguía abierto sobre ese mismo id, y
+    "Subir" siguió escribiendo dosimetría huérfana porque `puede_editarse`
+    solo miraba la franja de 2 meses, nunca si el control seguía existiendo.
+    Con C2, "eliminado" es `activo=0` (soft-delete) -- un control anulado
+    sigue teniendo fila, así que "existe" por sí solo ya no basta.
+    """
+    con = sqlite3.connect(_conection.ruta_base_datos())
+    try:
+        fila = con.execute(
+            "SELECT activo FROM controles WHERE id = ?", (control_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    if fila is None:
+        return False, False
+    activo = fila[0]
+    return True, (activo is None or activo == 1)
+
+
 def puede_editarse(control_id, hoy=None):
-    """True si `control_id` sigue dentro de la ventana de 2 meses. Sin
-    ancla resoluble (ver fecha_ancla_de_control), no bloquea."""
+    """True si `control_id` existe, sigue activo (no anulado) y está dentro
+    de la ventana de 2 meses. Sin ancla resoluble (ver
+    fecha_ancla_de_control) pero con el control existente y activo, no
+    bloquea por fecha."""
     if not control_id:
         return True
+    existe, activo = _estado_control(control_id)
+    if not existe or not activo:
+        return False
     ancla, _ = fecha_ancla_de_control(control_id)
     if ancla is None:
         return True
@@ -100,6 +129,18 @@ def mensaje_bloqueo_edicion(control_id):
     """Texto explicando por qué un control ya no admite edición, y desde
     cuándo se cuenta el plazo -- para mostrarlo tal cual en el aviso de
     'Subir' bloqueado."""
+    existe, activo = _estado_control(control_id)
+    if not existe:
+        return (
+            "Este control ya no existe en la base de datos (fue "
+            "eliminado desde otra pestaña) -- no se pueden guardar datos "
+            "nuevos sobre un registro que ya no está."
+        )
+    if not activo:
+        return (
+            "Este control fue anulado -- no se pueden guardar más datos "
+            "sobre un registro eliminado."
+        )
     ancla, _ = fecha_ancla_de_control(control_id)
     if ancla is None:
         return ("Este control ya no admite edición.")
