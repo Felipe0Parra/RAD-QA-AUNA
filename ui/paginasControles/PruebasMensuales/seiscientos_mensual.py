@@ -22,6 +22,7 @@ from services.mcc_metrics import (
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR
+from services.fechas_control import mismo_mes as _mismo_mes
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 from services.MLCs_calibration_service import (
@@ -236,17 +237,23 @@ class PruebaMensual600(PruebaBasico):
             mostrar_controles_mensuales(None, tabla_widget, equipo_filtrar=self.equipo_f)
     
     def actualizar_fisicos(self):
-        fecha = self.date_box.date().toString("MM/yyyy")
+        # F2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): mismo criterio que
+        # create_control -- la identidad es (equipo, mes, anio), nunca la
+        # fecha completa como texto exacto.
+        fecha_elegida = self.date_box.date().toString("MM/yyyy")
         try:
             conn = self.db_manager.obtener_conexion() if hasattr(self, 'equipo_f') and self.equipo_f != 'Tomógrafo' else Conexion().conectar()
             cursor = conn.cursor()
-            cursor.execute(f"""
-                SELECT user_id, user_id_f2 
-                FROM controles 
-                WHERE fecha = ? AND equipo = '{self.equipo_f}'
-            """, (fecha,))
-            resultado = cursor.fetchone()
-            
+            cursor.execute(
+                "SELECT fecha, user_id, user_id_f2 FROM controles WHERE equipo = ?",
+                (self.equipo_f,)
+            )
+            resultado = None
+            for fecha_existente, user_id, user_id_f2 in cursor.fetchall():
+                if _mismo_mes(fecha_existente, fecha_elegida):
+                    resultado = (user_id, user_id_f2)
+                    break
+
             if resultado:
                 self.fisico1.setText(resultado[0])
                 if resultado[1]:

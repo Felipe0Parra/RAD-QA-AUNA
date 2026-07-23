@@ -13,6 +13,7 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import (
     ACCION_GUARDAR, ACCION_REEMPLAZO, ACCION_EDITAR, ACCION_ELIMINAR)
+from services.fechas_control import mismo_mes as _mismo_mes
 def guardar_imagen(imagen_path):
     """
     Convierte una imagen en BLOB para guardarla en la base de datos.
@@ -218,15 +219,27 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
         tipo_control = "Anual" if es_anual else "Mensual"
         
 
-        # Verificar si ya existe registro para esa máquina, fecha y tipo
+        # F2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): la identidad de un
+        # control mensual es (equipo, mes, anio, tipo) -- el dia NUNCA es
+        # parte de la llave (H14/B5). Comparar "fecha = ?" como texto exacto
+        # dejaba inalcanzables las 3 fichas de produccion que ya traen dia
+        # (con datos reales colgando de dosimetriaMen/tamano_campo) y, una
+        # vez que el formulario empiece a guardar el dia real (F3), habria
+        # creado un control nuevo cada vez que se abriera un dia distinto
+        # del mismo mes.
         cursor.execute(
-            "SELECT id FROM controles WHERE fecha = ? AND equipo = ? AND control = ?",
-            (fecha, maquina, tipo_control)
+            "SELECT id, fecha FROM controles WHERE equipo = ? AND control = ?",
+            (maquina, tipo_control)
         )
-        old_id = cursor.fetchone()
-        if old_id is not None:
-            control_id = old_id[0]
-            
+        control_id_existente = None
+        for fila_id, fecha_existente in cursor.fetchall():
+            if _mismo_mes(fecha_existente, fecha):
+                control_id_existente = fila_id
+                break
+
+        if control_id_existente is not None:
+            control_id = control_id_existente
+
             # Actualizar el físico aunque ya exista el registro
             cursor.execute(
                 "UPDATE controles SET user_id = ?, user_id_f2 = ? WHERE id = ?",
