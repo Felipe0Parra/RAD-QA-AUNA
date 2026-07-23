@@ -934,6 +934,12 @@ class DialogCalculadoraDosis(QDialog):
                 fecha_inicial.year(), fecha_inicial.month(), fecha_inicial.day()))
             self.date_edit.setReadOnly(True)
             self.date_edit.setCalendarPopup(False)
+            # H-H (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md, hallazgo del
+            # fisico 2026-07-23): setReadOnly+setCalendarPopup(False) ya
+            # impiden editar, pero un QDateEdit sigue dibujando sus flechas
+            # de incremento/decremento -- parece que se pudiera cambiar el
+            # valor aunque no se pueda. Sin botones, solo queda el texto.
+            self.date_edit.setButtonSymbols(QAbstractSpinBox.NoButtons)
             self.date_edit.setToolTip(
                 "Esta fecha viene del formulario mensual que abrió la "
                 "calculadora y siempre coincide con ella -- no se puede "

@@ -792,10 +792,25 @@ class TestH34FechaCalculadoraDesdeFormulario:
         assert d.date_edit.isReadOnly() is True
         assert d.date_edit.calendarPopup() is False
 
+    def test_con_fecha_inicial_sin_flechas(self, dialogo_factory):
+        """H-H (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md, hallazgo del físico
+        2026-07-23): un campo bloqueado no debe insinuar que se puede
+        cambiar -- sin botones de incremento/decremento, solo el texto."""
+        from PyQt5.QtWidgets import QAbstractSpinBox
+        d = dialogo_factory(fecha_inicial=QDate(2026, 7, 16))
+        assert d.date_edit.buttonSymbols() == QAbstractSpinBox.NoButtons
+
     def test_sin_fecha_inicial_sigue_editable(self, dialogo_factory):
         d = dialogo_factory()
         assert d.date_edit.isReadOnly() is False
         assert d.date_edit.calendarPopup() is True
+
+    def test_sin_fecha_inicial_conserva_flechas(self, dialogo_factory):
+        """En uso independiente (sin fecha heredada) el campo sigue siendo
+        un QDateEdit normal, con sus botones de siempre."""
+        from PyQt5.QtWidgets import QAbstractSpinBox
+        d = dialogo_factory()
+        assert d.date_edit.buttonSymbols() == QAbstractSpinBox.UpDownArrows
 
     def test_i4_formato_de_fecha_explicito_no_del_locale(self, dialogo_factory):
         """I4 (2026-07-16): sin setDisplayFormat, QDateEdit muestra el formato
