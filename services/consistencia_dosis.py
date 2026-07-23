@@ -19,22 +19,9 @@ import sqlite3
 from data.ManejoDatos import conection as _conection
 from services.dosis_service import DosisService
 from services.nombres_acelerador import nombre_canonico
+from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 
 TOLERANCIA_DEFECTO = 0.03  # 3%, del mismo orden que tolerancia_dosis real
-
-
-def _mes_anio_de_fecha(fecha):
-    """Extrae (mes, anio) de `controles.fecha` -- "MM/yyyy" (mensual) o
-    "dd/MM/yyyy" (2 filas históricas, formato mixto verificado en
-    producción): los dos últimos segmentos separados por "/" son siempre
-    mes y año. (None, None) si el texto no tiene esa forma."""
-    partes = (fecha or "").split("/")
-    if len(partes) < 2:
-        return None, None
-    try:
-        return int(partes[-2]), int(partes[-1])
-    except ValueError:
-        return None, None
 
 
 def verificar_consistencia(mes=None, anio=None, tolerancia=TOLERANCIA_DEFECTO):
