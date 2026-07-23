@@ -44,6 +44,30 @@ def aplicar_pragmas_conexion(con):
     return con
 
 
+def checkpoint_wal(con):
+    """R2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): en modo WAL (H2.5), los
+    commits recientes pueden vivir SOLO en el archivo "-wal", no en el .db
+    principal, hasta que ocurre un checkpoint. Copiar/mover la BD llevándose
+    solo el .db (sin "-wal"/"-shm", o sin checkpoint antes) puede perder esos
+    commits en silencio -- el "verificar las rutas" que pidió el físico
+    (2026-07-23) tras traer una copia de la BD con un "-wal" de 473 KB sin
+    consolidar.
+
+    TRUNCATE consolida todo el WAL al .db y además vacía el archivo -wal (a
+    diferencia de PASSIVE/FULL, que solo lo intentan sin garantizar que quede
+    en cero) -- así una copia posterior del .db, aunque no incluya el -wal,
+    queda completa. Best-effort: nunca lanza (mismo principio que
+    audit_minimo.registrar()) -- un fallo al checkpointar no debe impedir que
+    la app siga cerrando.
+    """
+    if con is None:
+        return
+    try:
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    except Exception as ex:
+        print("Error al hacer checkpoint del WAL:", ex)
+
+
 class Conexion():
     _instance = None  # Variable de clase para almacenar una única instancia de la conexión
     

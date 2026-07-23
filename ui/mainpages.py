@@ -20,6 +20,7 @@ import sys, os, shutil, importlib
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from data.ManejoDatos.usuariosManager import UsuarioData
 from services.audit_minimo import usuario_actual as _usuario_actual
+from data.ManejoDatos.conection import Conexion, checkpoint_wal
 
 class Menuu(QWidget):
     finished = pyqtSignal()
@@ -576,7 +577,14 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         print("Guardando datos o haciendo respaldo...")
         #self.hacer_respaldo()
-        event.accept() 
+        # R2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): consolidar el WAL al
+        # .db principal antes de cerrar -- si alguien copia/mueve la BD justo
+        # después de cerrar la app, el .db por sí solo ya queda completo (sin
+        # depender de llevarse también "-wal"/"-shm"). Best-effort: nunca
+        # bloquea el cierre.
+        if Conexion._instance is not None:
+            checkpoint_wal(Conexion._instance.con)
+        event.accept()
 
     def hacer_respaldo(self):
         ruta_bd_red = r"\\VARIANDB\Va_Transfer\BaseDatosQA.db"
