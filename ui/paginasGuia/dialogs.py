@@ -297,15 +297,22 @@ class DialogAdminPermisoEliminar(QDialog):
         subtitle_label.setWordWrap(True)
 
         # Línea de usuario
+        # C3 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md / PLAN_AUDITORIA_DOS_EJES
+        # §7.7a): antes re-validaba la CONTRASEÑA DEL PROPIO usuario logueado
+        # (campo fijo, solo lectura) -- cualquier físico podía eliminar un
+        # registro con su propia clave, contra el pedido explícito del
+        # físico ("verificar que solo el administrador puede eliminar un
+        # registro, o físico médico jefe"). Editable + verificación de
+        # es_admin_equivalente, mismo patrón ya usado en
+        # DialogAdminPermiso/DialogAdminPermiso2 (crear usuario/cambiar clave).
         self.admin_user = QLineEdit(self)
-        self.admin_user.setText(self.user._usuario)
-        self.admin_user.setReadOnly(True)
+        self.admin_user.setText("admin")
 
         # Línea de contraseña
         self.admin_password = QLineEdit(self)
         self.admin_password.setPlaceholderText("Contraseña")
         self.admin_password.setEchoMode(QLineEdit.Password)
-        
+
         self.labelwarnign = QLabel(self)
         self.labelwarnign.setStyleSheet("""
             QLabel {
@@ -372,7 +379,7 @@ class DialogAdminPermisoEliminar(QDialog):
     def open_main_window(self):
         print(f"    Método open_main_window en la clase: {self.__class__.__name__}")
         # Aquí puedes agregar la lógica para abrir otra ventana
-        
+
         if not self.admin_password.text():
             self.labelwarnign.setText('Hace falta la contraseña')
             self.admin_password.setFocus()
@@ -381,9 +388,19 @@ class DialogAdminPermisoEliminar(QDialog):
             usuData = UsuarioData()
             # A8: esto AUTORIZA una operación, no abre sesión.
             self.res = usuData.login(user, ACCION_AUTORIZACION)
-            if self.res:
+            if self.res and es_admin_equivalente(self.admin_user.text()):
                 self.labelwarnign.setText('')
                 self.accept()
+            elif self.res:
+                # C3: contraseña correcta, pero el usuario no es admin ni la
+                # física en jefe -- se audita el intento denegado (A8 ya
+                # registró el login de autorización; aquí se deja constancia
+                # de POR QUÉ se denegó, no solo que se autorizó).
+                self.labelwarnign.setText('Este usuario no tiene permisos administrativos')
+                _registrar_auditoria(
+                    self.admin_user.text(), ACCION_AUTORIZACION, "controles",
+                    detalle=f"eliminar denegado: '{self.admin_user.text()}' no es administrador")
+                self.admin_user.setFocus()
             else:
                 self.labelwarnign.setText('Verifique la contraseña por favor')
                 self.admin_user.setFocus()
