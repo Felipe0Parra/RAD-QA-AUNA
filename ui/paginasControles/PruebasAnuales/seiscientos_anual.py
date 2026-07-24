@@ -27,6 +27,13 @@ class PruebaAnual600(PruebaMensual600):
                 QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
                 return
             
+            # X1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): sin esta
+            # inicialización, un control anual sin 2º físico (user_id_f2=None,
+            # el caso común) dejaba _nombre_fisico2 sin asignar -->
+            # UnboundLocalError al armar `lista` más abajo. None es además la
+            # representación correcta de "sin 2º físico" (no el centinela de
+            # texto " ---- " que sí usaba la versión mensual, load.py).
+            _nombre_fisico2 = None
             if user_id_f2:
                 cursor.execute("SELECT fullname FROM users WHERE id = ?", (user_id_f2,))
                 row = cursor.fetchone()

@@ -208,7 +208,15 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
             QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
             return
 
-        _nombre_fisico2 = " ---- "
+        # X1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): antes se guardaba
+        # el centinela de texto " ---- " cuando no había 2º físico --
+        # user_id_f2 tiene FOREIGN KEY a users(fullname), así que ese
+        # centinela viola la integridad referencial (7 filas así en
+        # producción) y además bloquearía activar PRAGMA foreign_keys=ON
+        # (W2). NULL es la representación correcta de "sin 2º físico"; todo
+        # lector existente ya lo trata igual (`if user_id_f2:`/`if
+        # resultado[1]:` -- ambos falsy con None).
+        _nombre_fisico2 = None
         if user_id_f2:
             cursor.execute("SELECT fullname FROM users WHERE id = ?", (user_id_f2,))
             row = cursor.fetchone()
