@@ -233,6 +233,68 @@ class TestValidacionDeEntradaFBD2:
             migrar(ruta, aplicar=True)
 
 
+class TestWalDeLaBdEntranteI3:
+    """I3/F-BD3 (INFORME_BARRIDO_BD_RUTAS_24-07.md): una BD traída de otra
+    máquina puede llegar con commits SOLO en su archivo `-wal` (el rebuild
+    del físico traía 473 KB así). La herramienta debe consolidarlos, no
+    perderlos: el dry-run copia el set completo y el `--aplicar` checkpointea
+    antes del backup. Técnica del arnés: mantener abierta una conexión WAL
+    con autocheckpoint apagado, para que el commit viva solo en el -wal
+    (misma técnica que la suite R2)."""
+
+    def _abrir_con_fila_solo_en_wal(self, ruta):
+        """Deja `ruta` con una fila de `controles` (con el centinela) cuyo
+        commit vive SOLO en el -wal. Devuelve la conexión (mantener abierta:
+        cerrarla dispararía el checkpoint automático y desarmaría el caso)."""
+        con = sqlite3.connect(ruta)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA wal_autocheckpoint=0")
+        con.execute(
+            "INSERT INTO controles (equipo, control, fecha, user_id, user_id_f2) "
+            "VALUES ('Halcyon', 'Mensual', '03/2026', 'Físico de Prueba', ?)",
+            (CENTINELA_SEGUNDO_FISICO,))
+        con.commit()
+        return con
+
+    def test_dry_run_ve_los_datos_que_viven_solo_en_el_wal(self, bd_vieja, capsys):
+        con_abierta = self._abrir_con_fila_solo_en_wal(bd_vieja)
+        try:
+            assert os.path.getsize(bd_vieja + "-wal") > 0  # el commit está en el -wal
+
+            migrar(bd_vieja, aplicar=False)
+
+            salida = capsys.readouterr().out
+            # la BD vieja traía 1 centinela en el .db + 1 solo-en-wal = 2;
+            # sin la copia del set completo, la simulación solo veía 1
+            assert "2 encontradas, 2 normalizadas" in salida
+        finally:
+            con_abierta.close()
+
+    def test_aplicar_consolida_y_el_backup_es_completo(self, bd_vieja):
+        con_abierta = self._abrir_con_fila_solo_en_wal(bd_vieja)
+        try:
+            resultado = migrar(bd_vieja, aplicar=True)
+        finally:
+            con_abierta.close()
+
+        # el BACKUP (copia simple del .db, sin -wal) debe contener TAMBIÉN la
+        # fila que vivía solo en el -wal -- prueba de que se consolidó antes
+        con_bak = sqlite3.connect(resultado["respaldo"])
+        n_backup = con_bak.execute(
+            "SELECT COUNT(*) FROM controles").fetchone()[0]
+        con_bak.close()
+        assert n_backup == 3  # las 2 de la BD vieja + la que vivía en el -wal
+
+        con = sqlite3.connect(bd_vieja)
+        n_final = con.execute("SELECT COUNT(*) FROM controles").fetchone()[0]
+        sentinelas = con.execute(
+            "SELECT COUNT(*) FROM controles WHERE user_id_f2 = ?",
+            (CENTINELA_SEGUNDO_FISICO,)).fetchone()[0]
+        con.close()
+        assert n_final == 3
+        assert sentinelas == 0  # ambas centinelas (la del .db y la del wal) normalizadas
+
+
 class TestBdYaAlDiaNoReportaCambios:
 
     def test_bd_recien_creada_por_la_app_no_tiene_cambios_que_reportar(self, tmp_path, monkeypatch):

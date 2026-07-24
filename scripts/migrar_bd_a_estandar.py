@@ -74,6 +74,33 @@ def _validar_archivo_bd(ruta_bd):
         sys.exit(1)
 
 
+def _consolidar_wal(ruta_bd):
+    """I3/F-BD3 (lección R2 aplicada a la propia herramienta): en modo WAL,
+    los commits recientes pueden vivir SOLO en el archivo `-wal` -- una BD
+    traída de otra máquina puede llegar así (el rebuild del físico del 23-07
+    traía un -wal de 473 KB sin consolidar). Sin este paso: el backup de
+    `--aplicar` copiaba solo el `.db` (backup incompleto) y el dry-run
+    simulaba sobre una copia sin esos datos. `wal_checkpoint(TRUNCATE)`
+    consolida todo al `.db` y deja el `-wal` en cero -- preserva el contenido
+    lógico, solo lo reubica -- de modo que una copia simple del `.db` ya es
+    la base completa."""
+    con = sqlite3.connect(ruta_bd)
+    try:
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        con.close()
+
+
+def _copiar_set_sqlite(ruta_origen, ruta_destino):
+    """Copia `.db` + `-wal` + `-shm` (los que existan) -- el 'set' completo
+    de un archivo SQLite en modo WAL. Copiar solo el `.db` puede perder los
+    commits aún no consolidados (la trampa demostrada en R2)."""
+    for ext in ("", "-wal", "-shm"):
+        origen = ruta_origen + ext
+        if os.path.exists(origen):
+            shutil.copy(origen, ruta_destino + ext)
+
+
 def _inventario_esquema(con):
     """dict tabla -> set(columnas) -- para diffear antes/después."""
     tablas = [r[0] for r in con.execute(
@@ -199,7 +226,11 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
               "Use --aplicar para aplicar los cambios de verdad.\n")
         with tempfile.TemporaryDirectory() as tmp:
             copia = str(Path(tmp) / "copia_para_simular.db")
-            shutil.copy(ruta_bd, copia)
+            # I3/F-BD3: set completo (.db + -wal + -shm), no solo el .db --
+            # si la BD entrante trae commits sin consolidar en el -wal, la
+            # simulación debe verlos igual que los vería la app real.
+            _copiar_set_sqlite(ruta_bd, copia)
+            _consolidar_wal(copia)
             sentinelas_normalizadas = _aplicar_migracion_en(copia, usuario=usuario)
             con_copia = sqlite3.connect(copia)
             try:
@@ -218,6 +249,12 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
               f"'{integridad_antes}' (no 'ok') -- revise la base antes de "
               f"continuar. Se aborta sin hacer ningún cambio.")
         sys.exit(1)
+
+    # I3/F-BD3: consolidar el WAL de la BD entrante ANTES del backup --
+    # preserva el contenido lógico (solo lo reubica del -wal al .db), y
+    # garantiza que el backup por copia simple del .db sea la base COMPLETA
+    # aunque la BD haya llegado con un -wal sin consolidar.
+    _consolidar_wal(ruta_bd)
 
     respaldo = f"{ruta_bd}.pre_migracion_{datetime.now():%Y%m%d_%H%M%S}.bak"
     shutil.copy(ruta_bd, respaldo)
