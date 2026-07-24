@@ -60,6 +60,11 @@ ACCION_LOGOUT = "logout"
 # del rebuild 22-07 eran "login", la mitad de ellas simples confirmaciones de
 # permiso -- el físico las leía como "mi borrado quedó registrado como login".
 ACCION_AUTORIZACION = "autorizacion"
+# M1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): scripts/migrar_bd_a_estandar.py
+# normaliza datos históricos (hoy: el centinela " ---- " de user_id_f2) al
+# traer una BD antigua al estándar actual -- distinto de un "actualizar"
+# hecho por un físico desde la UI en el flujo normal de trabajo.
+ACCION_MIGRACION = "migracion"
 
 
 def usuario_actual(obj):

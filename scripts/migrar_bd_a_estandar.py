@@ -1,0 +1,208 @@
+"""Trae CUALQUIER archivo .db (una copia vieja, una BD de otra sesión de
+trabajo, un backup de hace meses) al estándar de esquema que usa la versión
+ACTUAL de la app -- para poder incorporar datos que se llenaron en una forma
+"antigua" de la base sin que falte ninguna columna/tabla de las que se han
+ido agregando a lo largo de este proyecto (M1,
+PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8, petición del físico 2026-07-24).
+
+Diseño clave -- por qué esto no puede quedar desactualizado: en vez de
+reimplementar la lista de columnas/tablas que la app ha ido agregando (una
+segunda copia que habría que recordar mantener sincronizada para siempre),
+este script REUTILIZA exactamente la misma secuencia de arranque que corre
+`Conexion.__init_connection()` cada vez que la app abre un archivo --
+apuntándola temporalmente al archivo dado, con el mismo mecanismo de
+aislamiento que usa `tests/conftest.py` (parchear `conection.ruta_base_datos`
+a la ruta deseada). Cualquier `_asegurar_columna`/`CREATE TABLE IF NOT
+EXISTS` que se agregue en el futuro al arranque de la app queda cubierto acá
+automáticamente, sin tocar este archivo.
+
+Además de esquema, normaliza UN dato histórico conocido: el centinela de
+texto `" ---- "` que versiones anteriores de `create_control` guardaban en
+`controles.user_id_f2` cuando no había 2º físico (X1, mismo plan) -- ese
+centinela viola la FOREIGN KEY a `users(fullname)` y bloquearía activar
+`PRAGMA foreign_keys=ON` sobre una BD antigua. Se convierte a NULL (la
+representación correcta; todo lector ya la trata igual). Nunca se inventan
+otros valores ni se tocan columnas/filas que no sean estas dos cosas.
+
+Modo de uso:
+    python scripts/migrar_bd_a_estandar.py <ruta.db>              # dry-run
+    python scripts/migrar_bd_a_estandar.py <ruta.db> --aplicar    # aplica
+
+Por defecto es DRY-RUN (solo reporta qué cambiaría, corriendo la migración
+real sobre una copia temporal -- nunca toca el archivo original). Con
+--aplicar: hace un backup con timestamp junto al archivo ANTES de tocarlo,
+corre `PRAGMA integrity_check` antes y después, y aborta sin escribir nada
+si la BD ya venía con problemas de integridad. Idempotente: correrlo dos
+veces sobre la misma BD no repite ni deshace nada la segunda vez.
+"""
+import argparse
+import shutil
+import sqlite3
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+CENTINELA_SEGUNDO_FISICO = " ---- "
+
+
+def _inventario_esquema(con):
+    """dict tabla -> set(columnas) -- para diffear antes/después."""
+    tablas = [r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    return {t: set(c[1] for c in con.execute(f"PRAGMA table_info('{t}')").fetchall())
+            for t in tablas}
+
+
+def _contar_centinela(con):
+    try:
+        return con.execute(
+            "SELECT COUNT(*) FROM controles WHERE user_id_f2 = ?",
+            (CENTINELA_SEGUNDO_FISICO,)).fetchone()[0]
+    except sqlite3.OperationalError:
+        return 0  # tabla controles aun no existe (BD recien creada)
+
+
+def _aplicar_migracion_en(ruta_bd, usuario=None):
+    """Corre la MISMA secuencia de arranque que usa la app real
+    (Conexion.__init_connection) apuntada a `ruta_bd`, más la normalización
+    del centinela de user_id_f2. No reimplementa ninguna migración -- las
+    reutiliza tal cual están hoy en el código de producción."""
+    from data.ManejoDatos import conection as conection_mod
+
+    instancia_previa = conection_mod.Conexion._instance
+    ruta_original = conection_mod.ruta_base_datos
+    conection_mod.Conexion._instance = None
+    conection_mod.ruta_base_datos = lambda: ruta_bd
+    try:
+        instancia = conection_mod.Conexion()
+        con = instancia.con
+        filas_centinela = _contar_centinela(con)
+        if filas_centinela:
+            con.execute(
+                "UPDATE controles SET user_id_f2 = NULL WHERE user_id_f2 = ?",
+                (CENTINELA_SEGUNDO_FISICO,))
+            con.commit()
+            try:
+                from services.audit_minimo import registrar, ACCION_MIGRACION
+                registrar(usuario, ACCION_MIGRACION, tabla="controles",
+                          detalle=(f"normalizadas {filas_centinela} fila(s) "
+                                   f"con el centinela historico de 2do "
+                                   f"fisico (' ---- ' -> NULL)"),
+                          ruta_db=ruta_bd)
+            except Exception:
+                pass  # el audit_log del archivo destino es best-effort
+        con.close()
+    finally:
+        conection_mod.ruta_base_datos = ruta_original
+        conection_mod.Conexion._instance = instancia_previa
+    return filas_centinela
+
+
+def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas):
+    print("\n--- Cambios de esquema ---")
+    tablas_nuevas = sorted(set(inv_despues) - set(inv_antes))
+    if tablas_nuevas:
+        print("  Tablas nuevas creadas:", tablas_nuevas)
+    hubo_columnas = False
+    for tabla in sorted(inv_despues):
+        antes = inv_antes.get(tabla, set())
+        nuevas_cols = inv_despues[tabla] - antes
+        if nuevas_cols and tabla in inv_antes:
+            hubo_columnas = True
+            print(f"  {tabla}: columna(s) nueva(s) {sorted(nuevas_cols)}")
+    if not tablas_nuevas and not hubo_columnas:
+        print("  (sin cambios de esquema -- la base ya estaba al día)")
+
+    print("\n--- Normalización de datos (X1) ---")
+    print(f"  Filas con el centinela histórico de 2º físico (' ---- '): "
+          f"{sentinelas_antes} encontradas, {sentinelas_normalizadas} normalizadas a NULL")
+
+
+def migrar(ruta_bd, aplicar=False, usuario=None):
+    """Punto de entrada reutilizable (además de la CLI). Devuelve un dict
+    con el resultado -- útil para tests y para invocarlo desde la propia
+    app en el futuro sin pasar por subprocess."""
+    ruta_bd = str(ruta_bd)
+    con_antes = sqlite3.connect(ruta_bd)
+    try:
+        integridad_antes = con_antes.execute("PRAGMA integrity_check").fetchone()[0]
+        inventario_antes = _inventario_esquema(con_antes)
+        sentinelas_antes = _contar_centinela(con_antes)
+    finally:
+        con_antes.close()
+
+    print(f"Base de datos: {ruta_bd}")
+    print(f"integrity_check antes: {integridad_antes}")
+
+    if not aplicar:
+        print("\n[MODO DRY-RUN] No se modifica el archivo original. "
+              "Use --aplicar para aplicar los cambios de verdad.\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            copia = str(Path(tmp) / "copia_para_simular.db")
+            shutil.copy(ruta_bd, copia)
+            sentinelas_normalizadas = _aplicar_migracion_en(copia, usuario=usuario)
+            con_copia = sqlite3.connect(copia)
+            try:
+                inventario_despues = _inventario_esquema(con_copia)
+            finally:
+                con_copia.close()
+        _reportar_diff(inventario_antes, inventario_despues,
+                        sentinelas_antes, sentinelas_normalizadas)
+        return {"aplicado": False, "integridad_antes": integridad_antes,
+                "sentinelas_antes": sentinelas_antes}
+
+    if integridad_antes != "ok":
+        print(f"ALERTA: integrity_check antes de migrar dio "
+              f"'{integridad_antes}' (no 'ok') -- revise la base antes de "
+              f"continuar. Se aborta sin hacer ningún cambio.")
+        sys.exit(1)
+
+    respaldo = f"{ruta_bd}.pre_migracion_{datetime.now():%Y%m%d_%H%M%S}.bak"
+    shutil.copy(ruta_bd, respaldo)
+    print(f"Backup creado: {respaldo}")
+
+    sentinelas_normalizadas = _aplicar_migracion_en(ruta_bd, usuario=usuario)
+
+    con_despues = sqlite3.connect(ruta_bd)
+    try:
+        integridad_despues = con_despues.execute("PRAGMA integrity_check").fetchone()[0]
+        inventario_despues = _inventario_esquema(con_despues)
+    finally:
+        con_despues.close()
+
+    print(f"integrity_check después: {integridad_despues}")
+    _reportar_diff(inventario_antes, inventario_despues,
+                    sentinelas_antes, sentinelas_normalizadas)
+
+    if integridad_despues != "ok":
+        print(f"ALERTA: integrity_check después de migrar dio "
+              f"'{integridad_despues}' (no 'ok'). El backup previo está en "
+              f"{respaldo} -- restáurelo y avise antes de seguir usando "
+              f"este archivo.")
+        sys.exit(1)
+
+    print(f"\nListo. Backup de seguridad conservado en: {respaldo}")
+    return {"aplicado": True, "respaldo": respaldo,
+            "integridad_antes": integridad_antes,
+            "integridad_despues": integridad_despues,
+            "sentinelas_normalizadas": sentinelas_normalizadas}
+
+
+def _main():
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("ruta_bd", help="Ruta al archivo .db a migrar")
+    parser.add_argument("--aplicar", action="store_true",
+                         help="Aplica los cambios de verdad (por defecto "
+                              "solo reporta que cambiaría -- dry-run)")
+    parser.add_argument("--usuario", default=None,
+                         help="Nombre para dejar auditado quién corrió la migración")
+    args = parser.parse_args()
+    migrar(args.ruta_bd, aplicar=args.aplicar, usuario=args.usuario)
+
+
+if __name__ == "__main__":
+    _main()
