@@ -36,6 +36,7 @@ si la BD ya venía con problemas de integridad. Idempotente: correrlo dos
 veces sobre la misma BD no repite ni deshace nada la segunda vez.
 """
 import argparse
+import os
 import shutil
 import sqlite3
 import sys
@@ -46,6 +47,31 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 CENTINELA_SEGUNDO_FISICO = " ---- "
+
+CABECERA_SQLITE = b"SQLite format 3\x00"
+
+
+def _validar_archivo_bd(ruta_bd):
+    """F-BD2 (INFORME_BARRIDO_BD_RUTAS_24-07.md): `sqlite3.connect()` CREA un
+    archivo vacío si la ruta no existe -- sin esta guarda, un typo en la ruta
+    hacía que la herramienta "migrara" con éxito una BD vacía recién creada
+    en la ruta equivocada (reportando `integrity_check: ok` y 66 tablas
+    nuevas), y el físico creería que migró su archivo real. Se valida ANTES
+    de abrir cualquier conexión: la ruta existe, es un archivo, y trae la
+    cabecera SQLite (primeros 16 bytes) -- toda BD real la tiene; un archivo
+    de 0 bytes o de otro formato, no."""
+    if not os.path.isfile(ruta_bd):
+        print(f"ERROR: no existe ningún archivo en la ruta indicada:\n"
+              f"  {ruta_bd}\n"
+              f"Revise la ruta -- esta herramienta nunca crea archivos nuevos.")
+        sys.exit(1)
+    with open(ruta_bd, "rb") as f:
+        cabecera = f.read(16)
+    if cabecera != CABECERA_SQLITE:
+        print(f"ERROR: el archivo indicado no es una base de datos SQLite "
+              f"válida:\n  {ruta_bd}\n"
+              f"No se hizo ningún cambio.")
+        sys.exit(1)
 
 
 def _inventario_esquema(con):
@@ -155,6 +181,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     con el resultado -- útil para tests y para invocarlo desde la propia
     app en el futuro sin pasar por subprocess."""
     ruta_bd = str(ruta_bd)
+    _validar_archivo_bd(ruta_bd)
     con_antes = sqlite3.connect(ruta_bd)
     try:
         integridad_antes = con_antes.execute("PRAGMA integrity_check").fetchone()[0]

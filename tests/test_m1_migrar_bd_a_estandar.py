@@ -191,6 +191,48 @@ class TestIdempotencia:
         assert resultado2["sentinelas_normalizadas"] == 0  # ya no queda ninguno
 
 
+class TestValidacionDeEntradaFBD2:
+    """F-BD2 (INFORME_BARRIDO_BD_RUTAS_24-07.md): sin la validación,
+    `sqlite3.connect` sobre una ruta con typo creaba un archivo vacío y la
+    herramienta lo "migraba" con éxito -- el físico creería que migró su BD
+    real cuando migró una vacía nueva en la ruta equivocada."""
+
+    def test_ruta_inexistente_aborta_sin_crear_archivo(self, tmp_path):
+        ruta_typo = str(tmp_path / "BaseDatosQA_typo.db")
+
+        with pytest.raises(SystemExit):
+            migrar(ruta_typo, aplicar=True)
+
+        assert not os.path.exists(ruta_typo)  # la herramienta nunca crea archivos
+
+    def test_ruta_inexistente_aborta_tambien_en_dry_run(self, tmp_path):
+        ruta_typo = str(tmp_path / "no_existe.db")
+        with pytest.raises(SystemExit):
+            migrar(ruta_typo, aplicar=False)
+        assert not os.path.exists(ruta_typo)
+
+    def test_archivo_que_no_es_sqlite_aborta_sin_tocarlo(self, tmp_path):
+        ruta = str(tmp_path / "no_es_bd.db")
+        contenido = b"esto es un archivo de texto, no una base de datos"
+        with open(ruta, "wb") as f:
+            f.write(contenido)
+
+        with pytest.raises(SystemExit):
+            migrar(ruta, aplicar=True)
+
+        with open(ruta, "rb") as f:
+            assert f.read() == contenido  # intacto, byte a byte
+        assert not any(".pre_migracion_" in n for n in os.listdir(tmp_path))
+
+    def test_archivo_vacio_cero_bytes_aborta(self, tmp_path):
+        """El caso exacto que produce un connect previo accidental: un .db de
+        0 bytes no tiene cabecera SQLite y no es una BD migrable."""
+        ruta = str(tmp_path / "vacio.db")
+        open(ruta, "wb").close()
+        with pytest.raises(SystemExit):
+            migrar(ruta, aplicar=True)
+
+
 class TestBdYaAlDiaNoReportaCambios:
 
     def test_bd_recien_creada_por_la_app_no_tiene_cambios_que_reportar(self, tmp_path, monkeypatch):
