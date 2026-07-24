@@ -126,10 +126,82 @@ class Conexion():
                 print("Error asegurando esquema de calculadora_dosimetrica al arranque:", ex_dosis)
 
             self._asegurar_migraciones_ad_hoc()
+            self._asegurar_catalogos_base()
 
         except Exception as ex:
             traceback.print_exc()
             print("Error al conectar a la base de datos:", ex)
+
+    def _asegurar_catalogos_base(self):
+        """INSERT-audit (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8,
+        prerrequisito de W2): `tipos_prueba`, `materiales_ct`,
+        `regiones_uniformidad` y `energias` nunca se sembraban desde ningún
+        punto del código -- solo se CREABAN vacíos (`CREATE TABLE IF NOT
+        EXISTS`). El código que escribe en tablas con FK hacia ellos usa ids
+        LITERALES fijos en Python que asumen que esas filas ya existen
+        (`mapeo_tipos`/`mapeo_materiales`/`mapeo_regiones` en catphan_db.py,
+        `energia_ids`/`id_energia=0` en ix_anual.py/halcyon_*.py) -- la BD de
+        producción real SÍ las tiene (probablemente insertadas a mano en
+        algún momento), pero una BD nueva o traída de otra sesión queda con
+        estos catálogos VACÍOS. Hoy es inofensivo (FK apagado, H-F); en
+        cuanto se active `PRAGMA foreign_keys=ON` (W2), CUALQUIER guardado
+        de CT/Halcyon/tablas anuales de iX en una BD así fallaría de
+        inmediato. `INSERT OR IGNORE`: aditivo, nunca sobreescribe una fila
+        ya sembrada (aunque alguien la haya editado a mano después). Valores
+        verificados contra `AUNA_2026_2/BaseDatosQA.db` real -- se replica
+        exactamente lo que ya está desplegado, no se inventa nada nuevo.
+        """
+        try:
+            cur = self.con.cursor()
+            cur.executemany(
+                "INSERT OR IGNORE INTO tipos_prueba (id_tipo, nombre_prueba, descripcion) "
+                "VALUES (?, ?, ?)",
+                [
+                    (1, "ESPESOR_CORTE", "Medición del espesor de corte"),
+                    (2, "TAMAÑO_PIXEL", "Medición del tamaño de pixel"),
+                    (3, "RESOLUCION_CONTRASTE", "Resolución de contraste"),
+                    (4, "RESOLUCION_ESPACIAL", "Resolución espacial"),
+                    (5, "VALORES_CT", "Valores del número CT"),
+                    (6, "LINEALIDAD_CT", "Linealidad del número CT y escala de contraste"),
+                    (7, "UNIFORMIDAD_RUIDO", "Uniformidad y ruido"),
+                ]
+            )
+            cur.executemany(
+                "INSERT OR IGNORE INTO materiales_ct "
+                "(id_material, nombre_material, rango_referencia_min, rango_referencia_max) "
+                "VALUES (?, ?, ?, ?)",
+                [
+                    (1, "Aire", -1000.0, -970.0),
+                    (2, "PMP", -200.0, -180.0),
+                    (3, "LDPE", -120.0, -90.0),
+                    (4, "Poliestireno", -65.0, -25.0),
+                    (5, "Acrilico", 110.0, 140.0),
+                    (6, "Delrin", 340.0, 380.0),
+                    (7, "Teflon", 940.0, 1000.0),
+                ]
+            )
+            cur.executemany(
+                "INSERT OR IGNORE INTO regiones_uniformidad "
+                "(id_region, nombre_region, angulo) VALUES (?, ?, ?)",
+                [
+                    (1, "Centro", 0),
+                    (2, "Superior", 270),
+                    (3, "Derecha", 0),
+                    (4, "Inferior", 90),
+                    (5, "Izquierda", 180),
+                ]
+            )
+            cur.executemany(
+                "INSERT OR IGNORE INTO energias (id, energia) VALUES (?, ?)",
+                [
+                    (0, "6 MV"), (1, "15 MV"), (2, "6 MeV"),
+                    (3, "9 MeV"), (4, "12 MeV"), (5, "15 MeV"),
+                ]
+            )
+            self.con.commit()
+            cur.close()
+        except Exception as ex:
+            print("Error asegurando catálogos base al arranque:", ex)
 
     def _asegurar_migraciones_ad_hoc(self):
         """R3 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): cierra el resto

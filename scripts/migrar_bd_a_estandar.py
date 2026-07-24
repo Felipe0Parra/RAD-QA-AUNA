@@ -65,6 +65,22 @@ def _contar_centinela(con):
         return 0  # tabla controles aun no existe (BD recien creada)
 
 
+CATALOGOS_BASE = ["tipos_prueba", "materiales_ct", "regiones_uniformidad", "energias"]
+
+
+def _contar_catalogos_base(con):
+    """INSERT-audit (§8): estos 4 catálogos nunca se sembraban desde el
+    código (solo se creaban vacíos) -- reportar cuántas filas tenían antes y
+    después deja explícito cuándo la migración sembró un catálogo vacío."""
+    conteos = {}
+    for tabla in CATALOGOS_BASE:
+        try:
+            conteos[tabla] = con.execute(f"SELECT COUNT(*) FROM {tabla}").fetchone()[0]
+        except sqlite3.OperationalError:
+            conteos[tabla] = 0
+    return conteos
+
+
 def _aplicar_migracion_en(ruta_bd, usuario=None):
     """Corre la MISMA secuencia de arranque que usa la app real
     (Conexion.__init_connection) apuntada a `ruta_bd`, más la normalización
@@ -101,7 +117,8 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
     return filas_centinela
 
 
-def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas):
+def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas,
+                    catalogos_antes=None, catalogos_despues=None):
     print("\n--- Cambios de esquema ---")
     tablas_nuevas = sorted(set(inv_despues) - set(inv_antes))
     if tablas_nuevas:
@@ -120,6 +137,18 @@ def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normaliz
     print(f"  Filas con el centinela histórico de 2º físico (' ---- '): "
           f"{sentinelas_antes} encontradas, {sentinelas_normalizadas} normalizadas a NULL")
 
+    if catalogos_antes is not None and catalogos_despues is not None:
+        print("\n--- Catálogos base (prerrequisito de foreign_keys=ON) ---")
+        hubo_siembra = False
+        for tabla in CATALOGOS_BASE:
+            antes, despues = catalogos_antes[tabla], catalogos_despues[tabla]
+            if despues > antes:
+                hubo_siembra = True
+                print(f"  {tabla}: sembradas {despues - antes} fila(s) "
+                      f"({antes} -> {despues})")
+        if not hubo_siembra:
+            print("  (los 4 catálogos ya estaban sembrados -- sin cambios)")
+
 
 def migrar(ruta_bd, aplicar=False, usuario=None):
     """Punto de entrada reutilizable (además de la CLI). Devuelve un dict
@@ -131,6 +160,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         integridad_antes = con_antes.execute("PRAGMA integrity_check").fetchone()[0]
         inventario_antes = _inventario_esquema(con_antes)
         sentinelas_antes = _contar_centinela(con_antes)
+        catalogos_antes = _contar_catalogos_base(con_antes)
     finally:
         con_antes.close()
 
@@ -147,10 +177,12 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             con_copia = sqlite3.connect(copia)
             try:
                 inventario_despues = _inventario_esquema(con_copia)
+                catalogos_despues = _contar_catalogos_base(con_copia)
             finally:
                 con_copia.close()
         _reportar_diff(inventario_antes, inventario_despues,
-                        sentinelas_antes, sentinelas_normalizadas)
+                        sentinelas_antes, sentinelas_normalizadas,
+                        catalogos_antes, catalogos_despues)
         return {"aplicado": False, "integridad_antes": integridad_antes,
                 "sentinelas_antes": sentinelas_antes}
 
@@ -170,12 +202,14 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     try:
         integridad_despues = con_despues.execute("PRAGMA integrity_check").fetchone()[0]
         inventario_despues = _inventario_esquema(con_despues)
+        catalogos_despues = _contar_catalogos_base(con_despues)
     finally:
         con_despues.close()
 
     print(f"integrity_check después: {integridad_despues}")
     _reportar_diff(inventario_antes, inventario_despues,
-                    sentinelas_antes, sentinelas_normalizadas)
+                    sentinelas_antes, sentinelas_normalizadas,
+                    catalogos_antes, catalogos_despues)
 
     if integridad_despues != "ok":
         print(f"ALERTA: integrity_check después de migrar dio "
