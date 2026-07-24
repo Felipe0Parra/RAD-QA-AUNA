@@ -125,9 +125,40 @@ class Conexion():
             except Exception as ex_dosis:
                 print("Error asegurando esquema de calculadora_dosimetrica al arranque:", ex_dosis)
 
+            self._asegurar_migraciones_ad_hoc()
+
         except Exception as ex:
             traceback.print_exc()
             print("Error al conectar a la base de datos:", ex)
+
+    def _asegurar_migraciones_ad_hoc(self):
+        """R3 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): cierra el resto
+        de la deuda de ALTER TABLE ad-hoc que quedaba FUERA del arranque --
+        mismo patrón de riesgo que H-C/R1 (columna faltante que revienta una
+        lectura antes de que el único punto que la agrega llegue a ejecutarse
+        alguna vez), pero para otras tablas: `pruebas.mes_control`/`.equipo`
+        (antes solo se agregaban dentro de las funciones de listado anual/CT,
+        nunca al arranque), `CondicionesMedicion.observaciones` (antes solo
+        dentro de `observaciones_db` de braquiterapia). `equipos.imagen_certificado`/
+        `.h_cal` y `dosimetriaMen.energia` YA están en el CREATE TABLE actual
+        (cubren BD nuevas) pero el ALTER histórico que las agregó a una BD ya
+        desplegada quedó comentado/inerte en el código -- para una BD
+        genuinamente antigua (anterior a que esas columnas existieran) hacía
+        falta repetirlo aquí. Puramente aditivo e idempotente (mismo
+        `_asegurar_columna`); no toca ninguna fila existente.
+        """
+        try:
+            cur = self.con.cursor()
+            _asegurar_columna(cur, "pruebas", "mes_control", "TEXT")
+            _asegurar_columna(cur, "pruebas", "equipo", "TEXT")
+            _asegurar_columna(cur, "CondicionesMedicion", "observaciones", "TEXT")
+            _asegurar_columna(cur, "equipos", "imagen_certificado", "BLOB")
+            _asegurar_columna(cur, "equipos", "h_cal", "REAL")
+            _asegurar_columna(cur, "dosimetriaMen", "energia", "TEXT")
+            self.con.commit()
+            cur.close()
+        except Exception as ex:
+            print("Error asegurando migraciones ad-hoc al arranque:", ex)
             
     def fetchone(self, sql, params=None):
         """
