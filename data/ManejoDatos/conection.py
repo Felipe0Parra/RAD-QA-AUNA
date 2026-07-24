@@ -244,6 +244,13 @@ class Conexion():
             _asegurar_columna(cur, "equipos", "imagen_certificado", "BLOB")
             _asegurar_columna(cur, "equipos", "h_cal", "REAL")
             _asegurar_columna(cur, "dosimetriaMen", "energia", "TEXT")
+            # I4: repara las BD nacidas del DDL equivocado de
+            # HC_dosimetria_anual (val_teo_discrepancia en vez de
+            # val_teo_dosis/val_teo_calidad, ver el CREATE TABLE) -- sin
+            # estas columnas, el "Subir" de la dosimetría anual del Halcyon
+            # fallaría en una BD fresca al escribir val_teo_calidad.
+            _asegurar_columna(cur, "HC_dosimetria_anual", "val_teo_dosis", "REAL")
+            _asegurar_columna(cur, "HC_dosimetria_anual", "val_teo_calidad", "REAL")
             self.con.commit()
             cur.close()
         except Exception as ex:
@@ -1239,11 +1246,21 @@ class Conexion():
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
+        # I4 (INFORME_BARRIDO_BD_RUTAS_24-07.md): mismo defecto clase-H2.7
+        # que dosimetriaMen -- el DDL decía `val_teo_discrepancia`, pero la
+        # BD de PRODUCCIÓN (y las copias del linaje) tienen `val_teo_dosis` +
+        # `val_teo_calidad`, y NINGÚN código escribe/lee la columna del DDL
+        # (la escritura real pasa por widget_a_columna → val_teo_calidad).
+        # Encontrado por el test integral de migración (comparar el esquema
+        # de una BD nueva contra la BD real migrada). Se alinea con
+        # producción; _asegurar_migraciones_ad_hoc repara las BD que hayan
+        # nacido del DDL equivocado.
         tabla_dosimetria_anual_hc = """CREATE TABLE IF NOT EXISTS HC_dosimetria_anual (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ref INTEGER,
             id_energia INTEGER,
-            val_teo_discrepancia REAL,
+            val_teo_dosis REAL,
+            val_teo_calidad REAL,
             dosis_ref_cgy_um INTEGER,
             discrepancia_dosis INTEGER,
             tolerancia_dosis INTEGER,
