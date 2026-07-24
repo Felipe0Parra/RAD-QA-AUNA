@@ -295,6 +295,106 @@ class TestWalDeLaBdEntranteI3:
         assert sentinelas == 0  # ambas centinelas (la del .db y la del wal) normalizadas
 
 
+def _agregar_equipos_del_linaje(ruta, con_deriva=False):
+    """Tabla `equipos` como la traería una BD del linaje de producción
+    ANTES del saneamiento H2.6/H2.10: la fila id=13 (N30013 vigente) con las
+    condiciones AMBIENTALES del certificado grabadas en t_cal/p_cal (el error
+    dosimétrico de ~2% en kTP que H2.6 corrigió). Con `con_deriva=True`, la
+    fila id=16 trae un valor que NO coincide ni con el antes ni con el
+    después esperado -- simula una BD que fue editada por otra vía."""
+    con = sqlite3.connect(ruta)
+    con.execute("""
+        CREATE TABLE equipos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equip_type TEXT, model TEXT, serie TEXT,
+            calibr_fact INTEGER, calibr_fact2 INTEGER,
+            fecha_calibr INTEGER, fabricante TEXT,
+            t_cal REAL, p_cal REAL, h_cal REAL, v1 TEXT,
+            vigente REAL, activo REAL
+        )
+    """)
+    con.execute(
+        "INSERT INTO equipos (id, model, serie, t_cal, p_cal, vigente, activo) "
+        "VALUES (13, 'N30013', '2123', 20.9, 98.91, 1, 1)")
+    if con_deriva:
+        con.execute(
+            "INSERT INTO equipos (id, model, serie, calibr_fact, vigente, activo) "
+            "VALUES (16, 'HDR1000 Plus', 'A972662', 12345, 1, 1)")
+    con.commit()
+    con.close()
+
+
+class TestSaneamientoDeEquiposDentroDeM1:
+    """I1 (PLAN §10, decisión del físico 2026-07-24): las correcciones del
+    catálogo de equipos (H2.6/H2.10) corren POR DEFECTO como parte de la
+    migración -- una BD del linaje de producción original llega con los
+    mismos errores que los certificados corrigieron, y debe quedar corregida
+    en la misma corrida."""
+
+    def test_fila_del_linaje_queda_corregida(self, bd_vieja):
+        _agregar_equipos_del_linaje(bd_vieja)
+
+        resultado = migrar(bd_vieja, aplicar=True)
+
+        con = sqlite3.connect(bd_vieja)
+        t_cal, p_cal = con.execute(
+            "SELECT t_cal, p_cal FROM equipos WHERE id = 13").fetchone()
+        con.close()
+        assert (t_cal, p_cal) == (22.0, 101.325)  # condiciones de REFERENCIA
+        ids_aplicados = [c["id"] for c in resultado["equipos"]["aplicados"]]
+        assert 13 in ids_aplicados
+
+    def test_fila_con_deriva_queda_intacta_y_reportada(self, bd_vieja):
+        """La garantía de seguridad: una fila que no coincide con el estado
+        esperado de los certificados NO se toca -- se reporta para revisión
+        humana."""
+        _agregar_equipos_del_linaje(bd_vieja, con_deriva=True)
+
+        resultado = migrar(bd_vieja, aplicar=True)
+
+        con = sqlite3.connect(bd_vieja)
+        valor = con.execute(
+            "SELECT calibr_fact FROM equipos WHERE id = 16").fetchone()[0]
+        con.close()
+        assert valor == 12345  # intacta, byte a byte
+        ids_deriva = [c["id"] for c in resultado["equipos"]["con_deriva"]]
+        assert 16 in ids_deriva
+
+    def test_cada_correccion_queda_auditada_en_la_bd_destino(self, bd_vieja):
+        _agregar_equipos_del_linaje(bd_vieja)
+
+        migrar(bd_vieja, aplicar=True, usuario="fisico_migrando")
+
+        con = sqlite3.connect(bd_vieja)
+        filas = con.execute(
+            "SELECT usuario, ref FROM audit_log "
+            "WHERE accion = 'saneamiento_h26' AND tabla = 'equipos'").fetchall()
+        con.close()
+        assert ("fisico_migrando", "13") in filas
+
+    def test_segunda_corrida_reporta_ya_aplicados_sin_recambiar(self, bd_vieja):
+        _agregar_equipos_del_linaje(bd_vieja)
+        migrar(bd_vieja, aplicar=True)
+
+        resultado2 = migrar(bd_vieja, aplicar=True)
+
+        assert resultado2["equipos"]["aplicados"] == []
+        ids_ya = [c["id"] for c in resultado2["equipos"]["ya_aplicados"]]
+        assert 13 in ids_ya
+
+    def test_dry_run_muestra_lo_que_corregiria_sin_tocar_el_archivo(self, bd_vieja):
+        _agregar_equipos_del_linaje(bd_vieja)
+
+        resultado = migrar(bd_vieja, aplicar=False)
+
+        con = sqlite3.connect(bd_vieja)
+        t_cal = con.execute("SELECT t_cal FROM equipos WHERE id = 13").fetchone()[0]
+        con.close()
+        assert t_cal == 20.9  # el original NO se tocó
+        ids_aplicados = [c["id"] for c in resultado["equipos"]["aplicados"]]
+        assert 13 in ids_aplicados  # pero el reporte muestra qué corregiría
+
+
 class TestBdYaAlDiaNoReportaCambios:
 
     def test_bd_recien_creada_por_la_app_no_tiene_cambios_que_reportar(self, tmp_path, monkeypatch):

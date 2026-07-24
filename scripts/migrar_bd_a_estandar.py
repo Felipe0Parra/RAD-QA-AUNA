@@ -164,10 +164,21 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
             except Exception:
                 pass  # el audit_log del archivo destino es best-effort
         con.close()
+
+        # I1 (PLAN §10, decisión del físico 2026-07-24): saneamiento del
+        # catálogo de equipos (H2.6/H2.10) POR DEFECTO, como parte de la
+        # migración. Es seguro incluso sobre una BD que NO sea del linaje
+        # esperado: cada cambio declara su estado ANTES exacto (verificado
+        # contra los certificados de calibración reales) y la guarda de
+        # deriva SALTA con aviso cualquier fila que no coincida, sin tocarla.
+        # Cada corrección aplicada queda auditada en el audit_log de la BD
+        # destino (el script ya lo hace vía registrar(ruta_db=...)).
+        from scripts.saneamiento_equipos_h26 import aplicar_saneamiento
+        resultado_equipos = aplicar_saneamiento(ruta_bd, usuario=usuario)
     finally:
         conection_mod.ruta_base_datos = ruta_original
         conection_mod.Conexion._instance = instancia_previa
-    return filas_centinela
+    return filas_centinela, resultado_equipos
 
 
 def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas,
@@ -203,6 +214,29 @@ def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normaliz
             print("  (los 4 catálogos ya estaban sembrados -- sin cambios)")
 
 
+def _reportar_equipos(resultado_equipos):
+    """I1: qué hizo el saneamiento de equipos (H2.6/H2.10) en esta corrida."""
+    print("\n--- Saneamiento del catálogo de equipos (certificados H2.6/H2.10) ---")
+    aplicados = resultado_equipos["aplicados"]
+    ya = resultado_equipos["ya_aplicados"]
+    deriva = resultado_equipos["con_deriva"]
+    if aplicados:
+        print(f"  corregidas en esta corrida: {len(aplicados)} fila(s)")
+        for c in aplicados:
+            print(f"    id={c['id']}: {c['motivo']}")
+    if ya:
+        print(f"  ya estaban corregidas (idempotencia): {len(ya)} fila(s)")
+    if deriva:
+        print(f"  ATENCION -- saltadas por deriva: {len(deriva)} fila(s) no "
+              f"coinciden con el estado esperado de los certificados; se "
+              f"dejaron INTACTAS, revisar a mano:")
+        for c in deriva:
+            print(f"    id={c['id']}: estado actual {c['actual']}")
+    if not (aplicados or ya or deriva):
+        print("  (ninguna fila coincide con el catálogo de este linaje -- "
+              "nada que corregir)")
+
+
 def migrar(ruta_bd, aplicar=False, usuario=None):
     """Punto de entrada reutilizable (además de la CLI). Devuelve un dict
     con el resultado -- útil para tests y para invocarlo desde la propia
@@ -231,7 +265,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             # simulación debe verlos igual que los vería la app real.
             _copiar_set_sqlite(ruta_bd, copia)
             _consolidar_wal(copia)
-            sentinelas_normalizadas = _aplicar_migracion_en(copia, usuario=usuario)
+            sentinelas_normalizadas, equipos = _aplicar_migracion_en(copia, usuario=usuario)
             con_copia = sqlite3.connect(copia)
             try:
                 inventario_despues = _inventario_esquema(con_copia)
@@ -241,8 +275,9 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         _reportar_diff(inventario_antes, inventario_despues,
                         sentinelas_antes, sentinelas_normalizadas,
                         catalogos_antes, catalogos_despues)
+        _reportar_equipos(equipos)
         return {"aplicado": False, "integridad_antes": integridad_antes,
-                "sentinelas_antes": sentinelas_antes}
+                "sentinelas_antes": sentinelas_antes, "equipos": equipos}
 
     if integridad_antes != "ok":
         print(f"ALERTA: integrity_check antes de migrar dio "
@@ -260,7 +295,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     shutil.copy(ruta_bd, respaldo)
     print(f"Backup creado: {respaldo}")
 
-    sentinelas_normalizadas = _aplicar_migracion_en(ruta_bd, usuario=usuario)
+    sentinelas_normalizadas, equipos = _aplicar_migracion_en(ruta_bd, usuario=usuario)
 
     con_despues = sqlite3.connect(ruta_bd)
     try:
@@ -274,6 +309,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     _reportar_diff(inventario_antes, inventario_despues,
                     sentinelas_antes, sentinelas_normalizadas,
                     catalogos_antes, catalogos_despues)
+    _reportar_equipos(equipos)
 
     if integridad_despues != "ok":
         print(f"ALERTA: integrity_check después de migrar dio "
@@ -286,7 +322,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     return {"aplicado": True, "respaldo": respaldo,
             "integridad_antes": integridad_antes,
             "integridad_despues": integridad_despues,
-            "sentinelas_normalizadas": sentinelas_normalizadas}
+            "sentinelas_normalizadas": sentinelas_normalizadas,
+            "equipos": equipos}
 
 
 def _main():
