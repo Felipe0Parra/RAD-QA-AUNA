@@ -34,6 +34,13 @@ def bd_temporal(monkeypatch, tmp_path):
     monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
     Conexion._instance = None
     conexion = Conexion()  # corre el DDL real -- incluye la migración activo
+    # W2: controles.user_id tiene FOREIGN KEY a users(fullname) -- con
+    # foreign_keys=ON, _crear_controles necesita que el usuario ya exista.
+    conexion.con.execute(
+        "INSERT INTO users (user, password, fullname, active, idreal, role) "
+        "VALUES (?,?,?,?,?,?)",
+        ("ccastellanos", "x", "Cristian Castellanos", 1, 1, "Físico Médico"))
+    conexion.con.commit()
     yield conexion
     if Conexion._instance is not None:
         Conexion._instance.con.close()

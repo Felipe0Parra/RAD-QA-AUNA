@@ -38,9 +38,26 @@ def aplicar_pragmas_conexion(con):
     bloqueo lector<->escritor; busy_timeout=30000 hace que un segundo
     escritor espere en vez de fallar con 'database is locked' (doble patrón
     de conexión de esta app: el singleton persistente de Conexion conviviendo
-    con conexiones nuevas por llamada en conectar()/DosisService)."""
+    con conexiones nuevas por llamada en conectar()/DosisService).
+
+    W2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): foreign_keys=ON en
+    TODAS las conexiones sqlite3 de la app (antes solo lo activaba, de forma
+    aislada, el camino QtSql del borrado genérico -- load.py `eliminarRegistro`
+    -- dejando huérfano cualquier INSERT hecho por las demás conexiones; esa
+    inconsistencia es la causa habilitante de H-A, la dosimetría huérfana
+    tras borrar un control). SQLite NO hereda este flag entre conexiones ni
+    lo persiste en el archivo -- hay que pedirlo en cada `sqlite3.connect()`,
+    por eso vive en el mismo punto único que WAL/busy_timeout. Prerrequisitos
+    verificados antes de activarlo (X1: controles.user_id_f2 ya no guarda el
+    centinela ' ---- ', que violaba su FK a users; INSERT-audit: los 4
+    catálogos con FK RESTRICT -- tipos_prueba/materiales_ct/
+    regiones_uniformidad/energias -- se siembran al arranque). NO retroactivo:
+    huérfanos que ya existían en una BD (116 en producción, heredados de la
+    fusión 2026-07-03) no se tocan ni se resuelven solos -- FK ON solo valida
+    escrituras NUEVAS."""
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=30000")
+    con.execute("PRAGMA foreign_keys=ON")
     return con
 
 

@@ -98,10 +98,13 @@ class TestFechaRealDelControl:
         instancia._fecha_real_del_control = sm.PruebaMensual600._fecha_real_del_control.__get__(instancia)
 
         con = conection_mod.Conexion().con
+        # X1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): create_control ya
+        # no guarda el centinela " ---- " para "sin 2º físico" -- guarda NULL
+        # (ese centinela violaba la FK de user_id_f2 a users(fullname)).
         cur = con.execute(
             "INSERT INTO controles (equipo, control, fecha, user_id, user_id_f2) "
             "VALUES (?,?,?,?,?)",
-            ("Clinac iX", "Mensual", "05/07/2026", "Físico de Prueba", " ---- "))
+            ("Clinac iX", "Mensual", "05/07/2026", "Físico de Prueba", None))
         con.commit()
         control_id = cur.lastrowid
 
