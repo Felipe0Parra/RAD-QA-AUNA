@@ -395,6 +395,44 @@ class TestSaneamientoDeEquiposDentroDeM1:
         assert 13 in ids_aplicados  # pero el reporte muestra qué corregiría
 
 
+class TestResumenQcPreservadoI2:
+    """I2 (PLAN §10): la razón de incorporar una BD vieja es NO perder ni una
+    fila de QC -- el reporte lo demuestra con conteos antes==después, y el
+    resultado los expone para verificación programática."""
+
+    def test_conteos_qc_identicos_antes_y_despues(self, bd_vieja):
+        con = sqlite3.connect(bd_vieja)
+        con.executemany(
+            "INSERT INTO controles (equipo, control, fecha, user_id) "
+            "VALUES (?, 'Mensual', ?, 'Físico de Prueba')",
+            [("Clinac iX", "03/2026"), ("Halcyon", "04/2026"),
+             ("Clinac 600", "05/2026")])
+        con.commit()
+        con.close()
+
+        resultado = migrar(bd_vieja, aplicar=True)
+
+        assert resultado["qc_antes"] == resultado["qc_despues"]
+        assert resultado["qc_despues"]["controles"] == 5  # 2 de la vieja + 3 QC extra
+        assert resultado["qc_despues"]["calculadora_dosimetrica"] == 1
+        assert resultado["qc_despues"]["pruebas"] == 1
+
+    def test_reporte_dice_que_ningun_registro_se_perdio(self, bd_vieja, capsys):
+        migrar(bd_vieja, aplicar=True)
+        salida = capsys.readouterr().out
+        assert "Registros de QC preservados" in salida
+        assert "Ningún registro de QC se perdió" in salida
+        assert "PERDIDA" not in salida
+
+    def test_tablas_ausentes_en_bd_vieja_cuentan_como_cero(self, bd_vieja):
+        """`dosimetriaMen`/`tamano_campo` no existen en la BD vieja sintética
+        -- el conteo 'antes' debe ser 0 (no un crash), y 'después' 0 también
+        (la migración crea la tabla pero no inventa filas)."""
+        resultado = migrar(bd_vieja, aplicar=True)
+        assert resultado["qc_antes"]["dosimetriaMen"] == 0
+        assert resultado["qc_despues"]["dosimetriaMen"] == 0
+
+
 class TestBdYaAlDiaNoReportaCambios:
 
     def test_bd_recien_creada_por_la_app_no_tiene_cambios_que_reportar(self, tmp_path, monkeypatch):

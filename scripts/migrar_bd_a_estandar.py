@@ -120,6 +120,38 @@ def _contar_centinela(con):
 
 CATALOGOS_BASE = ["tipos_prueba", "materiales_ct", "regiones_uniformidad", "energias"]
 
+# I2 (PLAN §10): las tablas que cargan el TRABAJO DE QC del físico -- la
+# razón de ser de incorporar una BD vieja es no perder ni una fila de estas.
+# El reporte demuestra conteos antes==después; si alguno bajara (no debería
+# poder pasar: la migración es puramente aditiva), se avisa en mayúsculas.
+TABLAS_QC = ["controles", "dosimetriaMen", "preguntas", "tamano_campo",
+             "pruebas", "calculadora_dosimetrica"]
+
+
+def _contar_qc(con):
+    conteos = {}
+    for tabla in TABLAS_QC:
+        try:
+            conteos[tabla] = con.execute(f'SELECT COUNT(*) FROM "{tabla}"').fetchone()[0]
+        except sqlite3.OperationalError:
+            conteos[tabla] = 0  # la tabla aún no existía en la BD vieja
+    return conteos
+
+
+def _reportar_qc(qc_antes, qc_despues):
+    print("\n--- Registros de QC preservados ---")
+    perdida = False
+    for tabla in TABLAS_QC:
+        antes, despues = qc_antes[tabla], qc_despues[tabla]
+        marca = ""
+        if despues < antes:
+            perdida = True
+            marca = "  <<< PERDIDA DE REGISTROS -- NO USAR, RESTAURAR EL BACKUP"
+        print(f"  {tabla}: {antes} -> {despues}{marca}")
+    if not perdida:
+        print("  Ningún registro de QC se perdió (la migración nunca borra filas).")
+    return perdida
+
 
 def _contar_catalogos_base(con):
     """INSERT-audit (§8): estos 4 catálogos nunca se sembraban desde el
@@ -249,6 +281,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         inventario_antes = _inventario_esquema(con_antes)
         sentinelas_antes = _contar_centinela(con_antes)
         catalogos_antes = _contar_catalogos_base(con_antes)
+        qc_antes = _contar_qc(con_antes)
     finally:
         con_antes.close()
 
@@ -270,14 +303,17 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             try:
                 inventario_despues = _inventario_esquema(con_copia)
                 catalogos_despues = _contar_catalogos_base(con_copia)
+                qc_despues = _contar_qc(con_copia)
             finally:
                 con_copia.close()
         _reportar_diff(inventario_antes, inventario_despues,
                         sentinelas_antes, sentinelas_normalizadas,
                         catalogos_antes, catalogos_despues)
         _reportar_equipos(equipos)
+        _reportar_qc(qc_antes, qc_despues)
         return {"aplicado": False, "integridad_antes": integridad_antes,
-                "sentinelas_antes": sentinelas_antes, "equipos": equipos}
+                "sentinelas_antes": sentinelas_antes, "equipos": equipos,
+                "qc_antes": qc_antes, "qc_despues": qc_despues}
 
     if integridad_antes != "ok":
         print(f"ALERTA: integrity_check antes de migrar dio "
@@ -302,6 +338,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         integridad_despues = con_despues.execute("PRAGMA integrity_check").fetchone()[0]
         inventario_despues = _inventario_esquema(con_despues)
         catalogos_despues = _contar_catalogos_base(con_despues)
+        qc_despues = _contar_qc(con_despues)
     finally:
         con_despues.close()
 
@@ -310,6 +347,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                     sentinelas_antes, sentinelas_normalizadas,
                     catalogos_antes, catalogos_despues)
     _reportar_equipos(equipos)
+    hubo_perdida_qc = _reportar_qc(qc_antes, qc_despues)
 
     if integridad_despues != "ok":
         print(f"ALERTA: integrity_check después de migrar dio "
@@ -318,12 +356,23 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
               f"este archivo.")
         sys.exit(1)
 
+    if hubo_perdida_qc:
+        # Tripwire defensivo: la migración es puramente aditiva, así que
+        # esto no debería poder dispararse jamás -- pero si algún cambio
+        # futuro lo rompiera, el físico debe enterarse RUIDOSAMENTE y con la
+        # instrucción de restaurar, no por un número menor en una tabla.
+        print(f"\nALERTA GRAVE: algún conteo de QC BAJÓ tras la migración "
+              f"(ver arriba). Restaure el backup ({respaldo}) y NO use este "
+              f"archivo.")
+        sys.exit(1)
+
     print(f"\nListo. Backup de seguridad conservado en: {respaldo}")
     return {"aplicado": True, "respaldo": respaldo,
             "integridad_antes": integridad_antes,
             "integridad_despues": integridad_despues,
             "sentinelas_normalizadas": sentinelas_normalizadas,
-            "equipos": equipos}
+            "equipos": equipos,
+            "qc_antes": qc_antes, "qc_despues": qc_despues}
 
 
 def _main():
