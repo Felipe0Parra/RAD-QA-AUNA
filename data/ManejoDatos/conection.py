@@ -256,33 +256,11 @@ class Conexion():
         except Exception as ex:
             print("Error asegurando migraciones ad-hoc al arranque:", ex)
             
-    def fetchone(self, sql, params=None):
-        """
-        Ejecuta una consulta SQL y retorna una única fila.
-        
-        Args:
-            sql: Consulta SQL a ejecutar
-            params: Tupla de parámetros para la consulta (opcional)
-            
-        Returns:
-            Una tupla con los valores de la fila, o None si no hay resultados
-        """
-        try:
-            cursor = self.con.cursor()
-            if params:
-                cursor.execute(sql, params)
-            else:
-                cursor.execute(sql)
-            
-            result = cursor.fetchone()
-            cursor.close()
-            return result
-            
-        except Exception as ex:
-            print(f"Error en fetchone: {ex}")
-            traceback.print_exc()
-            raise
-    
+    # A6.0 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.5): fetchone(sql, params) se
+    # borró -- cero llamadores en producción. Recibía el SQL por parámetro,
+    # así que era invisible para el detector estático de A6.1 (cualquier
+    # escritura que pasara por aquí no se habría podido auditar ni vigilar).
+
     def createTable(self):
         sql_create_table1 = """
         CREATE TABLE IF NOT EXISTS users (

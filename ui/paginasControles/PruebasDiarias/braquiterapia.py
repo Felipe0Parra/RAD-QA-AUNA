@@ -34,23 +34,30 @@ from data.ManejoDatos.load import (mostrar_db_linealidad, mostrar_db_mensualBraq
 import datetime, sqlite3, html, re, traceback
 import numpy as np
 import time
-import hashlib
-from typing import Optional, Any, List, Tuple
+from typing import Optional, List, Tuple
 import weakref
 from contextlib import contextmanager
 
 
 class GestorConexionDB:
-    """Gestor centralizado de conexiones a base de datos con pool y reconexión automática"""
+    """Gestor centralizado de conexiones a base de datos con reconexión automática"""
     _instancia = None
-    _conexiones_activas = {}
-    _cache_consultas = {}
-    
+
+    # A6.0 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.5): ejecutar_consulta_con_cache
+    # (y los atributos de clase que solo ella usaba, _cache_consultas y
+    # _conexiones_activas -- este último nunca se llegó a usar) se borraron:
+    # cero llamadores en producción, cache que nunca se invalidaba al
+    # escribir (habría devuelto datos rancios tras un guardado), y estado
+    # mutable a nivel de CLASE -- la misma familia de bug que H-B (P1). Además
+    # recibía el SQL por parámetro: era invisible para el detector estático
+    # de A6.1. obtener_conexion() sigue en uso (braquiterapia.py) y se
+    # conserva tal cual.
+
     def __new__(cls):
         if cls._instancia is None:
             cls._instancia = super().__new__(cls)
         return cls._instancia
-    
+
     @contextmanager
     def obtener_conexion(self, reintentos: int = 3):
         """Context manager para obtener conexión con reintentos automáticos"""
@@ -66,7 +73,7 @@ class GestorConexionDB:
                     if intento == reintentos - 1:
                         raise ConnectionError(f"No se pudo conectar después de {reintentos} intentos")
                     time.sleep(0.5)
-            
+
             yield conn
         finally:
             if conn:
@@ -74,28 +81,6 @@ class GestorConexionDB:
                     conn.close()
                 except:
                     pass
-    
-    def ejecutar_consulta_con_cache(self, consulta: str, parametros: tuple = (), usar_cache: bool = True) -> List[Any]:
-        """Ejecuta consulta con caché opcional"""
-        cache_key = hashlib.md5(f"{consulta}_{parametros}".encode()).hexdigest()
-        
-        if usar_cache and cache_key in self._cache_consultas:
-            #logger.debug(f"Consulta obtenida del caché: {cache_key}")
-            return self._cache_consultas[cache_key]
-        
-        try:
-            with self.obtener_conexion() as conn:
-                cursor = conn.cursor()
-                cursor.execute(consulta, parametros)
-                resultado = cursor.fetchall()
-                
-                if usar_cache:
-                    self._cache_consultas[cache_key] = resultado
-                
-                return resultado
-        except Exception as e:
-            #logger.error(f"Error en consulta: {e}")
-            raise
 
 class OptimizadorAnalisis:
     """Optimizador para análisis de imágenes sin caché innecesario"""

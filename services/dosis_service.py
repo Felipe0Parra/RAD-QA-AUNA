@@ -555,67 +555,11 @@ class DosisService():
             print(f"Error getting available dates: {e}")
             return []
     
-    @classmethod
-    def eliminar_por_id(cls, id: int) -> bool:
-        """
-        Delete a dosimetry record by ID
-        
-        Args:
-            id: Record ID to delete
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            conn = cls._get_connection()
-            cursor = conn.cursor()
-            
-            query = "DELETE FROM calculadora_dosimetrica WHERE id = ?"
-            cursor.execute(query, (id,))
-            
-            conn.commit()
-            conn.close()
-            
-            print(f"Record {id} deleted successfully")
-            return True
-            
-        except Exception as e:
-            print(f"Error deleting record: {e}")
-            return False
-    
-    @classmethod
-    def actualizar_datos(cls, id: int, datos: Dict) -> bool:
-        """
-        Update an existing dosimetry record
-        
-        Args:
-            id: Record ID to update
-            datos: Dictionary with updated values
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            conn = cls._get_connection()
-            cursor = conn.cursor()
-            
-            # Build SET clause
-            set_clause = ', '.join([f"{key} = ?" for key in datos.keys()])
-            valores = list(datos.values())
-            valores.append(id)  # Add ID for WHERE clause
-            
-            query = f"UPDATE calculadora_dosimetrica SET {set_clause} WHERE id = ?"
-            cursor.execute(query, valores)
-            
-            conn.commit()
-            conn.close()
-            
-            print(f"Record {id} updated successfully")
-            return True
-            
-        except Exception as e:
-            print(f"Error updating record: {e}")
-            return False
-    
-    
+# A6.0 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.5): eliminar_por_id (DELETE
+# físico) y actualizar_datos (UPDATE con SET arbitrario) se borraron -- cero
+# llamadores en todo el repo (ni siquiera en tests). Ambas contradecían B3.3:
+# el modelo de "calculadora_dosimetrica" no borra históricos, solo baja la
+# bandera `vigente` (ver guardar_datos arriba); un UPDATE con columnas
+# arbitrarias tampoco podía sostener ese invariante.
+
     

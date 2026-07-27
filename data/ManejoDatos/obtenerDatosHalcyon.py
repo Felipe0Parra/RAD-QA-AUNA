@@ -1,7 +1,7 @@
 import os
 import re
 import pandas as pd
-from PyQt5.QtWidgets import QMessageBox, QFileDialog
+from PyQt5.QtWidgets import QMessageBox
 import data.ManejoDatos.conection as con
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
@@ -10,52 +10,12 @@ def addSpace(cadena):
     """Agrega un espacio antes de cada letra mayúscula en una cadena, excepto la inicial."""
     return re.sub(r'(?<!^)([A-Z])', r' \1', cadena)
 
-def addInfo2(self, user):
-    
-    archivo = QFileDialog.getExistingDirectory(self, "Seleccionar carpeta")
-    if archivo is None:
-        QMessageBox.critical(self, "Error", f"No se encontró la carpeta.")
-        return None
-    elif archivo == "":
-        print('Se cancelo')
-        return None
-    
-    patron_fecha = re.compile(r'(\d{4}-\d{2}-\d{2})')
-    match = patron_fecha.search(archivo)
-    fecha = match.group(1)
-    
-    print(fecha)
-    
-    nombre_archivo = os.path.join(archivo,'Results.csv')
-    df = pd.read_csv(nombre_archivo)
-
-    df[['hipergroup', 'group', 'subgroup', 'subsubgroup']] = df['Name [Unit]'].str.split('/', expand=True)
-    df.fillna('', inplace=True)
-    df_widgets = addInfoWidgets(df)
-    
-    df_csv = df_widgets.copy()
-    df_csv = df_csv.loc[df_csv['type'] == 'resultado']
-    df_csv.to_csv('infoWidgets.csv', index=False)
-    df_csv['fecha'] = fecha
-    df_csv['user_id'] = user
-    #print(df_csv)
-
-    try:
-        with con.Conexion().conectar() as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT * FROM halcyon WHERE date=?", (fecha,))
-            fila = cursor.fetchone()
-            
-            if fila: # Si ya existe, actualizar
-                print("Ya existe la fecha")
-            else:
-                createDB(df_csv, fecha, user)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"Error al agregar datos de la fecha: {fecha}:", e)
-        
-    return df_widgets
+# A6.0 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.5): addInfo2 (variante manual de
+# ingesta MPC, selección de carpeta con QFileDialog) se borró -- cero
+# llamadores en todo el repo (halcyon.py solo importa addInfo). addInfo la
+# reemplazó hace tiempo con localización automática por fecha, validación de
+# corrida completa y auditoría; addInfo2 ni auditaba ni avisaba en UI al
+# reimportar un día ya existente (hallazgo de HANDOFF_BUILD_WINDOWS).
 
 RUTA_MPC_POR_DEFECTO = r"\\VARIANDB\Va_Transfer\TDS\HAL1161\MPCChecks"
 
