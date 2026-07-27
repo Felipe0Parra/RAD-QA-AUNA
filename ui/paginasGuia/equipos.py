@@ -4,6 +4,7 @@ from data.ManejoDatos.conection import Conexion
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR
+from services.vigencia_equipo import VIGENCIA_ANOS_POR_TIPO, es_vigente_en_fecha
 from PyQt5.QtWidgets import (QMessageBox, QGridLayout, QWidget, QSplitter, QHeaderView, QSizePolicy, QTableWidget, QTableWidgetItem,
                             QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QDialog, QLineEdit, QComboBox)
 from PyQt5.QtCore import Qt, QDate
@@ -29,14 +30,13 @@ class Config(PruebaBasico):
         #print("---------------------------------------------------------------------------------------------")
         super().__init__()
         self.iniGUI()
-        # Diccionario de vigencias en años según tipo de equipo
-        self.vigencia_equipo = {"Cámara de ionización":  2, 
-                            "Cámara de pozo":       2, 
-                            "Electrómetro":         2, 
-                            "Barómetro":            1, 
-                            "Termohigrómetro":      1, 
-                            "Detector Rad.":         None}
-        self.cargartabla() 
+        # Diccionario de vigencias en años según tipo de equipo (V1,
+        # PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.5: fuente única en
+        # services/vigencia_equipo.py, para que el formulario mensual/anual
+        # use la misma regla al calcular vigencia contra la fecha del
+        # control en vez de siempre "hoy").
+        self.vigencia_equipo = VIGENCIA_ANOS_POR_TIPO
+        self.cargartabla()
         self.button_click()
         
         # Conectar la señal de doble clic una sola vez después de la inicialización
@@ -452,23 +452,15 @@ class Config(PruebaBasico):
         return True
     
     def verificar_vigencia_equipo(self, fecha_calibracion, tipo_equipo):
-        """Verifica si la calibración de un equipo está vigente"""
-        if not fecha_calibracion or tipo_equipo not in self.vigencia_equipo:
-            return True  # Si no hay fecha o no tiene vigencia definida, se considera vigente
-        
-        vigencia_anos = self.vigencia_equipo[tipo_equipo]
-        if vigencia_anos is None:
-            return True  # Equipos sin vigencia definida (como Detector Rad.)
-        
-        try:
-            dia, mes, anio = map(int, fecha_calibracion.split('/'))
-            fecha_cal = QDate(anio, mes, dia)
-            fecha_actual = QDate.currentDate()
-            diferencia_dias = fecha_cal.daysTo(fecha_actual)
-            
-            return diferencia_dias <= (365 * vigencia_anos)
-        except (ValueError, AttributeError):
-            return True  # Si hay error en el formato, se considera vigente por defecto
+        """Verifica si la calibración de un equipo está vigente HOY.
+
+        V1: delega en services.vigencia_equipo.es_vigente_en_fecha con
+        fecha_referencia=hoy -- este catálogo siempre evalúa contra la
+        fecha actual (no depende de ningún control en curso). El formulario
+        mensual/anual usa la misma función con fecha_referencia=fecha del
+        control (ver seiscientos_mensual.py::setEquipoSeleccionado).
+        """
+        return es_vigente_en_fecha(fecha_calibracion, tipo_equipo, QDate.currentDate())
 
     def cargartabla(self):
         conn = Conexion().conectar()

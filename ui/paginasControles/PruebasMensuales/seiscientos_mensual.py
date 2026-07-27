@@ -24,6 +24,7 @@ from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR
 from services.fechas_control import mismo_mes as _mismo_mes
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
+from services.vigencia_equipo import es_vigente_en_fecha
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 from services.MLCs_calibration_service import (
@@ -2684,24 +2685,28 @@ class PruebaMensual600(PruebaBasico):
     @lru_cache(maxsize=30)
     def obtenerSeriesConVigencia(self, modelo):
         """
-        Obtiene las series de un modelo específico con información de vigencia y estado activo (optimizado con caché)
+        Obtiene las series de un modelo específico con fecha_calibr/equip_type
+        (V1, PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.5: para que
+        setEquipoSeleccionado pueda evaluar vigencia contra la fecha del
+        CONTROL en vez del flag `vigente` congelado en la columna) y estado
+        activo (optimizado con caché).
         """
         if not modelo or modelo == "Seleccionar...":
             return []
-            
+
         cache_key = f"series_vigencia_{modelo}"
-        
+
         # Verificar caché local
         if hasattr(self, '_series_cache') and cache_key in self._series_cache:
             return self._series_cache[cache_key]
-        
+
         try:
             conn = self.db_manager.obtener_conexion()
             cursor = conn.cursor()
             series_data = []
-            
+
             cursor.execute("""
-                SELECT serie, vigente, activo
+                SELECT serie, vigente, activo, fecha_calibr, equip_type
                 FROM equipos
                 WHERE model = ?
                 AND id IN (
@@ -2795,13 +2800,24 @@ class PruebaMensual600(PruebaBasico):
         series_data = self.obtenerSeriesConVigencia(modelo)
         series_activas = []
         series_no_vigentes = []
-        
-        for serie, vigente, activo in series_data:
+
+        # V1 (PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.5): la vigencia se evalúa
+        # contra la fecha del CONTROL que se está llenando (self.date_box),
+        # no contra el flag `vigente` congelado en la BD (que se calculó una
+        # sola vez, con la fecha de ESE momento) ni contra hoy -- así un
+        # control retroactivo con fecha pasada no marca "vencido" un equipo
+        # que sí estaba vigente en esa fecha. No escribe nada en `equipos`.
+        fecha_referencia = (
+            self.date_box.date() if hasattr(self, 'date_box') and self.date_box
+            else QDate.currentDate()
+        )
+
+        for serie, vigente, activo, fecha_calibr, equip_type in series_data:
             if activo == 1:  # Solo equipos activos
                 series_activas.append(serie)
-                if vigente == 0:  # Si no está vigente, recordarlo
+                if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
                     series_no_vigentes.append(serie)
-        
+
         series_activas.insert(0, 'Seleccionar...')
         next_combo.addItems(series_activas)
         
