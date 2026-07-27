@@ -3,7 +3,7 @@ from data.ManejoDatos.load import encontrar_columnas
 from data.ManejoDatos.conection import Conexion
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
-from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR
+from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR, ACCION_ELIMINAR
 from services.vigencia_equipo import VIGENCIA_ANOS_POR_TIPO, es_vigente_en_fecha
 from PyQt5.QtWidgets import (QMessageBox, QGridLayout, QWidget, QSplitter, QHeaderView, QSizePolicy, QTableWidget, QTableWidgetItem,
                             QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QDialog, QLineEdit, QComboBox)
@@ -870,9 +870,20 @@ class Config(PruebaBasico):
             # Eliminar el equipo de la base de datos
             conn = Conexion().conectar()
             cursor = conn.cursor()
+            # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): identificación
+            # ANTES del DELETE -- el mismo patrón de ref que guardarCambios
+            # (f"{modelo}/{serie}"), para que el borrado físico del catálogo
+            # (curado a mano en H2.6/H2.10) quede legible en audit_log.
+            cursor.execute("SELECT equip_type, model, serie FROM equipos WHERE id = ?", (id_equipo,))
+            fila_equipo = cursor.fetchone()
             cursor.execute("DELETE FROM equipos WHERE id = ?", (id_equipo,))
             conn.commit()
             conn.close()
+
+            if fila_equipo:
+                equip_type, modelo, serie = fila_equipo
+                _registrar_auditoria(_usuario_actual(self), ACCION_ELIMINAR, "equipos",
+                                     ref=f"{modelo}/{serie}", detalle=f"tipo: {equip_type}")
 
             QMessageBox.information(self, "Éxito", "El equipo ha sido eliminado correctamente.")
 

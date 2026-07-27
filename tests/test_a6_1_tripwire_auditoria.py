@@ -33,8 +33,9 @@ argumento cuyo texto resuelto es SQL de escritura; el único `.exec_(<literal>)`
 real en producción es un `PRAGMA` (lectura de configuración, no escritura).
 
 Alcance: todo `Codigo_radqa/` salvo tests/build/venv/recursos. 57 funciones
-de producción escriben en BD hoy (2026-07-27, después de A6.0); 14 auditan
-directamente. Este test verifica que las 43 restantes estén todas explicadas.
+de producción escriben en BD (2026-07-27, después de A6.0); 17 auditan
+directamente (14 originales + las 3 que cerró A6.2). Este test verifica que
+las 40 restantes estén todas explicadas.
 """
 import ast
 import re
@@ -177,8 +178,8 @@ INVENTARIO = _construir_inventario()
 
 
 # ---------------------------------------------------------------------------
-# Allowlist -- 43 funciones que escriben y no se auditan a sí mismas
-# (57 funciones con escritura - 14 que auditan directamente, 2026-07-27).
+# Allowlist -- 40 funciones que escriben y no se auditan a sí mismas
+# (57 funciones con escritura - 17 que auditan directamente, 2026-07-27).
 # ---------------------------------------------------------------------------
 BOOTSTRAP = "bootstrap"
 ES_LA_PROPIA_AUDITORIA = "es-la-propia-auditoria"
@@ -202,10 +203,9 @@ ALLOWLIST = {
     ("data/ManejoDatos/obtenerDatosHalcyon.py", "createDB"):
         "audita-el-llamador:data/ManejoDatos/obtenerDatosHalcyon.py::addInfo",
 
-    # --- PENDIENTE-A6.2: identidad y catálogo ---
-    ("data/ManejoDatos/usuariosManager.py", "UsuarioData.add_user"): "PENDIENTE-A6.2",
-    ("data/ManejoDatos/usuariosManager.py", "UsuarioData.update_password"): "PENDIENTE-A6.2",
-    ("ui/paginasGuia/equipos.py", "Config.eliminarEquipo"): "PENDIENTE-A6.2",
+    # --- A6.2 (identidad y catálogo) cerrada 2026-07-27: add_user,
+    # update_password y eliminarEquipo ya auditan directamente -- no quedan
+    # entradas aquí. ---
 
     # --- PENDIENTE-A6.3: mensual 600 / IX / Halcyon ---
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py",

@@ -3,6 +3,7 @@ from data.ManejoDatos.user import Usuario
 from data.ManejoDatos.encriptarInfo import encrypt_data, decrypt_data
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_LOGIN, ACCION_LOGOUT, ACCION_AUTORIZACION
+from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR
 
 class UsuarioData():
 
@@ -77,7 +78,21 @@ class UsuarioData():
                 encrypted_pass = encrypt_data(username._clave)
                 cursor.execute("INSERT INTO users (user, password, fullname, active, idreal, role, firma ) VALUES (?, ?, ?, ?, ?, ?, ?)",
                             (username._usuario, encrypted_pass, username._nombre, username._activo, username._ident, username._rol, username._firma))
+                # Commit explícito ANTES de auditar: `registrar()` abre su
+                # propia conexión (services/audit_minimo.py) y si el INSERT
+                # de arriba sigue sin comprometerse, choca con "database is
+                # locked" (mismo motivo por el que update_password, abajo,
+                # ya hacía su propio db.commit() antes de auditar).
+                db.commit()
                 print(f"Usuario {username} agregado exitosamente.")
+                # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): alta de
+                # usuario -- este archivo ya audita login/logout (A4), pero
+                # crear la cuenta en sí no dejaba rastro. Es alta desde el
+                # registro propio (register_page.py, sin sesión activa
+                # todavía), así que se audita con la identidad del usuario
+                # recién creado, igual que login() hace en su rama "OK".
+                _registrar_auditoria(username._nombre, ACCION_GUARDAR, "users",
+                                     ref=username._usuario)
                 return Usuario(username._usuario, username._clave, username._nombre, username._activo, username._ident, username._rol, username._firma)  # Devuelve el nuevo usuario creado
         except Exception as e:
             print("Error al agregar usuario:", e)
@@ -108,6 +123,12 @@ class UsuarioData():
                 encrypted_new_pass = encrypt_data(nueva_pass)
                 cursor.execute("UPDATE users SET password=? WHERE user=?", (encrypted_new_pass, usuario))
                 db.commit()
+                # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): cambio de
+                # contraseña vía recuperación (recover_page.py) -- mismo
+                # archivo que ya audita login/logout, sin rastro hasta
+                # ahora pese a ser un cambio de credencial.
+                _registrar_auditoria(usuario, ACCION_ACTUALIZAR, "users",
+                                     detalle="cambio de contraseña")
                 return True
         except Exception as e:
             print("Error al actualizar contraseña:", e)
