@@ -42,12 +42,10 @@ def bd_temporal(monkeypatch, tmp_path):
     ruta = str(tmp_path / "test.db")
     monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
     Conexion._instance = None
-    DatabaseManager._connections.clear()
     conexion = Conexion()  # crea el esquema completo, incl. `equipos`
     yield ruta
     conexion.con.close()
     Conexion._instance = None
-    DatabaseManager._connections.clear()
 
 
 def _insertar_equipo(ruta_bd, eq_id, **campos):

@@ -24,7 +24,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
-from ui.paginasControles.PruebasMensuales.seiscientos_mensual import DatabaseManager
 
 from services.equipos_service import EquiposService
 
@@ -34,12 +33,10 @@ def bd_temporal(monkeypatch, tmp_path):
     ruta = str(tmp_path / "test.db")
     monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
     Conexion._instance = None
-    DatabaseManager._connections.clear()
     conexion = Conexion()
     yield ruta
     conexion.con.close()
     Conexion._instance = None
-    DatabaseManager._connections.clear()
 
 
 def _insertar_equipo(ruta_bd, eq_id, **campos):

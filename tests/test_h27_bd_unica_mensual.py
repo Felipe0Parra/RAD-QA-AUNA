@@ -61,18 +61,17 @@ def app():
 
 @pytest.fixture
 def bd_temporal(monkeypatch, tmp_path):
-    """BD temporal con el esquema completo (DDL de Conexion). Limpia también
-    el pool de DatabaseManager: cachea conexiones a nivel de CLASE y una
-    conexión de otro test (u otra BD) no debe sobrevivir aquí."""
+    """BD temporal con el esquema completo (DDL de Conexion). P1 (PLAN_P1_
+    POOL_CONEXIONES_27-07.md): DatabaseManager ya no cachea conexiones a
+    nivel de clase (fachada sin estado en services/db_pool.py), así que ya
+    no hace falta limpiar ningún pool entre tests."""
     ruta = str(tmp_path / "test.db")
     monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
     Conexion._instance = None
-    DatabaseManager._connections.clear()
     conexion = Conexion()
     yield ruta
     conexion.con.close()
     Conexion._instance = None
-    DatabaseManager._connections.clear()
 
 
 def _sin_avisos(monkeypatch):

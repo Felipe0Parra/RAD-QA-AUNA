@@ -146,7 +146,6 @@ class TestConsistenciaEntreLosCuatroCaminosDeConexion:
         Conexion().con.commit()
 
         dbm = DatabaseManager()
-        dbm._connections.clear()  # aislar de otros tests que ya hayan poblado el pool
         con_pool = dbm.obtener_conexion()
         n = con_pool.execute(
             "SELECT COUNT(*) FROM users WHERE user='u2'").fetchone()[0]
