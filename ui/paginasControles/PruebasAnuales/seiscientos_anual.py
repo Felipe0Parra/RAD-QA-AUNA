@@ -50,6 +50,19 @@ class PruebaAnual600(PruebaMensual600):
             old_id = cursor.fetchone()
             if old_id is not None:
                 control_id = old_id[0]
+
+                # B4 (PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.2): actualizar
+                # el(los) físico(s) aunque el control anual ya exista, igual
+                # que ya hacía el mensual (data/ManejoDatos/load.py::
+                # create_control) -- sin esto, reabrir el control anual del
+                # mismo año para registrar el 2º físico nunca quedaba
+                # guardado en `controles.user_id_f2`.
+                cursor.execute(
+                    "UPDATE controles SET user_id = ?, user_id_f2 = ? WHERE id = ?",
+                    (user_id, _nombre_fisico2, control_id)
+                )
+                conn.commit()
+
                 if hasattr(self, 'equipo_f') and self.equipo_f == 'Tomógrafo':
                     self.old_id = True
                 QMessageBox.information(self, "Éxito", f"Puede seguir con el proceso de llenado de datos del {fecha_formateada[1]}.")
