@@ -169,10 +169,16 @@ class PruebaMensual600(PruebaBasico):
                         tab.deleteLater()
                 self.dynamic_tabs.clear()
             
-            # Cerrar conexiones de BD
-            if hasattr(self, 'db_manager'):
-                self.db_manager.cerrar_conexiones()
-            
+            # P1.3 (PLAN_P1_POOL_CONEXIONES_27-07.md): antes se llamaba aquí
+            # self.db_manager.cerrar_conexiones() -- con el pool viejo (con
+            # estado a nivel de CLASE, compartido entre TODAS las vistas)
+            # esto era la causa raíz de H-B: el __del__ de una vista cerraba
+            # las conexiones que otra vista viva todavía estaba usando
+            # ("Cannot operate on a closed database"). La fachada actual
+            # (services/db_pool.py) ya no tiene ningún pool compartido que
+            # cerrar, así que la llamada se quitó -- no hacía falta dejarla
+            # como no-op.
+
             print("Recursos limpiados correctamente")
             
         except Exception as e:
