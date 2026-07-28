@@ -18,6 +18,24 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import *
 
 
+def traducir_booleano_editado(texto):
+    """E1 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §2): traduce el texto de una
+    celda booleana editada a su entero de BD, o None si no es traducible.
+
+    Las columnas booleanas de las diarias son INTEGER pero se PINTAN como
+    "Funciona"/"No Funciona" (tablas.py::load_table). Antes, la edición
+    escribía la cadena mostrada tal cual y SQLite -- tipado dinámico -- la
+    guardaba como TEXT sin error: la celda dejaba de pintarse como booleano
+    ("se editan pero no parecen aceptarse", rebuild 28-07). Insensible a
+    mayúsculas y espacios porque el valor puede venir tecleado a mano (la BD
+    del físico registró 'No funciona' con f minúscula).
+    """
+    if texto is None:
+        return None
+    limpio = " ".join(str(texto).split()).casefold()
+    return {"funciona": 1, "no funciona": 0, "1": 1, "0": 0}.get(limpio)
+
+
 class PruebaBasico(QWidget):
     def __init__(self, user_id=None):
         super(PruebaBasico, self).__init__()
@@ -736,6 +754,29 @@ class PruebaBasico(QWidget):
         if not column_name:
             QMessageBox.critical(self, "Error", f"No se encontró mapeo para la columna {col}")
             return
+
+        # E1: en una columna booleana (INTEGER) nunca se escribe la cadena
+        # mostrada -- se traduce a 0/1, y un valor no traducible NO se guarda
+        # (antes SQLite aceptaba la cadena sin error y la celda quedaba
+        # corrupta como TEXT). Se conservan los dos caminos de edición (D4).
+        if column_name in getattr(self, "boolean_colums", ()):
+            traducido = traducir_booleano_editado(new_value)
+            if traducido is None:
+                QMessageBox.warning(
+                    self, "Valor no válido",
+                    f"'{new_value}' no es un valor válido para esta celda.\n"
+                    "Solo se acepta 'Funciona' o 'No Funciona'. "
+                    "No se guardó ningún cambio.")
+                self.table.blockSignals(True)
+                item.setText(str(old_value))
+                self.table.blockSignals(False)
+                self.edit_table.show()
+                self.search_bar.show()
+                self.accept_edit.hide()
+                self.cancel_edit.hide()
+                self.btn_delete.show()
+                return
+            new_value = traducido
 
         # Actualizar la base de datos
         db = self.opeenDatabase()
