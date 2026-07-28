@@ -12,22 +12,22 @@ físico (el mismo catálogo curado a mano en H2.6/H2.10).
   "OK" de `login()`), no con un "actor" que no existe en ese flujo.
 - `update_password`: recibe `usuario` como parámetro propio, se audita con
   ese mismo valor.
-- `eliminarEquipo`: identificado ANTES del DELETE (mismo patrón de `ref`
-  que `guardarCambios`, f"{modelo}/{serie}") para que el borrado físico
-  quede legible.
+- `eliminarEquipo`: identificado ANTES de anular (mismo patrón de `ref`
+  que `guardarCambios`, f"{modelo}/{serie}"). La cobertura de esta función
+  vive ahora en `test_e2_borrado_equipos.py` -- E2
+  (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §3) le agregó un gate de permiso
+  admin/jefe y cambió el DELETE físico por soft-delete (activo=0).
 """
 import sqlite3
 
 import pytest
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QMessageBox, QTableWidget, QTableWidgetItem, QWidget
+from PyQt5.QtWidgets import QApplication
 
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.encriptarInfo import encrypt_data
 from data.ManejoDatos.user import Usuario
 from data.ManejoDatos.usuariosManager import UsuarioData
-from ui.paginasGuia.equipos import Config
 
 
 @pytest.fixture(scope="module")
@@ -120,34 +120,7 @@ class TestUpdatePasswordAudita:
 class _UsuarioActualFalso:
     _nombre = "Físico de Prueba"
 
-
-class TestEliminarEquipoAudita:
-    def test_borrado_de_equipo_audita_con_modelo_y_serie(self, app, bd_temporal, monkeypatch):
-        con = sqlite3.connect(bd_temporal)
-        cur = con.execute(
-            "INSERT INTO equipos (equip_type, model, serie) VALUES (?, ?, ?)",
-            ("Acelerador", "Clinac iX", "SN-123"))
-        id_equipo = cur.lastrowid
-        con.commit()
-        con.close()
-
-        monkeypatch.setattr(QMessageBox, "question",
-                            staticmethod(lambda *a, **k: QMessageBox.Yes))
-        monkeypatch.setattr(QMessageBox, "information", staticmethod(lambda *a, **k: None))
-        monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
-
-        obj = Config.__new__(Config)
-        QWidget.__init__(obj)
-        obj.user_id = _UsuarioActualFalso()
-        obj.cargartabla = lambda: None  # refresco de tabla, fuera de alcance aquí
-
-        obj.table = QTableWidget(1, 1)
-        item = QTableWidgetItem()
-        item.setData(Qt.UserRole, id_equipo)
-        obj.table.setItem(0, 0, item)
-        obj.table.setCurrentCell(0, 0)
-
-        Config.eliminarEquipo(obj)
-
-        assert _audit_log(bd_temporal) == [
-            ("Físico de Prueba", "eliminar", "equipos", "Clinac iX/SN-123", "tipo: Acelerador")]
+# TestEliminarEquipoAudita se retiró de aquí -- E2
+# (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §3) reemplazó el DELETE físico
+# (sin barrera de permiso) por un gate DialogAdminPermisoEliminar +
+# soft-delete. Cobertura completa en test_e2_borrado_equipos.py.

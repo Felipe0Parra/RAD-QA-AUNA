@@ -3,8 +3,9 @@ from data.ManejoDatos.load import encontrar_columnas
 from data.ManejoDatos.conection import Conexion
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
-from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR, ACCION_ELIMINAR
+from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR, ACCION_ANULAR
 from services.vigencia_equipo import VIGENCIA_ANOS_POR_TIPO, es_vigente_en_fecha
+from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar
 from PyQt5.QtWidgets import (QMessageBox, QGridLayout, QWidget, QSplitter, QHeaderView, QSizePolicy, QTableWidget, QTableWidgetItem,
                             QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QDialog, QLineEdit, QComboBox)
 from PyQt5.QtCore import Qt, QDate
@@ -866,37 +867,39 @@ class Config(PruebaBasico):
         id_equipo = item.data(Qt.UserRole)  # Recupera el ID desde Qt.UserRole
         print(f"ID del equipo a eliminar: {id_equipo}")
 
-        # Mostrar un cuadro de confirmación
-        respuesta = QMessageBox.question(
-            self,
-            "Confirmar eliminación",
-            "¿Estás seguro de que deseas eliminar este equipo?",
-            QMessageBox.Yes | QMessageBox.No
-        )
+        # E2 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §3): antes este era el
+        # ÚNICO borrado de la app sin barrera de permiso (solo un
+        # QMessageBox.question) sobre el catálogo curado a mano en H2.6/H2.10.
+        # Mismo patrón que PruebasDiarias.py::verificar_eliminar.
+        dialogo = DialogAdminPermisoEliminar(self.user_id)
+        respuesta = dialogo.exec()
+        if respuesta != QDialog.DialogCode.Accepted:
+            return
 
-        if respuesta == QMessageBox.Yes:
-            # Eliminar el equipo de la base de datos
-            conn = Conexion().conectar()
-            cursor = conn.cursor()
-            # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): identificación
-            # ANTES del DELETE -- el mismo patrón de ref que guardarCambios
-            # (f"{modelo}/{serie}"), para que el borrado físico del catálogo
-            # (curado a mano en H2.6/H2.10) quede legible en audit_log.
-            cursor.execute("SELECT equip_type, model, serie FROM equipos WHERE id = ?", (id_equipo,))
-            fila_equipo = cursor.fetchone()
-            cursor.execute("DELETE FROM equipos WHERE id = ?", (id_equipo,))
-            conn.commit()
-            conn.close()
+        # E2: soft-delete -- la columna `activo` ya existe y guardarCambios
+        # ya la usa. El catálogo nunca pierde una fila: un equipo anulado
+        # deja de ofrecerse en los selectores (equipos_service.py ya filtra
+        # activo=1) pero un control histórico que lo referencia sigue
+        # resolviendo su modelo/serie.
+        conn = Conexion().conectar()
+        cursor = conn.cursor()
+        # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): identificación ANTES
+        # de anular -- mismo patrón de ref que guardarCambios (f"{modelo}/{serie}").
+        cursor.execute("SELECT equip_type, model, serie FROM equipos WHERE id = ?", (id_equipo,))
+        fila_equipo = cursor.fetchone()
+        cursor.execute("UPDATE equipos SET activo = 0 WHERE id = ?", (id_equipo,))
+        conn.commit()
+        conn.close()
 
-            if fila_equipo:
-                equip_type, modelo, serie = fila_equipo
-                _registrar_auditoria(_usuario_actual(self), ACCION_ELIMINAR, "equipos",
-                                     ref=f"{modelo}/{serie}", detalle=f"tipo: {equip_type}")
+        if fila_equipo:
+            equip_type, modelo, serie = fila_equipo
+            _registrar_auditoria(_usuario_actual(self), ACCION_ANULAR, "equipos",
+                                 ref=f"{modelo}/{serie}", detalle=f"tipo: {equip_type}")
 
-            QMessageBox.information(self, "Éxito", "El equipo ha sido eliminado correctamente.")
+        QMessageBox.information(self, "Éxito", "El equipo ha sido anulado correctamente.")
 
-            # Actualizar la tabla
-            self.cargartabla()
+        # Actualizar la tabla
+        self.cargartabla()
 
     def identificar_equipo_editar(self):
         row = self.table.currentRow()

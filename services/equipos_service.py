@@ -130,6 +130,14 @@ class EquiposService:
         puede tener varias filas históricas (recalibraciones) con factores
         distintos, y el combo de la calculadora no tenía forma de
         distinguirlas -- se veían idénticas salvo por el factor real.
+
+        E2 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §3): filtra `activo = 1`
+        -- antes un equipo anulado seguía ofreciéndose en el combo de la
+        calculadora de dosis (única lectura de este método) pese a haber
+        desaparecido del catálogo de Equipos. Mismo criterio ya usado por
+        modelos_actuales()/series_actuales() (H2.10) para braquiterapia. Un
+        control histórico que ya referencia el equipo por id no pasa por
+        aquí -- sigue resolviendo su fila sin este filtro.
         """
         con = Conexion().con
         cur = con.cursor()
@@ -138,7 +146,7 @@ class EquiposService:
         SELECT id, equip_type, model, serie, calibr_fact, t_cal, p_cal, h_cal,
                fecha_calibr, vigente
         FROM equipos
-        WHERE model = ?
+        WHERE model = ? AND activo = 1
         ORDER BY serie, vigente DESC
         """
         # OJO: NO ordenar por fecha_calibr -- es TEXT en formato "dd/MM/yyyy"
