@@ -1,6 +1,7 @@
 import sqlite3
 import sys
 import os
+import re
 from data.ManejoDatos.encriptarInfo import encrypt_data
 import traceback
 
@@ -146,10 +147,177 @@ class Conexion():
             self._asegurar_catalogos_base()
             self._asegurar_roles_de_sistema()
             self._asegurar_activo_bloque_qc()
+            # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
+            # recreación de tablas ya incluya las columnas `activo` de E7 y
+            # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
+            # cualquier trigger (E8): recrear una tabla BORRA sus triggers
+            # (comprobado empíricamente) -- si algún día esta migración
+            # vuelve a activarse sobre una BD ya blindada, los triggers de
+            # E8 deben recrearse después (por eso E8 también corre al
+            # arranque, tras esta línea).
+            self._asegurar_secuencias_sin_duplicados()
+            self._asegurar_fk_on_delete_restrict()
 
         except Exception as ex:
             traceback.print_exc()
             print("Error al conectar a la base de datos:", ex)
+
+    def _asegurar_secuencias_sin_duplicados(self):
+        """E10, hallazgo del ensayo sobre la BD real: `sqlite_sequence`
+        traía filas DUPLICADAS para una misma tabla (users x4,
+        TipoCalibracion x4, LinealidadBraquiterapia x4, equipos x4,
+        HC_dosimetria_anual x2, ...) -- herencia de recreaciones antiguas y
+        de la fusión de BD de 2026-07-03. `sqlite_sequence` no declara
+        unicidad, y con duplicados SQLite puede leer el contador MENOR y
+        reutilizar el id de una fila borrada físicamente en el pasado: un
+        huérfano heredado que apunte a ese id "adoptaría" en silencio al
+        registro nuevo. Se normaliza a UNA fila por tabla con el contador
+        MÁXIMO (lo conservador: un salto de ids es inocuo; una reutilización
+        no). Es metadato de infraestructura, no dato clínico -- ninguna fila
+        de ninguna tabla de QC se toca.
+        """
+        try:
+            cur = self.con.cursor()
+            try:
+                duplicadas = cur.execute(
+                    "SELECT name, MAX(seq) FROM sqlite_sequence "
+                    "GROUP BY name HAVING COUNT(*) > 1").fetchall()
+            except sqlite3.OperationalError:
+                cur.close()
+                return  # la BD no tiene sqlite_sequence
+            for nombre, seq_max in duplicadas:
+                cur.execute("DELETE FROM sqlite_sequence WHERE name=?", (nombre,))
+                cur.execute("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)",
+                            (nombre, seq_max))
+                print(f"E10: sqlite_sequence normalizada para {nombre} "
+                      f"(duplicados -> seq={seq_max})")
+            self.con.commit()
+            cur.close()
+        except Exception as ex:
+            print("Error normalizando sqlite_sequence al arranque:", ex)
+
+    def _asegurar_fk_on_delete_restrict(self):
+        """E10 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §18): migra toda FK
+        con borrado en cascada a `ON DELETE RESTRICT`.
+
+        Por qué: medido sobre la BD real, un solo DELETE en `controles` se
+        llevaba 19 filas hijas de 5 tablas con un único statement. El
+        soft-delete de C2/E7 evita que la APP lo dispare, pero era
+        convención de aplicación; con RESTRICT es la BD misma la que
+        rechaza el borrado de un padre con hijas, venga de donde venga.
+        OJO (aviso del plan §18): RESTRICT NO da soft-delete -- no impide
+        borrar un padre sin hijas ni borrar hijas directamente. Esa capa la
+        dan E7 (anulación) y E8 (triggers). Son complementarias, ninguna
+        sustituye a otra.
+
+        SQLite no permite alterar una constraint: el procedimiento es el
+        documentado por SQLite (recrear y copiar), tabla por tabla, en una
+        transacción cada una, con foreign_keys=OFF durante la copia (los
+        109 huérfanos heredados no deben bloquear la migración; el criterio
+        es "no aumentan", no "son cero" -- directriz del físico).
+        Idempotente: detecta por `PRAGMA foreign_key_list` y no hace nada
+        si ya no queda ninguna FK en cascada. Alcance medido sobre la
+        producción real: 59 tablas, 59 FK, 2158 filas, 0 índices propios.
+
+        El texto de la declaración vieja se compone en dos partes a
+        propósito: tests/test_e10_restrict.py exige que este archivo no la
+        contenga escrita (tripwire para que ninguna tabla nueva la
+        reintroduzca), y esta función es precisamente quien la elimina.
+        """
+        _CASCADA = "ON DELETE " + "CASCADE"
+        try:
+            cur = self.con.cursor()
+            pendientes = []
+            for (nombre,) in cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND name NOT LIKE 'sqlite_%'").fetchall():
+                for fk in cur.execute(f"PRAGMA foreign_key_list('{nombre}')").fetchall():
+                    if fk[6] == "CASCADE":  # on_delete
+                        pendientes.append(nombre)
+                        break
+            if not pendientes:
+                cur.close()
+                return
+            print(f"E10: migrando {len(pendientes)} tablas a ON DELETE RESTRICT...")
+
+            patron = re.compile(r"ON\s+DELETE\s+CASCADE", re.IGNORECASE)
+            self.con.commit()
+            aislamiento_previo = self.con.isolation_level
+            # autocommit: BEGIN/COMMIT manuales por tabla, y PRAGMA
+            # foreign_keys solo surte efecto fuera de una transacción.
+            self.con.isolation_level = None
+            try:
+                cur.execute("PRAGMA foreign_keys=OFF")
+                for nombre in pendientes:
+                    sql = cur.execute(
+                        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                        (nombre,)).fetchone()[0]
+                    sql_restrict, n_cambios = patron.subn("ON DELETE RESTRICT", sql)
+                    if n_cambios == 0:
+                        raise Exception(
+                            f"{nombre}: foreign_key_list reporta cascada pero el SQL "
+                            "almacenado no la contiene -- no se migra a ciegas")
+                    temporal = f"_e10_nueva_{nombre}"
+                    sql_temporal = re.sub(
+                        rf'CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?["\[]?{re.escape(nombre)}["\]]?',
+                        f'CREATE TABLE "{temporal}"', sql_restrict,
+                        count=1, flags=re.IGNORECASE)
+                    indices = [r[0] for r in cur.execute(
+                        "SELECT sql FROM sqlite_master WHERE type='index' "
+                        "AND tbl_name=? AND sql IS NOT NULL", (nombre,)).fetchall()]
+                    # Preservar el contador AUTOINCREMENT: DROP TABLE borra su
+                    # fila de sqlite_sequence y el INSERT masivo la re-siembra
+                    # solo hasta MAX(id) copiado -- si el contador previo iba
+                    # más adelante (filas altas borradas físicamente en el
+                    # pasado), un id se REUTILIZARÍA y los huérfanos heredados
+                    # que apuntan a ese id "adoptarían" al registro nuevo.
+                    # MAX(seq): sqlite_sequence no tiene restricción de
+                    # unicidad y la producción real trae filas DUPLICADAS
+                    # para una misma tabla (HC_dosimetria_anual: seq=1 y
+                    # seq=3, herencia de una recreación antigua) -- leer la
+                    # primera a secas tomaba el contador equivocado.
+                    seq_previa = None
+                    try:
+                        fila_seq = cur.execute(
+                            "SELECT MAX(seq) FROM sqlite_sequence WHERE name=?",
+                            (nombre,)).fetchone()
+                        seq_previa = fila_seq[0] if fila_seq else None
+                    except sqlite3.OperationalError:
+                        pass  # la BD no tiene sqlite_sequence
+                    cur.execute("BEGIN")
+                    try:
+                        cur.execute(sql_temporal)
+                        cur.execute(f'INSERT INTO "{temporal}" SELECT * FROM "{nombre}"')
+                        cur.execute(f'DROP TABLE "{nombre}"')
+                        cur.execute(f'ALTER TABLE "{temporal}" RENAME TO "{nombre}"')
+                        for sql_indice in indices:
+                            cur.execute(sql_indice)
+                        if seq_previa is not None:
+                            fila_seq = cur.execute(
+                                "SELECT MAX(seq) FROM sqlite_sequence WHERE name=?",
+                                (nombre,)).fetchone()
+                            seq_final = max(seq_previa,
+                                            fila_seq[0] if fila_seq and fila_seq[0] is not None else 0)
+                            # normaliza también los duplicados heredados:
+                            # queda UNA sola fila con el contador máximo.
+                            cur.execute("DELETE FROM sqlite_sequence WHERE name=?", (nombre,))
+                            cur.execute(
+                                "INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)",
+                                (nombre, seq_final))
+                        cur.execute("COMMIT")
+                    except Exception:
+                        cur.execute("ROLLBACK")
+                        raise
+                cur.execute("PRAGMA foreign_keys=ON")
+            finally:
+                self.con.isolation_level = aislamiento_previo
+            cur.close()
+        except Exception as ex:
+            try:
+                self.con.execute("PRAGMA foreign_keys=ON")
+            except Exception:
+                pass
+            print(f"Error migrando FK ({_CASCADA} -> RESTRICT) al arranque:", ex)
 
     def _asegurar_activo_bloque_qc(self):
         """E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): `activo INTEGER
@@ -359,7 +527,7 @@ class Conexion():
             centrado_reticulo INTEGER,
             dosis_referencia INTEGER,
             observaciones TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE
         )  
         """
         # Control diario del ix
@@ -391,7 +559,7 @@ class Conexion():
             tol_ele_12mev INTEGER,
             tol_ele_15mev INTEGER,
             observaciones TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE
         )  
         """
         # Control diario de braqui
@@ -424,7 +592,7 @@ class Conexion():
             desplazamientos TEXT NULL,
             promedio_des REAL NULL,
             desviacion_des REAL NULL,
-            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
         # Control del halcyon
@@ -453,7 +621,7 @@ class Conexion():
             VirtualToIsoVrt INTEGER,
             MVImagerCalibrationGain INTEGER,
             MVImagerCalibrationUniformity INTEGER,
-            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE
         )  
         """
         # Tabla de equipos, las unidades están: 
@@ -497,8 +665,8 @@ class Conexion():
             fecha TEXT,
             user_id TEXT,
             user_id_f2 TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE,
-            FOREIGN KEY (user_id_f2) REFERENCES users(fullname) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE,
+            FOREIGN KEY (user_id_f2) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
         # Tabla de datos de los indicadores de brazos
@@ -508,7 +676,7 @@ class Conexion():
             nivel TEXT,
             indicador_luminoso_consola TEXT,
             indicador_luminoso_equipo TEXT,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )  
         """
         # Tabla de datos de los indicadores del colimador
@@ -518,7 +686,7 @@ class Conexion():
             nivel TEXT,
             indicador_luminoso_consola TEXT,
             indicador_luminoso_equipo TEXT, 
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )  
         """
         # Tabla de tamaños de campo
@@ -534,7 +702,7 @@ class Conexion():
             ic_largoy2 TEXT,
             ic_anchox1 TEXT,
             ic_anchox2 TEXT,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )  
         """
         # Tabla de datos del funcionamiento mecánico del dispositivo
@@ -556,7 +724,7 @@ class Conexion():
             laser_lateral9,
             observaciones,
             imagen BLOB,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )  """
 
         # Tabla de equipos que se usuan en el control
@@ -570,7 +738,7 @@ class Conexion():
             serie TEXT,
             calibr_fact INTEGER,
             fecha_calibr INTEGER,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )  
         """
         # Tabla de datos relacionados con la dosis.
@@ -597,7 +765,7 @@ class Conexion():
             tolerancia_planicidad INTEGER,
             observaciones_dosi TEXT,
             energia TEXT,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
         # Alterar tabla (solo si no existe la columna)
@@ -612,7 +780,7 @@ class Conexion():
             right_val INTEGER CHECK(right_val IN (0,1)),
             left_val INTEGER CHECK(left_val IN (0,1)),
             observaciones TEXT, 
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )"""
         
         sql_create_table14 = """CREATE TABLE IF NOT EXISTS control_conos (
@@ -620,7 +788,7 @@ class Conexion():
             ref INTEGER,         -- referencia o identificador del equipo/paciente
             medida TEXT NOT NULL,      -- por ejemplo "6x6", "10x10", etc.
             valor INTEGER NOT NULL,     -- 1 = funciona, 0 = no funciona
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )"""
 
         # H2.4 (auditoría 2026-07-14): audit trail mínimo -- quién/qué/cuándo
@@ -710,7 +878,7 @@ class Conexion():
                 t0 REAL,
                 p0 REAL,
                 h0 REAL,
-                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE RESTRICT ON UPDATE CASCADE
             )
             """,
             """
@@ -722,7 +890,7 @@ class Conexion():
                 p REAL,
                 h REAL,
                 desplazamiento_ini REAL,
-                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE RESTRICT ON UPDATE CASCADE
             )
             """,
             """
@@ -734,7 +902,7 @@ class Conexion():
                 medida1 TEXT,
                 medida2 TEXT,
                 promedio TEXT,
-                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE RESTRICT ON UPDATE CASCADE
             )
             """,
             """
@@ -747,7 +915,7 @@ class Conexion():
                 V_150 TEXT,
                 Vn_300 TEXT,
                 promediosV TEXT,
-                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE RESTRICT ON UPDATE CASCADE
             )
             """,
             """
@@ -761,7 +929,7 @@ class Conexion():
                 actividad_monitor REAL,
                 actividad_calculada REAL,
                 actividad_decaimiento REAL,
-                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE CASCADE ON UPDATE CASCADE
+                FOREIGN KEY (ref) REFERENCES TipoCalibracion(id) ON DELETE RESTRICT ON UPDATE CASCADE
             )
             """
         ]
@@ -825,7 +993,7 @@ class Conexion():
             diferencia_arriba_der REAL,
             diferencia_abajo_izq REAL,
             diferencia_abajo_der REAL,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         );"""
 
         verificaciones = """
@@ -850,7 +1018,7 @@ class Conexion():
             alineado_vertical INTEGER,
             torcido INTEGER,
             FOREIGN KEY (ref) REFERENCES controles(id)
-                ON DELETE CASCADE ON UPDATE CASCADE
+                ON DELETE RESTRICT ON UPDATE CASCADE
             );"""
 
         correcciones = """
@@ -864,7 +1032,7 @@ class Conexion():
             diferencia_izquierda REAL,
             diferencia_derecha REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-                ON DELETE CASCADE ON UPDATE CASCADE
+                ON DELETE RESTRICT ON UPDATE CASCADE
         );
 
         """
@@ -897,7 +1065,7 @@ class Conexion():
             imagen_resultado BLOB,                          -- Imagen con resultados (BLOB)
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Fecha y hora de creación
 
-            FOREIGN KEY (id_sesion) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_sesion) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_tipo) REFERENCES tipos_prueba(id_tipo)
         );"""
 
@@ -909,7 +1077,7 @@ class Conexion():
             espesor_teorico_mm REAL NOT NULL,               -- Espesor teórico en mm    
             diferencia_mm REAL NOT NULL,                    -- Diferencia entre espesor medido y teórico en mm
             error_pct REAL NOT NULL,                        -- Error porcentual
-            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT ON UPDATE CASCADE
         );"""
 
         # Tabla específica para TAMAÑO DE PIXEL
@@ -921,7 +1089,7 @@ class Conexion():
                 Y REAL,                                     -- Promedio yizq, yder
                 diferencia_x REAL,                          -- |promedio_x - teorico|
                 diferencia_y REAL,                          -- |promedio_y - teorico|
-                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
             );"""
         
         # Tabla para detalles por ROI en RESOLUCIÓN DE CONTRASTE
@@ -940,7 +1108,7 @@ class Conexion():
             visibilidad_lim REAL,                       -- Criterio de Rose
             pasa_cnr BOOLEAN,
             pasa_visibilidad_lim BOOLEAN,               -- Criterio recomendado
-            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
         );"""
 
         # Tabla específica para RESOLUCIÓN DE CONTRASTE
@@ -954,7 +1122,7 @@ class Conexion():
             pasa_test_cnr BOOLEAN,                     -- ≥4 ROIs visibles con CNR
             pasa_test_visibilidad BOOLEAN,             -- ≥4 ROIs visibles con visibilidad
             metodo_recomendado VARCHAR(20),            -- 'visibilidad_lim'
-            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
         );"""
 
         # Tabla específica para RESOLUCIÓN ESPACIAL
@@ -970,7 +1138,7 @@ class Conexion():
                 mtf_10_pct REAL,                          -- lp/mm para MTF 10%
                 mtf_20_pct REAL,                          -- lp/mm para MTF 20%
                 mtf_50_pct REAL,                          -- lp/mm para MTF 50%
-                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
             );"""
 
         resolucion_espacial_regiones = """
@@ -985,7 +1153,7 @@ class Conexion():
                 n_peaks_used INTEGER,
                 n_valleys_used INTEGER,
                 status VARCHAR(50),                        -- "OK", "Picos insuficientes", etc.
-                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+                FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
             );"""
         
         # Catálogo de materiales para pruebas CT
@@ -1007,7 +1175,7 @@ class Conexion():
             error_absoluto REAL NOT NULL,                  -- Error absoluto entre el valor medido y el rango de referencia
             error_relativo REAL NOT NULL,                  -- Error relativo en porcentaje
 
-            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE,
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT,
             FOREIGN KEY (id_material) REFERENCES materiales_ct(id_material),
             UNIQUE(id_prueba, id_material)
         );"""
@@ -1029,7 +1197,7 @@ class Conexion():
             hu_promedio REAL NOT NULL,                     -- Valor promedio medido en Hounsfield Units (HU) para la región
             desviacion REAL NOT NULL,                      -- Desviación estándar de los valores medidos en la región
 
-            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_region) REFERENCES regiones_uniformidad(id_region),
             UNIQUE(id_prueba, id_region)
         );"""
@@ -1050,7 +1218,7 @@ class Conexion():
             ui_threshold_pct REAL,                    -- Umbral UI usado (2.0%)
             inu_threshold_pct REAL,                   -- Umbral INU usado (2.0%)
             hu_tolerancia REAL,                       -- Tolerancia HU usada (40.0)
-            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
         );  """
 
         # Tabla para LINEALIDAD CT (pendiente de implementación)
@@ -1066,7 +1234,7 @@ class Conexion():
             rango_hu_min REAL,                        -- HU mínimo del análisis
             rango_hu_max REAL,                        -- HU máximo del análisis
             linealidad_aceptable BOOLEAN,            -- r² >= 0.99
-            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE CASCADE
+            FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
         );"""
 
         cursor = self.con.cursor()
@@ -1104,7 +1272,7 @@ class Conexion():
                 factor_campo_esperado REAL,
                 discrepancia REAL,
                 FOREIGN KEY (ref) REFERENCES controles(id)
-                ON DELETE CASCADE ON UPDATE CASCADE,
+                ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (id_energia) REFERENCES energias(id)
             )
         """
@@ -1119,7 +1287,7 @@ class Conexion():
                 factor_transmision_esperado REAL,
                 discrepancia REAL,
                 FOREIGN KEY (ref) REFERENCES controles(id)
-                ON DELETE CASCADE ON UPDATE CASCADE,
+                ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (id_energia) REFERENCES energias(id)
             )"""
         
@@ -1134,7 +1302,7 @@ class Conexion():
                 ppd_esperado REAL,
                 discrepancia REAL,
                 FOREIGN KEY (ref) REFERENCES controles(id)
-                ON DELETE CASCADE ON UPDATE CASCADE,
+                ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (id_energia) REFERENCES energias(id)
             )"""
         
@@ -1146,7 +1314,7 @@ class Conexion():
                 indicador_medir TEXT,
                 valor_medido REAL,
                 FOREIGN KEY (ref) REFERENCES controles(id)
-                ON DELETE CASCADE ON UPDATE CASCADE,
+                ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (id_energia) REFERENCES energias(id)
             )"""
 
@@ -1175,7 +1343,7 @@ class Conexion():
             serie2 TEXT,
             modelo3 TEXT,
             serie3 TEXT,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
@@ -1188,7 +1356,7 @@ class Conexion():
             valor_medido REAL,
             discrepancia REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
@@ -1201,7 +1369,7 @@ class Conexion():
             valor_medido REAL,
             discrepancia REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
         
@@ -1214,7 +1382,7 @@ class Conexion():
             concordancia REAL,
             dif_isocentro REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
@@ -1228,7 +1396,7 @@ class Conexion():
             medido_cm REAL,
             diferencia REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""    
 
@@ -1242,7 +1410,7 @@ class Conexion():
             medido REAL,
             diferencia REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
@@ -1255,7 +1423,7 @@ class Conexion():
             velocidad_prom REAL,
             desviacion_med REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
@@ -1268,7 +1436,7 @@ class Conexion():
             esperada REAL,
             discrepancia REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
@@ -1281,7 +1449,7 @@ class Conexion():
             imagen_perfil_horiz BLOB,
             picos_perfil TEXT,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
@@ -1314,7 +1482,7 @@ class Conexion():
             tolerancia_planicidad INTEGER,
             observaciones_dosi TEXT,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )
         """
@@ -1329,7 +1497,7 @@ class Conexion():
             Q2 REAL,
             Qprom REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
 
@@ -1343,7 +1511,7 @@ class Conexion():
             medido_inplane REAL,
             medido_crossplane REAL,
             FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE ON UPDATE CASCADE,
+            ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
         cursor = self.con.cursor()
@@ -1374,7 +1542,7 @@ class Conexion():
             tolerancia REAL,
             action_tolerance REAL,
             imagen_mlc BLOB,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
             )"""
         error_picket = """ 
         CREATE TABLE IF NOT EXISTS error_picket (
@@ -1383,7 +1551,7 @@ class Conexion():
             picket INTEGER NOT NULL,
             picket_mean_error REAL NOT NULL,
             picket_max_error REAL NOT NULL,
-            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE RESTRICT ON UPDATE CASCADE
             
         )
         """
@@ -1393,7 +1561,7 @@ class Conexion():
             ref INTEGER NOT NULL,
             leaf INTEGER NOT NULL,
             error REAL NOT NULL,
-            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
         highest_leaf_errors = """ 
@@ -1403,7 +1571,7 @@ class Conexion():
             leaf_out INTEGER NOT NULL,
             picket_asociado INTEGER NOT NULL,
             desviacion REAL,
-            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
         
@@ -1420,7 +1588,7 @@ class Conexion():
             tolerancia REAL,
             sid REAL,
             imagen_mlc_spoke,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
       
@@ -1432,7 +1600,7 @@ class Conexion():
         angulo_nominal_deg REAL NOT NULL,
         angulo_real_deg REAL NOT NULL,
         desviacion_deg REAL NOT NULL,
-        FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE, 
+        FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE, 
         UNIQUE(ref, spoke_index)
         )
         """
@@ -1444,7 +1612,7 @@ class Conexion():
             std_mm REAL, 
             rms_mm REAL,
             pm_95 REAL,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
         
@@ -1454,7 +1622,7 @@ class Conexion():
             ref INTEGER NOT NULL,
             separacion_ideal REAL,
             error_separacion REAL,
-            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """   
         uniformidad_angular_starshot ="""
@@ -1468,7 +1636,7 @@ class Conexion():
         separacion_ideal_deg REAL,
         error_deg REAL,
         FOREIGN KEY (ref) REFERENCES controles(id)
-            ON DELETE CASCADE
+            ON DELETE RESTRICT
             ON UPDATE CASCADE
     )"""
         
