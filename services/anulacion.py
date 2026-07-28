@@ -69,10 +69,17 @@ TABLAS_ANULABLES = frozenset({
 })
 
 
-def anular_fila(db, tabla, id_valor, usuario, detalle=""):
-    """`UPDATE {tabla} SET activo = 0 WHERE id = ?`, auditado con
+def anular_fila(db, tabla, id_valor, usuario, detalle="", id_where=None,
+                valor_where=None, ref=None):
+    """`UPDATE {tabla} SET activo = 0 WHERE ...`, auditado con
     `ACCION_ANULAR`. Nunca borra: todas las tablas del bloque de QC
     conservan su historial completo (D6).
+
+    Por defecto la fila se localiza por `"id" = ?` (con `id_valor`) --
+    válido para la mayoría del inventario. Dos tablas (`dosimetriaMen`,
+    `tamano_campo`) no tienen columna "id": su identidad real es una clave
+    compuesta (mismo criterio que ya usa `guardarEdicion`) -- el llamador
+    pasa `id_where`/`valor_where` explícitos para esos casos (E5).
 
     `db` es una conexión `QSqlDatabase` ya abierta (mismo patrón que los
     llamadores `eliminarRegistro`/`eliminarfilas`, que reusan su propia
@@ -84,9 +91,14 @@ def anular_fila(db, tabla, id_valor, usuario, detalle=""):
             f"'{tabla}' no está en la lista blanca de anulación "
             "(services/anulacion.py::TABLAS_ANULABLES) -- fuera del bloque "
             "de control de calidad, no se anula por este camino.")
+    if id_where is None:
+        id_where = '"id" = ?'
+        valor_where = [id_valor]
     query = QSqlQuery(db)
-    query.prepare(f'UPDATE "{tabla}" SET activo = 0 WHERE "id" = ?')
-    query.addBindValue(id_valor)
+    query.prepare(f'UPDATE "{tabla}" SET activo = 0 WHERE {id_where}')
+    for v in valor_where:
+        query.addBindValue(v)
     if not query.exec_():
         raise Exception(query.lastError().text())
-    _registrar_auditoria(usuario, ACCION_ANULAR, tabla, ref=str(id_valor), detalle=detalle)
+    _registrar_auditoria(usuario, ACCION_ANULAR, tabla,
+                         ref=ref if ref is not None else str(id_valor), detalle=detalle)

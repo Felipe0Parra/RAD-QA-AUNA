@@ -2962,6 +2962,19 @@ def mostrar_dosimetria(parent, id_ref):
     dlg.cancel_edit.clicked.connect(
         lambda: cancelarEdicion(dlg)
     )
+    # E5 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §6, D3/D5): el botón se
+    # creaba (arriba) y se agregaba al layout, pero nunca se conectaba --
+    # un botón visible que no hacía nada. Se conecta DESPUÉS de E7 a
+    # propósito: "dosimetriaMen" ya está en
+    # services.anulacion.TABLAS_ANULABLES, así que verificar_eliminar (vía
+    # eliminarRegistro) anula (activo=0) en vez de borrar -- conectarlo
+    # antes de E7 habría creado un DELETE físico sobre el bloque de
+    # dosimetría, justo lo que D5 prohibió. `dlg` ya lleva identidad desde
+    # A6.2-bis, así que queda auditado con el nombre del físico sin trabajo
+    # extra.
+    dlg.btn_delete.clicked.connect(
+        lambda: verificar_eliminar(dlg, table, "dosimetriaMen", id_ref)
+    )
 
     dlg.resize(1200, 700)
     if getattr(sys, 'frozen', False):
@@ -4158,8 +4171,30 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
 
         table_name = nombre_tabla
 
-        id_where = '"id" = ?'
-        valor_where = [row_id]
+        # E5 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §6): dosimetriaMen (y
+        # tamano_campo) NO tienen columna "id" -- su identidad real es una
+        # clave compuesta. El "id"=? por defecto de abajo cae al fallback de
+        # SQLite para identificadores entre comillas sin columna (compara
+        # contra el LITERAL 'id', nunca encuentra nada): silenciosamente no
+        # hacía nada antes de E7, y desde E7 revienta con "No se encontró el
+        # registro" (el chequeo `existe` nuevo lo destapó al conectar este
+        # botón). Mismo dispatch por tabla que ya usa guardarEdicion, misma
+        # razón: sin esto, el botón de Dosimetría quedaría "conectado" pero
+        # inservible -- justo el defecto que E5 vino a cerrar.
+        if table_name == "dosimetriaMen":
+            if not (isinstance(row_id, (tuple, list)) and len(row_id) == 2):
+                raise Exception("No se encontró metadata (id_ref, energia) en la fila seleccionada")
+            id_where = '"ref" = ? AND "energia" = ?'
+            valor_where = list(row_id)
+        elif table_name == "tamano_campo":
+            campo_nominal_item = tabla_widget.item(row, 0)
+            if not campo_nominal_item:
+                raise Exception("No se pudo obtener el valor de campo_nominal")
+            id_where = '"ref" = ? AND "campo_nominal" = ?'
+            valor_where = [id_ref, campo_nominal_item.text()]
+        else:
+            id_where = '"id" = ?'
+            valor_where = [row_id]
 
         print(f"→ Eliminando en tabla {table_name}, WHERE {id_where}, valores {valor_where}")
 
@@ -4193,7 +4228,11 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
         if table_name in TABLAS_ANULABLES:
             if not existe:
                 raise Exception("No se encontró el registro a eliminar")
-            anular_fila(db, table_name, row_id, _usuario_actual(dlg), detalle=fila_actual)
+            ref_legible = ("/".join(str(v) for v in valor_where)
+                          if len(valor_where) > 1 else str(row_id))
+            anular_fila(db, table_name, row_id, _usuario_actual(dlg),
+                       detalle=fila_actual, id_where=id_where,
+                       valor_where=valor_where, ref=ref_legible)
             QMessageBox.information(dlg, "Éxito", "Registro anulado correctamente.")
             tabla_widget.removeRow(row)
             print("UPDATE (anular) ejecutado correctamente")
