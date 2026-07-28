@@ -217,7 +217,8 @@ class TestDdlIgualProduccion:
             "discrepancia_calidad", "tolerancia_calidad", "simetria_inplane",
             "simetria_crossplane", "tolerancia_simetria",
             "planicidad_inplane", "planicidad_crossplane",
-            "tolerancia_planicidad", "observaciones_dosi", "energia"]
+            "tolerancia_planicidad", "observaciones_dosi", "energia",
+            "activo"]  # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11)
 
 
 class TestSinRegistroNaceVacio:

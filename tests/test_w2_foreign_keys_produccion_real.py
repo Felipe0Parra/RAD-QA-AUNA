@@ -104,21 +104,25 @@ class TestSoftDeleteDeUnControlRealNoRompeConFkOn:
         assert n_preguntas_despues == n_preguntas_antes  # el detalle sobrevive intacto
 
 
-class TestBorradoFisicoDeCatalogoConCascadaReal:
+class TestAnularTipoCalibracionYaNoArrastraHijosReal:
+    """E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11) SUPERSEDE esta clase:
+    antes de E7, TipoCalibracion se borraba FÍSICO y el FK CASCADE (W2) se
+    llevaba a SistemaMedicion con él -- exactamente el "peligro #1" que el
+    plan identificó (arrastraba en cascada ResultadosActividad, la actividad
+    calculada de la fuente, sin dejar nada recuperable). Ahora
+    TipoCalibracion está en `services.anulacion.TABLAS_ANULABLES`: anular ya
+    NO es un DELETE, así que el CASCADE nunca se dispara y el hijo sobrevive.
+    Verificado sobre una COPIA de la BD real (no un esquema sintético)."""
 
-    def test_eliminar_un_tipocalibracion_cascada_correctamente(self, app, copia_produccion):
-        """TipoCalibracion tiene hijos declarados ON DELETE CASCADE
-        (SistemaMedicion, CondicionesMedicion, MaximosCamaras,
-        LecturasMaximos, ResultadosActividad) -- con FK ON, borrar el padre
-        ahora SÍ arrastra a los hijos (antes, con FK apagado, los hijos
-        quedaban huérfanos en silencio -- la fuente de una parte de las 116
-        huérfanas heredadas)."""
+    def test_anular_preserva_padre_e_hijo(self, app, copia_produccion):
         con = copia_produccion.con
         fila = con.execute("SELECT id FROM TipoCalibracion LIMIT 1").fetchone()
         if fila is None:
             pytest.skip("no hay filas en TipoCalibracion en esta copia")
         tipo_id = fila[0]
 
+        hijos_antes = con.execute(
+            "SELECT COUNT(*) FROM SistemaMedicion WHERE ref = ?", (tipo_id,)).fetchone()[0]
         con.execute(
             "INSERT INTO SistemaMedicion (ref, user) VALUES (?, 'ensayo_w2')",
             (tipo_id,))
@@ -126,13 +130,17 @@ class TestBorradoFisicoDeCatalogoConCascadaReal:
 
         eliminarRegistro(_DlgFalso(), _tabla_con_fila(tipo_id), "TipoCalibracion")
 
-        padre = con.execute(
-            "SELECT COUNT(*) FROM TipoCalibracion WHERE id = ?", (tipo_id,)).fetchone()[0]
-        hijos = con.execute(
+        padre, activo = con.execute(
+            "SELECT COUNT(*), MAX(activo) FROM TipoCalibracion WHERE id = ?",
+            (tipo_id,)).fetchone()
+        hijos_despues = con.execute(
             "SELECT COUNT(*) FROM SistemaMedicion WHERE ref = ?", (tipo_id,)).fetchone()[0]
 
-        assert padre == 0  # el padre sí se borró físicamente (fuera del alcance de C2)
-        assert hijos == 0  # y ahora el hijo se fue con él (antes quedaba huérfano)
+        assert padre == 1  # el padre SOBREVIVE (E7: anular, no borrar)
+        assert activo == 0
+        # ninguna hija se pierde (antes se iban TODAS con el CASCADE, incluidas
+        # las que ya existieran de antes en esta copia real de producción)
+        assert hijos_despues == hijos_antes + 1
 
 
 class TestCreateControlSobreDatosRealesConFkOn:

@@ -48,7 +48,8 @@ def bd_temporal(app, monkeypatch):
     assert db.open()
     QSqlQuery(db).exec(
         "CREATE TABLE aceleradorlineal_600 "
-        "(id INTEGER PRIMARY KEY, date TEXT, luces_consola INTEGER)")
+        "(id INTEGER PRIMARY KEY, date TEXT, luces_consola INTEGER, "
+        "activo INTEGER DEFAULT 1)")  # E7: load_table filtra por 'activo'
     QSqlQuery(db).exec(
         "INSERT INTO aceleradorlineal_600 (id, date, luces_consola) "
         "VALUES (7, '01/07/2026', 1)")

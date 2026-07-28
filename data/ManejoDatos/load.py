@@ -17,6 +17,7 @@ from services.fechas_control import mismo_mes as _mismo_mes
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
+from services.anulacion import TABLAS_ANULABLES, anular_fila
 def _dialogo_con_identidad(dlg, parent):
     """Propaga al diálogo la identidad del físico del formulario que lo abre.
 
@@ -593,6 +594,17 @@ def encontrar_columnas(nombre_tabla, id = True, delete = 1):
         print('Error al obtener las columnas:', e)
         return
 
+    # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): `activo` es metadato de
+    # anulación, agregado SIEMPRE al final por `_asegurar_activo_bloque_qc`
+    # -- se excluye ANTES del recorte por `delete` para que ese recorte
+    # (tuneado por cada llamador contra el esquema previo a E7) siga
+    # quitando las MISMAS columnas de siempre, no la nueva columna de
+    # metadato. Acotado a TABLAS_ANULABLES: `equipos` también tiene una
+    # columna `activo` propia (anterior a E7, con otro significado) y no
+    # debe verse afectada.
+    if nombre_tabla in TABLAS_ANULABLES and columnas and columnas[-1] == "activo":
+        columnas.pop()
+
     for _  in range(delete):
         columnas.pop(-1)
     print(f"\n▥ Columnas detectadas: {columnas} para {nombre_tabla}\n")
@@ -770,7 +782,9 @@ def mostrar_db_linealidad(self):
     # Cargar datos desde base de datos
     conn = Conexion().conectar()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM LinealidadBraquiterapia ORDER BY id DESC")
+    cursor.execute(
+        "SELECT * FROM LinealidadBraquiterapia "
+        "WHERE (activo IS NULL OR activo = 1) ORDER BY id DESC")
     resultados = cursor.fetchall()
     conn.close()
 
@@ -870,8 +884,8 @@ def mostrar_db_mensualBraqui(self):
 
     # Obtener todas las entradas base
     cursor.execute("""
-        SELECT id, user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion 
-        FROM TipoCalibracion ORDER BY id DESC
+        SELECT id, user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion
+        FROM TipoCalibracion WHERE (activo IS NULL OR activo = 1) ORDER BY id DESC
     """)
     entradas = cursor.fetchall()
     self.table.setRowCount(len(entradas))
@@ -2612,7 +2626,7 @@ def mostrar_equipos(parent, id_ref):
     cursor = conn.cursor()
     cursor.execute("""
         SELECT id, equip_type, model, serie, calibr_fact, fecha_calibr
-        FROM equipos_medicion WHERE ref=?
+        FROM equipos_medicion WHERE ref=? AND (activo IS NULL OR activo = 1)
     """, (id_ref,))
     data = cursor.fetchall()
 
@@ -2628,7 +2642,11 @@ def mostrar_seguridad(parent, id_ref, ix=False):
 
     def cargar_datos(tabla, columnas, id_ref):
         cols = ", ".join(columnas)
-        cursor.execute(f"""SELECT {cols} FROM {tabla} WHERE ref=? """, (id_ref,))
+        # E7: solo "control_cunas" está en la lista blanca de anulación
+        # (services/anulacion.py) -- "control_conos" no tiene columna
+        # `activo`, filtrarla ahí rompería la consulta.
+        filtro_activo = " AND (activo IS NULL OR activo = 1)" if tabla == "control_cunas" else ""
+        cursor.execute(f"""SELECT {cols} FROM {tabla} WHERE ref=?{filtro_activo}""", (id_ref,))
         return cursor.fetchall()
 
     # Datos de cunas y conos
@@ -2791,7 +2809,7 @@ def mostrar_tam_campos(parent, id_ref):
     cursor.execute("""
         SELECT campo_nominal, ie_largoy1, ie_largoy2, ie_anchox1, ie_anchox2,
             ic_largoy1, ic_largoy2, ic_anchox1, ic_anchox2
-        FROM tamano_campo WHERE ref=?
+        FROM tamano_campo WHERE ref=? AND (activo IS NULL OR activo = 1)
     """, (id_ref,))
     data = cursor.fetchall()
 
@@ -2805,8 +2823,8 @@ def mostrar_analisis_img(parent, id_ref):
     conn = Conexion().conectar()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT caracteristica, franja1, franja2, franja3 
-        FROM analisis_placa_franjas WHERE ref=?
+        SELECT caracteristica, franja1, franja2, franja3
+        FROM analisis_placa_franjas WHERE ref=? AND (activo IS NULL OR activo = 1)
     """, (id_ref,))
     data = cursor.fetchall()
     conn.close()
@@ -2833,7 +2851,7 @@ def mostrar_dosimetria(parent, id_ref):
             simetria_inplane, simetria_crossplane, tolerancia_simetria,
             planicidad_inplane, planicidad_crossplane, tolerancia_planicidad, observaciones_dosi
         FROM dosimetriaMen
-        WHERE ref = ?
+        WHERE ref = ? AND (activo IS NULL OR activo = 1)
         ORDER BY energia
     """, (id_ref,))
     resultados = cursor.fetchall()
@@ -4161,40 +4179,41 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
         existe = query_fila.next()
         fila_actual = _serializar_fila_actual(query_fila) if existe else ""
 
-        # C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md / PLAN_AUDITORIA_DOS_EJES
-        # §7 P4): "controles" es la raíz de la jerarquía mensual/anual/CT --
-        # el físico pidió soft-delete ("no veo ningún soft-delete"). Anular
-        # (activo=0) en vez de DELETE: las tablas de detalle (dosimetriaMen,
-        # preguntas, tamano_campo, etc.) NUNCA se tocan, quedan colgadas del
-        # mismo id. Cualquier OTRA tabla (subtablas vía "Ver tabla",
-        # catálogos como TipoCalibracion/LinealidadBraquiterapia) sigue con
-        # DELETE físico -- fuera del alcance de esta tarea, ya auditado (A2).
-        if table_name == "controles":
+        # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): "controles" era la
+        # ÚNICA tabla del bloque de QC con soft-delete (C2); las demás
+        # (dosimetriaMen, preguntas, tamano_campo, TipoCalibracion, las 4
+        # diarias...) se borraban físicamente una a una -- el caso más grave,
+        # anular un TipoCalibracion arrastraba en cascada ResultadosActividad
+        # (la actividad calculada de la fuente de braquiterapia) sin dejar
+        # nada recuperable. Ahora TODA tabla en la lista blanca cerrada del
+        # inventario del plan (services/anulacion.py::TABLAS_ANULABLES)
+        # anula en vez de borrar. Fuera de esa lista (subtablas de detalle
+        # sin botón de borrado propio, catálogos) sigue con DELETE físico --
+        # ya auditado (A2).
+        if table_name in TABLAS_ANULABLES:
             if not existe:
                 raise Exception("No se encontró el registro a eliminar")
-            sql = 'UPDATE controles SET activo = 0 WHERE "id" = ?'
-            accion = ACCION_ANULAR
-            mensaje_exito = "Registro anulado correctamente."
+            anular_fila(db, table_name, row_id, _usuario_actual(dlg), detalle=fila_actual)
+            QMessageBox.information(dlg, "Éxito", "Registro anulado correctamente.")
+            tabla_widget.removeRow(row)
+            print("UPDATE (anular) ejecutado correctamente")
         else:
             sql = f'DELETE FROM "{table_name}" WHERE {id_where}'
-            accion = ACCION_ELIMINAR
-            mensaje_exito = "Registro eliminado correctamente."
+            query.prepare(sql)
+            for v in valor_where:
+                query.addBindValue(v)
 
-        query.prepare(sql)
-        for v in valor_where:
-            query.addBindValue(v)
+            if not query.exec_():
+                error_msg = query.lastError().text()
+                print(f" ! Error en {sql.split()[0]}: {error_msg}")
+                raise Exception(error_msg)
 
-        if not query.exec_():
-            error_msg = query.lastError().text()
-            print(f" ! Error en {sql.split()[0]}: {error_msg}")
-            raise Exception(error_msg)
+            _registrar_auditoria(_usuario_actual(dlg), ACCION_ELIMINAR, table_name,
+                                 ref=str(row_id), detalle=fila_actual)
 
-        _registrar_auditoria(_usuario_actual(dlg), accion, table_name,
-                             ref=str(row_id), detalle=fila_actual)
-
-        QMessageBox.information(dlg, "Éxito", mensaje_exito)
-        tabla_widget.removeRow(row)
-        print(f"{sql.split()[0]} ejecutado correctamente")
+            QMessageBox.information(dlg, "Éxito", "Registro eliminado correctamente.")
+            tabla_widget.removeRow(row)
+            print(f"{sql.split()[0]} ejecutado correctamente")
 
     except Exception as e:
         traceback.print_exc()

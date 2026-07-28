@@ -145,10 +145,33 @@ class Conexion():
             self._asegurar_migraciones_ad_hoc()
             self._asegurar_catalogos_base()
             self._asegurar_roles_de_sistema()
+            self._asegurar_activo_bloque_qc()
 
         except Exception as ex:
             traceback.print_exc()
             print("Error al conectar a la base de datos:", ex)
+
+    def _asegurar_activo_bloque_qc(self):
+        """E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): `activo INTEGER
+        DEFAULT 1` en las 26 tablas del inventario cerrado de anulación
+        (services/anulacion.py::TABLAS_ANULABLES, menos `controles`, que ya
+        la tiene desde C2). Con DEFAULT 1, SQLite hace que TODAS las filas
+        existentes se comporten como activas sin ningún UPDATE -- migración
+        de coste cero, no reescribe ni una fila.
+
+        Import local (mismo motivo que DosisService.crear_tabla() arriba):
+        `services.anulacion` importa `services.audit_minimo`, que importa
+        este módulo -- un import de nivel de módulo aquí sería circular.
+        """
+        try:
+            from services.anulacion import TABLAS_ANULABLES
+            cur = self.con.cursor()
+            for tabla in sorted(TABLAS_ANULABLES - {"controles"}):
+                _asegurar_columna(cur, tabla, "activo", "INTEGER DEFAULT 1")
+            self.con.commit()
+            cur.close()
+        except Exception as ex:
+            print("Error asegurando 'activo' en el bloque de QC al arranque:", ex)
 
     def _asegurar_roles_de_sistema(self):
         """E6 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §10): modelo de roles

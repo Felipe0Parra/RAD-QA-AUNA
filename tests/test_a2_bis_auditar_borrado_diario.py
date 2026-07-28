@@ -1,10 +1,16 @@
 """A2-bis (§8.1 H1 del PLAN_AUDITORIA_DOS_EJES_21-07): el borrado DIARIO
 (`eliminarfilas`, data/GraficasyTablas/tablas.py) ahora deja rastro.
 
-Hallazgo del rebuild 22-07: el DELETE es físico y tablas.py no tenía
+Hallazgo del rebuild 22-07: el DELETE era físico y tablas.py no tenía
 NINGUNA llamada de auditoría -- A2 solo cubrió las rutas de load.py
 (mensual/anual/CT). El físico reportó: "elimino un registro diario del
 iX... lo grave es que no parece quedar rastro del registro eliminado".
+
+E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11) cambió el mecanismo de fondo:
+las 4 diarias son raíces del inventario de anulación -- `eliminarfilas` ya
+no borra, anula (`activo=0`, ACCION_ANULAR) vía `services.anulacion.anular_fila`.
+La auditoría que A2-bis fijó sigue intacta (usuario/tabla/ref/detalle), solo
+cambia el verbo y que la fila sobrevive.
 """
 import os
 import sqlite3
@@ -39,7 +45,8 @@ def bd_temporal(app, monkeypatch):
     db.setDatabaseName(ruta)
     assert db.open()
     QSqlQuery(db).exec(
-        "CREATE TABLE aceleradorlineal_ix (id INTEGER PRIMARY KEY, date TEXT, dato TEXT)")
+        "CREATE TABLE aceleradorlineal_ix (id INTEGER PRIMARY KEY, date TEXT, dato TEXT, "
+        "activo INTEGER DEFAULT 1)")
     QSqlQuery(db).exec(
         "INSERT INTO aceleradorlineal_ix (id, date, dato) VALUES (1, '01/07/2026', 'valor_x')")
     db.close()
@@ -88,7 +95,7 @@ class _WidgetFalso(QWidget):
 
 class TestA2BisAuditaElBorradoDiario:
 
-    def test_registra_eliminar_con_la_fila_completa(self, app, bd_temporal, monkeypatch):
+    def test_registra_anular_con_la_fila_completa(self, app, bd_temporal, monkeypatch):
         monkeypatch.setattr(tablas_mod.QMessageBox, "question",
                              staticmethod(lambda *a, **k: tablas_mod.QMessageBox.Yes))
         monkeypatch.setattr(tablas_mod.QMessageBox, "critical", staticmethod(lambda *a, **k: None))
@@ -104,13 +111,14 @@ class TestA2BisAuditaElBorradoDiario:
         assert fila is not None, "eliminarfilas no dejó ningún rastro en audit_log"
         usuario, accion, tabla, ref, detalle = fila
         assert usuario == "Cristian Castellanos"
-        assert accion == "eliminar"
+        assert accion == "anular"  # E7: ya no es "eliminar", el DELETE era físico
         assert tabla == "aceleradorlineal_ix"
         assert ref == "1"
         assert "date=01/07/2026" in detalle
         assert "dato=valor_x" in detalle
 
-    def test_la_fila_realmente_desaparece(self, app, bd_temporal, monkeypatch):
+    def test_la_fila_sobrevive_anulada(self, app, bd_temporal, monkeypatch):
+        """E7: la fila ya NO desaparece -- queda con activo=0 (soft-delete)."""
         monkeypatch.setattr(tablas_mod.QMessageBox, "question",
                              staticmethod(lambda *a, **k: tablas_mod.QMessageBox.Yes))
         monkeypatch.setattr(tablas_mod.QMessageBox, "critical", staticmethod(lambda *a, **k: None))
@@ -119,9 +127,11 @@ class TestA2BisAuditaElBorradoDiario:
         tablas_mod.eliminarfilas(widget, "aceleradorlineal_ix")
 
         con = sqlite3.connect(bd_temporal)
-        n = con.execute("SELECT COUNT(*) FROM aceleradorlineal_ix").fetchone()[0]
+        n, activo = con.execute(
+            "SELECT COUNT(*), MAX(activo) FROM aceleradorlineal_ix").fetchone()
         con.close()
-        assert n == 0
+        assert n == 1
+        assert activo == 0
 
     def test_cancelar_no_borra_ni_audita(self, app, bd_temporal, monkeypatch):
         monkeypatch.setattr(tablas_mod.QMessageBox, "question",

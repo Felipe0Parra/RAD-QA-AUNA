@@ -161,25 +161,30 @@ class TestEliminarRegistroSoloAnulaControles:
     OTRA tabla (subtablas vía "Ver tabla", catálogos) -- solo "controles"
     cambia a soft-delete."""
 
-    def test_tabla_distinta_de_controles_sigue_con_delete_fisico(self, app, bd_temporal, monkeypatch):
-        """TipoCalibracion es uno de los call-sites reales del `eliminarRegistro`
-        genérico con una tabla que NO es "controles" (braquiterapia.py,
-        braq_mensual.py) -- catálogo, categoría ④, fuera del alcance de C2."""
+    def test_tabla_fuera_de_la_lista_blanca_sigue_con_delete_fisico(self, app, bd_temporal, monkeypatch):
+        """E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11) AMPLIÓ la lista de
+        tablas que anulan en vez de borrar (TipoCalibracion pasó a anular --
+        ver test_e7_soft_delete_bloque_qc.py, que reemplaza esta afirmación
+        para esa tabla en concreto). "control_conos" queda deliberadamente
+        FUERA de `services.anulacion.TABLAS_ANULABLES` (a diferencia de su
+        vecina "control_cunas", que sí entró) -- sigue siendo el ejemplo de
+        que `eliminarRegistro` conserva el DELETE físico para tablas de
+        detalle sin botón de borrado propio en la interfaz."""
         con = sqlite3.connect(bd_temporal)
         con.execute(
-            "INSERT INTO TipoCalibracion (id, user, fecha, tipo) VALUES (99, 'x', '2026-01-01', 1.0)")
+            "INSERT INTO control_conos (id, ref, medida, valor) VALUES (99, 1, '10x10', 1)")
         con.commit()
         con.close()
 
         _no_confirmar_qmessagebox(monkeypatch)
         tabla = _tabla_con_fila(99)
 
-        eliminarRegistro(_DlgFalso(), tabla, "TipoCalibracion")
+        eliminarRegistro(_DlgFalso(), tabla, "control_conos")
 
         con = sqlite3.connect(bd_temporal)
-        n = con.execute("SELECT COUNT(*) FROM TipoCalibracion WHERE id = 99").fetchone()[0]
+        n = con.execute("SELECT COUNT(*) FROM control_conos WHERE id = 99").fetchone()[0]
         con.close()
-        assert n == 0, "las tablas fuera de C2 siguen con DELETE físico"
+        assert n == 0, "las tablas fuera de la lista blanca siguen con DELETE físico"
 
     def test_no_encontrar_el_control_a_anular_no_revienta_en_silencio(self, app, bd_temporal, monkeypatch):
         """id inexistente en 'controles' -- no debe reventar con un

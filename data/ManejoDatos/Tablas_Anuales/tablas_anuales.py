@@ -43,11 +43,20 @@ def tablas_relacionadas():
         ]
     }
 
+# E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): filtro compartido por las
+# tres funciones de abajo -- cubren TODA la lista de hijas anuales del
+# inventario (equipos_medicion, tabla_factor_campo/factores_transmision/
+# factores_sobre_eje/control_camaras_monitoras, y los 10 HC_* anuales) desde
+# un solo punto. "activo IS NULL OR activo = 1" tolera BD sin la columna
+# aún (migración `_asegurar_activo_bloque_qc` en conection.py).
+_FILTRO_ACTIVO = "(activo IS NULL OR activo = 1)"
+
+
 def buscar_datos_db(tabla, tipo_equipo, parametros, ref_id):
     """Busca datos de una tabla específica para un control anual"""
     con = Conexion().conectar()
     cursor = con.cursor()
-    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ?"
+    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND {_FILTRO_ACTIVO}"
     cursor.execute(query, (ref_id,))
     datos = cursor.fetchall()
     con.close()
@@ -57,7 +66,7 @@ def buscar_datos_db_energia(tabla, tipo_equipo, parametros, ref_id, id_energia):
     """Busca datos de una tabla específica filtrada por energía para un control anual"""
     con = Conexion().conectar()
     cursor = con.cursor()
-    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND id_energia = ?"
+    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND id_energia = ? AND {_FILTRO_ACTIVO}"
     cursor.execute(query, (ref_id, id_energia))
     datos = cursor.fetchall()
     con.close()
@@ -67,7 +76,7 @@ def buscar_datos_db_energia_pdd(tabla, tipo_equipo, parametros, ref_id, id_energ
     """Busca datos de una tabla específica filtrada por energía y PDD para un control anual"""
     con = Conexion().conectar()
     cursor = con.cursor()
-    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND id_energia = ? AND pdd = ?"
+    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND id_energia = ? AND pdd = ? AND {_FILTRO_ACTIVO}"
     cursor.execute(query, (ref_id, id_energia, pdd))
     datos = cursor.fetchall()
     con.close()

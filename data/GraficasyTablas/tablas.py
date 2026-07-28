@@ -3,8 +3,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtSql import QSqlDatabase, QSqlQuery
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
-from services.audit_minimo import registrar as _registrar_auditoria
-from services.audit_minimo import ACCION_ELIMINAR, usuario_actual as _usuario_actual
+from services.audit_minimo import usuario_actual as _usuario_actual
+from services.anulacion import anular_fila
 import traceback
 
 
@@ -24,7 +24,12 @@ def _serializar_fila_actual(query):
 def load_table(self, boolean_keys=None, dosis=None, maquina=""):
     try:
         db = self.opeenDatabase()
-        query = QSqlQuery(f"SELECT * FROM {maquina} ORDER BY date DESC")
+        # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): las 4 diarias son
+        # raíces del inventario de anulación -- una fila anulada no debe
+        # seguir apareciendo en la tabla visible.
+        query = QSqlQuery(
+            f"SELECT * FROM {maquina} "
+            "WHERE (activo IS NULL OR activo = 1) ORDER BY date DESC")
     except Exception as e:
         traceback.print_exc()
         return
@@ -35,6 +40,11 @@ def load_table(self, boolean_keys=None, dosis=None, maquina=""):
     self.table.setColumnCount(column_count)
     self.table.setHorizontalHeaderLabels(headers)
     self.table.setRowCount(0)
+    # `activo` es metadato interno de anulación (E7) -- SELECT * lo trae
+    # como cualquier otra columna, pero no debe verse en la tabla del físico.
+    col_activo = next((c for c, h in enumerate(headers) if h.lower() == "activo"), None)
+    if col_activo is not None:
+        self.table.setColumnHidden(col_activo, True)
 
     # Deshabilitar actualizaciones visuales mientras se carga
     self.table.setUpdatesEnabled(False),
@@ -177,24 +187,19 @@ def eliminarfilas(self, maquina):
         QMessageBox.critical(self, "Error", f"No se pudo conectar a la base de datos: {db.lastError().text()}")
         return
 
-    # A2-bis (§8.1 H1): capturar la fila ANTES de borrarla -- el DELETE de
-    # abajo es físico y sin esto no queda ninguna forma de reconstruir qué
-    # se perdió ("no parece quedar rastro del registro eliminado", reporte
-    # del físico 22-07).
+    # A2-bis (§8.1 H1): capturar la fila ANTES de anularla -- deja constancia
+    # de qué contenía ("no parece quedar rastro del registro eliminado",
+    # reporte del físico 22-07).
     query_fila = QSqlQuery()
     query_fila.prepare(f'SELECT * FROM {maquina} WHERE id = ?')
     query_fila.addBindValue(pac_id)
     query_fila.exec()
     fila_borrada = _serializar_fila_actual(query_fila) if query_fila.next() else ""
 
-    query = QSqlQuery()
-    query.prepare(f'DELETE FROM {maquina} WHERE id = ?')
-    query.addBindValue(pac_id)
-
-    if not query.exec():  # En PyQt5, exec() devuelve False si falla
-        QMessageBox.critical(self, "Error", "Falló la eliminación: " + query.lastError().text())
-    else:
-        _registrar_auditoria(
-            _usuario_actual(self), ACCION_ELIMINAR, maquina, ref=str(pac_id),
-            detalle=fila_borrada)
+    # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): las 4 diarias son
+    # raíces del inventario de anulación -- ya no se borran físicamente.
+    try:
+        anular_fila(db, maquina, pac_id, _usuario_actual(self), detalle=fila_borrada)
+    except Exception as e:
+        QMessageBox.critical(self, "Error", "Falló la anulación: " + str(e))
 
