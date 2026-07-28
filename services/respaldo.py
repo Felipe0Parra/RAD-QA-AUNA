@@ -16,7 +16,7 @@ Diseño de este módulo:
   escribible, el respaldo también; protege contra corrupción y borrado
   accidental. Contra fallo del disco completo, el físico puede copiar la
   carpeta a otra unidad -- no hay ruta de red confiable que codificar aquí
-  (la vieja `\\VARIANDB\...` era precisamente el defecto 3 de E9).
+  (la vieja ruta de red codificada era precisamente el defecto 3 de E9).
 - Nombre fechado + rotación (se conservan las MAX_RESPALDOS copias más
   recientes): siempre hay historial y la carpeta no crece sin límite.
 - Best-effort: nunca lanza -- un fallo de respaldo jamás debe impedir cerrar

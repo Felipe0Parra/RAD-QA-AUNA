@@ -265,6 +265,7 @@ ALLOWLIST = {
     # --- bootstrap / self-heal: no es acción de usuario ---
     ("data/ManejoDatos/conection.py", "Conexion._asegurar_catalogos_base"): BOOTSTRAP,
     ("data/ManejoDatos/conection.py", "Conexion.createAdmin"): BOOTSTRAP,
+    ("data/ManejoDatos/conection.py", "Conexion._asegurar_roles_de_sistema"): BOOTSTRAP,
     ("data/ManejoDatos/load.py", "mostrar_controles_imgIX"): BOOTSTRAP,
     ("data/ManejoDatos/load.py", "mostrar_controles_imgHC"): BOOTSTRAP,
     ("data/ManejoDatos/load.py", "mostrar_controles_tac"): BOOTSTRAP,

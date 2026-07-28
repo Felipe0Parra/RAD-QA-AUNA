@@ -1,18 +1,67 @@
-"""Equivalencia de permisos administrativos (C3, PLAN_AUDITORIA_DOS_EJES_21-07.md
-§7.3/§7.7a).
+"""Permisos administrativos por rol de sistema (E6,
+PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §10; antes C3,
+PLAN_AUDITORIA_DOS_EJES_21-07.md §7.3/§7.7a).
 
-El físico en jefe (Luz Adriana Maya, usuario "lamaya") debe poder ejercer las
-mismas decisiones administrativas que la cuenta "admin". Hoy `users.role` no
-distingue jefe de físico raso -- es NULL para admin y 'Físico Médico' para
-los 6 físicos por igual, incluida lamaya --, así que la equivalencia se
-resuelve por nombre de usuario hasta que exista un modelo de roles real.
+El rol de PERMISOS vive en `users.rol_sistema` ('admin' / 'jefe' /
+'fisico'), poblado por la migración idempotente del arranque
+(`Conexion._asegurar_roles_de_sistema`). Es una columna aparte de
+`users.role` a propósito: `role` es el CARGO MOSTRADO ('Físico Médico') que
+imprimen los reportes PDF clínicos en el bloque de firma y que compara la
+recuperación de contraseña -- reescribirlo habría cambiado los PDF y roto
+la recuperación.
+
+`es_admin_equivalente()` conserva nombre y firma desde C3: sus llamadores
+(DialogAdminPermisoEliminar y quien se sume) no cambian. Si el rol no se
+puede resolver (BD sin migrar, fallo transitorio de conexión), se cae al
+conjunto codificado histórico {"admin", "lamaya"} CON aviso por consola --
+denegar dejaría a la física en jefe sin permisos en un turno clínico por un
+fallo pasajero, que es peor. Nunca se concede un permiso que un rol
+resuelto no dé: el fallback solo aplica cuando NO hay rol legible.
 """
 
+import sqlite3
+
+from data.ManejoDatos import conection as _conection
+
+ROLES_VALIDOS = {"admin", "jefe", "fisico"}
+ROLES_ADMIN_EQUIVALENTE = {"admin", "jefe"}
+
+# Fallback legado (C3): solo se consulta cuando el rol no se puede resolver.
 USUARIOS_ADMIN_EQUIVALENTE = {"admin", "lamaya"}
+
+
+def rol_de(username):
+    """Rol de sistema de `username` ('admin'/'jefe'/'fisico'), o None si no
+    se puede resolver (usuario inexistente, BD sin migrar, error de BD)."""
+    if not username:
+        return None
+    try:
+        con = sqlite3.connect(_conection.ruta_base_datos())
+        try:
+            fila = con.execute(
+                "SELECT rol_sistema FROM users WHERE lower(user) = ?",
+                (str(username).strip().lower(),)).fetchone()
+        finally:
+            con.close()
+    except Exception as ex:
+        print(f"[permisos] no se pudo leer el rol de '{username}': {ex}")
+        return None
+    if fila is None:
+        return None
+    rol = fila[0]
+    return rol if rol in ROLES_VALIDOS else None
 
 
 def es_admin_equivalente(username):
     """True si `username` tiene permisos administrativos plenos."""
     if not username:
         return False
-    return username.strip().lower() in USUARIOS_ADMIN_EQUIVALENTE
+    rol = rol_de(username)
+    if rol is not None:
+        return rol in ROLES_ADMIN_EQUIVALENTE
+    limpio = str(username).strip().lower()
+    if limpio in USUARIOS_ADMIN_EQUIVALENTE:
+        print(f"[permisos] rol de '{username}' no resoluble; se usa la "
+              "equivalencia codificada legada (BD sin migrar o fallo de BD)")
+        return True
+    return False

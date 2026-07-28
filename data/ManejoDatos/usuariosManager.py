@@ -74,10 +74,16 @@ class UsuarioData():
                     print(f"El usuario {username._usuario} ya existe.")
                     return None  # Usuario ya existe, no lo agrega
 
-                # Si no existe, lo agrega a la base de datos
+                # Si no existe, lo agrega a la base de datos.
+                # E6: `rol_sistema` (permisos) nace 'fisico' SIEMPRE -- los
+                # roles 'admin'/'jefe' solo se asignan por la migración del
+                # arranque o a mano; el registro público jamás debe poder
+                # crear una cuenta con permisos administrativos. `role` sigue
+                # siendo el cargo mostrado que eligió en el combo (lo
+                # imprimen los PDF y lo compara la recuperación).
                 encrypted_pass = encrypt_data(username._clave)
-                cursor.execute("INSERT INTO users (user, password, fullname, active, idreal, role, firma ) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            (username._usuario, encrypted_pass, username._nombre, username._activo, username._ident, username._rol, username._firma))
+                cursor.execute("INSERT INTO users (user, password, fullname, active, idreal, role, firma, rol_sistema) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                            (username._usuario, encrypted_pass, username._nombre, username._activo, username._ident, username._rol, username._firma, "fisico"))
                 # Commit explícito ANTES de auditar: `registrar()` abre su
                 # propia conexión (services/audit_minimo.py) y si el INSERT
                 # de arriba sigue sin comprometerse, choca con "database is

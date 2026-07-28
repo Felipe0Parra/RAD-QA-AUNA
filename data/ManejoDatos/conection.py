@@ -144,10 +144,47 @@ class Conexion():
 
             self._asegurar_migraciones_ad_hoc()
             self._asegurar_catalogos_base()
+            self._asegurar_roles_de_sistema()
 
         except Exception as ex:
             traceback.print_exc()
             print("Error al conectar a la base de datos:", ex)
+
+    def _asegurar_roles_de_sistema(self):
+        """E6 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §10): modelo de roles
+        real en `users.rol_sistema` ('admin' / 'jefe' / 'fisico').
+
+        Columna NUEVA en vez de migrar `role` en sitio -- decisión de
+        implementación verificada contra los consumidores reales: `role` es
+        el CARGO MOSTRADO ('Físico Médico') y lo imprimen 5 reportes PDF
+        clínicos en el bloque de firma (`SELECT firma, role FROM users` en
+        reportes_mensuales/reportes/braquiterapia/imagenes) y lo compara
+        literal la recuperación de contraseña (`get_user`, recover_page).
+        Reescribirlo habría cambiado el texto de los PDF a 'fisico' y roto
+        la recuperación para todos los físicos. `rol_sistema` es el rol de
+        PERMISOS (lo lee services/permisos.py); `role` queda intacto.
+
+        Idempotente y conservador: solo se puebla donde está NULL/vacío --
+        una asignación manual posterior (p.ej. otra física asciende a jefe)
+        nunca se pisa. Mapeo inicial: admin->'admin', lamaya->'jefe'
+        (decisión del físico, C3), resto->'fisico'.
+        """
+        try:
+            cur = self.con.cursor()
+            _asegurar_columna(cur, "users", "rol_sistema", "TEXT")
+            cur.execute(
+                "UPDATE users SET rol_sistema='admin' "
+                "WHERE lower(user)='admin' AND (rol_sistema IS NULL OR rol_sistema='')")
+            cur.execute(
+                "UPDATE users SET rol_sistema='jefe' "
+                "WHERE lower(user)='lamaya' AND (rol_sistema IS NULL OR rol_sistema='')")
+            cur.execute(
+                "UPDATE users SET rol_sistema='fisico' "
+                "WHERE rol_sistema IS NULL OR rol_sistema=''")
+            self.con.commit()
+            cur.close()
+        except Exception as ex:
+            print("Error asegurando roles de sistema al arranque:", ex)
 
     def _asegurar_catalogos_base(self):
         """INSERT-audit (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8,
@@ -269,10 +306,11 @@ class Conexion():
             password TEXT,
             fullname TEXT UNIQUE,
             active INTEGER,
-            idreal INTEGER, 
+            idreal INTEGER,
             role TEXT,
-            firma BLOB
-        )  
+            firma BLOB,
+            rol_sistema TEXT
+        )
         """
         # Control diario del 600
         sql_create_table2 = """
