@@ -206,10 +206,12 @@ class Config(PruebaBasico):
         cursor = conn.cursor()
         # Calcular vigencia usando función existente
         
+        # E3: fabricante en la MISMA posición relativa que usa guardarCambios
+        # (tras fecha_calibr) -- antes el alta lo omitía y quedaba NULL ("NA").
         cursor.execute("""
-            INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, t_cal, p_cal, h_cal,
-                        v1, activo, vigente,  imagen_certificado )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr,
+                        fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, lista)
         conn.commit()
         # H2.4: alta de equipo -- ref = "modelo/serie" (lista[1]/lista[2]).
@@ -317,6 +319,8 @@ class Config(PruebaBasico):
             # Solo para Electrómetro
             segundo_factor = self.calib_factor2.text() if hasattr(self, "calib_factor2") and self.calib_factor2.isVisible() else None
             fecha_calibracion = self.calib_date.text()
+            # E3: mismo criterio que guardarCambios (None si viene vacío).
+            fabricante = self.fabricante.text() if self.fabricante.text() else None
             t_cal = float(self.t_cal.text()) if self.t_cal.text() else "No disponible"
             p_cal = float(self.p_cal.text()) if self.p_cal.text() else "No disponible"
             h_cal = float(self.h_cal.text()) if self.h_cal.text() else "No disponible"
@@ -330,7 +334,7 @@ class Config(PruebaBasico):
                     imagen_blob = f.read()
 
             if self.verificarCampos(self.canson1):
-                lista = [tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_blob]
+                lista = [tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion, fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_blob]
                 self.cargarDatos(lista)
                 self.cargartabla()
                 deshabilitar() # Limpia y deshabilita los campos después de guardar
