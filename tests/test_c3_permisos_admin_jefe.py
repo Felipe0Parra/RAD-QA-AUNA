@@ -12,13 +12,14 @@ import sqlite3
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QLabel
 
 import data.ManejoDatos.conection as conection_mod
 import ui.paginasGuia.dialogs as dialogs_mod
 from data.ManejoDatos.conection import Conexion
 from ui.paginasGuia.dialogs import (
-    DialogAdminPermiso, DialogAdminPermiso2, DialogAdminPermisoEliminar)
+    DialogAdminPermiso, DialogAdminPermiso2, DialogAdminPermisoEditar,
+    DialogAdminPermisoEliminar)
 from data.ManejoDatos.user import Usuario
 
 
@@ -184,3 +185,47 @@ class TestDialogAdminPermisoEliminarSoloAdminOJefe:
         n = con.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
         con.close()
         assert n == 0
+
+
+class TestE4EditarReautenticaAlPropioFisico:
+    """E4 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §5, decisión D1): editar es
+    DELIBERADAMENTE menos estricto que eliminar -- reautenticación del propio
+    físico, sin es_admin_equivalente. El texto viejo pedía "la cuenta de
+    administrador" con el usuario del físico precargado, y el físico tecleaba
+    la clave de admin sobre su propia cuenta (audit_log del rebuild 28-07,
+    filas 47/48: dos autorizaciones fallidas seguidas). La conducta NO cambia;
+    esta clase ancla la asimetría para que no se "arregle" por error."""
+
+    def test_editar_acepta_al_propio_fisico_logueado(self, app, monkeypatch):
+        monkeypatch.setattr(dialogs_mod.UsuarioData, "login",
+                             _mock_login({"accastellanos"}))
+        dlg = DialogAdminPermisoEditar(_UsuarioLogueadoFalso())
+        assert dlg.admin_user.text() == "accastellanos"  # precargado, no "admin"
+        dlg.admin_password.setText("cualquierclave")
+        dlg.open_main_window()
+        assert dlg.res is not None
+        assert dlg.labelwarnign.text() == ""
+
+    def test_asimetria_editar_acepta_eliminar_rechaza(self, app, monkeypatch):
+        """El MISMO físico con la MISMA clave válida: Editar acepta, Eliminar
+        exige permisos administrativos."""
+        monkeypatch.setattr(dialogs_mod.UsuarioData, "login",
+                             _mock_login({"accastellanos"}))
+
+        editar = DialogAdminPermisoEditar(_UsuarioLogueadoFalso())
+        editar.admin_password.setText("cualquierclave")
+        editar.open_main_window()
+        assert editar.res is not None
+
+        eliminar = DialogAdminPermisoEliminar(_UsuarioLogueadoFalso())
+        eliminar.admin_user.setText("accastellanos")
+        eliminar.admin_password.setText("cualquierclave")
+        eliminar.open_main_window()
+        assert (eliminar.labelwarnign.text()
+                == "Este usuario no tiene permisos administrativos")
+
+    def test_el_texto_ya_no_pide_la_cuenta_de_administrador(self, app):
+        dlg = DialogAdminPermisoEditar(_UsuarioLogueadoFalso())
+        textos = " ".join(lbl.text() for lbl in dlg.findChildren(QLabel))
+        assert "cuenta de administrador" not in textos
+        assert "propia contraseña" in textos

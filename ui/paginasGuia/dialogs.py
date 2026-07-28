@@ -424,8 +424,16 @@ class DialogAdminPermisoEditar(QDialog):
         # Layout principal
         main_layout = QVBoxLayout(self)
 
-        # Grupo de información
-        group_box = QGroupBox("Control de edición de datos")
+        # E4 (D1): editar es DELIBERADAMENTE menos estricto que eliminar --
+        # reautenticación del propio físico con sesión abierta (queda auditada
+        # vía A8), sin exigir es_admin_equivalente() como sí hace
+        # DialogAdminPermisoEliminar. El texto viejo pedía "la cuenta de
+        # administrador" con el usuario del físico precargado: el físico
+        # tecleaba la clave de admin sobre su propia cuenta y fallaba
+        # (audit_log del rebuild 28-07, filas 47/48). Texto y conducta ahora
+        # coinciden; si algún día editar debe exigir admin, copiar el patrón
+        # de DialogAdminPermisoEliminar, no solo cambiar este texto.
+        group_box = QGroupBox("Confirmación de identidad")
         group_layout = QVBoxLayout(group_box)
 
         # Etiqueta de título
@@ -434,7 +442,8 @@ class DialogAdminPermisoEditar(QDialog):
         title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: rgb(153, 176, 6)")
 
         # Etiqueta informativa
-        subtitle_label = QLabel("Para continuar ingrese la cuenta de administrador y su contraseña.")
+        subtitle_label = QLabel("Para continuar confirme su propia contraseña "
+                                "(la del usuario con la sesión abierta).")
         subtitle_label.setWordWrap(True)
 
         # Línea de usuario
