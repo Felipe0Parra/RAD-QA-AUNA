@@ -157,10 +157,91 @@ class Conexion():
             # arranque, tras esta línea).
             self._asegurar_secuencias_sin_duplicados()
             self._asegurar_fk_on_delete_restrict()
+            # E8: SIEMPRE después de E10 -- recrear una tabla borra sus
+            # triggers, así que si E10 alguna vez recrea algo sobre una BD
+            # ya blindada, los triggers deben reponerse justo después.
+            self._asegurar_triggers_anti_delete()
 
         except Exception as ex:
             traceback.print_exc()
             print("Error al conectar a la base de datos:", ex)
+
+    # E8 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §14, alcance AJUSTADO en la
+    # ejecución -- ver docstring de _asegurar_triggers_anti_delete): el plan
+    # pedía un trigger por cada tabla de TABLAS_ANULABLES (27) + users. Al
+    # implementarlo se descubrió un conflicto real, no anticipado por el
+    # plan: `loadtablacomplex` (load.py) y `add_info` (load.py, reporte
+    # diario) usan un mecanismo YA DECIDIDO de "reemplazar al guardar"
+    # (DELETE FROM <tabla> WHERE ref=?/date=? seguido de INSERT) para las ~20
+    # tablas hijas mensuales/anuales y las 4 diarias -- un trigger BEFORE
+    # DELETE ahí habría bloqueado el guardado normal ("Subir"), no solo el
+    # borrado. Verificado empíricamente antes de decidir el recorte.
+    # Las 4 tablas de abajo SÍ se verificaron sin ningún DELETE físico
+    # alcanzable (barrido completo del árbol de producción): son puro
+    # "una fila por evento", nunca "reemplazar el conjunto al guardar".
+    TABLAS_CON_TRIGGER_ANTI_DELETE = frozenset({
+        "controles", "TipoCalibracion", "LinealidadBraquiterapia", "users",
+    })
+
+    def _asegurar_triggers_anti_delete(self):
+        """E8 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §14): guardas
+        estructurales -- un `TRIGGER BEFORE DELETE` para que la BASE DE
+        DATOS misma rechace el borrado físico, sin importar qué haga la
+        aplicación (una consulta SQL directa, o una ruta de código futura
+        que se olvide de pasar por `anular_fila`).
+
+        ALCANCE AJUSTADO respecto al plan original: `TABLAS_CON_TRIGGER_
+        ANTI_DELETE` (4 tablas) en vez de las 27 de `TABLAS_ANULABLES` +
+        users. El plan asumía que, tras E7, "todas las rutas de la app ya
+        anulan en vez de borrar, así que no hay nada legítimo que
+        bloquear" -- cierto para el botón "Eliminar", pero no contempló que
+        ~20 tablas hijas (mensual/anual, vía `loadtablacomplex`) y las 4
+        diarias (vía `add_info`, decisión H2.2 ya vigente) usan DELETE+
+        INSERT como mecanismo normal de GUARDADO ("Subir"), no de borrado.
+        Confirmado con una prueba directa: el mismo DELETE que `add_info`
+        ejecuta al reemplazar el reporte de una fecha queda bloqueado por
+        un trigger genérico. Ampliar la protección a esas tablas exigiría
+        rediseñar ese mecanismo (UPDATE-or-insert en vez de recrear todo el
+        conjunto), un cambio de mayor alcance y riesgo que esta tarea --
+        quedan protegidas solo por E7 (sin ruta de borrado alcanzable),
+        igual que antes de E8. Cierra igual los dos peligros más graves de
+        §13.2: TipoCalibracion arrastrando en cascada ResultadosActividad
+        (el borrado más destructivo posible), y la regla permanente de que
+        los usuarios nunca se eliminan.
+
+        No requiere recrear ninguna tabla (a diferencia de E10) -- es
+        aditivo y reversible con `DROP TRIGGER`. Va DESPUÉS de E10 a
+        propósito: recrear una tabla borra sus triggers (comprobado
+        empíricamente), así que si E10 llegara a recrear algo sobre una BD
+        ya blindada, este método repone la guarda justo después en el
+        mismo arranque.
+
+        `users` lleva un mensaje propio ("los usuarios nunca se eliminan")
+        en vez de "use activo=0": la regla del proyecto es no borrar
+        cuentas nunca, no anularlas -- `users.active` ya cumple otro papel
+        (activar/desactivar el acceso), no es el mecanismo de anulación de
+        `services/anulacion.py`.
+
+        Idempotente (`CREATE TRIGGER IF NOT EXISTS`): correrla de nuevo no
+        cambia nada.
+        """
+        try:
+            cur = self.con.cursor()
+            for tabla in sorted(self.TABLAS_CON_TRIGGER_ANTI_DELETE - {"users"}):
+                mensaje = f"{tabla} no admite borrado fisico: use activo=0 (anular)"
+                cur.execute(
+                    f'CREATE TRIGGER IF NOT EXISTS "trg_no_borrar_{tabla}" '
+                    f'BEFORE DELETE ON "{tabla}" '
+                    f"BEGIN SELECT RAISE(ABORT, '{mensaje}'); END")
+            cur.execute(
+                'CREATE TRIGGER IF NOT EXISTS "trg_no_borrar_users" '
+                'BEFORE DELETE ON "users" '
+                "BEGIN SELECT RAISE(ABORT, "
+                "'users no admite borrado fisico: los usuarios nunca se eliminan'); END")
+            self.con.commit()
+            cur.close()
+        except Exception as ex:
+            print("Error asegurando triggers anti-DELETE al arranque:", ex)
 
     def _asegurar_secuencias_sin_duplicados(self):
         """E10, hallazgo del ensayo sobre la BD real: `sqlite_sequence`
