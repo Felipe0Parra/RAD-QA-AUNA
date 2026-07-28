@@ -121,13 +121,26 @@ class UsuarioData():
             with con.Conexion().conectar() as db:
                 cursor = db.cursor()
                 encrypted_new_pass = encrypt_data(nueva_pass)
+                # A6.2-bis: el nombre completo se lee ANTES del UPDATE (la
+                # fila existe, `recover_page` ya validó con get_user) para
+                # auditar con la MISMA identidad que el resto del audit_log.
+                cursor.execute("SELECT fullname FROM users WHERE user=?", (usuario,))
+                fila_usuario = cursor.fetchone()
                 cursor.execute("UPDATE users SET password=? WHERE user=?", (encrypted_new_pass, usuario))
                 db.commit()
                 # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): cambio de
                 # contraseña vía recuperación (recover_page.py) -- mismo
                 # archivo que ya audita login/logout, sin rastro hasta
                 # ahora pese a ser un cambio de credencial.
-                _registrar_auditoria(usuario, ACCION_ACTUALIZAR, "users",
+                #
+                # A6.2-bis: antes se auditaba con `usuario` (el nombre de
+                # CUENTA, p.ej. "fparrap"), mientras que el alta y el login
+                # usan el nombre COMPLETO ("Felipe Parra Paez"). En la BD del
+                # rebuild 27-07-2026 eso dejó dos filas de la misma persona
+                # sobre `users` con identidades distintas. Ahora espeja a
+                # add_user: nombre completo en `usuario`, cuenta en `ref`.
+                _registrar_auditoria(fila_usuario[0] if fila_usuario else usuario,
+                                     ACCION_ACTUALIZAR, "users", ref=usuario,
                                      detalle="cambio de contraseña")
                 return True
         except Exception as e:

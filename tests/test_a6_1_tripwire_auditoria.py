@@ -154,27 +154,104 @@ class _EscaneadorFunciones(ast.NodeVisitor):
         self._escanear_funcion(node)
 
 
-def _construir_inventario():
-    """registro[(ruta_relativa_str, qualname)] = {"escribe": bool, "audita": bool}"""
-    inventario = {}
+def _archivos_de_produccion():
     for path in sorted(ROOT.rglob("*.py")):
         rel = path.relative_to(ROOT)
         if any(parte in EXCLUDE_DIRS for parte in rel.parts):
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(rel))
+            arbol = ast.parse(path.read_text(encoding="utf-8"), filename=str(rel))
         except SyntaxError:
             continue
+        yield rel.as_posix(), arbol
+
+
+def _construir_inventario():
+    """registro[(ruta_relativa_str, qualname)] = {"escribe": bool, "audita": bool}"""
+    inventario = {}
+    for rel_str, tree in _archivos_de_produccion():
         alias_registrar = _resolver_alias_registrar(tree)
         escaneador = _EscaneadorFunciones(alias_registrar)
         escaneador.visit(tree)
-        rel_str = rel.as_posix()
         for qualname, info in escaneador.registro.items():
             inventario[(rel_str, qualname)] = info
     return inventario
 
 
 INVENTARIO = _construir_inventario()
+
+
+# ---------------------------------------------------------------------------
+# A6.2-bis -- cadena de IDENTIDAD.
+#
+# A6.1 verificaba que existiera una llamada a `registrar()`, pero no que esa
+# llamada pudiera RESOLVER un usuario. El rebuild del físico (27-07-2026)
+# mostró el agujero: las 3 auditorías del catálogo de equipos llevaban
+# escribiendo `usuario` NULL desde H2.4 porque `Config` nunca recibía
+# `user_id` -- y ningún test lo veía, porque todos inyectan el atributo a
+# mano (ver tests/test_a6_2bis_identidad_llega_al_audit_log.py).
+#
+# Estas dos comprobaciones cierran el hueco por estática, para que A6.3-A6.8
+# no puedan repetir el patrón en las muchas clases que aún les faltan.
+# ---------------------------------------------------------------------------
+def _analizar_identidad():
+    clases = {}          # nombre -> {"archivo", "bases", "asigna_user_id"}
+    audita_con_self = {} # nombre -> [líneas]
+    instanciaciones = {} # nombre -> [(archivo, línea, n_args)]
+
+    for rel_str, tree in _archivos_de_produccion():
+        # Calls que son receptor inmediato de un atributo -- `Klase().metodo()`
+        # es un objeto EFÍMERO usado solo para alcanzar un helper (p.ej.
+        # `PruebaBasico().opeenDatabase()` en load.py); nunca audita, así que
+        # no necesita identidad.
+        efimeros = {id(n.value) for n in ast.walk(tree)
+                    if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Call)}
+
+        for nodo in ast.walk(tree):
+            if isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name):
+                instanciaciones.setdefault(nodo.func.id, []).append(
+                    (rel_str, nodo.lineno, len(nodo.args) + len(nodo.keywords),
+                     id(nodo) in efimeros))
+
+        for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
+            bases = [b.id if isinstance(b, ast.Name)
+                     else (b.attr if isinstance(b, ast.Attribute) else "?")
+                     for b in cls.bases]
+            asigna = any(
+                isinstance(n, ast.Assign) and any(
+                    isinstance(t, ast.Attribute) and t.attr == "user_id"
+                    and isinstance(t.value, ast.Name) and t.value.id == "self"
+                    for t in n.targets)
+                for n in ast.walk(cls))
+            clases[cls.name] = {"archivo": rel_str, "bases": bases,
+                                "asigna_user_id": asigna}
+
+            for n in ast.walk(cls):
+                if not isinstance(n, ast.Call) or not n.args:
+                    continue
+                f = n.func
+                nombre = f.attr if isinstance(f, ast.Attribute) else (
+                    f.id if isinstance(f, ast.Name) else None)
+                if nombre in ("_usuario_actual", "usuario_actual"):
+                    arg0 = n.args[0]
+                    if isinstance(arg0, ast.Name) and arg0.id == "self":
+                        audita_con_self.setdefault(cls.name, []).append(n.lineno)
+
+    return clases, audita_con_self, instanciaciones
+
+
+CLASES, AUDITA_CON_SELF, INSTANCIACIONES = _analizar_identidad()
+
+
+def _cadena_de_herencia(nombre, vistos=None):
+    vistos = vistos if vistos is not None else set()
+    if nombre in vistos or nombre not in CLASES:
+        return []
+    vistos.add(nombre)
+    resultado = [nombre]
+    for base in CLASES[nombre]["bases"]:
+        resultado.extend(_cadena_de_herencia(base, vistos))
+    return resultado
 
 
 # ---------------------------------------------------------------------------
@@ -332,4 +409,56 @@ class TestTripwireAuditoria:
             "este es exactamente el caso que A6.1 debe atrapar:\n" +
             "\n".join(f"  {a} :: {b} -> {reason} ({motivo})"
                       for (a, b), reason, motivo in mal_referenciadas)
+        )
+
+
+class TestCadenaDeIdentidad:
+    """A6.2-bis: no basta con que exista el `registrar()`; tiene que poder
+    resolver QUIÉN lo hizo.
+
+    Verificado revirtiendo el fix: de las dos comprobaciones, **la que atrapa
+    el bug real del catálogo de equipos es la de instanciación** (señala
+    `ui/mainpages.py:461  Config()  <- falta el user_id`). La de herencia es
+    una red más gruesa: solo ve el caso "en toda la cadena nadie asigna
+    `self.user_id` jamás", y NO habría visto el de `Config`, porque
+    `PruebaBasico` sí lo asignaba... pero en `init_data()`, un método que
+    `Config` nunca llama. Afinarla más (exigir la asignación en `__init__`)
+    daría falsos positivos legítimos: `PruebaMensual600` la hace en
+    `preINIGI()`. Se deja así, consciente de su alcance."""
+
+    def test_toda_clase_que_audita_con_self_guarda_su_user_id(self):
+        """`_usuario_actual(self)` lee `self.user_id`. Si ni la clase ni
+        ninguno de sus ancestros lo asigna nunca, la fila sale con NULL."""
+        sin_identidad = []
+        for clase, lineas in sorted(AUDITA_CON_SELF.items()):
+            cadena = _cadena_de_herencia(clase)
+            if not any(CLASES[c]["asigna_user_id"] for c in cadena if c in CLASES):
+                sin_identidad.append((clase, CLASES[clase]["archivo"], lineas, cadena))
+
+        assert not sin_identidad, (
+            "Clase(s) que auditan con `_usuario_actual(self)` pero en cuya "
+            "cadena de herencia NADIE asigna `self.user_id` -- toda fila que "
+            "escriban en audit_log saldrá con `usuario` NULL (el defecto que "
+            "el rebuild del 27-07-2026 destapó en `Config`):\n" +
+            "\n".join(f"  {c} ({arch}) audita en líneas {lns}; cadena: {cad}"
+                      for c, arch, lns, cad in sin_identidad)
+        )
+
+    def test_toda_clase_que_audita_con_self_se_instancia_con_identidad(self):
+        """El otro extremo de la cadena: aunque la clase sepa guardar el
+        `user_id`, si el call-site la construye sin argumentos (`Config()`)
+        la identidad nunca llega. Los objetos efímeros del tipo
+        `Klase().helper()` quedan fuera: no auditan."""
+        sin_argumentos = []
+        for clase in sorted(AUDITA_CON_SELF):
+            for archivo, linea, n_args, efimero in INSTANCIACIONES.get(clase, []):
+                if not efimero and n_args == 0:
+                    sin_argumentos.append((clase, archivo, linea))
+
+        assert not sin_argumentos, (
+            "Instanciación(es) de clases que auditan con su propia identidad, "
+            "hechas SIN pasar el usuario -- la auditoría escribirá `usuario` "
+            "NULL aunque el `registrar()` esté bien puesto:\n" +
+            "\n".join(f"  {archivo}:{linea}  {clase}()  <- falta el user_id"
+                      for clase, archivo, linea in sin_argumentos)
         )

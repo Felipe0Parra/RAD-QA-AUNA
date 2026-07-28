@@ -454,7 +454,11 @@ class MainWindow(QMainWindow):
             modulo = importlib.import_module("ui.paginasGuia.equipos")
             Config = getattr(modulo, "Config")
             #print("✓ Clase 'Config' importada exitosamente desde 'ui.paginasGuia.equipos'")
-            return Config()
+            # A6.2-bis: sin pasar la identidad aquí, las 3 auditorías del
+            # catálogo de equipos quedaban con `usuario` NULL (rebuild del
+            # físico, 27-07-2026). `self.user_id` es el mismo objeto que
+            # reciben las demás pestañas vía Menuu(..., user_id).
+            return Config(self.user_id)
         except Exception as e:
             print(f"✗ Error importando Config: {e}")
             return QWidget()  # Widget vacío como fallback

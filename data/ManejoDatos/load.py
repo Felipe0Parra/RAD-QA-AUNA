@@ -17,6 +17,25 @@ from services.fechas_control import mismo_mes as _mismo_mes
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
+def _dialogo_con_identidad(dlg, parent):
+    """Propaga al diálogo la identidad del físico del formulario que lo abre.
+
+    A6.2-bis (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7 bis). `guardarEdicion` y
+    `eliminarRegistro*` auditan con `_usuario_actual(dlg)`. Cuando los llama
+    el formulario mensual/diario directamente, `dlg` ES el formulario y trae
+    `user_id`; pero los diálogos emergentes de "Ver tabla" creaban un
+    `QDialog(parent)` pelado, así que toda edición o borrado hecho desde ahí
+    quedaba en `audit_log` con `usuario` NULL -- mismo defecto que el rebuild
+    del físico (27-07-2026) destapó en la pestaña Equipos.
+
+    `parent` es siempre el formulario (mensual o anual): los `mostrar_*` lo
+    reciben como primer argumento desde `self`. Devolver el propio `dlg`
+    permite usarlo en línea sobre el `QDialog(...)` ya existente.
+    """
+    dlg.user_id = getattr(parent, "user_id", None)
+    return dlg
+
+
 def guardar_imagen(imagen_path):
     """
     Convierte una imagen en BLOB para guardarla en la base de datos.
@@ -2798,7 +2817,9 @@ def mostrar_analisis_img(parent, id_ref):
     _mostrar_dialogo(parent, headers, data, 1000, 1000, "analisis_placa_franjas", id_ref)
 
 def mostrar_dosimetria(parent, id_ref):
-    dlg = QDialog(parent)
+    # A6.2-bis: este diálogo permite editar (guardarEdicion más abajo) -- sin
+    # la identidad, esa edición se auditaba con `usuario` NULL.
+    dlg = _dialogo_con_identidad(QDialog(parent), parent)
     dlg.setWindowTitle("Dosimetría Mensual")
     grid_layout = QGridLayout(dlg)
 
@@ -3295,7 +3316,10 @@ def mostrar_indc_brazo_HC(parent, id_ref):
 
 " ---------------------------------- Función genérica para mostrar QDialog --------------------------------------- "
 def _mostrar_dialogo(parent, headers, data, w, h, tabla_db=None, id_ref=None):
-    dlg = QDialog(parent)
+    # A6.2-bis: diálogo con botones de editar y eliminar (guardarEdicion /
+    # verificar_eliminar más abajo) -- sin la identidad, ambas acciones se
+    # auditaban con `usuario` NULL.
+    dlg = _dialogo_con_identidad(QDialog(parent), parent)
     dlg.setWindowTitle("Detalle")
     if getattr(sys, 'frozen', False):
         # Ruta dentro del .exe

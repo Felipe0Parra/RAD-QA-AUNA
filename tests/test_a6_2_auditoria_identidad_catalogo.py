@@ -85,7 +85,17 @@ class TestAddUserAudita:
 
 
 class TestUpdatePasswordAudita:
-    def test_cambio_de_contrasena_audita_con_el_usuario(self, bd_temporal):
+    def test_cambio_de_contrasena_audita_con_el_nombre_completo(self, bd_temporal):
+        """A6.2-bis: identidad HOMOGÉNEA con el resto de `audit_log`.
+
+        La primera versión (A6.2) auditaba con el nombre de CUENTA
+        ("ffisico"), porque es el único dato que `update_password` recibe --
+        mientras que `add_user` y `login()` usan el nombre COMPLETO. En la BD
+        del rebuild del físico (27-07-2026) eso dejó dos filas de la misma
+        persona sobre `users` con identidades distintas (id 33 "Felipe Parra
+        Paez" vs id 35 "fparrap"), ilegible en el visor. Ahora espeja a
+        `add_user`: nombre completo en `usuario`, cuenta en `ref`.
+        """
         con = sqlite3.connect(bd_temporal)
         con.execute(
             "INSERT INTO users (user, password, fullname, active, idreal, role) "
@@ -100,7 +110,8 @@ class TestUpdatePasswordAudita:
         filas = _audit_log(bd_temporal)
         assert len(filas) == 1
         usuario, accion, tabla, ref, detalle = filas[0]
-        assert usuario == "ffisico"
+        assert usuario == "Físico de Prueba"
+        assert ref == "ffisico"
         assert accion == "actualizar"
         assert tabla == "users"
         assert "contraseña" in detalle

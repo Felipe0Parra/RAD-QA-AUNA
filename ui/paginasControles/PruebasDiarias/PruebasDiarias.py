@@ -21,6 +21,16 @@ from PyQt5.QtCore import *
 class PruebaBasico(QWidget):
     def __init__(self, user_id=None):
         super(PruebaBasico, self).__init__()
+        # A6.2-bis (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7 bis): este
+        # __init__ ya RECIBÍA user_id pero nunca lo guardaba -- solo
+        # `init_data()` lo asignaba. Las subclases que llaman a init_data
+        # (600/iX/Halcyon/braqui diarios) no notaban nada, pero `Config`
+        # (pestaña Equipos) no la llama nunca, así que sus 3 llamadas de
+        # auditoría escribían `usuario` NULL desde H2.4 -- destapado por el
+        # rebuild del físico del 27-07-2026. Asignarlo aquí es seguro:
+        # verificado que ninguna subclase asigna self.user_id ANTES de
+        # llamar a super().__init__() (lo haría desaparecer).
+        self.user_id = user_id
         self.general_layout = QVBoxLayout()
         self.archivo = None
 

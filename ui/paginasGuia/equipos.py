@@ -24,11 +24,15 @@ class ColoredTableWidgetItem(QTableWidgetItem):
         self.setData(Qt.BackgroundRole, QBrush(bg_color) if bg_color else None)
         self.setData(Qt.ForegroundRole, QBrush(text_color) if text_color else None)
 
-class Config(PruebaBasico):  
-    def __init__(self):
+class Config(PruebaBasico):
+    def __init__(self, user_id=None):
         #print("Config                 __init__ called")
         #print("---------------------------------------------------------------------------------------------")
-        super().__init__()
+        # A6.2-bis: `user_id` es la identidad del físico con sesión abierta,
+        # la que firma las 3 auditorías de este archivo (alta/edición/borrado
+        # del catálogo). Antes no se recibía y `_usuario_actual(self)`
+        # devolvía None -> `usuario` NULL en audit_log.
+        super().__init__(user_id)
         self.iniGUI()
         # Diccionario de vigencias en años según tipo de equipo (V1,
         # PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.5: fuente única en

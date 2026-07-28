@@ -6,6 +6,7 @@ from PyQt5.QtCore import Qt
 import sys
 from pathlib import Path
 from data.ManejoDatos.load import verificar_editar, guardarEdicion, cancelarEdicion, verificar_eliminar
+from data.ManejoDatos.load import _dialogo_con_identidad
 
 # Tablas relacionadas al control para cada equipo
 
@@ -277,7 +278,10 @@ def mostrar_controles_anuales(parent, tableWidget, equipo_filtrar=None):
                 ('medido_inplane', 'Med. Inplane'), ('medido_crossplane', 'Med. Crossplane')])))
     
 def crear_ventanas_emergentes_tablas(self, headers, data, w, h, tabla_db=None, id_ref=None):
-    dlg = QDialog(self)
+    # A6.2-bis: diálogo con editar y eliminar (guardarEdicion /
+    # verificar_eliminar más abajo) -- sin la identidad del formulario anual
+    # que lo abre (`self`), ambas acciones se auditaban con `usuario` NULL.
+    dlg = _dialogo_con_identidad(QDialog(self), self)
     dlg.setWindowTitle("Detalle")
     if getattr(sys, 'frozen', False):
         # Ruta dentro del .exe
