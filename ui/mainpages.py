@@ -16,11 +16,12 @@ except Exception:
         resource_path = getattr(utils, 'resource_path')
     else:
         raise
-import sys, os, shutil, importlib
+import sys, os, importlib
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from data.ManejoDatos.usuariosManager import UsuarioData
 from services.audit_minimo import usuario_actual as _usuario_actual
 from data.ManejoDatos.conection import Conexion, checkpoint_wal
+from services.respaldo import respaldar_bd
 
 class Menuu(QWidget):
     finished = pyqtSignal()
@@ -579,8 +580,6 @@ class MainWindow(QMainWindow):
         layout_barra.addWidget(self.btn_cerrar)
 
     def closeEvent(self, event):
-        print("Guardando datos o haciendo respaldo...")
-        #self.hacer_respaldo()
         # R2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): consolidar el WAL al
         # .db principal antes de cerrar -- si alguien copia/mueve la BD justo
         # después de cerrar la app, el .db por sí solo ya queda completo (sin
@@ -588,31 +587,12 @@ class MainWindow(QMainWindow):
         # bloquea el cierre.
         if Conexion._instance is not None:
             checkpoint_wal(Conexion._instance.con)
+        # E9 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §17): respaldo fechado con
+        # rotación, DESPUÉS del checkpoint para que la copia salga completa.
+        # Best-effort igual que el checkpoint: un fallo avisa por consola y la
+        # app cierra de todas formas.
+        respaldar_bd(usuario=_usuario_actual(self))
         event.accept()
-
-    def hacer_respaldo(self):
-        ruta_bd_red = r"\\VARIANDB\Va_Transfer\BaseDatosQA.db"
-        carpeta_destino_local = os.path.expanduser("~\\Desktop\\BackupsRadioterapia")
-
-        # Verificar que el archivo de origen exista
-        if not os.path.exists(ruta_bd_red):
-            QMessageBox.critical(
-                self,
-                "Error de respaldo",
-                f"No se encontró el archivo de origen:\n{ruta_bd_red}\nLa aplicación se cerrará."
-            )
-            sys.exit(1)
-
-        # Crear carpeta si no existe
-        os.makedirs(carpeta_destino_local, exist_ok=True)
-
-        # Crear nombre con fecha si se desea (se dejó fijo)
-        nombre_backup = "BaseDatosQA.db"
-        destino_backup = os.path.join(carpeta_destino_local, nombre_backup)
-
-        # Copiar
-        shutil.copy(ruta_bd_red, destino_backup)
-        print(f"Copia realizada en: {destino_backup}")
 
 if __name__ == "__main__":
 

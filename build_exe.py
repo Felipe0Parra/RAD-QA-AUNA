@@ -37,6 +37,10 @@ hidden_imports = [
     # desde dialogs/PruebasDiarias; listado por la misma defensa de arriba.
     "ui.util_fechas",
 
+    # E9: respaldo fechado con rotación al cerrar. Import estático desde
+    # ui.mainpages; listado por la misma defensa de arriba.
+    "services.respaldo",
+
     # MODELOS
     "models.PDF.reportes",
 ]
