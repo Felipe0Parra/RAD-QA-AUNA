@@ -102,6 +102,29 @@ def _asegurar_columna(cursor, tabla, columna, ddl):
         cursor.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {ddl}")
 
 
+def _tablas_con_borrado_en_cascada(cur):
+    """Tablas cuyo esquema aún declara la cascada vieja de borrado (ver
+    `_asegurar_fk_on_delete_restrict`) en alguna FK.
+
+    F1 (PLAN_F_CIERRE_ESTANDAR_29-07.md): fuente ÚNICA para dos consumidores
+    que antes podían desincronizarse -- `_asegurar_fk_on_delete_restrict`
+    (que las recrea en RESTRICT) y el respaldo previo a esa recreación (que
+    debe activarse exactamente cuando la primera tiene trabajo que hacer, ni
+    antes ni después). Vacío en cualquier BD ya migrada o nacida del DDL
+    actual (que ya declara RESTRICT) -- ahí ninguno de los dos consumidores
+    hace nada.
+    """
+    pendientes = []
+    for (nombre,) in cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%'").fetchall():
+        for fk in cur.execute(f"PRAGMA foreign_key_list('{nombre}')").fetchall():
+            if fk[6] == "CASCADE":  # on_delete
+                pendientes.append(nombre)
+                break
+    return pendientes
+
+
 class Conexion():
     _instance = None  # Variable de clase para almacenar una única instancia de la conexión
     
@@ -277,6 +300,61 @@ class Conexion():
         except Exception as ex:
             print("Error normalizando sqlite_sequence al arranque:", ex)
 
+    def _respaldar_antes_de_recrear(self, pendientes):
+        """F1 (PLAN_F_CIERRE_ESTANDAR_29-07.md): copia de seguridad ANTES de
+        que `_asegurar_fk_on_delete_restrict` recree tablas. Devuelve True si
+        es seguro proceder con la recreación, False si no.
+
+        Por qué: E9 (respaldo) corre en `closeEvent`, al CERRAR; E10 (la
+        recreación que sigue a esto) corre en `__init_connection`, al ABRIR.
+        Verificado sobre la BD de producción real (2026-07-29): la primera
+        vez que un build nuevo abre un archivo aún en CASCADE, recrea 59
+        tablas antes de que exista ningún respaldo de esa sesión. Un disco
+        que falla a mitad de esa recreación no necesita que nadie dispare un
+        DELETE -- a diferencia del resto del plan (E7/E8), que protege
+        contra acciones de usuario, este es el único paso que se dispara
+        solo, sin que nadie lo pida, la primera vez que se abre una BD vieja.
+
+        DELIBERADAMENTE fundido dentro de `_asegurar_fk_on_delete_restrict`
+        (llamado con la MISMA lista de `pendientes` que esa función ya
+        calculó, en vez de volver a detectarlas) en lugar de un método
+        aparte con una bandera de instancia: una bandera que nadie lee no
+        bloquea nada -- es el mismo defecto que E9 vino a corregir (la app
+        anunciaba un respaldo que no hacía). Aquí no hay bandera: el propio
+        `if not self._respaldar_antes_de_recrear(pendientes): return` es la
+        única puerta hacia la recreación.
+
+        Si el respaldo falla, la migración estructural NO se ejecuta --
+        deliberadamente distinto de E9 (best-effort): no respaldar al cerrar
+        no debe impedir cerrar la app, pero recrear 59 tablas sin una copia
+        previa sí debe evitarse. La app sigue funcionando con el esquema
+        viejo (como ya lo hace hoy) hasta el siguiente arranque. E8 no se ve
+        afectado: sus triggers no dependen de que E10 se haya aplicado, y si
+        E10 llega a aplicarse en un arranque posterior, E8 los repone justo
+        después (mismo orden ya documentado en `__init_connection`).
+        """
+        try:
+            print(f"F1: {len(pendientes)} tablas con borrado en cascada -- "
+                  "respaldando antes de recrear el esquema en RESTRICT...")
+            from services.respaldo import respaldar_bd, carpeta_respaldos
+            checkpoint_wal(self.con)  # R2: el .db solo puede no tener los commits recientes
+            carpeta = os.path.join(carpeta_respaldos(ruta_base_datos()), "pre_migracion")
+            # max_copias por defecto (no 0): _rotar trata max_copias<=0 como
+            # "borrar TODAS las existentes", lo que eliminaría de inmediato
+            # la copia recién creada -- verificado antes de usarlo aquí.
+            destino = respaldar_bd(ruta_origen=ruta_base_datos(),
+                                   carpeta_destino=carpeta)
+            if destino is None:
+                print("F1: el respaldo previo a la migración estructural "
+                      "FALLÓ -- la migración a ON DELETE RESTRICT se "
+                      "posterga al próximo arranque (el esquema actual "
+                      "sigue funcionando).")
+                return False
+            return True
+        except Exception as ex:
+            print("Error en el respaldo previo a la migración estructural:", ex)
+            return False
+
     def _asegurar_fk_on_delete_restrict(self):
         """E10 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §18): migra toda FK
         con borrado en cascada a `ON DELETE RESTRICT`.
@@ -304,19 +382,20 @@ class Conexion():
         propósito: tests/test_e10_restrict.py exige que este archivo no la
         contenga escrita (tripwire para que ninguna tabla nueva la
         reintroduzca), y esta función es precisamente quien la elimina.
+
+        F1 (PLAN_F_CIERRE_ESTANDAR_29-07.md): antes de recrear una sola
+        tabla, `_respaldar_antes_de_recrear` deja una copia de la BD tal
+        como estaba. Si el respaldo falla, esta función no recrea nada ese
+        arranque -- se reintenta en el siguiente.
         """
         _CASCADA = "ON DELETE " + "CASCADE"
         try:
             cur = self.con.cursor()
-            pendientes = []
-            for (nombre,) in cur.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table' "
-                    "AND name NOT LIKE 'sqlite_%'").fetchall():
-                for fk in cur.execute(f"PRAGMA foreign_key_list('{nombre}')").fetchall():
-                    if fk[6] == "CASCADE":  # on_delete
-                        pendientes.append(nombre)
-                        break
+            pendientes = _tablas_con_borrado_en_cascada(cur)
             if not pendientes:
+                cur.close()
+                return
+            if not self._respaldar_antes_de_recrear(pendientes):
                 cur.close()
                 return
             print(f"E10: migrando {len(pendientes)} tablas a ON DELETE RESTRICT...")
