@@ -65,6 +65,18 @@ class UsuarioData():
         _registrar_auditoria(nombre_usuario, ACCION_LOGOUT)
     
     def add_user(self, username: Usuario):
+        # F3 (PLAN_F_CIERRE_ESTANDAR_29-07.md): `fullname` es TEXT UNIQUE,
+        # NO NOT NULL -- admite vacío. Es el destino de 6 FK y la identidad
+        # que queda en audit_log; un usuario sin él es inatribuible de por
+        # vida. La interfaz ya lo exige (register_page.py deshabilita el
+        # botón sin texto), esta guarda es la última línea de defensa para
+        # cualquier otro llamador. Se rechaza en el servicio, no con
+        # NOT NULL en el esquema: eso exigiría recrear `users` (que además
+        # lleva un trigger anti-borrado de E8, que una recreación borraría)
+        # para cerrar un camino que la UI ya bloquea.
+        if not username._nombre or not username._nombre.strip():
+            print("No se agrega el usuario: el nombre completo no puede quedar vacío.")
+            return None
         try:
             with con.Conexion().conectar() as db:  # Cierra la conexión automáticamente
                 cursor = db.cursor()
