@@ -452,3 +452,129 @@ class TestBdYaAlDiaNoReportaCambios:
         resultado = migrar(ruta, aplicar=True)
 
         assert resultado["sentinelas_normalizadas"] == 0
+
+
+def _bd_legada_con_cascada(ruta):
+    """F2 (PLAN_F_CIERRE_ESTANDAR_29-07.md): subconjunto real del esquema
+    PRE-E10, con una FK que SÍ declara borrado en cascada (mismo patrón que
+    test_e10_restrict.py::TestMigracionDeBdLegada) -- `_crear_bd_vieja` de
+    este archivo no tiene ninguna FK, así que nunca ejercita la migración
+    estructural (E10/E8/E6/sqlite_sequence) que F2 debe reportar."""
+    con = sqlite3.connect(ruta)
+    con.executescript("""
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user TEXT UNIQUE, password TEXT, fullname TEXT UNIQUE,
+            active INTEGER, idreal INTEGER, role TEXT, firma BLOB
+        );
+        CREATE TABLE controles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipo TEXT, control TEXT, fecha TEXT,
+            user_id TEXT, user_id_f2 TEXT);
+        CREATE TABLE dosimetriaMen (
+            ref INTEGER, energia TEXT,
+            FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE CASCADE ON UPDATE CASCADE);
+    """)
+    con.execute("INSERT INTO users (user, password, fullname, active) "
+                "VALUES ('admin', 'x', 'Administrador', 1)")
+    con.execute("INSERT INTO controles (equipo, control, fecha) "
+                "VALUES ('Clinac iX', 'Mensual', '01/2026')")
+    con.execute("INSERT INTO dosimetriaMen (ref, energia) VALUES (1, '6mv')")
+    con.commit()
+    con.close()
+
+
+@pytest.fixture
+def bd_legada_con_cascada(tmp_path):
+    ruta = str(tmp_path / "legada_cascada.db")
+    _bd_legada_con_cascada(ruta)
+    return ruta
+
+
+class TestCambiosEstructuralesReportadosF2:
+    """F2: antes, recrear tablas a RESTRICT, crear triggers anti-borrado y
+    asignar roles ocurría en silencio -- el reporte no lo mencionaba en
+    ningún lado. Esta clase fija que el reporte SÍ lo cuenta."""
+
+    def test_dry_run_reporta_migracion_a_restrict_y_triggers(
+            self, bd_legada_con_cascada, capsys):
+        migrar(bd_legada_con_cascada, aplicar=False)
+        salida = capsys.readouterr().out
+        assert "Cambios estructurales" in salida
+        assert "dosimetriaMen" in salida.split("Cambios estructurales")[1]
+        assert "trg_no_borrar_controles" in salida
+        assert "Roles de sistema asignados" in salida
+
+    def test_dry_run_no_modifica_nada_pese_a_reportarlo(
+            self, bd_legada_con_cascada):
+        con = sqlite3.connect(bd_legada_con_cascada)
+        acciones_antes = {fk[6] for fk in con.execute(
+            "PRAGMA foreign_key_list('dosimetriaMen')").fetchall()}
+        con.close()
+
+        migrar(bd_legada_con_cascada, aplicar=False)
+
+        con = sqlite3.connect(bd_legada_con_cascada)
+        acciones_despues = {fk[6] for fk in con.execute(
+            "PRAGMA foreign_key_list('dosimetriaMen')").fetchall()}
+        con.close()
+        assert acciones_antes == acciones_despues == {"CASCADE"}
+
+    def test_aplicar_migra_de_verdad_y_lo_reporta(
+            self, bd_legada_con_cascada, capsys):
+        migrar(bd_legada_con_cascada, aplicar=True)
+        salida = capsys.readouterr().out
+        assert "Tablas migradas de borrado en cascada a RESTRICT" in salida
+        assert "Triggers anti-borrado creados" in salida
+        assert "Filas duplicadas de sqlite_sequence normalizadas" not in salida  # no había ninguna
+
+        con = sqlite3.connect(bd_legada_con_cascada)
+        acciones = {fk[6] for fk in con.execute(
+            "PRAGMA foreign_key_list('dosimetriaMen')").fetchall()}
+        con.close()
+        assert acciones == {"RESTRICT"}
+
+    def test_segunda_corrida_no_repite_los_cambios_estructurales(
+            self, bd_legada_con_cascada, capsys):
+        migrar(bd_legada_con_cascada, aplicar=True)
+        capsys.readouterr()  # descarta la salida de la primera corrida
+
+        migrar(bd_legada_con_cascada, aplicar=True)
+        salida = capsys.readouterr().out
+        assert "sin cambios estructurales -- la base ya estaba al día" in salida
+
+    def test_censo_completo_cubre_todas_las_tablas_no_solo_las_6_de_qc(
+            self, bd_legada_con_cascada, capsys):
+        resultado = migrar(bd_legada_con_cascada, aplicar=True)
+        salida = capsys.readouterr().out
+        assert "Censo completo" in salida
+        assert "users" in resultado["censo_despues"]  # fuera de TABLAS_QC
+        assert "dosimetriaMen" in resultado["censo_despues"]  # dentro de TABLAS_QC
+        assert len(resultado["censo_despues"]) >= 3
+
+
+class TestCensoCompletoDetectaPerdidaFueraDeQc:
+    """Prueba unitaria directa: `_reportar_censo_completo` es la red de
+    seguridad para las ~63 tablas que `_reportar_qc` no vigila. No hay forma
+    natural de inducir una pérdida real vía `migrar()` (es puramente
+    aditiva) -- se ejercita la función directamente, como exige verificar
+    que la alarma SÍ se dispara y no solo que nunca se dispara."""
+
+    def test_una_tabla_fuera_de_qc_que_pierde_filas_dispara_la_alarma(self):
+        from scripts.migrar_bd_a_estandar import _reportar_censo_completo
+
+        antes = {"users": 7, "equipos": 39, "controles": 24}
+        despues = {"users": 7, "equipos": 38, "controles": 24}  # equipos perdió 1
+
+        perdida = _reportar_censo_completo(antes, despues)
+
+        assert perdida is True
+
+    def test_ninguna_perdida_no_dispara_la_alarma(self):
+        from scripts.migrar_bd_a_estandar import _reportar_censo_completo
+
+        antes = {"users": 7, "equipos": 39}
+        despues = {"users": 7, "equipos": 39}
+
+        assert _reportar_censo_completo(antes, despues) is False

@@ -24,9 +24,18 @@ perder ni un registro de QC**.
    se reporta para revisión. Nunca borra una fila.
 4. **Limpieza del dato histórico** `' ---- '` en el segundo físico de los
    controles (pasa a vacío/NULL, que es lo correcto).
-5. **Verificación y reporte**: integridad antes/después, conteo de cada
-   tabla de QC antes/después (deben ser idénticos), y detalle de todo lo que
-   cambió. Todo queda además registrado en el `audit_log` de la propia BD.
+5. **Blindaje estructural** (si la BD viene de antes de esto): migra toda
+   FK con borrado en cascada a `RESTRICT`, crea los triggers que impiden
+   borrar físicamente `controles`/`TipoCalibracion`/`LinealidadBraquiterapia`/
+   `users`, asigna los roles de sistema (admin/jefe/físico) y normaliza
+   cualquier fila duplicada de `sqlite_sequence`. El reporte lo cuenta
+   explícitamente en **"Cambios estructurales"** — antes esto ocurría en
+   silencio.
+6. **Verificación y reporte**: integridad antes/después, conteo de cada
+   tabla de QC antes/después (deben ser idénticos), **censo de las 69
+   tablas** (no solo las de QC) para confirmar que ninguna perdió filas, y
+   detalle de todo lo que cambió. Todo queda además registrado en el
+   `audit_log` de la propia BD.
 
 ## Qué NO hace
 
@@ -57,8 +66,14 @@ solo MUESTRA lo que haría. Revise el reporte:
   En una copia del linaje de producción lo normal es ver las correcciones de
   los certificados. Si aparece **"saltadas por deriva"**, esas filas NO se
   tocarán — anote los id y consúltelo antes de continuar.
-- **"Registros de QC preservados"**: los conteos deben ser IDÉNTICOS a
-  ambos lados de la flecha.
+- **"Cambios estructurales"**: si la BD venía en el formato viejo (borrado
+  en cascada), aquí se listan las tablas que pasan a RESTRICT, los triggers
+  anti-borrado creados y los roles asignados. Es esperado que aparezca en
+  la primera corrida de una BD vieja; en corridas siguientes debe decir
+  "sin cambios estructurales".
+- **"Registros de QC preservados"** y **"Censo completo"**: los conteos
+  deben ser IDÉNTICOS a ambos lados de la flecha, en las 69 tablas, no solo
+  las destacadas.
 
 ### Paso 2 — Aplicar
 

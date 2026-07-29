@@ -153,6 +153,93 @@ def _reportar_qc(qc_antes, qc_despues):
     return perdida
 
 
+def _contar_todas_las_tablas(con):
+    """F2 (PLAN_F_CIERRE_ESTANDAR_29-07.md): censo de TODAS las tablas, no
+    solo las 6 de TABLAS_QC -- con la migración estructural (E10) recreando
+    hasta 59 tablas en una sola corrida, limitar la vigilancia de "ninguna
+    fila perdida" a 6 dejaba las otras 63 sin comprobar."""
+    tablas = [r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%'").fetchall()]
+    conteos = {}
+    for tabla in tablas:
+        try:
+            conteos[tabla] = con.execute(f'SELECT COUNT(*) FROM "{tabla}"').fetchone()[0]
+        except sqlite3.OperationalError:
+            conteos[tabla] = 0
+    return conteos
+
+
+def _reportar_censo_completo(censo_antes, censo_despues):
+    """Extiende la garantía de `_reportar_qc` (que solo vigila las 6 tablas
+    destacadas) a TODAS las demás. Devuelve True si alguna tabla (fuera de
+    las ya destacadas en 'Registros de QC preservados') perdió filas."""
+    otras = sorted(set(censo_despues) - set(TABLAS_QC))
+    perdida = [(t, censo_antes.get(t, 0), censo_despues[t])
+               for t in otras if censo_despues[t] < censo_antes.get(t, 0)]
+    print(f"\n--- Censo completo ({len(censo_despues)} tablas revisadas) ---")
+    if perdida:
+        print("  ALERTA -- estas tablas (fuera de las destacadas arriba) "
+              "PERDIERON filas:")
+        for tabla, antes, despues in perdida:
+            print(f"    {tabla}: {antes} -> {despues}  <<< PERDIDA DE REGISTROS")
+    else:
+        print(f"  Las {len(otras)} tablas restantes conservan sus conteos "
+              "(ninguna perdió filas).")
+    return bool(perdida)
+
+
+def _inventario_estructural(con):
+    """F2: estado de las cuatro migraciones estructurales de PLAN_E, para
+    poder diffear antes/después y reportar lo que antes quedaba en silencio
+    (recrear 59 tablas sin decir que las recreó)."""
+    from data.ManejoDatos.conection import _tablas_con_borrado_en_cascada
+    cascada = set(_tablas_con_borrado_en_cascada(con.cursor()))
+    triggers = set(r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='trigger'").fetchall())
+    try:
+        roles = dict(con.execute(
+            "SELECT rol_sistema, COUNT(*) FROM users GROUP BY rol_sistema"
+        ).fetchall())
+    except sqlite3.OperationalError:
+        roles = {}
+    try:
+        seq_dup = con.execute(
+            "SELECT COUNT(*) FROM (SELECT name FROM sqlite_sequence "
+            "GROUP BY name HAVING COUNT(*) > 1)").fetchone()[0]
+    except sqlite3.OperationalError:
+        seq_dup = 0
+    return {"cascada": cascada, "triggers": triggers, "roles": roles, "seq_dup": seq_dup}
+
+
+def _reportar_cambios_estructurales(est_antes, est_despues):
+    """F2: antes, recrear 59 tablas a RESTRICT y crear triggers anti-borrado
+    no aparecía en ningún lado del reporte -- el físico no tenía forma de
+    saber, leyendo la salida, que eso había ocurrido."""
+    print("\n--- Cambios estructurales ---")
+    migradas = sorted(est_antes["cascada"] - est_despues["cascada"])
+    if migradas:
+        print(f"  Tablas migradas de borrado en cascada a RESTRICT: {len(migradas)}")
+        for tabla in migradas:
+            print(f"    {tabla}")
+
+    triggers_nuevos = sorted(est_despues["triggers"] - est_antes["triggers"])
+    if triggers_nuevos:
+        print(f"  Triggers anti-borrado creados: {triggers_nuevos}")
+
+    if est_despues["roles"] and est_despues["roles"] != est_antes["roles"]:
+        print(f"  Roles de sistema asignados: {est_despues['roles']}")
+
+    if est_antes["seq_dup"] and not est_despues["seq_dup"]:
+        print(f"  Filas duplicadas de sqlite_sequence normalizadas: "
+              f"{est_antes['seq_dup']} tabla(s)")
+
+    if not (migradas or triggers_nuevos
+            or (est_despues["roles"] and est_despues["roles"] != est_antes["roles"])
+            or (est_antes["seq_dup"] and not est_despues["seq_dup"])):
+        print("  (sin cambios estructurales -- la base ya estaba al día)")
+
+
 def _contar_catalogos_base(con):
     """INSERT-audit (§8): estos 4 catálogos nunca se sembraban desde el
     código (solo se creaban vacíos) -- reportar cuántas filas tenían antes y
@@ -282,6 +369,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         sentinelas_antes = _contar_centinela(con_antes)
         catalogos_antes = _contar_catalogos_base(con_antes)
         qc_antes = _contar_qc(con_antes)
+        censo_antes = _contar_todas_las_tablas(con_antes)
+        estructural_antes = _inventario_estructural(con_antes)
     finally:
         con_antes.close()
 
@@ -304,16 +393,21 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                 inventario_despues = _inventario_esquema(con_copia)
                 catalogos_despues = _contar_catalogos_base(con_copia)
                 qc_despues = _contar_qc(con_copia)
+                censo_despues = _contar_todas_las_tablas(con_copia)
+                estructural_despues = _inventario_estructural(con_copia)
             finally:
                 con_copia.close()
         _reportar_diff(inventario_antes, inventario_despues,
                         sentinelas_antes, sentinelas_normalizadas,
                         catalogos_antes, catalogos_despues)
         _reportar_equipos(equipos)
+        _reportar_cambios_estructurales(estructural_antes, estructural_despues)
         _reportar_qc(qc_antes, qc_despues)
+        _reportar_censo_completo(censo_antes, censo_despues)
         return {"aplicado": False, "integridad_antes": integridad_antes,
                 "sentinelas_antes": sentinelas_antes, "equipos": equipos,
-                "qc_antes": qc_antes, "qc_despues": qc_despues}
+                "qc_antes": qc_antes, "qc_despues": qc_despues,
+                "censo_antes": censo_antes, "censo_despues": censo_despues}
 
     if integridad_antes != "ok":
         print(f"ALERTA: integrity_check antes de migrar dio "
@@ -339,6 +433,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         inventario_despues = _inventario_esquema(con_despues)
         catalogos_despues = _contar_catalogos_base(con_despues)
         qc_despues = _contar_qc(con_despues)
+        censo_despues = _contar_todas_las_tablas(con_despues)
+        estructural_despues = _inventario_estructural(con_despues)
     finally:
         con_despues.close()
 
@@ -347,7 +443,9 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                     sentinelas_antes, sentinelas_normalizadas,
                     catalogos_antes, catalogos_despues)
     _reportar_equipos(equipos)
+    _reportar_cambios_estructurales(estructural_antes, estructural_despues)
     hubo_perdida_qc = _reportar_qc(qc_antes, qc_despues)
+    hubo_perdida_censo = _reportar_censo_completo(censo_antes, censo_despues)
 
     if integridad_despues != "ok":
         print(f"ALERTA: integrity_check después de migrar dio "
@@ -356,12 +454,12 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
               f"este archivo.")
         sys.exit(1)
 
-    if hubo_perdida_qc:
+    if hubo_perdida_qc or hubo_perdida_censo:
         # Tripwire defensivo: la migración es puramente aditiva, así que
         # esto no debería poder dispararse jamás -- pero si algún cambio
         # futuro lo rompiera, el físico debe enterarse RUIDOSAMENTE y con la
         # instrucción de restaurar, no por un número menor en una tabla.
-        print(f"\nALERTA GRAVE: algún conteo de QC BAJÓ tras la migración "
+        print(f"\nALERTA GRAVE: algún conteo de fila BAJÓ tras la migración "
               f"(ver arriba). Restaure el backup ({respaldo}) y NO use este "
               f"archivo.")
         sys.exit(1)
@@ -372,7 +470,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             "integridad_despues": integridad_despues,
             "sentinelas_normalizadas": sentinelas_normalizadas,
             "equipos": equipos,
-            "qc_antes": qc_antes, "qc_despues": qc_despues}
+            "qc_antes": qc_antes, "qc_despues": qc_despues,
+            "censo_antes": censo_antes, "censo_despues": censo_despues}
 
 
 def _main():
