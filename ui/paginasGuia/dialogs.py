@@ -653,6 +653,7 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
 from services.nombres_acelerador import mismo_acelerador
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
+from services.etiqueta_equipo import etiqueta_equipo
 from ui.util_fechas import ancho_minimo_fecha  # I5
 from data.ManejoDatos import conection as _conection_mod
 import pandas as pd
@@ -2339,25 +2340,20 @@ class DialogCalculadoraDosis(QDialog):
             self._refrescar_guardia_kq(modelo)
             try:
                 equipos = EquiposService.obtener_series_por_modelo(modelo)
-                
+
                 if equipos:
                     self.combo_series.addItem("-- Seleccione una serie --", None)
 
+                    # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): mismo helper
+                    # que el selector del mensual/TAC -- sin símbolos, y la
+                    # vigencia se deriva contra la fecha de ESTE diálogo
+                    # (self.date_edit, que F5 ya hace heredar del formulario
+                    # mensual cuando se abre desde ahí), nunca contra la
+                    # columna `equipos.vigente` (retirada del contrato en F8).
+                    fecha_referencia = self.date_edit.date()
                     for equipo in equipos:
-                        # 2026-07-09: un mismo número de serie puede repetirse con
-                        # varios factores de calibración (recalibraciones históricas)
-                        # sin nada que los distinga en el desplegable -> se agrega
-                        # la fecha del certificado y si es la calibración vigente.
-                        # .get() defensivo: fixtures de test más viejos no traen
-                        # estas claves y deben seguir mostrando solo "Serie: X".
-                        texto = f"Serie: {equipo['serie']}"
-                        fecha = equipo.get('fecha_calibr')
-                        if fecha:
-                            texto += f" — calibrado {fecha}"
-                        vigente = equipo.get('vigente')
-                        if vigente is not None:
-                            texto += " ✓ vigente" if vigente else " (no vigente)"
-                        self.combo_series.addItem(texto, equipo['id'])
+                        texto, equipo_id = etiqueta_equipo(equipo, fecha_referencia)
+                        self.combo_series.addItem(texto, equipo_id)
 
                     self.combo_series.setEnabled(True)
                 else:

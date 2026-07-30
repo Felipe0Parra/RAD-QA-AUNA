@@ -103,13 +103,15 @@ class TestVigenciaEvaluadaContraLaFechaDelControl:
         )
 
     def test_control_retroactivo_dentro_de_la_ventana_no_marca_vencido(self, app, bd_temporal):
+        # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): el texto ahora lo compone
+        # el helper compartido (services/etiqueta_equipo.py), sin símbolos.
         self._poblar(bd_temporal)
         obj, combo_modelo, combo_serie = _instancia_pelada(QDate(2024, 6, 15))
 
         combo_modelo.setCurrentText("ModeloTest")
 
         texto, tooltip = _texto_y_tooltip(combo_serie, "S1")
-        assert texto == "S1"
+        assert texto == "Serie: S1 — calibrado 10/01/2024"
         assert tooltip == ""
 
     def test_control_con_fecha_posterior_al_vencimiento_marca_vencido(self, app, bd_temporal):
@@ -119,7 +121,7 @@ class TestVigenciaEvaluadaContraLaFechaDelControl:
         combo_modelo.setCurrentText("ModeloTest")
 
         texto, tooltip = _texto_y_tooltip(combo_serie, "S1")
-        assert texto == "⚠️S1"
+        assert texto == "Serie: S1 — calibrado 10/01/2024 (vencida)"
         assert "vencida" in tooltip.lower()
 
     def test_sin_date_box_cae_a_hoy_sin_reventar(self, app, bd_temporal):
@@ -153,7 +155,7 @@ class TestVigenteHoySigueMostrandoseVigente:
         combo_modelo.setCurrentText("ModeloTest")
 
         texto, tooltip = _texto_y_tooltip(combo_serie, "S2")
-        assert texto == "S2"
+        assert texto == "Serie: S2 — calibrado 01/01/2026"
         assert tooltip == ""
 
 

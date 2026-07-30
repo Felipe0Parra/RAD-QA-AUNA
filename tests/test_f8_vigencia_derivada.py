@@ -196,12 +196,10 @@ class TestTripwireNingunModuloLeeEquiposVigente:
        `r[12]`/`equipo[12]`) y uno que sí la lee para CONSERVARLA sin
        cambios como dato histórico inerte (`guardarCambios`, F8 punto 3).
     2. Acceso por clave: `.get('vigente')`/`['vigente']` sobre un dict de
-       EquiposService. El único sitio conocido es `dialogs.py` (calculadora,
-       K-fix.4) -- ya inofensivo (la clave nunca llega, `obtener_series_por_
-       modelo` ya no la expone) pero migrarlo de verdad es F9 (§9, punto 2
-       del plan), no F8. Marcado explícito como PENDIENTE-F9: si aparece en
-       CUALQUIER otro archivo, o si desaparece de dialogs.py sin que se
-       actualice esta lista, el test debe fallar.
+       EquiposService. El único sitio conocido era `dialogs.py` (calculadora,
+       K-fix.4) -- F9 (§9 punto 2 del plan) ya lo migró al helper
+       `services/etiqueta_equipo.py`, así que la allowlist queda vacía: si
+       aparece en CUALQUIER archivo de producción, el test debe fallar.
     """
 
     ROOT = Path(__file__).resolve().parent.parent
@@ -213,9 +211,7 @@ class TestTripwireNingunModuloLeeEquiposVigente:
     SQL_PERMITIDO = {
         "ui/paginasGuia/equipos.py",
     }
-    ACCESO_POR_CLAVE_PENDIENTE_F9 = {
-        "ui/paginasGuia/dialogs.py",
-    }
+    ACCESO_POR_CLAVE_PENDIENTE_F9 = set()
 
     def _archivos_produccion(self):
         for path in sorted(self.ROOT.rglob("*.py")):

@@ -423,15 +423,20 @@ class TestEtiquetaSerieCalibracion:
         assert d.combo_series.itemText(1) == "Serie: 1825"
 
     def test_combo_series_muestra_fecha_y_vigente(self, dialogo, monkeypatch):
+        # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): sin símbolos -- la
+        # vigencia se deriva con es_vigente_en_fecha contra self.date_edit
+        # (hoy, en este fixture), no contra una columna `vigente` que ya no
+        # llega en el dict (retirada del contrato en F8). 16/03/2026 + 2
+        # años sigue vigente hoy; 05/02/2024 + 2 años ya venció en 02/2026.
         equipos_n31010 = [
             {"id": 76, "equip_type": "Cámara de ionización", "model": "N31010",
              "serie": "1825", "calibr_fact": 0.3045, "t_cal": 22.0,
              "p_cal": 101.325, "h_cal": 50.0,
-             "fecha_calibr": "16/03/2026", "vigente": 1.0},
+             "fecha_calibr": "16/03/2026"},
             {"id": 5, "equip_type": "Cámara de ionización", "model": "N31010",
              "serie": "1825", "calibr_fact": 0.3034, "t_cal": 20.9,
              "p_cal": 98.97, "h_cal": 33.0,
-             "fecha_calibr": "05/02/2024", "vigente": 0.0},
+             "fecha_calibr": "05/02/2024"},
         ]
         monkeypatch.setattr(
             dialogs_mod.EquiposService, "obtener_series_por_modelo",
@@ -440,8 +445,8 @@ class TestEtiquetaSerieCalibracion:
         d = dialogo
         idx = d.combo_modelos.findData("N31010")
         d.combo_modelos.setCurrentIndex(idx)
-        assert d.combo_series.itemText(1) == "Serie: 1825 — calibrado 16/03/2026 ✓ vigente"
-        assert d.combo_series.itemText(2) == "Serie: 1825 — calibrado 05/02/2024 (no vigente)"
+        assert d.combo_series.itemText(1) == "Serie: 1825 — calibrado 16/03/2026"
+        assert d.combo_series.itemText(2) == "Serie: 1825 — calibrado 05/02/2024 (vencida)"
         # Los ids distintos siguen siendo la data real del combo (para poder
         # elegir cuál certificado usar, aunque el número de serie se repita).
         assert d.combo_series.itemData(1) == 76

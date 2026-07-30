@@ -25,6 +25,8 @@ from services.audit_minimo import ACCION_GUARDAR
 from services.fechas_control import mismo_mes as _mismo_mes
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from services.vigencia_equipo import es_vigente_en_fecha
+from services.etiqueta_equipo import etiqueta_equipo
+from services.equipos_service import EquiposService
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 from services.MLCs_calibration_service import (
@@ -2657,11 +2659,19 @@ class PruebaMensual600(PruebaBasico):
     @lru_cache(maxsize=30)
     def obtenerSeriesConVigencia(self, modelo):
         """
-        Obtiene las series de un modelo específico con fecha_calibr/equip_type
-        (V1, PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.5: para que
-        setEquipoSeleccionado pueda evaluar vigencia contra la fecha del
-        CONTROL en vez del flag `vigente` congelado en la columna) y estado
-        activo (optimizado con caché).
+        Obtiene, para un modelo, UNA FILA POR CALIBRACIÓN ACTIVA (id, serie,
+        fecha_calibr, equip_type) -- optimizado con caché.
+
+        F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.3/§9): antes colapsaba a una
+        fila por SERIE (`MAX(id) GROUP BY serie`), lo que (a) escondía
+        calibraciones históricas todavía en uso -- caso real: A092535
+        conserva activas la calibración de 2022 Y la de 2025, para
+        reproducir un control retroactivo con los parámetros que el equipo
+        tenía entonces -- y (b) podía colapsar a un duplicado `activo=0` de
+        H2.6 y hacer desaparecer la serie ENTERA del selector (medido: 3
+        series reales invisibles en el mensual). Ahora se listan todas las
+        filas `activo=1` sin colapsar nada; `setEquipoSeleccionado` calcula
+        la vigencia de cada una contra la fecha del control (V1).
         """
         if not modelo or modelo == "Seleccionar...":
             return []
@@ -2675,35 +2685,23 @@ class PruebaMensual600(PruebaBasico):
         try:
             conn = self.db_manager.obtener_conexion()
             cursor = conn.cursor()
-            series_data = []
 
-            # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md SS8.4): ya no se selecciona
-            # `vigente` -- columna congelada, retirada del contrato; V1 ya
-            # calculaba la vigencia con `es_vigente_en_fecha` y la dejaba sin
-            # usar (variable muerta). El colapso a una fila por serie
-            # (MAX(id) GROUP BY serie) sigue igual: su rediseño es F9.
             cursor.execute("""
-                SELECT serie, activo, fecha_calibr, equip_type
+                SELECT id, serie, fecha_calibr, equip_type
                 FROM equipos
-                WHERE model = ?
-                AND id IN (
-                    SELECT MAX(id) FROM equipos GROUP BY serie
-                )
-                ORDER BY serie
+                WHERE model = ? AND activo = 1
+                ORDER BY serie, id DESC
             """, (modelo,))
-            
-            rows = cursor.fetchall()
-            for row in rows:
-                if row:  # Verificar que la fila no esté vacía
-                    series_data.append(row)
-            
+
+            series_data = [row for row in cursor.fetchall() if row]
+
             # Guardar en caché local
             if not hasattr(self, '_series_cache'):
                 self._series_cache = {}
             self._series_cache[cache_key] = series_data
-            
+
             return series_data
-            
+
         except sqlite3.Error as e:
             print(f"Error de BD en obtenerSeriesConVigencia: {e}")
             return []
@@ -2764,24 +2762,28 @@ class PruebaMensual600(PruebaBasico):
         sender_combo = self.sender()
         index = self.commenu.index(sender_combo)
         modelo = sender_combo.currentText()
-        
+
         # Habilitar el siguiente combobox
         next_combo = self.commenu[index + 1]
         next_combo.setEnabled(True)
-        
+
         # Bloquear señales para evitar que al limpiar y agregar items se emitan eventos
         next_combo.blockSignals(True)
         next_combo.clear()
-        
-        # Obtener series activas con información de vigencia
-        series_data = self.obtenerSeriesConVigencia(modelo)
-        series_activas = []
-        series_no_vigentes = []
 
-        # V1 (PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.5): la vigencia se evalúa
+        # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): una entrada por
+        # CALIBRACIÓN activa (ya no una por serie) -- igual que la
+        # calculadora (K-fix.4). El combo guarda el id del equipo en
+        # `currentData()`; `setCalibracion` resuelve el factor por ese id,
+        # nunca por texto (elimina el `set()+lista[0]` no determinista de
+        # `buscarModeloActivo`, R3 del plan). Una calibración vencida se
+        # MUESTRA y se puede elegir (uso retroactivo, A092535); solo
+        # desaparece si el equipo está `activo=0`.
+        series_data = self.obtenerSeriesConVigencia(modelo)
+
+        # V1 (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.5): la vigencia se evalúa
         # contra la fecha del CONTROL que se está llenando (self.date_box),
-        # no contra el flag `vigente` congelado en la BD (que se calculó una
-        # sola vez, con la fecha de ESE momento) ni contra hoy -- así un
+        # no contra hoy ni contra ninguna columna congelada -- así un
         # control retroactivo con fecha pasada no marca "vencido" un equipo
         # que sí estaba vigente en esa fecha. No escribe nada en `equipos`.
         fecha_referencia = (
@@ -2789,53 +2791,41 @@ class PruebaMensual600(PruebaBasico):
             else QDate.currentDate()
         )
 
-        for serie, activo, fecha_calibr, equip_type in series_data:
-            if activo == 1:  # Solo equipos activos
-                series_activas.append(serie)
-                if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
-                    series_no_vigentes.append(serie)
-
-        series_activas.insert(0, 'Seleccionar...')
-        next_combo.addItems(series_activas)
-        
-        # Marcar en rojo los equipos no vigentes
-        for serie in series_no_vigentes:
-            index_serie = next_combo.findText(serie)
-            if index_serie != -1:
-                item = next_combo.model().item(index_serie)
-                item.setForeground(QColor(255, 0, 0))  # Texto rojo
-                item.setText(f"⚠️{serie}")  # Agregar indicador visual
-                item.setToolTip("⚠️ Calibración vencida - Requiere recalibración")
+        next_combo.addItem('Seleccionar...', None)
+        for eq_id, serie, fecha_calibr, equip_type in series_data:
+            equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
+                     "equip_type": equip_type}
+            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
+            next_combo.addItem(texto, eq_id)
+            if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
+                item = next_combo.model().item(next_combo.count() - 1)
+                item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
+                item.setToolTip("Calibración vencida - Requiere recalibración")
         next_combo.blockSignals(False)
-        
+
         # Configurar el QLineEdit siguiente
         self.commenu[index + 2].setReadOnly(True)
     
     def setCalibracion(self):
-        #print('entro a calibracion')
+        # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9, R3): el factor se
+        # resuelve por el ID del equipo guardado en `currentData()`, nunca
+        # por el texto de la serie -- antes `buscarModeloActivo('serie',
+        # 'calibr_fact', modelo)` devolvía un `set()` y tomaba `lista[0]`
+        # (orden arbitrario) confiando en que el colapso MAX(id) GROUP BY
+        # serie garantizara un único valor; al levantar ese colapso (F9,
+        # una fila por calibración activa) una misma serie puede tener
+        # varios factores reales y el `set()` habría escrito el que fuera.
         sender = self.sender()
-        # Obtén el índice del combobox en la lista
         index = self.commenu.index(sender)
-        # Busca el valor de calibración asociada a esa serie
-        modelo = sender.currentText()
-        
-        # Limpiar el texto si contiene el marcador de vencido
-        if "⚠️" in modelo:
-            modelo = modelo.replace("⚠️", "").strip()
-        if "(VENCIDO)" in modelo:
-            modelo = modelo.replace("(VENCIDO)", "").strip()
-        
-        if modelo == 'Seleccionar...':
-            #print('retorno')
-            return 
-        #calibracion = self.buscarCalibracion(serie_text)
-        # Asigna el valor al QLineEdit siguiente (posición idx+1)
-        #self.commenu[idx + 1].setText(str(calibracion))
-        lista = self.buscarModeloActivo('serie', 'calibr_fact', modelo)
-        #print(lista)
-        lista = list(lista)
-        str2 = str(lista[0])
-        self.commenu[index + 1].setText(str2)
+        equipo_id = sender.currentData()
+
+        if equipo_id is None:
+            return
+
+        equipo = EquiposService.obtener_por_id(equipo_id)
+        if equipo is None:
+            return
+        self.commenu[index + 1].setText(str(equipo["calibr_fact"]))
     
     def botonescombobox(self, categoria, combobox=None, combos_seguridad=None):
         #print(f"\n ~~~~~~ Entra a botonescombobox en la clase: {self.__class__.__name__}~~~~~~")
@@ -2915,9 +2905,22 @@ class PruebaMensual600(PruebaBasico):
 
     def subirtodo_modificado(self, datos):
         """
-        Versión optimizada para insertar datos de equipos con transacciones agrupadas
+        Versión optimizada para insertar datos de equipos con transacciones agrupadas.
         Para cada grupo de 3 elementos en datos (model, serie, calibr_fact),
-        busca en la tabla 'equipos' y luego inserta en equipos_mensual.
+        resuelve la fila real en la tabla 'equipos' e inserta en
+        'equipos_medicion' (el docstring decía "equipos_mensual" -- tabla
+        distinta que no es esta; corregido, F9).
+
+        F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): `serie`/`fecha_calibr`/
+        `equip_type` se resuelven por el ID del equipo elegido
+        (`self.commenu[base+1].currentData()`, la MISMA lista de widgets
+        que `combo_menu` -- ver `controlTestWindow`), nunca por el texto
+        del combo de serie: desde F9 ese texto incluye
+        "— calibrado dd/mm/aaaa" y, si aplica, "(vencida)"; usarlo tal cual
+        habría guardado la etiqueta completa como si fuera la serie.
+        También guarda `equipo_id` -- puntero de trazabilidad hacia el
+        catálogo (mismo patrón que `calculadora_dosimetrica.equipo_id`
+        desde B3).
         """
 
         if hasattr(self, "esIX") and self.esIX:
@@ -2948,47 +2951,50 @@ class PruebaMensual600(PruebaBasico):
                     tipo_camara = ('Principal' if base == 0 else 'Secundaria' if base == 3 else 'Electrómetro')
                 try:
                     model = datos[base] if base < len(datos) else ""
-                    serie = datos[base + 1] if (base + 1) < len(datos) else ""
                     calibr_fact = datos[base + 2] if (base + 2) < len(datos) else ""
-                    
-                    if not all([model, serie, calibr_fact]):
+
+                    # F9: el id del equipo elegido, no su texto -- el mismo
+                    # widget que puso el texto en `datos[base+1]` (commenu
+                    # ES combo_menu, ver controlTestWindow).
+                    serie_widget = (self.commenu[base + 1]
+                                   if (base + 1) < len(self.commenu) else None)
+                    equipo_id = (serie_widget.currentData()
+                                if serie_widget is not None else None)
+
+                    if not model or not calibr_fact or equipo_id is None:
                         print(f"Datos incompletos en grupo {base//3 + 1}")
                         continue
-                    
-                    # Consulta optimizada en la tabla 'equipos'
+
+                    # Resolver serie/fecha_calibr/equip_type por ID -- nunca
+                    # por MAX(id) GROUP BY serie (el colapso que F9 elimina
+                    # en todo el resto del selector) ni por el texto decorado.
                     cursor.execute("""
-                        SELECT fecha_calibr, equip_type 
-                        FROM equipos 
-                        WHERE serie = ? 
-                        AND id = (
-                        SELECT MAX(id) FROM equipos WHERE serie = ?
-                        )
-                    """, (serie, serie))
-                    
+                        SELECT serie, fecha_calibr, equip_type
+                        FROM equipos
+                        WHERE id = ?
+                    """, (equipo_id,))
+
                     resultado = cursor.fetchone()
-                    fecha_calibr, equip_type = resultado if resultado else (None, None)
-                    
-                    # Fallback: Si equip_type es None, determinarlo según el índice del grupo
-                    if equip_type is None:
-                        if hasattr(self, "esIX") and self.esIX:
-                            equip_type = ('Cámara de ionización' if base in [0, 3, 6] else 'Electrómetro')
-                        else:
-                            equip_type = ('Cámara de ionización' if base in [0, 3] else 'Electrómetro')
-                        print(f"Advertencia: equip_type no encontrado para serie {serie}, usando fallback: {equip_type}")
-                    
+                    if resultado is None:
+                        print(f"Advertencia: no se encontró el equipo id={equipo_id} "
+                              f"para el grupo {base//3 + 1}")
+                        continue
+                    serie, fecha_calibr, equip_type = resultado
+
                     # Preparar fila para inserción
-                    fila = (self.ref, tipo_camara, equip_type, model, serie, calibr_fact, fecha_calibr)
+                    fila = (self.ref, tipo_camara, equip_type, model, serie,
+                           calibr_fact, fecha_calibr, equipo_id)
                     filas_a_insertar.append(fila)
-                    
+
                 except (IndexError, ValueError) as e:
                     print(f"Error procesando grupo {base//3 + 1}: {e}")
                     continue
-            
+
             # Inserción por lotes para mejor rendimiento
             if filas_a_insertar:
                 cursor.executemany(f"""
-                    INSERT INTO equipos_medicion (ref, tipo_camara, equip_type, model, serie, calibr_fact, fecha_calibr) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO equipos_medicion (ref, tipo_camara, equip_type, model, serie, calibr_fact, fecha_calibr, equipo_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, filas_a_insertar)
                 
                 cursor.execute("COMMIT")

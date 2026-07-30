@@ -657,6 +657,15 @@ class Conexion():
             # fallaría en una BD fresca al escribir val_teo_calidad.
             _asegurar_columna(cur, "HC_dosimetria_anual", "val_teo_dosis", "REAL")
             _asegurar_columna(cur, "HC_dosimetria_anual", "val_teo_calidad", "REAL")
+            # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9 punto 7): puntero de
+            # trazabilidad hacia el catálogo de equipos -- mismo patrón que
+            # `calculadora_dosimetrica.equipo_id` desde B3. Sin FK declarada
+            # a propósito (el catálogo conserva filas históricas; el id es
+            # un puntero, la copia de datos sigue siendo la fuente para
+            # reproducir el control). Las 55 filas históricas quedan con
+            # `equipo_id = NULL` -- no se rellenan retroactivamente (46 de
+            # 55 no son determinables sin ambigüedad, ver §8.7 del plan).
+            _asegurar_columna(cur, "equipos_medicion", "equipo_id", "INTEGER")
             self.con.commit()
             cur.close()
         except Exception as ex:

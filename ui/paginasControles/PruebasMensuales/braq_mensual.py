@@ -434,32 +434,35 @@ class PruebaMensualBraq(PruebaBasico):
         series_activas = []
         equipos_no_vigentes = []
 
-        # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.4/§9): `vigente` ya no viene
-        # en la fila (columna congelada, retirada del contrato) -- se deriva
-        # aquí contra hoy. F9 la evaluará contra la fecha del formulario.
+        # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9 punto 5): la vigencia se
+        # evalúa contra la fecha del FORMULARIO (self.date_box), no contra
+        # hoy -- mismo criterio que el mensual/TAC (V1).
+        fecha_referencia = (
+            self.date_box.date() if hasattr(self, 'date_box') and self.date_box
+            else QDate.currentDate()
+        )
         for serie, activo, fecha_calibr, equip_type in equipos_data:
             if activo == 1.0:  # Solo equipos activos
                 series_activas.append(serie)
-                if not es_vigente_en_fecha(fecha_calibr, equip_type, QDate.currentDate()):
+                if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
                     equipos_no_vigentes.append(serie)
 
         self.combo_serie.addItems(series_activas)
 
-        # Marcar en rojo los no vigentes y agregar indicador visual
+        # Marcar en rojo los no vigentes, sin símbolos en el texto (F9)
         for serie in equipos_no_vigentes:
             index = self.combo_serie.findText(serie)
             if index != -1:
                 item = self.combo_serie.model().item(index)
                 item.setForeground(QColor(255, 0, 0))  # Poner en rojo
-                #item.setData(Qt.BackgroundRole, QColor(255, 240, 240))  # Fondo ligeramente rojizo
-                item.setText(f"⚠️ {serie} (VENCIDO)")  # Modificar el texto para ser más visible
-                item.setToolTip("⚠️ Calibración vencida - Requiere recalibración")  # Tooltip
+                item.setText(f"{serie} (vencida)")
+                item.setToolTip("Calibración vencida - Requiere recalibración")
 
     def on_serie_pozo_cambio(self, serie):
         """Cuando seleccionan serie de cámara de pozo, llenar valores de calibración"""
         modelo = self.combo_modelo.currentText()
-        if self.combo_serie.currentText().startswith("⚠️"):
-            serie = self.combo_serie.currentText().replace("⚠️ ", "").replace(" (VENCIDO)", "")
+        if self.combo_serie.currentText().endswith(" (vencida)"):
+            serie = self.combo_serie.currentText()[:-len(" (vencida)")]
 
         if not serie or serie == "Seleccionar Serie...":
             return
@@ -488,30 +491,33 @@ class PruebaMensualBraq(PruebaBasico):
         series_activas = []
         equipos_no_vigentes = []
 
-        # F8: `vigente` ya no viene en la fila -- se deriva aquí contra hoy.
+        # F9: vigencia contra la fecha del formulario (self.date_box).
+        fecha_referencia = (
+            self.date_box.date() if hasattr(self, 'date_box') and self.date_box
+            else QDate.currentDate()
+        )
         for serie, activo, fecha_calibr, equip_type in equipos_data:
             if activo == 1.0:  # Solo equipos activos
                 series_activas.append(serie)
-                if not es_vigente_en_fecha(fecha_calibr, equip_type, QDate.currentDate()):
+                if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
                     equipos_no_vigentes.append(serie)
 
         self.combo_serie_elec.addItems(series_activas)
 
-        # Marcar en rojo los no vigentes y agregar indicador visual
+        # Marcar en rojo los no vigentes, sin símbolos en el texto (F9)
         for serie in equipos_no_vigentes:
             index = self.combo_serie_elec.findText(serie)
             if index != -1:
                 item = self.combo_serie_elec.model().item(index)
                 item.setForeground(QColor(255, 0, 0))  # Poner en rojo
-                #item.setData(Qt.BackgroundRole, QColor(255, 240, 240))  # Fondo ligeramente rojizo
-                item.setText(f"⚠️ {serie} (VENCIDO)")  # Modificar el texto para ser más visible
-                item.setToolTip("⚠️ Calibración vencida - Requiere recalibración")  # Tooltip
+                item.setText(f"{serie} (vencida)")
+                item.setToolTip("Calibración vencida - Requiere recalibración")
 
     def on_serie_elec_cambio(self, serie):
         """Cuando seleccionan serie de electrómetro, llenar factor de calibración"""
         modelo = self.combo_modelo_elec.currentText()
-        if self.combo_serie_elec.currentText().startswith("⚠️"):
-            serie = self.combo_serie_elec.currentText().replace("⚠️ ", "").replace(" (VENCIDO)", "")
+        if self.combo_serie_elec.currentText().endswith(" (vencida)"):
+            serie = self.combo_serie_elec.currentText()[:-len(" (vencida)")]
         if not serie or serie == "Seleccionar Serie...":
             return
 
@@ -978,7 +984,11 @@ class PruebaMensualBraq(PruebaBasico):
 
     """Carga los datos de los equipos del último de cambio de funte y los muestra en los campos correspondientes predeterminados                                                                                        """
     def _limpiar_serie(self, texto):
-        return texto.replace("⚠️ ", "").replace(" (VENCIDO)", "").strip()
+        # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): sin símbolos -- el
+        # marcador de vencida ahora es "{serie} (vencida)" en minúsculas.
+        if texto.endswith(" (vencida)"):
+            texto = texto[:-len(" (vencida)")]
+        return texto.strip()
     def cargar_datos_equipos(self):
         #print("Entra a cargar_datos_equipos de la clase PruebaMensualBraq")
         
