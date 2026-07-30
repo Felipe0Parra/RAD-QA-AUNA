@@ -775,6 +775,23 @@ class Config(PruebaBasico):
         # servicios (nadie la lee para decidir ni mostrar). Se conserva el
         # valor histórico tal cual estaba, como dato inerte.
         vigente = datos_originales[12]
+        activo_original = datos_originales[11]
+
+        # F7 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.2/§9): reactivar un equipo
+        # (activo 0->1) exige autorización de administrador -- mismo gate
+        # que E2 puso en la anulación (DialogAdminPermisoEliminar ya valida
+        # login + es_admin_equivalente() por dentro, y audita el intento
+        # denegado). Es un flujo LEGÍTIMO y previsto (§8.3: llenar controles
+        # de años anteriores con los parámetros de entonces), no una
+        # operación sospechosa -- el gate es decisión explícita del físico;
+        # si con el uso resulta demasiada fricción, lo que se revisa es el
+        # gate, no el flujo. Los demás cambios de la edición siguen con la
+        # reautenticación del propio físico (D1 del Plan E, sin cambios).
+        if activo_original == 0 and activo == 1:
+            dialogo_admin = DialogAdminPermisoEliminar(self.user_id)
+            if dialogo_admin.exec() != QDialog.DialogCode.Accepted:
+                conn.close()
+                return
 
         # Función para comparar valores de forma robusta
         def valores_iguales(nuevo, original):
@@ -829,8 +846,14 @@ class Config(PruebaBasico):
                 hay_cambios = True
                 cambios_detectados.append(f" - {nombre}: '{original}' → '{nuevo}'")
         
-        solo_cambio_activo = (not hay_cambios and not hay_nueva_imagen and activo != datos_originales[11])
-        
+        solo_cambio_activo = (not hay_cambios and not hay_nueva_imagen and activo != activo_original)
+
+        # F7 punto 2: el detalle lleva los valores viejo->nuevo (mismo
+        # formato que guardarEdicion, A3) -- aplica a cualquier cambio de
+        # activo, no solo a la reactivación, porque sin valores el rastro
+        # no permite reconstruir el estado.
+        if activo != activo_original:
+            cambios_detectados.append(f"activo: {int(activo_original)}→{int(activo)}")
 
         if solo_cambio_activo:
             cursor.execute("UPDATE equipos SET activo = ?, vigente = ? WHERE id = ?",
@@ -853,12 +876,12 @@ class Config(PruebaBasico):
         conn.commit()
         conn.close()
 
-        # H2.4: edición de equipo -- detalle distingue el UPDATE de
-        # activo/vigente del INSERT de un nuevo registro de calibración.
+        # H2.4/F7: detalle con los campos cambiados; si `activo` cambió,
+        # incluye el valor viejo->nuevo (punto 2) -- sin eso el rastro no
+        # permite reconstruir el estado (p. ej. una reactivación).
         _registrar_auditoria(
             _usuario_actual(self), ACCION_ACTUALIZAR, "equipos", ref=f"{modelo}/{serie}",
-            detalle=("solo activo/vigente" if solo_cambio_activo
-                     else "; ".join(cambios_detectados)))
+            detalle="; ".join(cambios_detectados))
 
         QMessageBox.information(self, "Éxito", "Los cambios se han guardado correctamente.")
         self.cargartabla()
