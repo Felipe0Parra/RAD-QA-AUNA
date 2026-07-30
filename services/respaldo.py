@@ -76,13 +76,24 @@ def _rotar(carpeta, max_copias):
             print(f"[respaldo] no se pudo rotar {nombre}: {ex}")
 
 
+MOTIVO_CIERRE_APP = "respaldo al cerrar la aplicacion"
+
+
 def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
-                 max_copias=MAX_RESPALDOS):
+                 max_copias=MAX_RESPALDOS, motivo=MOTIVO_CIERRE_APP):
     """Crea una copia fechada de la BD y rota las viejas. Nunca lanza.
 
     Devuelve la ruta de la copia creada, o None si no se pudo (origen
     inexistente, destino no escribible, etc. -- se avisa por consola y se
     sigue: el cierre de la app no debe bloquearse por esto).
+
+    `motivo` (F6, PLAN_F_CIERRE_ESTANDAR_29-07.md): el detalle auditado debe
+    describir el evento REAL que disparó el respaldo -- antes de F6, un
+    respaldo previo a la migración estructural (F1) se auditaba con el texto
+    fijo "respaldo al cerrar la aplicacion", una etiqueta incorrecta para un
+    evento que nada tiene que ver con cerrar la app. Por defecto conserva el
+    texto histórico de E9 (cierre de la app), así que el camino de
+    `MainWindow.closeEvent` no cambia.
     """
     try:
         if ruta_origen is None:
@@ -118,7 +129,7 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
         audit_minimo.registrar(
             usuario, audit_minimo.ACCION_GUARDAR, tabla="backup",
             ref=os.path.basename(destino),
-            detalle=f"respaldo al cerrar la aplicacion: {destino}",
+            detalle=f"{motivo}: {destino}",
             ruta_db=ruta_origen)
         print(f"Respaldo de la base de datos creado en: {destino}")
         return destino

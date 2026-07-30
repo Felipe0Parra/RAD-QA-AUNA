@@ -125,6 +125,22 @@ def _tablas_con_borrado_en_cascada(cur):
     return pendientes
 
 
+MOTIVO_RESPALDO_MIGRACION_ESTRUCTURAL = "respaldo previo a la migracion estructural (E10)"
+
+# F6 (PLAN_F_CIERRE_ESTANDAR_29-07.md): identidad a asociar con el respaldo
+# previo a la migración estructural (F1) cuando quien lo dispara es
+# `scripts/migrar_bd_a_estandar.py`, no la apertura normal de la app.
+#
+# RESTRICCIÓN DURA: None por defecto -- en el arranque normal de la app (sin
+# sesión iniciada) el respaldo se audita con usuario NULL, nunca con una
+# etiqueta de ejecución de terminal. El script es el ÚNICO que la fija, y
+# solo mientras dura su propia llamada a `Conexion()` (mismo patrón de
+# aislamiento por swap+try/finally que ya usa `_aplicar_migracion_en` para
+# `ruta_base_datos`/`Conexion._instance`): jamás debe quedar puesta cuando la
+# app abre el archivo por su cuenta.
+USUARIO_RESPALDO_MIGRACION = None
+
+
 class Conexion():
     _instance = None  # Variable de clase para almacenar una única instancia de la conexión
     
@@ -342,7 +358,9 @@ class Conexion():
             # max_copias por defecto (no 0): _rotar trata max_copias<=0 como
             # "borrar TODAS las existentes", lo que eliminaría de inmediato
             # la copia recién creada -- verificado antes de usarlo aquí.
-            destino = respaldar_bd(ruta_origen=ruta_base_datos(),
+            destino = respaldar_bd(usuario=USUARIO_RESPALDO_MIGRACION,
+                                   motivo=MOTIVO_RESPALDO_MIGRACION_ESTRUCTURAL,
+                                   ruta_origen=ruta_base_datos(),
                                    carpeta_destino=carpeta)
             if destino is None:
                 print("F1: el respaldo previo a la migración estructural "

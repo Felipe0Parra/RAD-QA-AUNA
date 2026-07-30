@@ -48,6 +48,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 CENTINELA_SEGUNDO_FISICO = " ---- "
 
+# F6 (PLAN_F_CIERRE_ESTANDAR_29-07.md): identidad para el respaldo previo a
+# la migración estructural (F1) cuando la dispara ESTE script, en vez de la
+# apertura normal de la app -- nunca un nombre de persona inventado.
+ETIQUETA_EJECUCION_TERMINAL = "ejecucion desde terminal"
+
 CABECERA_SQLITE = b"SQLite format 3\x00"
 
 
@@ -262,8 +267,14 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
 
     instancia_previa = conection_mod.Conexion._instance
     ruta_original = conection_mod.ruta_base_datos
+    usuario_respaldo_previo = conection_mod.USUARIO_RESPALDO_MIGRACION
     conection_mod.Conexion._instance = None
     conection_mod.ruta_base_datos = lambda: ruta_bd
+    # F6: si `_asegurar_fk_on_delete_restrict` dispara un respaldo dentro de
+    # `Conexion()` (BD aún en CASCADE), que quede identificado con quien
+    # lanzó el script -- nunca con un nombre de persona inventado si no se
+    # pasó --usuario. Restaurado a None (nunca queda puesto) en el `finally`.
+    conection_mod.USUARIO_RESPALDO_MIGRACION = usuario or ETIQUETA_EJECUCION_TERMINAL
     try:
         instancia = conection_mod.Conexion()
         con = instancia.con
@@ -297,6 +308,7 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
     finally:
         conection_mod.ruta_base_datos = ruta_original
         conection_mod.Conexion._instance = instancia_previa
+        conection_mod.USUARIO_RESPALDO_MIGRACION = usuario_respaldo_previo
     return filas_centinela, resultado_equipos
 
 
