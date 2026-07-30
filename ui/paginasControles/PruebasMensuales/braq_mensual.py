@@ -9,6 +9,7 @@ from data.ManejoDatos.load import (mostrar_db_mensualBraqui, verificar_editar, v
                                     cancelarEdicion, guardar_resultado_CambioFuente)
 from data.ManejoDatos.conection import Conexion
 from services.equipos_service import EquiposService
+from services.vigencia_equipo import es_vigente_en_fecha
 from analisisImagenes.ActividadFuente import  *
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 import traceback
@@ -433,12 +434,13 @@ class PruebaMensualBraq(PruebaBasico):
         series_activas = []
         equipos_no_vigentes = []
 
-        for row in equipos_data:
-            serie, activo, vigente = row
-            print(modelo, serie, activo, vigente)
+        # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.4/§9): `vigente` ya no viene
+        # en la fila (columna congelada, retirada del contrato) -- se deriva
+        # aquí contra hoy. F9 la evaluará contra la fecha del formulario.
+        for serie, activo, fecha_calibr, equip_type in equipos_data:
             if activo == 1.0:  # Solo equipos activos
                 series_activas.append(serie)
-                if vigente == 0.0:  # Si no está vigente, recordarlo
+                if not es_vigente_en_fecha(fecha_calibr, equip_type, QDate.currentDate()):
                     equipos_no_vigentes.append(serie)
 
         self.combo_serie.addItems(series_activas)
@@ -486,11 +488,11 @@ class PruebaMensualBraq(PruebaBasico):
         series_activas = []
         equipos_no_vigentes = []
 
-        for row in equipos_data:
-            serie, activo, vigente = row
+        # F8: `vigente` ya no viene en la fila -- se deriva aquí contra hoy.
+        for serie, activo, fecha_calibr, equip_type in equipos_data:
             if activo == 1.0:  # Solo equipos activos
                 series_activas.append(serie)
-                if vigente == 0.0:  # Si no está vigente, recordarlo
+                if not es_vigente_en_fecha(fecha_calibr, equip_type, QDate.currentDate()):
                     equipos_no_vigentes.append(serie)
 
         self.combo_serie_elec.addItems(series_activas)

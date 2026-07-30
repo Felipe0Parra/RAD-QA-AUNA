@@ -326,7 +326,12 @@ class Config(PruebaBasico):
             p_cal = float(self.p_cal.text()) if self.p_cal.text() else "No disponible"
             h_cal = float(self.h_cal.text()) if self.h_cal.text() else "No disponible"
             v1 = float(self.v1_cal.text()) if self.v1_cal.text() else "No disponible"
-            vigente = 1 if self.verificar_vigencia_equipo(fecha_calibracion, tipo) else 0
+            # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.4/§9): ya no se calcula
+            # `vigente` al guardar -- columna retirada del contrato, nadie la
+            # lee para decidir ni mostrar (services/vigencia_equipo.py la
+            # deriva siempre en el punto de uso). Un equipo nuevo no tiene
+            # valor histórico que conservar -> NULL, no un booleano inventado.
+            vigente = None
             activo = 1 if self.sel_activo.isChecked() else 0
 
             imagen_blob = None
@@ -503,8 +508,11 @@ class Config(PruebaBasico):
             tipo_equipo = r[1]
             fecha_calibracion = r[5]
             es_activo = r[11] == 1
-            # Usar el valor de vigencia de la base de datos, o calcular si es NULL
-            es_vigente = r[12] == 1 if r[12] is not None else self.verificar_vigencia_equipo(fecha_calibracion, tipo_equipo)
+            # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.4): ya no se lee la
+            # columna `vigente` (r[12], congelada desde que se guardó la
+            # fila) -- se calcula siempre contra la fecha de HOY, la única
+            # referencia que tiene sentido para el catálogo de equipos.
+            es_vigente = self.verificar_vigencia_equipo(fecha_calibracion, tipo_equipo)
 
             # Determinar colores según el estado
             if not es_activo:
@@ -534,7 +542,7 @@ class Config(PruebaBasico):
                 if col == 5 and not es_vigente and fecha_calibracion:
                     item = ColoredTableWidgetItem(str(value) if value else "NA", 
                                                 QColor(255, 99, 71), QColor(255, 100, 100))
-                    item.setToolTip("⚠️ Calibración vencida - Requiere actualización")
+                    item.setToolTip("Calibración vencida - Requiere actualización")
                 else:
                     item = ColoredTableWidgetItem(str(value) if value else "NA", bg_color, text_color)
                 
@@ -743,26 +751,31 @@ class Config(PruebaBasico):
         p_cal = float(self.p_cal.text()) if self.p_cal.text() else None
         h_cal = float(self.h_cal.text()) if self.h_cal.text() else None
         v1 = float(self.v1_cal.text()) if self.v1_cal.text() else None
-        vigente = 1 if self.verificar_vigencia_equipo(fecha_calibracion, tipo) else 0
         activo = 1 if self.sel_activo.isChecked() else 0
 
         conn = Conexion().conectar()
         cursor = conn.cursor()
-        
+
         # Obtener datos originales del equipo
         cursor.execute("""
-            SELECT equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, 
+            SELECT equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr,
                     fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado
             FROM equipos
             WHERE id = ?
         """, (id_equipo,))
         datos_originales = cursor.fetchone()
-        
+
         if not datos_originales:
             QMessageBox.warning(self, "Advertencia", "No se encontró el equipo original.")
             conn.close()
             return
-        
+
+        # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.4/§9): `vigente` ya no se
+        # recalcula al editar -- columna retirada del contrato de los
+        # servicios (nadie la lee para decidir ni mostrar). Se conserva el
+        # valor histórico tal cual estaba, como dato inerte.
+        vigente = datos_originales[12]
+
         # Función para comparar valores de forma robusta
         def valores_iguales(nuevo, original):
             # Si ambos son None o vacíos

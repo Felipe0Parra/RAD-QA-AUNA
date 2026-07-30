@@ -16,6 +16,7 @@ from ui.paginasControles.PruebasMensuales.PruebasMensuales import PruebaMensualB
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
 from services.equipos_service import EquiposService
+from services.vigencia_equipo import es_vigente_en_fecha
 from PyQt5.QtWidgets import (QHBoxLayout, QVBoxLayout, QWidget, QToolBox, QPushButton, QLabel, QComboBox, QTableWidget, 
                             QTableWidgetItem, QMessageBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout, QDialog,
                             QDateEdit, QSplitter)
@@ -2108,11 +2109,14 @@ class Linealidad(PruebaBasico):
         """Puebla el combo de series con indicadores visuales"""
         series_activas = []
         series_no_vigentes = []
-        
-        for serie, activo, vigente in series_data:
+
+        # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.4/§9): `vigente` ya no viene
+        # en la fila (columna congelada, retirada del contrato) -- se deriva
+        # aquí contra hoy. F9 la evaluará contra la fecha del formulario.
+        for serie, activo, fecha_calibr, equip_type in series_data:
             if activo == 1.0:  # Solo equipos activos
                 series_activas.append(serie)
-                if vigente == 0.0:  # Si no está vigente, recordarlo
+                if not es_vigente_en_fecha(fecha_calibr, equip_type, QDate.currentDate()):
                     series_no_vigentes.append(serie)
         
         self.combo_serie.addItems(series_activas)
@@ -2152,11 +2156,11 @@ class Linealidad(PruebaBasico):
         series_activas = []
         equipos_no_vigentes = []
 
-        for row in equipos_data:
-            serie, activo, vigente = row
+        # F8: `vigente` ya no viene en la fila -- se deriva aquí contra hoy.
+        for serie, activo, fecha_calibr, equip_type in equipos_data:
             if activo == 1.0:  # Solo equipos activos
                 series_activas.append(serie)
-                if vigente == 0.0:  # Si no está vigente, recordarlo
+                if not es_vigente_en_fecha(fecha_calibr, equip_type, QDate.currentDate()):
                     equipos_no_vigentes.append(serie)
 
         self.combo_serie_elec.addItems(series_activas)

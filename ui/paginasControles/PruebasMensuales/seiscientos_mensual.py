@@ -2677,8 +2677,13 @@ class PruebaMensual600(PruebaBasico):
             cursor = conn.cursor()
             series_data = []
 
+            # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md SS8.4): ya no se selecciona
+            # `vigente` -- columna congelada, retirada del contrato; V1 ya
+            # calculaba la vigencia con `es_vigente_en_fecha` y la dejaba sin
+            # usar (variable muerta). El colapso a una fila por serie
+            # (MAX(id) GROUP BY serie) sigue igual: su rediseño es F9.
             cursor.execute("""
-                SELECT serie, vigente, activo, fecha_calibr, equip_type
+                SELECT serie, activo, fecha_calibr, equip_type
                 FROM equipos
                 WHERE model = ?
                 AND id IN (
@@ -2784,7 +2789,7 @@ class PruebaMensual600(PruebaBasico):
             else QDate.currentDate()
         )
 
-        for serie, vigente, activo, fecha_calibr, equip_type in series_data:
+        for serie, activo, fecha_calibr, equip_type in series_data:
             if activo == 1:  # Solo equipos activos
                 series_activas.append(serie)
                 if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):

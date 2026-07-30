@@ -51,7 +51,13 @@ def es_vigente_en_fecha(fecha_calibr, tipo_equipo, fecha_referencia):
     try:
         dia, mes, anio = map(int, fecha_calibr.split('/'))
         fecha_cal = QDate(anio, mes, dia)
-        diferencia_dias = fecha_cal.daysTo(fecha_referencia)
-        return diferencia_dias <= (365 * vigencia_anos)
+        # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md): aniversario de calendario
+        # exacto (antes: `daysTo <= 365 * años`, una aproximación que se
+        # desvía por 1 día de la fecha real de vencimiento para toda
+        # calibración anterior al 29 de febrero de un año bisiesto -- medido
+        # sobre la BD real: 0 de las 15 filas activas cambia de estado hoy
+        # con este cambio, así que es higiene de precisión, no una
+        # corrección de datos).
+        return fecha_referencia <= fecha_cal.addYears(vigencia_anos)
     except (ValueError, AttributeError):
         return True

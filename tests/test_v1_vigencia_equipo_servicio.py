@@ -43,15 +43,15 @@ class TestReglaDeVigenciaPorTipo:
         tres_anios_despues = QDate(2027, 1, 1)
         assert not es_vigente_en_fecha(calibr, "Cámara de ionización", tres_anios_despues)
 
-    def test_limite_exacto_365_por_anio_es_vigente(self):
-        # 2 años = 730 días exactos (regla original: <=), sin bisiestos de por medio.
+    def test_limite_exacto_aniversario_de_calendario_es_vigente(self):
+        # F8: aniversario de calendario (ya no día 730 aproximado por 365*años).
         calibr = QDate(2023, 1, 1)
-        limite = calibr.addDays(730)
+        limite = calibr.addYears(2)  # 01/01/2025
         assert es_vigente_en_fecha(calibr.toString("dd/MM/yyyy"), "Cámara de ionización", limite)
 
-    def test_un_dia_despues_del_limite_no_es_vigente(self):
+    def test_un_dia_despues_del_aniversario_no_es_vigente(self):
         calibr = QDate(2023, 1, 1)
-        pasado_el_limite = calibr.addDays(731)
+        pasado_el_limite = calibr.addYears(2).addDays(1)  # 02/01/2025
         assert not es_vigente_en_fecha(calibr.toString("dd/MM/yyyy"), "Cámara de ionización", pasado_el_limite)
 
     def test_barometro_vigencia_de_1_anio(self):

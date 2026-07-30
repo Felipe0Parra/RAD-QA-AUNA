@@ -72,9 +72,13 @@ class TestPozoA972662:
         assert "HDR1000 Plus" in EquiposService.modelos_actuales("Cámara de pozo")
 
     def test_serie_sigue_apareciendo_como_vigente(self, bd_temporal):
+        # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): `series_actuales` ya no
+        # devuelve `vigente` (columna congelada, retirada del contrato) --
+        # devuelve los hechos (fecha_calibr, equip_type) para que el
+        # llamador derive la vigencia con es_vigente_en_fecha.
         self._poblar(bd_temporal)
         series = EquiposService.series_actuales("Cámara de pozo", "HDR1000 Plus")
-        assert ("A972662", 1.0, 1.0) in series
+        assert ("A972662", 1.0, "07/02/2024", "Cámara de pozo") in series
 
     def test_calibracion_es_la_de_la_fila_vigente_no_la_de_mayor_id(self, bd_temporal):
         self._poblar(bd_temporal)
@@ -106,13 +110,17 @@ class TestPozoA092535:
 
 class TestPozoSomerRetirado:
     """Las 3 filas de la Somer quedaron activo=0/vigente=0 tras H2.6 (equipo
-    prestado, devuelto). El helper hace fallback al id más alto (56) y lo
-    devuelve como fila actual -- igual que la consulta original,
-    `series_actuales` no filtra `activo` en SQL, devuelve la columna para
-    que el llamador decida (así lo hacían ya `_poblar_combo_series` /
-    `on_modelo_elec_cambio`, sin cambios en H2.10). Por eso el modelo
-    "HDR1000 Plus" desaparece por completo (ninguna serie activa), pero la
-    fila de la serie sí puede recuperarse con activo=0 para quien la pida."""
+    prestado, devuelto).
+
+    F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): `_FILA_ACTUAL` ahora exige
+    `activo = 1` DENTRO de la subconsulta (antes hacía fallback al id más
+    alto sin mirar `activo`, y el llamador filtraba después). Para una serie
+    sin NINGUNA fila activa no existe ya "fila actual" -- `series_actuales`
+    devuelve una lista vacía en vez de una fila inactiva que el llamador
+    iba a descartar de todos modos. Cero diferencia observable: ningún
+    llamador (`_poblar_combo_series`/`on_modelo_elec_cambio` en
+    braquiterapia.py/braq_mensual.py) usaba una fila inactiva para nada más
+    que filtrarla."""
 
     def _poblar(self, ruta_bd):
         for eq_id in (54, 55, 56):
@@ -124,37 +132,42 @@ class TestPozoSomerRetirado:
         self._poblar(bd_temporal)
         assert EquiposService.modelos_actuales("Cámara de pozo") == []
 
-    def test_serie_actual_es_la_de_mayor_id_pero_marcada_inactiva(self, bd_temporal):
-        # El helper sigue devolviendo la fila (id56, la de mayor id entre
-        # las 3) para que el llamador la filtre por `activo` -- igual que
-        # el contrato original. Ningún dato desaparece de la capa de datos;
-        # lo que desaparece es la entrada en el combo, decisión de la UI.
+    def test_serie_sin_ninguna_fila_activa_no_tiene_fila_actual(self, bd_temporal):
         self._poblar(bd_temporal)
         series = EquiposService.series_actuales("Cámara de pozo", "HDR1000 Plus")
-        assert series == [("A132690 Somer", 0.0, 0.0)]
-        # Y así es como el llamador (sin cambios en H2.10) la excluye del combo:
-        series_activas = [s for s, activo, _ in series if activo == 1.0]
-        assert series_activas == []
+        assert series == []
 
 
 class TestElectrometroSinFilaVigente:
     """Un electrómetro cuya calibración nunca se marcó vigente (p.ej.
     T10010/BEAMSCAN en la BD real) no debe desaparecer: sigue activo, se
-    hace fallback al id más alto, y sigue mostrándose (el llamador lo marca
-    "⚠️ VENCIDO" porque vigente=0)."""
+    hace fallback al id más alto, y sigue mostrándose.
+
+    F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): el llamador ya no lee la
+    columna `vigente` congelada -- deriva "vencido" con
+    `es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia)`. Con
+    una fecha de calibración realmente vieja (2015), el resultado es el
+    mismo que antes (marcado vencido), pero por la regla derivada."""
 
     def _poblar(self, ruta_bd):
         _insertar_equipo(ruta_bd, 10, equip_type="Electrómetro",
                          model="T10010", serie="000123",
-                         calibr_fact=1.0, activo=1, vigente=0)
+                         calibr_fact=1.0, activo=1, vigente=0,
+                         fecha_calibr="01/01/2015")
         _insertar_equipo(ruta_bd, 20, equip_type="Electrómetro",
                          model="T10010", serie="000123",
-                         calibr_fact=1.05, activo=1, vigente=0)
+                         calibr_fact=1.05, activo=1, vigente=0,
+                         fecha_calibr="01/01/2015")
 
     def test_sigue_visible_marcable_como_vencido(self, bd_temporal):
+        from services.vigencia_equipo import es_vigente_en_fecha
+        from PyQt5.QtCore import QDate
+
         self._poblar(bd_temporal)
         series = EquiposService.series_actuales("Electrómetro", "T10010")
-        assert ("000123", 1.0, 0.0) in series
+        assert ("000123", 1.0, "01/01/2015", "Electrómetro") in series
+        serie, activo, fecha_calibr, equip_type = series[0]
+        assert not es_vigente_en_fecha(fecha_calibr, equip_type, QDate.currentDate())
 
     def test_calibracion_toma_la_de_mayor_id_por_fallback(self, bd_temporal):
         self._poblar(bd_temporal)
