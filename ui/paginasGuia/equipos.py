@@ -860,7 +860,13 @@ class Config(PruebaBasico):
                         (activo, vigente, id_equipo))
         else:
             if hay_cambios or hay_nueva_imagen:
-                imagen_blob = nueva_imagen_blob if hay_nueva_imagen else datos_originales[12]
+                # Bug de índice preexistente (anterior a F6-F10/F7, hallado
+                # al tocar la línea de al lado): `datos_originales[12]` es
+                # `vigente`, no `imagen_certificado` -- ese es el índice 13
+                # del SELECT de arriba. Sin este fix, editar un equipo SIN
+                # subir una imagen nueva escribía el valor de `vigente`
+                # (0/1/None) dentro de la columna BLOB de la imagen.
+                imagen_blob = nueva_imagen_blob if hay_nueva_imagen else datos_originales[13]
                 cursor.execute("""
                     INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, 
                                         fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado)
