@@ -16,6 +16,7 @@ from ui.paginasControles.PruebasMensuales.PruebasMensuales import PruebaMensualB
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
 from services.equipos_service import EquiposService
+from services.etiqueta_equipo import etiqueta_equipo
 from services.vigencia_equipo import es_vigente_en_fecha
 from PyQt5.QtWidgets import (QHBoxLayout, QVBoxLayout, QWidget, QToolBox, QPushButton, QLabel, QComboBox, QTableWidget, 
                             QTableWidgetItem, QMessageBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout, QDialog,
@@ -2102,84 +2103,67 @@ class Linealidad(PruebaBasico):
         self.combo_serie.addItem("Seleccionar Serie...")
     
     def _obtener_series_equipo(self, tipo_equipo: str, modelo: str) -> List[Tuple]:
-        """Series de un equipo específico (fila actual por vigente, H2.10)"""
-        return EquiposService.series_actuales(tipo_equipo, modelo)
-    
-    def _poblar_combo_series(self, series_data: List[Tuple]):
-        """Puebla el combo de series con indicadores visuales"""
-        series_activas = []
-        series_no_vigentes = []
+        """G10 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): TODAS las
+        calibraciones ACTIVAS del modelo, sin colapsar por serie -- antes
+        usaba series_actuales/_FILA_ACTUAL (H2.10), que colapsaba a una fila
+        por serie y ocultaba la calibración de 2022 de A092535 (activa a
+        propósito junto a la de 2025, doctrina §8.4 de PLAN_F)."""
+        return EquiposService.calibraciones_activas(tipo_equipo, modelo)
 
-        # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9 punto 5): vigencia contra
-        # la fecha del formulario (self.date_box), no contra hoy.
+    def _poblar_combo_series(self, calibraciones_activas: List[Tuple]):
+        """Puebla el combo con una entrada por CALIBRACIÓN activa (G10,
+        mismo criterio que F9 en el mensual): texto de `etiqueta_equipo`
+        (fecha + vigencia, sin símbolos), id del equipo en `currentData()`
+        -- nunca por texto, porque una serie puede tener varias
+        calibraciones activas a la vez."""
         fecha_referencia = (
             self.date_box.date() if hasattr(self, 'date_box') and self.date_box
             else QDate.currentDate()
         )
-        for serie, activo, fecha_calibr, equip_type in series_data:
-            if activo == 1.0:  # Solo equipos activos
-                series_activas.append(serie)
-                if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
-                    series_no_vigentes.append(serie)
-
-        self.combo_serie.addItems(series_activas)
-        self._marcar_series_vencidas(series_no_vigentes)
-
-    def _marcar_series_vencidas(self, series_vencidas: List[str]):
-        """Marca visualmente las series con calibración vencida, sin
-        símbolos en el texto (F9)."""
-        for serie in series_vencidas:
-            index = self.combo_serie.findText(serie)
-            if index != -1:
-                item = self.combo_serie.model().item(index)
-                item.setForeground(QColor(255, 0, 0))  # Texto rojo
-                item.setText(f"{serie} (vencida)")
+        for eq_id, serie, fecha_calibr, equip_type in calibraciones_activas:
+            equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
+                      "equip_type": equip_type}
+            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
+            self.combo_serie.addItem(texto, eq_id)
+            if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
+                item = self.combo_serie.model().item(self.combo_serie.count() - 1)
+                item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
                 item.setToolTip("Calibración vencida - Requiere recalibración")
 
-    def on_serie_pozo_cambio(self, serie):
-        """Cuando seleccionan serie de cámara de pozo, llenar valores de calibración"""
-        modelo = self.combo_modelo.currentText()
-        if self.combo_serie.currentText().endswith(" (vencida)"):
-            serie = self.combo_serie.currentText()[:-len(" (vencida)")]
-
-        if not serie or serie == "Seleccionar Serie...":
+    def on_serie_pozo_cambio(self):
+        """Cuando seleccionan serie de cámara de pozo, llenar valores de
+        calibración. G10: resuelve por el ID guardado en `currentData()`,
+        nunca por texto -- una serie puede tener varias calibraciones
+        activas (A092535: 2022 y 2025)."""
+        equipo_id = self.combo_serie.currentData()
+        if equipo_id is None:
             return
 
-        datos = EquiposService.calibracion_actual('Cámara de pozo', modelo, serie)
+        datos = EquiposService.obtener_por_id(equipo_id)
         if datos:
             self.line_cal.setText(str(datos["calibr_fact"]))
 
     def on_modelo_elec_cambio(self, modelo):
-        """Cuando selecciona un modelo de electrómetro, llenar las series (fila actual por vigente, H2.10)"""
+        """Cuando selecciona un modelo de electrómetro, llenar las series.
+        G10: una entrada por calibración activa (mismo criterio que
+        _poblar_combo_series, sin colapsar por serie)."""
         self.combo_serie_elec.clear()
         self.combo_serie_elec.addItem("Seleccionar Serie...")
 
-        equipos_data = EquiposService.series_actuales('Electrómetro', modelo)
+        calibraciones_activas = EquiposService.calibraciones_activas('Electrómetro', modelo)
 
-        # Solo agregar equipos activos
-        series_activas = []
-        equipos_no_vigentes = []
-
-        # F9: vigencia contra la fecha del formulario (self.date_box).
         fecha_referencia = (
             self.date_box.date() if hasattr(self, 'date_box') and self.date_box
             else QDate.currentDate()
         )
-        for serie, activo, fecha_calibr, equip_type in equipos_data:
-            if activo == 1.0:  # Solo equipos activos
-                series_activas.append(serie)
-                if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
-                    equipos_no_vigentes.append(serie)
-
-        self.combo_serie_elec.addItems(series_activas)
-
-        # Marcar en rojo los no vigentes, sin símbolos en el texto (F9)
-        for serie in equipos_no_vigentes:
-            index = self.combo_serie_elec.findText(serie)
-            if index != -1:
-                item = self.combo_serie_elec.model().item(index)
-                item.setForeground(QColor(255, 0, 0))  # Poner en rojo
-                item.setText(f"{serie} (vencida)")  # Sin símbolos (F9)
+        for eq_id, serie, fecha_calibr, equip_type in calibraciones_activas:
+            equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
+                      "equip_type": equip_type}
+            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
+            self.combo_serie_elec.addItem(texto, eq_id)
+            if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
+                item = self.combo_serie_elec.model().item(self.combo_serie_elec.count() - 1)
+                item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
                 item.setToolTip("Calibración vencida - Requiere recalibración")
 
     def button_click(self):
@@ -2351,15 +2335,15 @@ class Linealidad(PruebaBasico):
                 except Exception as e:
                     print(f"Error procesando firma: {e}")
         return temp_image_path, rol  
-    def on_serie_elec_cambio(self, serie):
-        """Cuando seleccionan serie de electrómetro, llenar factor de calibración"""
-        modelo = self.combo_modelo_elec.currentText()
-        if self.combo_serie_elec.currentText().endswith(" (vencida)"):
-            serie = self.combo_serie_elec.currentText()[:-len(" (vencida)")]
-        if not serie or serie == "Seleccionar Serie...":
+    def on_serie_elec_cambio(self):
+        """Cuando seleccionan serie de electrómetro, llenar factor de
+        calibración. G10: resuelve por el ID en `currentData()`, nunca por
+        texto (mismo criterio que on_serie_pozo_cambio)."""
+        equipo_id = self.combo_serie_elec.currentData()
+        if equipo_id is None:
             return
 
-        datos = EquiposService.calibracion_actual('Electrómetro', modelo, serie)
+        datos = EquiposService.obtener_por_id(equipo_id)
         if datos:
             self.line_cal_elec.setText(str(datos["calibr_fact"]))
 

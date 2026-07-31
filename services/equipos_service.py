@@ -81,6 +81,35 @@ class EquiposService:
                 for serie, activo, fecha_calibr in filas]
 
     @staticmethod
+    def calibraciones_activas(equip_type, model):
+        """G10 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): TODAS las
+        calibraciones ACTIVAS de un modelo, SIN colapsar por serie (a
+        diferencia de series_actuales/_FILA_ACTUAL). Devuelve
+        (id, serie, fecha_calibr, equip_type) -- mismo contrato de hechos
+        que series_actuales, más el id (necesario para resolver por ID,
+        nunca por texto -- una serie puede tener varias calibraciones
+        activas a la vez, doctrina §8.4 de PLAN_F).
+
+        F9 ya aplicó este mismo criterio al selector del mensual
+        (`obtenerSeriesConVigencia`); braquiterapia (diaria y mensual)
+        seguía colapsando con series_actuales, justo la vista donde viven
+        las cámaras de pozo (caso real: A092535 con 2022 y 2025 activas)."""
+        con = Conexion().con
+        cur = con.cursor()
+
+        sql = """
+        SELECT id, serie, fecha_calibr FROM equipos
+        WHERE equip_type = ? AND model = ? AND activo = 1
+        ORDER BY serie, id DESC
+        """
+
+        cur.execute(sql, (equip_type, model))
+        filas = cur.fetchall()
+        cur.close()
+        return [(id_, serie, fecha_calibr, equip_type)
+                for id_, serie, fecha_calibr in filas]
+
+    @staticmethod
     def calibracion_actual(equip_type, model, serie):
         """Datos de calibración de la fila ACTUAL de una serie (ver
         _FILA_ACTUAL), o None si no existe ninguna fila para esa serie.
