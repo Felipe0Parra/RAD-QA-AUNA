@@ -4,7 +4,7 @@ from data.ManejoDatos.conection import Conexion
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR, ACCION_ANULAR
-from services.vigencia_equipo import VIGENCIA_ANOS_POR_TIPO, es_vigente_en_fecha
+from services.vigencia_equipo import es_vigente_en_fecha
 from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar
 from PyQt5.QtWidgets import (QMessageBox, QGridLayout, QWidget, QSplitter, QHeaderView, QSizePolicy, QTableWidget, QTableWidgetItem,
                             QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QDialog, QLineEdit, QComboBox)
@@ -35,12 +35,6 @@ class Config(PruebaBasico):
         # devolvía None -> `usuario` NULL en audit_log.
         super().__init__(user_id)
         self.iniGUI()
-        # Diccionario de vigencias en años según tipo de equipo (V1,
-        # PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.5: fuente única en
-        # services/vigencia_equipo.py, para que el formulario mensual/anual
-        # use la misma regla al calcular vigencia contra la fecha del
-        # control en vez de siempre "hoy").
-        self.vigencia_equipo = VIGENCIA_ANOS_POR_TIPO
         self.cargartabla()
         self.button_click()
         
@@ -700,7 +694,7 @@ class Config(PruebaBasico):
                     except (ValueError, IndexError) as e:
                         print(f"Error al parsear la fecha {equipo[5]}: {e}")
                         # Si hay error, mantener la fecha actual como fallback
-            self.verificar_vigencia(equipo, self.vigencia_equipo.get(f"{equipo[0]}"))
+            self.verificar_vigencia(equipo)
 
             if hasattr(self, "fabricante"):
                 self.fabricante.setText(str(equipo[6]) if equipo[6] is not None else "")
@@ -961,27 +955,22 @@ class Config(PruebaBasico):
         #print(f"Tipo de equipo seleccionado: {tipo_equipo}")
         return id_equipo, tipo_equipo
     
-    def verificar_vigencia(self, equipo, vigencia):
+    def verificar_vigencia(self, equipo):
+        """G4 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): sin lógica propia --
+        el veredicto lo da la misma fuente única que usa la tabla del
+        catálogo (`verificar_vigencia_equipo`, F8). Antes tenía su propio
+        parseo manual + `daysTo <= 365*vigencia`, una aproximación que F8 ya
+        había retirado del otro lado por desviarse 1 día en calibraciones que
+        cruzan un 29 de febrero bisiesto -- dos cálculos distintos para la
+        misma pregunta, que podían (y en ese caso concreto, lo hacían) dar
+        veredictos opuestos.
 
-        print(f"\nVerificando vigencia para el equipo: {equipo[0]} con vigencia de {vigencia} años.")
-        print("----------------------------------------------------------------------------------")
-        try:
-            dia, mes, anio = map(int, self.calib_date.text().split('/'))
-            print(f"\n  › Fecha de calibración: {dia}/{mes}/{anio}")
-            fecha_cal = QDate(anio, mes, dia)
-        except ValueError:
-            print("Formato de fecha inválido. Debe ser dd/MM/yyyy.")
-            return False
-
-        fecha_actual = QDate.currentDate()
-        diferencia = fecha_cal.daysTo(fecha_actual)
-        print(f"  › Días desde la última calibración: {diferencia}")
-        if (diferencia <= 365 * vigencia) or (vigencia is None):  # Vigencia en años convertida a días
-            print("  ✓ El equipo está vigente.")
+        El único efecto que se conserva es el borde de color del campo.
+        """
+        vigente = self.verificar_vigencia_equipo(self.calib_date.text(), equipo[0])
+        if vigente:
             self.calib_date.setStyleSheet("border: 2px solid rgb(138, 189, 44);")
-            return True  # Vigente
         else:
-            print("✗ El equipo no está vigente.")
             self.calib_date.setStyleSheet("border: 1px solid red;")
-            return False  # No vigente
+        return vigente
 

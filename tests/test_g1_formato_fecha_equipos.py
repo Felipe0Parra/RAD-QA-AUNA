@@ -33,10 +33,11 @@ import sqlite3
 import pandas as pd
 import pytest
 from PyQt5.QtCore import QDate, QLocale
-from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtWidgets import QApplication, QLineEdit, QWidget
 
 from services.vigencia_equipo import es_vigente_en_fecha
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
+from ui.paginasGuia.equipos import Config
 
 DB = "/home/felipepp/Documents/CodigosPython/AUNA_2026_2/BaseDatosQA.db"
 
@@ -153,6 +154,95 @@ class TestGuardaFechaInvalidaEsVigenteEnFecha:
         # Con una referencia dentro de la ventana, sigue vigente.
         assert es_vigente_en_fecha(
             "5/02/2024", "Cámara de ionización", QDate(2024, 6, 1)) is True
+
+
+def _config_pelado(texto_fecha):
+    """Config (equipos.py) sin su __init__ pesado (BD/tabla), solo el
+    QLineEdit que verificar_vigencia necesita -- mismo patron que
+    test_f7_reactivar_equipo.py::_instancia_con_formulario. Un QLineEdit
+    basta: verificar_vigencia solo llama .text() y .setStyleSheet(), que
+    QLineEdit tiene igual que QDateEdit."""
+    obj = Config.__new__(Config)
+    QWidget.__init__(obj)
+    obj.calib_date = QLineEdit(texto_fecha)
+    return obj
+
+
+class TestG4UnaSolaFuenteDeVigencia:
+    """G4 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): `verificar_vigencia`
+    (el formulario de edicion) tenia su PROPIA logica -- parseo manual +
+    `daysTo <= 365*vigencia` (la aproximacion que F8 ya habia retirado de
+    `es_vigente_en_fecha` el 29-07) -- mientras `verificar_vigencia_equipo`
+    (la tabla del catalogo, F8) ya usaba la fuente unica. Dos calculos
+    distintos para la MISMA pregunta, con codigo duplicado y con una
+    aproximacion menos precisa que la que el propio proyecto ya habia
+    corregido en el otro lado."""
+
+    def test_formulario_y_tabla_coinciden_equipo_claramente_vigente(self, app):
+        obj = _config_pelado("01/01/2026")
+        veredicto_form = obj.verificar_vigencia(("Cámara de ionización",))
+        veredicto_tabla = obj.verificar_vigencia_equipo(
+            "01/01/2026", "Cámara de ionización")
+        assert veredicto_form == veredicto_tabla
+
+    def test_formulario_y_tabla_coinciden_equipo_claramente_vencido(self, app):
+        obj = _config_pelado("01/01/2020")
+        veredicto_form = obj.verificar_vigencia(("Cámara de ionización",))
+        veredicto_tabla = obj.verificar_vigencia_equipo(
+            "01/01/2020", "Cámara de ionización")
+        assert veredicto_form == veredicto_tabla
+
+    def test_formulario_y_tabla_coinciden_con_fecha_invalida(self, app):
+        """Ambas rutas ya delegan en la misma guarda de G1 -- ninguna
+        "adivina" un veredicto propio para un formato invalido."""
+        obj = _config_pelado("7/30/2026")
+        veredicto_form = obj.verificar_vigencia(("Cámara de ionización",))
+        veredicto_tabla = obj.verificar_vigencia_equipo(
+            "7/30/2026", "Cámara de ionización")
+        assert veredicto_form == veredicto_tabla is True
+
+    def test_diverge_por_la_aproximacion_de_365_dias_rojo_antes_del_fix(
+            self, app, monkeypatch):
+        """ROJO ANTES DEL FIX -- reproduce el caso EXACTO que F8 documento
+        (PLAN_F_CIERRE_ESTANDAR_29-07.md): una calibracion cuyo intervalo de
+        vigencia contiene un 29 de febrero bisiesto. `fecha_cal=01/01/2024`,
+        vigencia=2 anios, referencia=01/01/2026 (el bisiesto 2024 cae DENTRO
+        del intervalo).
+
+        - Aniversario exacto (unica fuente, F8): 01/01/2026 <= 01/01/2026
+          -> VIGENTE.
+        - Aproximacion `daysTo <= 365*2` (la que tenia `verificar_vigencia`
+          ANTES de este fix): daysTo=731 (731 > 730) -> NO VIGENTE.
+
+        Se fuerza `QDate.currentDate()` (via monkeypatch, en vez de
+        depender de la fecha real del dia en que corra la suite) porque la
+        divergencia solo existe para referencias que caen exactamente en
+        esa ventana de 1 dia -- el propio F8 midio que HOY (31-07) ninguna
+        fila real cae ahi.
+        """
+        monkeypatch.setattr(QDate, "currentDate",
+                            staticmethod(lambda: QDate(2026, 1, 1)))
+
+        obj = _config_pelado("01/01/2024")
+        veredicto_form = obj.verificar_vigencia(("Cámara de ionización",))
+        veredicto_tabla = obj.verificar_vigencia_equipo(
+            "01/01/2024", "Cámara de ionización")
+
+        assert veredicto_tabla is True  # aniversario exacto, ya via F8
+        assert veredicto_form == veredicto_tabla, (
+            f"El formulario ({veredicto_form}) y la tabla ({veredicto_tabla}) "
+            f"deben coincidir SIEMPRE -- son la misma pregunta."
+        )
+
+    def test_borde_verde_cuando_vigente(self, app):
+        obj = _config_pelado("01/01/2026")
+        obj.verificar_vigencia(("Cámara de ionización",))
+        assert "138, 189, 44" in obj.calib_date.styleSheet()
+
+    def test_borde_rojo_cuando_no_vigente(self, app):
+        obj = _config_pelado("01/01/2020")
+        obj.verificar_vigencia(("Cámara de ionización",))
+        assert "red" in obj.calib_date.styleSheet()
 
 
 @pytest.mark.skipif(not os.path.exists(DB),
