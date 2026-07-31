@@ -151,10 +151,14 @@ class PruebaMensual600(PruebaBasico):
         """Limpia recursos para evitar memory leaks"""
         try:
             # Limpiar timers de debouncing
-            for timer in self._debounce_timers.values():
-                if timer and timer.isActive():
-                    timer.stop()
-            self._debounce_timers.clear()
+            # G6 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): PruebaMensualTAC
+            # puede llegar aquí sin haber inicializado _debounce_timers --
+            # mismo patrón de guarda que ya usa _configurar_debounce (:902).
+            if hasattr(self, '_debounce_timers'):
+                for timer in self._debounce_timers.values():
+                    if timer and timer.isActive():
+                        timer.stop()
+                self._debounce_timers.clear()
 
             # Limpiar caché de modelos
             if hasattr(self, '_model_cache'):
