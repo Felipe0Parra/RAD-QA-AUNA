@@ -242,6 +242,16 @@ class PruebaBasico(QWidget):
             elif widget_type == 'QDateEdit':
                 setattr(self, nombre, QDateEdit())
                 getattr(self, nombre).setCalendarPopup(True)
+                # G1 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): sin esto,
+                # el widget hereda el formato corto del locale del SO
+                # ("M/d/yyyy" en Windows inglés) y ese texto crudo es lo
+                # que se guarda -- causa raíz de fechas mal formadas en
+                # `equipos.py::calib_date`, el único QDateEdit de la app
+                # que nunca fija su propio displayFormat. Los formularios
+                # que necesitan otro formato lo fijan DESPUÉS de
+                # createInterface y siguen ganando (Halcyon diario, los
+                # mensuales, SQLtoEXCEL -- ninguno se ve afectado).
+                getattr(self, nombre).setDisplayFormat("dd/MM/yyyy")
                 getattr(self, nombre).setDate(QDate.currentDate())
                 # H3.5/I5: sin un piso, la flecha del calendario se come el
                 # espacio del texto cuando el layout aprieta el widget. Los

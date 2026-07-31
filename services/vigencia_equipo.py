@@ -51,6 +51,15 @@ def es_vigente_en_fecha(fecha_calibr, tipo_equipo, fecha_referencia):
     try:
         dia, mes, anio = map(int, fecha_calibr.split('/'))
         fecha_cal = QDate(anio, mes, dia)
+        # G1 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): un mes/día fuera de
+        # rango (p.ej. mes=30, del formato "M/d/yyyy" mal interpretado como
+        # "dd/MM/yyyy") NO lanza ValueError -- QDate(...) devuelve un QDate
+        # NULO en silencio, y `addYears()`/comparaciones sobre un QDate nulo
+        # siguen nulas sin excepción. Sin esta guarda, el `except` de abajo
+        # nunca se activa por esta vía y el contrato ya documentado arriba
+        # ("formato inválido -> se considera vigente") queda incumplido.
+        if not fecha_cal.isValid():
+            return True
         # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md): aniversario de calendario
         # exacto (antes: `daysTo <= 365 * años`, una aproximación que se
         # desvía por 1 día de la fecha real de vencimiento para toda
