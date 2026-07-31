@@ -471,16 +471,27 @@ class Config(PruebaBasico):
         return es_vigente_en_fecha(fecha_calibracion, tipo_equipo, QDate.currentDate())
 
     def cargartabla(self):
+        # G8 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md, DA-22): antes
+        # `WHERE id IN (SELECT MAX(id) FROM equipos GROUP BY serie)`
+        # colapsaba a 1 fila por serie sin filtrar `activo` -- medido contra
+        # producción: de 39 filas solo 15 se veían, y 5 de las ocultas
+        # estaban ACTIVAS (justo las que la calculadora y los formularios
+        # usan, vía EquiposService._FILA_ACTUAL desde H2.10). El catálogo
+        # debe mostrar TODAS las versiones que ha tenido cada cámara/serie
+        # -- es el histórico curado en H2.6/H2.10, no un resumen. Efecto
+        # esperado y deseable: A092535 muestra sus dos calibraciones
+        # activas (doctrina §8.4 de PLAN_F, ya visible en F9/G10) -- no es
+        # un duplicado.
+        # ORDER BY model/serie/id (no fecha_calibr: TEXT con ceros
+        # inconsistentes, ordenaría lexicográficamente -- mismo criterio ya
+        # documentado en equipos_service.py:196-202).
         conn = Conexion().conectar()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, equip_type, model, serie, calibr_fact, fecha_calibr, fabricante, t_cal, p_cal, h_cal, v1, 
+            SELECT id, equip_type, model, serie, calibr_fact, fecha_calibr, fabricante, t_cal, p_cal, h_cal, v1,
                         activo, vigente, imagen_certificado
-            FROM equipos 
-            WHERE id IN (
-                SELECT MAX(id) FROM equipos GROUP BY serie
-            )
-            ORDER BY id ASC
+            FROM equipos
+            ORDER BY model, serie, id
         """)
         rows = cursor.fetchall()
         conn.close()
