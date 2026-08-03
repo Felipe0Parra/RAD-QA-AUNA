@@ -250,11 +250,15 @@ class TestG4UnaSolaFuenteDeVigencia:
 class TestTripwireFechasNoParseablesEnProduccion:
     """Patron de allowlist verificable de A6.1: no es una exencion silenciosa.
     Si aparece una fila NUEVA con fecha_calibr no parseable, la suite se pone
-    roja y senala el id -- no se auto-repara ni se ignora. Si se ejecuta G7
-    (normalizar los ids 57/58), esta allowlist debe vaciarse en el MISMO
-    commit, y el segundo assert lo obliga."""
+    roja y senala el id -- no se auto-repara ni se ignora.
 
-    ALLOWLIST_IDS_FECHA_NO_PARSEABLE = {57, 58}
+    G7 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md, DA-23, 2026-07-31)
+    normalizo los ids 57/58 ('7/28/2025' -> '28/07/2025', confirmado contra
+    el certificado HDR12899) -- la allowlist queda vacia. El segundo assert
+    de abajo sigue de guardia: si algun dia aparece una fila nueva no
+    parseable, la señala igual."""
+
+    ALLOWLIST_IDS_FECHA_NO_PARSEABLE = set()
 
     def test_filas_con_fecha_no_parseable_son_exactamente_la_allowlist(self):
         con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)

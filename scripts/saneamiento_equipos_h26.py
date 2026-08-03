@@ -47,6 +47,20 @@ Cambios, por categoría:
      (recalibración 17/03/2026, también vigente=1) -- dos vigentes
      simultáneas para la misma serie. Se marca id 18 histórica
      (vigente=0); id 79 queda como la única vigente.
+  8. (G9, PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md) Las 3 filas ACTIVAS de
+     2123/0453/A972662 completan `v1` (voltaje del electrodo colector,
+     leído directo de sus certificados ADW39862/ADW39861/HDR12115: todos
+     declaran "Collecting Electrode Bias: +300 V") y `h_cal` (asumido 50%
+     como humedad de REFERENCIA -- SUPUESTO DE TRABAJO, DA-27, distinto de
+     las lecturas directas de v1: los certificados ADCL no declaran
+     humedad de referencia). `calibr_fact` no se toca en ninguna de las
+     tres (ya correcto desde los puntos 3 y 6 de arriba).
+  9. (G7, PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md, DA-23) Las 2 filas con
+     el mes y el día invertidos (ids 57/58, "7/28/2025", QDate inválido)
+     se normalizan a "28/07/2025" -- confirmado contra el certificado
+     HDR12899 ("Calibration Completed: 28/JUL/2025"). Las 10 filas con
+     solo el día sin cero a la izquierda (dato correcto, defecto
+     cosmético) se dejan sin tocar -- decisión explícita del físico.
 
 Política deliberada: NUNCA se borra una fila (conservar todo el histórico,
 igual que en la fusión de BD de 2026-07-03). Las filas redundantes quedan
@@ -188,6 +202,67 @@ CAMBIOS = [
                          "misma serie; queda historica",
      "antes": {"vigente": 1},
      "despues": {"vigente": 0}},
+
+    # G9 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md, DA-25/DA-26/DA-27/DA-28,
+    # 2026-07-31): las 3 filas ACTIVAS de 2123/0453/A972662 quedaron
+    # incompletas frente a las de id alto (h_cal/v1 nunca se completaron).
+    # No entran en ninguna formula (kTP usa t_cal/p_cal, ya correctos desde
+    # H2.6/H2.10), pero DA-25: "que un campo no entre en una formula no es
+    # razon para dejarlo mal" -- son parte del registro del certificado.
+    # `calibr_fact` NO se toca en ninguna de las tres (ya correcto).
+    {"id": 13, "motivo": "(G9) N30013 vigente: v1 (voltaje de electrodo "
+                         "colector) sin registrar; certificado ADW39862 "
+                         "declara 'Collecting Electrode Bias: +300 V'",
+     "antes": {"v1": None},
+     "despues": {"v1": 300}},
+    {"id": 13, "motivo": "(G9) N30013 vigente: h_cal=33 es la humedad "
+                         "AMBIENTAL del dia de calibracion (certificado "
+                         "ADW39862, 'Environmental Conditions') -- se "
+                         "asume 50% como humedad de REFERENCIA. SUPUESTO "
+                         "DE TRABAJO (DA-27): el certificado ADCL no "
+                         "declara humedad de referencia, esto NO es una "
+                         "lectura del documento",
+     "antes": {"h_cal": 33},
+     "despues": {"h_cal": 50}},
+
+    {"id": 7, "motivo": "(G9) N31014 vigente: v1 sin registrar; "
+                        "certificado ADW39861 declara 'Collecting "
+                        "Electrode Bias: +300 V'",
+     "antes": {"v1": None},
+     "despues": {"v1": 300}},
+    {"id": 7, "motivo": "(G9) N31014 vigente: h_cal=33 es la humedad "
+                        "AMBIENTAL del certificado ADW39861. SUPUESTO DE "
+                        "TRABAJO (DA-27): se asume 50% de referencia, no "
+                        "es una lectura del certificado",
+     "antes": {"h_cal": 33},
+     "despues": {"h_cal": 50}},
+
+    {"id": 16, "motivo": "(G9) Pozo A972662 vigente: v1 sin registrar; "
+                         "certificado HDR12115 declara 'Collecting "
+                         "Electrode Bias: +300 V'",
+     "antes": {"v1": None},
+     "despues": {"v1": 300}},
+    {"id": 16, "motivo": "(G9) Pozo A972662 vigente: h_cal=38 es la "
+                         "humedad AMBIENTAL del certificado HDR12115. "
+                         "SUPUESTO DE TRABAJO (DA-27): se asume 50% de "
+                         "referencia, no es una lectura del certificado",
+     "antes": {"h_cal": 38},
+     "despues": {"h_cal": 50}},
+
+    # G7 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md, DA-23, 2026-07-31):
+    # solo la clase A (mes y dia invertidos, dato INCORRECTO) se corrige.
+    # La clase B (10 filas con el dia sin cero, dato correcto, solo
+    # cosmetico) se deja tal cual -- decision explicita del fisico.
+    {"id": 57, "motivo": "(G7, DA-23) Fecha con mes y dia invertidos "
+                         "('7/28/2025', QDate invalido) -- certificado "
+                         "HDR12899 confirma 'Calibration Completed: "
+                         "28/JUL/2025' -> 28 de julio de 2025",
+     "antes": {"fecha_calibr": "7/28/2025"},
+     "despues": {"fecha_calibr": "28/07/2025"}},
+    {"id": 58, "motivo": "(G7, DA-23) Fecha con mes y dia invertidos, "
+                         "misma correccion que id57 (certificado HDR12899)",
+     "antes": {"fecha_calibr": "7/28/2025"},
+     "despues": {"fecha_calibr": "28/07/2025"}},
 ]
 
 

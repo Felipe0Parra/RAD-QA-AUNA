@@ -184,10 +184,14 @@ class TestDeriva:
     def test_fila_que_no_coincide_ni_antes_ni_despues_no_se_toca(self, bd_temporal):
         # id 13 esperaba t_cal=20.9/p_cal=98.91 (antes) o 22/101.325
         # (después) -- un tercer valor significa que la fila cambió por otra
-        # vía desde el análisis: no se debe sobrescribir a ciegas.
+        # vía desde el análisis: no se debe sobrescribir a ciegas. v1/h_cal
+        # (G9) también con un tercer valor -- sin esto, sus "antes" (None/33)
+        # coincidirían por accidente con los defaults de esta fila sintética
+        # y SÍ se aplicarían, contaminando la aserción de audit_log==0.
         _insertar_equipo(bd_temporal, 13, equip_type="Cámara de ionización",
                          model="N30013", serie="2123", calibr_fact=0.05451,
-                         t_cal=21.5, p_cal=99.50, activo=1, vigente=1)
+                         t_cal=21.5, p_cal=99.50, h_cal=41, v1=250,
+                         activo=1, vigente=1)
 
         r = aplicar_saneamiento(bd_temporal, usuario="test")
 

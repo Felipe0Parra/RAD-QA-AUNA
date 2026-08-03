@@ -38,7 +38,7 @@ RUTA_BD_A_AJUSTAR = os.path.join(
 QC_ESPERADO = {"controles": 27, "dosimetriaMen": 37, "preguntas": 14,
                "tamano_campo": 68, "pruebas": 35, "calculadora_dosimetrica": 1}
 CENTINELAS_ESPERADOS = 7
-CORRECCIONES_EQUIPOS_ESPERADAS = 23  # los 23 cambios H2.6/H2.10, todos aplican
+CORRECCIONES_EQUIPOS_ESPERADAS = 31  # 23 de H2.6/H2.10 + 8 de G9/G7 (2026-07-31), todos aplican
 
 
 def _md5(ruta):
