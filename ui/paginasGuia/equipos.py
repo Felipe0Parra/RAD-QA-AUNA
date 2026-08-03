@@ -871,6 +871,32 @@ class Config(PruebaBasico):
                         (activo, vigente, id_equipo))
         else:
             if hay_cambios or hay_nueva_imagen:
+                # G3 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-G3,
+                # DA-21): no crear una fila IDÉNTICA a otra ya activa --
+                # caso real 82/83/84 del rebuild 30-07. Editar SIGUE
+                # bifurcando siempre (DA-21, sin excepción); esto solo
+                # bloquea la fila resultante si su certificado (los 7
+                # campos clínicos, no fabricante/imagen) ya está activo en
+                # OTRA fila de la misma serie. `id != ?` excluye la propia
+                # fila que se edita -- cambiar solo `fabricante` no debe
+                # bloquearse contra su propio certificado sin cambios,
+                # solo contra el de OTRA fila ya activa.
+                cursor.execute("""
+                    SELECT calibr_fact, calibr_fact2, fecha_calibr, t_cal, p_cal, h_cal, v1
+                    FROM equipos WHERE equip_type = ? AND serie = ? AND activo = 1 AND id != ?
+                """, (tipo, serie, id_equipo))
+                campos_certificado_nuevos = [factor_calibracion, segundo_factor,
+                                            fecha_calibracion, t_cal, p_cal, h_cal, v1]
+                for fila_activa in cursor.fetchall():
+                    if all(valores_iguales(nuevo, original) for nuevo, original in
+                            zip(campos_certificado_nuevos, fila_activa)):
+                        QMessageBox.warning(
+                            self, "Calibración duplicada",
+                            f"Ya hay una calibración idéntica registrada para "
+                            f"este equipo (fecha {fila_activa[2]}).")
+                        conn.close()
+                        return
+
                 # Bug de índice preexistente (anterior a F6-F10/F7, hallado
                 # al tocar la línea de al lado): `datos_originales[12]` es
                 # `vigente`, no `imagen_certificado` -- ese es el índice 13
