@@ -2914,22 +2914,52 @@ def mostrar_dosimetria(parent, id_ref):
             table.setItem(row, 2, item_disc)
             table.setItem(row, 3, item_tol)
             #table.setItem(row, 4, item_obs)
-            # Metadata correcta para guardarEdicion
+
+            # G5 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-a): identidad
+            # (id_ref, energia) en TODAS las celdas de la fila, no solo las
+            # editables -- "Energía Nominal" y "Observaciones" identifican
+            # el mismo registro (ref, energia) que las demás filas, aunque
+            # no tengan columna editable (no están en mapa_columnas). Antes
+            # se quedaban sin ningún Qt.UserRole y eliminarRegistro no
+            # encontraba metadata al seleccionarlas ("No se encontró
+            # metadata (id/ref) en la fila seleccionada"). UserRole+1
+            # (tabla+columna, que consume guardarEdicion) se sigue poniendo
+            # SOLO en las editables -- la edición no cambia de comportamiento.
+            for col in (0, 1, 2, 3):
+                table.item(row, col).setData(Qt.UserRole, (id_ref, energia))
+
             if desc in mapa_columnas:
                 for col in (1, 2, 3):  # columnas editables
                     col_name = mapa_columnas[desc].get(col)
                     if col_name:
-                        cell_item = table.item(row, col)
-                        # Guardar clave compuesta en UserRole (id_ref, energia)
-                        cell_item.setData(Qt.UserRole, (id_ref, energia))
                         # Guardar tabla y columna en UserRole+1
-                        cell_item.setData(Qt.UserRole + 1, ("dosimetriaMen", col_name))
+                        table.item(row, col).setData(
+                            Qt.UserRole + 1, ("dosimetriaMen", col_name))
 
         # Ajuste de ancho de columnas
         font_metrics = table.fontMetrics()
         for col in range(table.columnCount()):
             header_text = table.horizontalHeaderItem(col).text()
             table.setColumnWidth(col, font_metrics.horizontalAdvance(header_text) + 70)
+
+        # G5 (§5-a, hallazgo adicional durante la ejecución): Editar/
+        # Aceptar/Eliminar se conectan UNA sola vez, DESPUÉS de este bucle
+        # -- sin este seguimiento, sus lambdas cerraban sobre `table` (la
+        # variable del bucle, capturada por REFERENCIA) y siempre operaban
+        # sobre la ÚLTIMA energía creada (la que ordena última
+        # alfabéticamente), sin importar en cuál tabla el físico seleccionó
+        # la fila. Verificado contra producción real: 5 refs (16, 13, 30,
+        # 35, y el ref 1 de prueba) tienen 6 energías simultáneas -- el
+        # defecto era alcanzable, no hipotético. `t=table` congela el valor
+        # de ESTA iteración como argumento por defecto (idiom estándar
+        # contra el late binding de closures en un bucle); la primera
+        # tabla queda activa por defecto para que "Eliminar" sin haber
+        # seleccionado nada dé el aviso correcto ("elija una fila") en vez
+        # de operar a ciegas sobre una tabla ajena.
+        table.itemSelectionChanged.connect(
+            lambda t=table: setattr(dlg, '_tabla_dosimetria_activa', t))
+        if idx == 0:
+            dlg._tabla_dosimetria_activa = table
 
         row_grid = idx // max_cols
         col_grid = idx % max_cols
@@ -2953,11 +2983,15 @@ def mostrar_dosimetria(parent, id_ref):
     grid_layout.addLayout(edit_table_tools, row_grid, 0, 1, max_cols)
 
     # ------------------ Conexiones ------------------
+    # G5: leen dlg._tabla_dosimetria_activa (actualizada por
+    # itemSelectionChanged en cada tabla, ver el bucle arriba) en vez de
+    # cerrar sobre `table` -- esa variable, tras el bucle, quedaría fija en
+    # la última tabla creada.
     dlg.edit_table.clicked.connect(
-        lambda: verificar_editar(dlg, table, "dosimetriaMen", "ref", id_ref)
+        lambda: verificar_editar(dlg, dlg._tabla_dosimetria_activa, "dosimetriaMen", "ref", id_ref)
     )
     dlg.accept_edit.clicked.connect(
-        lambda: guardarEdicion(dlg, table, "dosimetriaMen", id_ref)
+        lambda: guardarEdicion(dlg, dlg._tabla_dosimetria_activa, "dosimetriaMen", id_ref)
     )
     dlg.cancel_edit.clicked.connect(
         lambda: cancelarEdicion(dlg)
@@ -2973,7 +3007,7 @@ def mostrar_dosimetria(parent, id_ref):
     # A6.2-bis, así que queda auditado con el nombre del físico sin trabajo
     # extra.
     dlg.btn_delete.clicked.connect(
-        lambda: verificar_eliminar(dlg, table, "dosimetriaMen", id_ref)
+        lambda: verificar_eliminar(dlg, dlg._tabla_dosimetria_activa, "dosimetriaMen", id_ref)
     )
 
     dlg.resize(1200, 700)
@@ -4144,11 +4178,43 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
         QMessageBox.warning(dlg, 'Error', 'Por favor selecciona una fila para eliminar')
         return
 
+    # G5 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-b): el escaneo de
+    # metadata se movió ANTES de la confirmación (antes vivía dentro del
+    # try, después de preguntar) para poder anunciar QUÉ se va a anular --
+    # en dosimetriaMen, el texto genérico ("¿desea eliminar este
+    # registro?") no avisaba que se anula el bloque COMPLETO de una
+    # energía (dosis, calidad, simetría y planicidad juntas), consecuencia
+    # de la clave compuesta (ref, energia) sin id propio.
+    row_id, col_data = None, None
+    for col in range(tabla_widget.columnCount()):
+        item = tabla_widget.item(row, col)
+        if item and item.data(Qt.UserRole) is not None:
+            row_id = item.data(Qt.UserRole)
+            col_data = item.data(Qt.UserRole + 1)
+            break
+
+    if row_id is None:
+        QMessageBox.critical(dlg, "Error",
+                              "Error al eliminar: No se encontró metadata "
+                              "(id/ref) en la fila seleccionada")
+        return
+
+    if (nombre_tabla == "dosimetriaMen"
+            and isinstance(row_id, (tuple, list)) and len(row_id) == 2):
+        _, energia = row_id
+        texto_confirmacion = (
+            f"Se anulará el registro completo de la energía {energia} de "
+            f"este control (dosis, calidad, simetría y planicidad). Las "
+            f"filas quedan en el historial, no se borran."
+        )
+    else:
+        texto_confirmacion = "¿Está seguro que desea eliminar este registro?"
+
     # Confirmación
     confirm = QMessageBox.question(
         dlg,
         "Confirmar eliminación",
-        "¿Está seguro que desea eliminar este registro?",
+        texto_confirmacion,
         QMessageBox.Yes | QMessageBox.No,
         QMessageBox.No
     )
@@ -4157,18 +4223,6 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
 
     db = None
     try:
-        # Buscar en la fila algún item con metadata (Qt.UserRole)
-        row_id, col_data = None, None
-        for col in range(tabla_widget.columnCount()):
-            item = tabla_widget.item(row, col)
-            if item and item.data(Qt.UserRole) is not None:
-                row_id = item.data(Qt.UserRole)
-                col_data = item.data(Qt.UserRole + 1)
-                break
-
-        if row_id is None:
-            raise Exception("No se encontró metadata (id/ref) en la fila seleccionada")
-
         table_name = nombre_tabla
 
         # E5 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §6): dosimetriaMen (y
