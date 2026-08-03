@@ -4,13 +4,32 @@ en la anulación (`DialogAdminPermisoEliminar`, admin o física jefe).
 
 Reactivar es un flujo LEGÍTIMO y previsto (§8.3: llenar controles de años
 anteriores con los parámetros que el equipo tenía entonces), no una
-operación sospechosa -- el gate es una decisión explícita del físico. Los
-demás cambios de la edición (no tocan `activo`) siguen sin pedir
-administrador (D1 del Plan E).
+operación sospechosa -- el gate es una decisión explícita del físico.
+
+ACTUALIZADO por G2 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-G2, DA-01,
+2026-07-31): el gate CONDICIONAL que F7 puso dentro de `guardarCambios`
+(solo si `activo` pasaba de 0 a 1) se retiró -- G2 exige administrador para
+CUALQUIER edición del catálogo, desde la ENTRADA (`habilitar2`), no solo
+para reactivar. La garantía de F7 ("reactivar no ocurre sin autorización")
+sigue siendo cierta -- ahora la cubre el gate más amplio de G2, verificado
+en `test_g2_gate_admin_equipos.py`. `TestReactivarSinAutorizacionNoCambiaActivo`
+se reubicó para probarlo a través de `habilitar2` (el mecanismo real ahora);
+`TestCambioQueNoTocaActivoNoPideAdministrador` se retiró porque su premisa
+("editar un campo distinto de `activo` no pide administrador") es exactamente
+lo que G2 invirtió -- ver `TestActivoQuedaAuditadoConNombreDelFisico` en
+test_g2_gate_admin_equipos.py para la cobertura vigente. `TestReactivarConAutorizacion`
+y `TestIntentoDenegadoQuedaAuditado` no dependían del gate condicional de F7
+(prueban la propia actualización/auditoría de `guardarCambios` y el
+comportamiento propio de `DialogAdminPermisoEliminar`) -- se conservan tal
+cual, ya autorizados antes de llegar aquí.
 """
+import os
 import sqlite3
 
 import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QLineEdit, QTableWidget,
@@ -134,13 +153,51 @@ def _activo_actual(ruta, id_equipo):
 
 
 class TestReactivarSinAutorizacionNoCambiaActivo:
+    """Reubicada por G2: el gate ya no vive en `guardarCambios` (se llamaba
+    directo, bypaseando `habilitar2`) -- ahora vive en `habilitar2`, así que
+    la prueba pasa por ahí. Con el diálogo denegado, `habilitar2` retorna
+    antes de conectar el botón "Guardar" a `guardarCambios` -- ni pulsándolo
+    cambia nada. Cobertura completa (incluida esta) en
+    test_g2_gate_admin_equipos.py."""
+
     def test_denegado_no_modifica_activo(self, app, bd_temporal, monkeypatch):
+        from PyQt5.QtWidgets import QComboBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout
+
         id_equipo = _preparar_equipo(bd_temporal, activo=0)
         _mock_dialogo(monkeypatch, aceptado=False)
-        obj = _instancia_con_formulario(id_equipo, activo_marcado=True)
 
-        Config.guardarCambios(obj)
+        obj = Config.__new__(Config)
+        QWidget.__init__(obj)
+        obj.user_id = _UsuarioActualFalso()
+        obj.canson1 = QWidget()
+        obj.canson1.setLayout(QVBoxLayout())
+        obj.tios = QPushButton()
+        obj.tios2 = QPushButton()
+        obj.info_unidades = QWidget()
+        obj.tipo = QComboBox()
+        obj.tipo.addItem("Cámara de ionización")
+        obj.actualizar_unidades_calibracion = lambda texto: None
+        obj.editarEquipo = lambda: None
+        obj.table = QTableWidget(1, 1)
+        item = QTableWidgetItem()
+        item.setData(Qt.UserRole, id_equipo)
+        obj.table.setItem(0, 0, item)
+        obj.table.setCurrentCell(0, 0)
 
+        # `guardarCambios` como espía en vez de la real: lo que esta prueba
+        # verifica es si el botón queda CONECTADO o no -- dejar correr la
+        # función real sobre un objeto "pelado" (sin modelo/serie/etc.)
+        # revienta con AttributeError sin try/except que lo atrape (a
+        # diferencia de guardarEdicion en load.py), y eso aborta el
+        # intérprete al propagarse a través del signal de Qt -- no es lo
+        # que se está probando aquí.
+        llamado = []
+        obj.guardarCambios = lambda: llamado.append(True)
+
+        Config.habilitar2(obj)
+        obj.tios.clicked.emit()  # aunque se pulsara "Guardar", no está conectado
+
+        assert llamado == []
         assert _activo_actual(bd_temporal, id_equipo) == 0
 
 
@@ -170,27 +227,6 @@ class TestReactivarConAutorizacion:
         assert accion == "actualizar"
         assert tabla == "equipos"
         assert "activo: 0→1" in detalle
-
-
-class TestCambioQueNoTocaActivoNoPideAdministrador:
-    """No romper D1: editar un campo distinto de `activo` sigue sin pedir
-    administrador -- el diálogo ni se instancia."""
-
-    def test_no_se_pide_administrador(self, app, bd_temporal, monkeypatch):
-        id_equipo = _preparar_equipo(bd_temporal, activo=1)  # ya activo
-        dialogo_falso = _mock_dialogo(monkeypatch, aceptado=False)
-        _mock_messagebox(monkeypatch)
-        obj = _instancia_con_formulario(id_equipo, activo_marcado=True,
-                                        mismos_datos=False)  # cambia el modelo
-
-        Config.guardarCambios(obj)
-
-        assert dialogo_falso.instancias == []  # nunca se instanció
-        # el cambio de modelo sí se guardó (INSERT de nueva fila, no bloqueado)
-        con = sqlite3.connect(bd_temporal)
-        modelos = [r[0] for r in con.execute("SELECT model FROM equipos").fetchall()]
-        con.close()
-        assert "N30013-editado" in modelos
 
 
 class TestIntentoDenegadoQuedaAuditado:

@@ -388,6 +388,20 @@ class Config(PruebaBasico):
 
     def habilitar2(self):
         print("\nBotón editar equipo clickeado (función habilitar2 en equipos.py)")
+
+        # G2 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-G2, DA-01): editar
+        # el catálogo de equipos exige administrador -- antes era la única
+        # tabla editable de la app sin ninguna barrera (las diarias usan
+        # DialogAdminPermisoEliminar, el mensual también). Sin esto, un
+        # físico raso podía desmarcar "Activo" y guardar sin que nadie
+        # autorizara nada (evidencia: audit_log del rebuild, activo: 1->0
+        # sin autorizacion en medio). DialogAdminPermisoEliminar ya valida
+        # login + es_admin_equivalente() y audita el intento denegado por sí
+        # sola (C3) -- mismo patrón que eliminarEquipo.
+        dialogo_admin = DialogAdminPermisoEliminar(self.user_id)
+        if dialogo_admin.exec() != QDialog.DialogCode.Accepted:
+            return
+
         for i in range(self.canson1.layout().count()):
             item = self.canson1.layout().itemAt(i).widget()
             if item is not None:
@@ -782,21 +796,13 @@ class Config(PruebaBasico):
         vigente = datos_originales[12]
         activo_original = datos_originales[11]
 
-        # F7 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.2/§9): reactivar un equipo
-        # (activo 0->1) exige autorización de administrador -- mismo gate
-        # que E2 puso en la anulación (DialogAdminPermisoEliminar ya valida
-        # login + es_admin_equivalente() por dentro, y audita el intento
-        # denegado). Es un flujo LEGÍTIMO y previsto (§8.3: llenar controles
-        # de años anteriores con los parámetros de entonces), no una
-        # operación sospechosa -- el gate es decisión explícita del físico;
-        # si con el uso resulta demasiada fricción, lo que se revisa es el
-        # gate, no el flujo. Los demás cambios de la edición siguen con la
-        # reautenticación del propio físico (D1 del Plan E, sin cambios).
-        if activo_original == 0 and activo == 1:
-            dialogo_admin = DialogAdminPermisoEliminar(self.user_id)
-            if dialogo_admin.exec() != QDialog.DialogCode.Accepted:
-                conn.close()
-                return
+        # G2 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-G2, DA-01): el
+        # gate de F7 aquí (reactivar 0->1 exigía admin) se retiró -- ahora
+        # TODA la edición del catálogo exige admin desde la entrada
+        # (habilitar2, más arriba en este archivo), así que pedir la clave
+        # otra vez al guardar era fricción sin ganancia. Se conserva el
+        # detalle de auditoría con activo: X->Y (más abajo), que es lo que
+        # hace reconstruible una reactivación.
 
         # Función para comparar valores de forma robusta
         def valores_iguales(nuevo, original):
