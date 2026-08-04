@@ -200,6 +200,11 @@ class Conexion():
             # triggers, así que si E10 alguna vez recrea algo sobre una BD
             # ya blindada, los triggers deben reponerse justo después.
             self._asegurar_triggers_anti_delete()
+            # U2 (PLAN_NUCLEO_04-08.md, Bloque U): al final -- es aditivo
+            # (no recrea tablas, no le afecta el orden con E10/E8) y
+            # depende de "controles.activo" (createTable, arriba) y de la
+            # medición de U1 (duplicados_control), que se corre primero.
+            self._asegurar_indice_unico_controles()
 
         except Exception as ex:
             traceback.print_exc()
@@ -281,6 +286,68 @@ class Conexion():
             cur.close()
         except Exception as ex:
             print("Error asegurando triggers anti-DELETE al arranque:", ex)
+
+    def _asegurar_indice_unico_controles(self):
+        """U2 (PLAN_NUCLEO_04-08.md, Bloque U, DP-06): índice UNIQUE
+        PARCIAL sobre expresión que impide dos controles activos del mismo
+        (equipo, control, mes/año) -- defensa en profundidad, no la primera
+        línea: `create_control` (load.py) ya busca-o-crea por esa misma
+        clave; el índice garantiza que ninguna ruta futura pueda saltárselo
+        (mismo principio que E10/E8 respecto de `anular_fila`).
+
+        Precedido SIEMPRE por U1 (`duplicados_control.duplicados_controles`):
+        si hay duplicados, NO se crea el índice y se reporta ruidosamente --
+        nunca se borra ni se corrige nada automáticamente, esa decisión es
+        del físico. Regla dura de esta ronda: "evitar siempre borrar
+        información antes de verificar".
+
+        Parcial (`WHERE activo IS NULL OR activo = 1`, mismo criterio que
+        el resto del proyecto desde E7): anular un control y crear otro del
+        mismo mes sigue siendo legal -- el caso excepcional que el físico
+        pidió no bloquear. La normalización de fecha
+        (`CASE WHEN length(fecha)=10 THEN substr(fecha,4,7) ELSE fecha END`)
+        es determinista porque `controles.fecha` solo tiene dos formatos
+        reales (medido: "MM/yyyy" de 7 caracteres y "dd/MM/yyyy" de 10; no
+        existe "d/MM/yyyy" en esta columna, a diferencia de `equipos`).
+
+        Aditivo y reversible (`DROP INDEX`); no recrea ninguna tabla, así
+        que no le afecta el orden con E10/E8 ni borra los triggers de E8
+        (lección de E10: recrear SÍ borra triggers; crear un índice, no).
+
+        Import local (mismo motivo que `_asegurar_activo_bloque_qc`):
+        evita cualquier riesgo de import circular con el resto de
+        `services/`.
+        """
+        try:
+            from services.duplicados_control import duplicados_controles
+            duplicados = duplicados_controles(self.con)
+            if duplicados:
+                print(
+                    "ALERTA: no se creó el índice único de controles -- hay "
+                    f"{len(duplicados)} grupo(s) duplicado(s) por (equipo, "
+                    "control, mes/año) entre filas activas. Requiere "
+                    "decisión del físico (services/duplicados_control.py, "
+                    "o el reporte de scripts/migrar_bd_a_estandar.py):"
+                )
+                for grupo in duplicados:
+                    print(f"  {grupo['equipo']} / {grupo['control']} / "
+                          f"{grupo['mes']:02d}/{grupo['anio']}: "
+                          f"ids {grupo['ids']}")
+                return
+            cur = self.con.cursor()
+            cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_controles_unico_mes "
+                "ON controles ("
+                "    equipo,"
+                "    control,"
+                "    CASE WHEN length(fecha)=10 THEN substr(fecha,4,7) "
+                "ELSE fecha END"
+                ") WHERE activo IS NULL OR activo = 1"
+            )
+            self.con.commit()
+            cur.close()
+        except Exception as ex:
+            print("Error asegurando el índice único de controles al arranque:", ex)
 
     def _asegurar_secuencias_sin_duplicados(self):
         """E10, hallazgo del ensayo sobre la BD real: `sqlite_sequence`
