@@ -3262,6 +3262,8 @@ class DialogCalculadoraDosis(QDialog):
             self.lDV1_prom.setText(str(round(qprom,5)))
             self.Mplus.setText(str(round(qprom,5)))
             self.lect_m1.setText(str(round(qprom,5)))
+        except (ValueError, TypeError):
+            self.lDV1_prom.clear()
         except Exception as e:
             print(e)
             self.lDV1_prom.clear()
@@ -3326,6 +3328,8 @@ class DialogCalculadoraDosis(QDialog):
             r50 = self.R50.text()
             q_r50 = DosisService.r50_quality(float(r50))
             self.QualityR50.setText(str(q_r50))
+        except (ValueError, TypeError):
+            self.QualityR50.clear()
         except Exception as e:
             print(e)
             self.QualityR50.clear()
@@ -3345,6 +3349,10 @@ class DialogCalculadoraDosis(QDialog):
             # invisible = guardado bloqueado, la trampa que H1.1 corrigió).
             if self.electrones.isChecked():
                 self.Zref.setText(str(q_r50))
+        except (ValueError, TypeError):
+            self.zrefR50.clear()
+            if self.electrones.isChecked():
+                self.Zref.clear()
         except Exception as e:
             print(e)
             self.zrefR50.clear()
@@ -3363,6 +3371,8 @@ class DialogCalculadoraDosis(QDialog):
             # elif self.SAD.isChecked():
             #     max_dose = DosisService.dwqzmaxSAD_calc(float(self.Dzref.text()), float(self.tmrzref.text()))
             #     self.dosis_maxima.setText(str(max_dose))
+        except (ValueError, TypeError):
+            self.dosis_maxima.clear()
         except Exception as e:
             print(e)
             self.dosis_maxima.clear()
@@ -3379,6 +3389,10 @@ class DialogCalculadoraDosis(QDialog):
             self.a0.setText(str(a0))
             self.a1.setText(str(a1))
             self.a2.setText(str(a2))
+        except (ValueError, TypeError):
+            self.a0.clear()
+            self.a1.clear()
+            self.a2.clear()
         except Exception as e:
             print(e)
             self.a0.clear()
@@ -3416,6 +3430,8 @@ class DialogCalculadoraDosis(QDialog):
             elif self.fotones.isChecked():
                 self.MQvar.setText(str(DosisService.calcular_mq_fot(float(self.cociente.text()),
                     float(self.ktp.text()), float(self.Kpol.text()), float(self.ks.text()))))
+        except (ValueError, TypeError):
+            self.MQvar.clear()
         except Exception as e:
             print(e)
             self.MQvar.clear()
@@ -3464,6 +3480,8 @@ class DialogCalculadoraDosis(QDialog):
             m3 = float(self.Mminus3.text())
             mprom = np.mean([m1,m2,m3])
             self.Mminus.setText(str(round(mprom,6)))
+        except (ValueError, TypeError):
+            self.Mminus.clear()
         except Exception as e:
             print(e)
             self.Mminus.clear()
@@ -3475,6 +3493,8 @@ class DialogCalculadoraDosis(QDialog):
             m2_3 = float(self.lect_m2_3.text())
             m2_prom = np.mean([m2_1,m2_2,m2_3])
             self.lect_m2.setText(str(round(m2_prom,6)))
+        except (ValueError, TypeError):
+            self.lect_m2.clear()
         except Exception as e:
             print(e)
             self.lect_m2.clear()
