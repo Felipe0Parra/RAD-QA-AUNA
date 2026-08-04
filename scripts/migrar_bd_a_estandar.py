@@ -46,6 +46,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from services.duplicados_control import duplicados_controles
+
 CENTINELA_SEGUNDO_FISICO = " ---- "
 
 # F6 (PLAN_F_CIERRE_ESTANDAR_29-07.md): identidad para el respaldo previo a
@@ -192,6 +194,25 @@ def _reportar_censo_completo(censo_antes, censo_despues):
         print(f"  Las {len(otras)} tablas restantes conservan sus conteos "
               "(ninguna perdió filas).")
     return bool(perdida)
+
+
+def _reportar_duplicados_controles(duplicados):
+    """U1 (PLAN_NUCLEO_04-08.md, Bloque U): duplicados por (equipo, control,
+    mes/año) entre las filas ACTIVAS de `controles` -- la precondición que
+    U2 (el índice UNIQUE parcial) necesita ver ANTES de intentar crearse.
+    Solo reporta; nunca borra ni corrige nada. Devuelve True si hay
+    duplicados (para que el llamador pueda decidir no seguir con U2)."""
+    print("\n--- Duplicados de controles (unicidad DP-06) ---")
+    if not duplicados:
+        print("  Ningún duplicado por (equipo, control, mes/año) entre las "
+              "filas activas.")
+        return False
+    print(f"  ALERTA -- {len(duplicados)} grupo(s) duplicado(s), requieren "
+          f"decisión del físico (no se toca nada automáticamente):")
+    for grupo in duplicados:
+        print(f"    {grupo['equipo']} / {grupo['control']} / "
+              f"{grupo['mes']:02d}/{grupo['anio']}: ids {grupo['ids']}")
+    return True
 
 
 def _inventario_estructural(con):
@@ -407,6 +428,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                 qc_despues = _contar_qc(con_copia)
                 censo_despues = _contar_todas_las_tablas(con_copia)
                 estructural_despues = _inventario_estructural(con_copia)
+                duplicados_controles_despues = duplicados_controles(con_copia)
             finally:
                 con_copia.close()
         _reportar_diff(inventario_antes, inventario_despues,
@@ -416,10 +438,12 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         _reportar_cambios_estructurales(estructural_antes, estructural_despues)
         _reportar_qc(qc_antes, qc_despues)
         _reportar_censo_completo(censo_antes, censo_despues)
+        _reportar_duplicados_controles(duplicados_controles_despues)
         return {"aplicado": False, "integridad_antes": integridad_antes,
                 "sentinelas_antes": sentinelas_antes, "equipos": equipos,
                 "qc_antes": qc_antes, "qc_despues": qc_despues,
-                "censo_antes": censo_antes, "censo_despues": censo_despues}
+                "censo_antes": censo_antes, "censo_despues": censo_despues,
+                "duplicados_controles": duplicados_controles_despues}
 
     if integridad_antes != "ok":
         print(f"ALERTA: integrity_check antes de migrar dio "
@@ -447,6 +471,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         qc_despues = _contar_qc(con_despues)
         censo_despues = _contar_todas_las_tablas(con_despues)
         estructural_despues = _inventario_estructural(con_despues)
+        duplicados_controles_despues = duplicados_controles(con_despues)
     finally:
         con_despues.close()
 
@@ -458,6 +483,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     _reportar_cambios_estructurales(estructural_antes, estructural_despues)
     hubo_perdida_qc = _reportar_qc(qc_antes, qc_despues)
     hubo_perdida_censo = _reportar_censo_completo(censo_antes, censo_despues)
+    _reportar_duplicados_controles(duplicados_controles_despues)
 
     if integridad_despues != "ok":
         print(f"ALERTA: integrity_check después de migrar dio "
@@ -483,7 +509,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             "sentinelas_normalizadas": sentinelas_normalizadas,
             "equipos": equipos,
             "qc_antes": qc_antes, "qc_despues": qc_despues,
-            "censo_antes": censo_antes, "censo_despues": censo_despues}
+            "censo_antes": censo_antes, "censo_despues": censo_despues,
+            "duplicados_controles": duplicados_controles_despues}
 
 
 def _main():
