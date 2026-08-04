@@ -27,9 +27,13 @@ donde vivía el bug.
 Este archivo cubre el hueco por el otro lado: NO inyecta nada, construye por
 el constructor real y verifica la cadena completa de identidad.
 """
+import os
 import sqlite3
 
 import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 from PyQt5.QtWidgets import QApplication, QDialog
 
 import data.ManejoDatos.conection as conection_mod
