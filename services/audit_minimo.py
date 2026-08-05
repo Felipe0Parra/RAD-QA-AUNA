@@ -65,6 +65,11 @@ ACCION_AUTORIZACION = "autorizacion"
 # traer una BD antigua al estándar actual -- distinto de un "actualizar"
 # hecho por un físico desde la UI en el flujo normal de trabajo.
 ACCION_MIGRACION = "migracion"
+# N2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, DA-34): reactivar un
+# control mensual/anual anulado -- lo inverso de ACCION_ANULAR, no
+# "actualizar" (que ya se usa para el UPDATE de físicos de create_control) ni
+# "editar" (que audita cambios de campo, no de estado activo/inactivo).
+ACCION_REACTIVAR = "reactivar"
 
 
 def usuario_actual(obj):

@@ -18,6 +18,7 @@ from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
 from services.anulacion import TABLAS_ANULABLES, anular_fila
+from services.reactivacion import reactivar_control as _reactivar_control
 def _dialogo_con_identidad(dlg, parent):
     """Propaga al diálogo la identidad del físico del formulario que lo abre.
 
@@ -76,6 +77,45 @@ def _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha):
         f"Ya existe un reporte para {fecha} -- ¿reemplazarlo?",
         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
     return respuesta == QMessageBox.Yes
+
+
+def _ofrecer_reactivar_control(self, control_id):
+    """N2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, DA-34): ofrece
+    reactivar un control anulado, en la misma ventana que hoy da la
+    advertencia de "no se puede subir sobre un registro anulado".
+
+    Autenticación PERSONAL (DialogAdminPermisoEditar, no
+    DialogAdminPermisoEliminar) -- decisión del físico: reactivar es una
+    operación de edición del propio físico (DA-07), no un cambio fuerte que
+    exija administrador.
+
+    Aislada y mockeable (mismo patrón que _confirmar_reemplazo_reporte_
+    diario, H2.2): los tests sustituyen QMessageBox.question y el diálogo
+    sin disparar nada modal real.
+
+    Returns:
+        True si reactivó de verdad. False en cualquier otro caso (el
+        físico declinó, la reautenticación falló, o reactivar_control
+        rechazó la operación -- p.ej. por la guarda de unicidad de U2).
+    """
+    from ui.paginasGuia.dialogs import DialogAdminPermisoEditar
+
+    respuesta = QMessageBox.question(
+        self, "Control anulado",
+        "Este control fue anulado -- ¿desea reactivarlo?",
+        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    if respuesta != QMessageBox.Yes:
+        return False
+
+    dialogo = DialogAdminPermisoEditar(self.user_id)
+    if dialogo.exec() != QDialog.DialogCode.Accepted:
+        return False
+
+    ok, motivo = _reactivar_control(control_id, _usuario_actual(self))
+    if not ok:
+        QMessageBox.warning(self, "No se pudo reactivar", motivo)
+        return False
+    return True
 
 "Función que almecena la información en la base de datos de los controles diarios"
 def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
