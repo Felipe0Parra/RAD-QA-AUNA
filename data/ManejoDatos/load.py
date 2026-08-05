@@ -17,6 +17,7 @@ from services.fechas_control import mismo_mes as _mismo_mes
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
+from services.ventana_edicion import motivo_bloqueo as _motivo_bloqueo
 from services.anulacion import TABLAS_ANULABLES, anular_fila
 from services.reactivacion import reactivar_control as _reactivar_control
 def _dialogo_con_identidad(dlg, parent):
@@ -573,9 +574,19 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
     # mensual de QC solo admite UPDATE dentro de la ventana de 2 meses
     # desde su creación -- decisión del físico. Anual queda fuera (su
     # create_control es otro, sin ancla de auditoría; el plan no lo cubre).
-    if not anual and not _puede_editarse_control(ref):
-        QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(ref))
-        return
+    if not anual:
+        motivo = _motivo_bloqueo(ref)
+        if motivo is not None:
+            # N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, DA-34): si el
+            # bloqueo es porque el control está ANULADO, ofrecer reactivarlo
+            # aquí mismo -- "la pregunta en la misma ventana que da la
+            # advertencia". Cualquier otro motivo (inexistente, fuera de la
+            # ventana de 2 meses de F4b) mantiene el aviso de siempre --
+            # ofrecer reactivar ahí se tragaría el bloqueo de F4b.
+            reactivado = motivo == "anulado" and _ofrecer_reactivar_control(self, ref)
+            if not reactivado or not _puede_editarse_control(ref):
+                QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(ref))
+                return
     conn = Conexion().conectar()
     cursor = conn.cursor()
 

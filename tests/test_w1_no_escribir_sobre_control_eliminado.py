@@ -142,6 +142,17 @@ class TestSubirBloqueadoSiElControlYaNoExiste:
         con.close()
         assert activo == 0
 
+        # N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): un control
+        # anulado ahora ofrece reactivar -- este test verifica el camino
+        # "sigue bloqueado", no la reactivación (que tiene su propia
+        # cobertura en test_n2/test_n3); sin este mock, el QMessageBox.
+        # question mockeado arriba a Yes (para eliminarRegistro) también
+        # respondería la pregunta de reactivar, y el diálogo de
+        # reautenticación reventaría contra un objeto pelado sin user_id.
+        # ix_mensual.py importa el MÓDULO (`_load_mod`), así que parchear
+        # load_mod aquí (mismo objeto en sys.modules) sí tiene efecto ahí.
+        monkeypatch.setattr(load_mod, "_ofrecer_reactivar_control", lambda self, cid: False)
+
         # el formulario mensual, que seguía abierto con self.ref=42, intenta Subir
         obj = _pelado_ix()
         obj.subirlineasmensuales_ix("dosimetriaMen", 0, ref=42, usarid=True, df_lines=[])
@@ -156,6 +167,11 @@ class TestSubirBloqueadoSiElControlYaNoExiste:
     def test_600_bloquea_si_el_control_fue_anulado(self, app, bd_temporal, monkeypatch):
         avisos = _capturar_avisos(monkeypatch)
         _crear_control(bd_temporal, 43, activo=0)  # ya anulado
+        # N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): sin este mock,
+        # el QMessageBox.question de "¿desea reactivarlo?" (sin mockear en
+        # este test) colgaría la suite offscreen esperando un clic real.
+        # Este test verifica el camino "sigue bloqueado, no reactiva".
+        monkeypatch.setattr(load_mod, "_ofrecer_reactivar_control", lambda self, cid: False)
 
         obj = _pelado_600()
         obj.df_lines = ["ln_observaciones_dosi"]

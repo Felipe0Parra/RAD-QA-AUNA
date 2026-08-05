@@ -108,35 +108,73 @@ def _estado_control(control_id):
     return True, (activo is None or activo == 1)
 
 
+def _motivo_estructural(control_id):
+    """Parte de la clasificación que NO depende del reloj: si el control
+    existe y si sigue activo. Separada a propósito de la parte TEMPORAL (la
+    ventana de 2 meses) porque `mensaje_bloqueo_edicion` necesita la primera
+    y NO debe evaluar la segunda -- ver su docstring."""
+    existe, activo = _estado_control(control_id)
+    if not existe:
+        return "inexistente"
+    if not activo:
+        return "anulado"
+    return None
+
+
+def motivo_bloqueo(control_id, hoy=None):
+    """Por qué `control_id` no admite edición ahora mismo, o None si sí la
+    admite: "inexistente" | "anulado" | "fuera_de_ventana" | None.
+
+    N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): los dos puntos de
+    "Subir" necesitan DISTINGUIR el motivo -- solo "anulado" ofrece
+    reactivar (DA-34); "fuera_de_ventana" debe seguir bloqueando sin más
+    (F4b/C1).
+    """
+    if not control_id:
+        return None
+    motivo = _motivo_estructural(control_id)
+    if motivo is not None:
+        return motivo
+    ancla, _ = fecha_ancla_de_control(control_id)
+    if ancla is None:
+        return None
+    hoy = hoy or date.today()
+    return None if hoy <= limite_edicion(ancla) else "fuera_de_ventana"
+
+
 def puede_editarse(control_id, hoy=None):
     """True si `control_id` existe, sigue activo (no anulado) y está dentro
     de la ventana de 2 meses. Sin ancla resoluble (ver
     fecha_ancla_de_control) pero con el control existente y activo, no
-    bloquea por fecha."""
-    if not control_id:
-        return True
-    existe, activo = _estado_control(control_id)
-    if not existe or not activo:
-        return False
-    ancla, _ = fecha_ancla_de_control(control_id)
-    if ancla is None:
-        return True
-    hoy = hoy or date.today()
-    return hoy <= limite_edicion(ancla)
+    bloquea por fecha.
+
+    Fuente ÚNICA con `motivo_bloqueo`: si divergieran, un call-site podría
+    bloquear sin saber por qué -- y N3 nunca ofrecería reactivar.
+    """
+    return motivo_bloqueo(control_id, hoy=hoy) is None
 
 
 def mensaje_bloqueo_edicion(control_id):
     """Texto explicando por qué un control ya no admite edición, y desde
     cuándo se cuenta el plazo -- para mostrarlo tal cual en el aviso de
-    'Subir' bloqueado."""
-    existe, activo = _estado_control(control_id)
-    if not existe:
+    'Subir' bloqueado.
+
+    NO vuelve a comprobar la fecha, a propósito: se invoca SIEMPRE detrás de
+    un `if not puede_editarse(ref)`, así que el llamador ya decidió que está
+    bloqueado y aquí solo se redacta la explicación. Por eso se construye
+    sobre `_motivo_estructural` y no sobre `motivo_bloqueo`: con un control
+    existente y activo el único motivo posible es la ventana, y se describe
+    con su fecha límite sin volver a compararla contra el reloj (mismo
+    comportamiento que fijan los tests de F4b desde el 23-07).
+    """
+    motivo = _motivo_estructural(control_id)
+    if motivo == "inexistente":
         return (
             "Este control ya no existe en la base de datos (fue "
             "eliminado desde otra pestaña) -- no se pueden guardar datos "
             "nuevos sobre un registro que ya no está."
         )
-    if not activo:
+    if motivo == "anulado":
         return (
             "Este control fue anulado -- no se pueden guardar más datos "
             "sobre un registro eliminado."
