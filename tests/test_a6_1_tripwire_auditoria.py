@@ -287,24 +287,29 @@ ALLOWLIST = {
     # update_password y eliminarEquipo ya auditan directamente -- no quedan
     # entradas aquí. ---
 
-    # --- PENDIENTE-A6.3: mensual 600 / IX / Halcyon ---
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py",
-     "PruebaMensual600.subirtodo_modificado"): "PENDIENTE-A6.3",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py",
-     "PruebaMensual600.subir_control_cunas"): "PENDIENTE-A6.3",
+    # --- A6.3 (mensual 600 / IX / Halcyon) cerrada 2026-08-04:
+    # subirtodo_modificado, subir_control_cunas y _subir_tabla_optimizada ya
+    # auditan directamente -- no quedan entradas aquí para esas 3.
+    # guardar_control_conos: su único caller real (directo) es
+    # guardar_todo_ix -- ahí se audita una sola vez para cuñas+conos juntos
+    # (mismo click en iX), evitando 2 filas por 1 acción.
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py",
-     "PruebaMensualIX.guardar_control_conos"): "PENDIENTE-A6.3",
-    ("data/ManejoDatos/load.py", "guardar_analisis_placa600"): "PENDIENTE-A6.3",
-    ("data/ManejoDatos/load.py", "crear_algo"): "PENDIENTE-A6.3",
-    # loadtablacomplex: de sus 7 call-sites reales solo 1 audita hoy
-    # (fieldSize->subir_tabla, from_range=3). Los otros 6 -- incluida la vía
-    # "optimizada" que comparten 600 mensual Y Halcyon mensual -- no auditan
-    # todavía (ver PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7, corrección del
-    # mismo día). Pasa a `audita-el-llamador` cuando _subir_tabla_optimizada
-    # y los guardar_todas_fse de A6.4 auditen.
+     "PruebaMensualIX.guardar_control_conos"):
+        "audita-el-llamador:ui/paginasControles/PruebasMensuales/ix_mensual.py::PruebaMensualIX.guardar_todo_ix",
+    # guardar_analisis_placa600 y crear_algo: mismo botón "Guardar análisis"
+    # (antes 2 conexiones .clicked independientes -- habría dado 2 filas por
+    # 1 click). Unificadas en guardar_analisis_e_imagen, que llama a ambas
+    # (transitivamente, vía guardar_analsis/dbImagen) y audita una vez.
+    ("data/ManejoDatos/load.py", "guardar_analisis_placa600"):
+        "audita-el-llamador:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600.guardar_analisis_e_imagen",
+    ("data/ManejoDatos/load.py", "crear_algo"):
+        "audita-el-llamador:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600.guardar_analisis_e_imagen",
+    # loadtablacomplex: de sus 7 call-sites reales, ahora 2 auditan
+    # (fieldSize->subir_tabla, from_range=3, y _subir_tabla_optimizada,
+    # A6.3). Quedan los 2 guardar_todas_fse de A6.4 (seiscientos_anual.py /
+    # ix_anual.py) -- hasta que esos también auditen, sigue como
+    # PENDIENTE-A6.3 (ver PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7).
     ("data/ManejoDatos/load.py", "loadtablacomplex"): "PENDIENTE-A6.3",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py",
-     "PruebaMensual600._subir_tabla_optimizada"): "PENDIENTE-A6.3",
 
     # --- PENDIENTE-A6.4: anual (600 / IX / Halcyon) ---
     ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py",

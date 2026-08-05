@@ -430,12 +430,23 @@ class PruebaMensualIX(PruebaMensual600):
                         texto = widget.currentText()
                         valor = 1 if texto.lower() == "funciona" else 0
                         datos_seguridad.append((self.ref, angulo, pos, valor))
-                self.subir_control_cunas(self.combos_seguridad, self.df_seg_line)
+                # A6.3: auditar=False -- esta acción (guardar_todo_ix) audita
+                # UNA sola vez para cuñas+conos, más abajo; subir_control_cunas
+                # no debe auditarse a sí mismo aquí (sí lo hace cuando el 600
+                # la llama directo desde su propio botón, solo-cuñas).
+                self.subir_control_cunas(self.combos_seguridad, self.df_seg_line,
+                                         auditar=False)
                 #print("OK, Cuñas guardadas en IX")
 
             # 2. Guardar conos (tu lógica adicional)
             self.guardar_control_conos()
             #print("OK, Conos guardados en IX")
+
+            # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): una sola acción
+            # de usuario dispara cuñas Y conos -- 1 fila para las dos.
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                 "control_cunas_y_conos", ref=getattr(self, "ref", None),
+                                 detalle="mensual iX: cuñas + conos")
 
             #self.bloquearboton(self.btn_guardar_ix)
         except Exception as e:

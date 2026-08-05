@@ -2221,6 +2221,17 @@ class PruebaMensual600(PruebaBasico):
                 print(f"Los argumentos son: nombre_tabla={nombre_tabla}, ref={ref}, anual={anual}, id={id}")
                 loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=anual, id=id, id_energia=id_energia)
 
+            # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): punto de mayor
+            # apalancamiento del bloque -- vía compartida de "subir tabla"
+            # para casi todas las tablas simples de 600 mensual Y Halcyon
+            # mensual (halcyon_mensual.py no tiene ni un import de
+            # auditoría propio, depende enteramente de este método
+            # heredado). loadtablacomplex sigue sin auditar internamente
+            # (es capa de detalle); este es uno de sus 3 puntos de cierre
+            # reales.
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                 nombre_tabla, ref=ref)
+
             # Actualizar tabla principal
             self._actualizar_tabla_despues_subida()
             QMessageBox.information(self, "", "Tabla cargada correctamente")
@@ -2552,11 +2563,25 @@ class PruebaMensual600(PruebaBasico):
         self.canvas.update()
 
         if hasattr(self, 'guardar_analisis') and self.guardar_analisis is not None:
-            self.guardar_analisis.clicked.connect(self.guardar_analsis)
-            self.guardar_analisis.clicked.connect(lambda _: self.dbImagen(self.ref, self.imagen_path))
+            # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): antes eran 2
+            # conexiones independientes al mismo click (análisis de placa +
+            # imagen) -- auditar cada una por separado habría dejado 2 filas
+            # para 1 acción real. Un solo handler que hace ambas cosas y
+            # audita una vez.
+            self.guardar_analisis.clicked.connect(self.guardar_analisis_e_imagen)
 
     def guardar_analsis(self):
             guardar_analisis_placa600(self.ref, self.res)
+
+    def guardar_analisis_e_imagen(self):
+        """A6.3: acción real del botón "Guardar análisis" -- análisis de
+        placa (`guardar_analisis_placa600`) e imagen (`crear_algo`, vía
+        `dbImagen`), 1 fila de auditoría para las dos."""
+        self.guardar_analsis()
+        self.dbImagen(self.ref, self.imagen_path)
+        _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                             "analisis_placa600", ref=self.ref,
+                             detalle="análisis de placa + imagen")
 
     def mostrar_grafica_actual(self):
         if self.lista_graficas:
@@ -3003,7 +3028,10 @@ class PruebaMensual600(PruebaBasico):
                 
                 cursor.execute("COMMIT")
                 print(f"Insertados {len(filas_a_insertar)} registros de equipos correctamente")
-                
+                # A6.3: equipos de medición del mensual (600/iX/Halcyon).
+                _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                     "equipos_medicion", ref=self.ref)
+
                 # Actualizar tabla si existe
                 if hasattr(self, 'tabla'):
                     self._actualizar_tabla_despues_subida()
@@ -3035,7 +3063,7 @@ class PruebaMensual600(PruebaBasico):
             return texto
         return None
     
-    def subir_control_cunas(self, combos_seguridad, df_lines=None):
+    def subir_control_cunas(self, combos_seguridad, df_lines=None, auditar=True):
         """
         combos_seguridad es un diccionario con las llaves:
         {
@@ -3045,6 +3073,14 @@ class PruebaMensual600(PruebaBasico):
             60: {...}
         }
         Guarda 1 si es 'Funciona', 0 si es 'No funciona'.
+
+        A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): en 600 el botón
+        "Subir" de cuñas llama SOLO a este método (auditar=True por
+        defecto, 1 fila). En iX, `guardar_todo_ix` llama a este método Y a
+        `guardar_control_conos` desde una sola acción del usuario -- para
+        no producir 2 filas por un solo click, esa llamada pasa
+        `auditar=False` y `guardar_todo_ix` audita una vez, después de que
+        ambas escrituras terminan.
         """
         print("\n -> Entra en subir_control_cunas en 600")
         conn = Conexion().conectar()
@@ -3079,6 +3115,9 @@ class PruebaMensual600(PruebaBasico):
         conn.commit()
         #QMessageBox.information(self, "Éxito", "Datos de control de cuñas insertados correctamente.")
         print("Datos de control de cuñas insertados correctamente")
+        if auditar:
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                 "control_cunas", ref=getattr(self, "ref", None))
         QMessageBox.information(self, "", "Tabla cargada correctamente")
         # Actualizar tabla si existe
         if hasattr(self, 'tabla'):
