@@ -4,6 +4,9 @@ from PyQt5.QtWidgets import (QWidget, QToolBox, QVBoxLayout, QHBoxLayout, QPushB
 from data.ManejoDatos.load import loadtablacomplex
 from ui.paginasControles.PruebasMensuales.tac_mensual import PruebaMensualTAC
 from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modulos
+from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import usuario_actual as _usuario_actual
+from services.audit_minimo import ACCION_GUARDAR
 class PruebaAnualIX(PruebaAnual600):
     def __init__(self, user_id):
         #print("PruebaAnualIX         __init__ called")
@@ -222,7 +225,14 @@ class PruebaAnualIX(PruebaAnual600):
                         nombre_tabla, table, datos, reference=ref, from_range=0,
                         anual=getattr(self, "anual", False), id_energia=id_energia, id=True
                     )
-                
+
+                # A6.4 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): uno de los
+                # 3 puntos de cierre reales de loadtablacomplex -- un solo
+                # click aquí puede subir VARIAS tablas FSE (una por energía)
+                # en bucle; 1 fila de auditoría para la acción completa.
+                _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                     nombre_tabla, ref=ref)
+
                 self.bloquearboton(btn_guardar)
                 self._actualizar_tabla_despues_subida()
                 print(f"Tabla(s) {nombre_tabla} subida(s) correctamente")

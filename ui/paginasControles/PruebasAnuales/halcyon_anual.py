@@ -2,6 +2,9 @@ from ui.paginasControles.PruebasAnuales.seiscientos_anual import PruebaAnual600
 from ui.paginasControles.PruebasMensuales.tac_mensual import PruebaMensualTAC
 from PyQt5.QtWidgets import QWidget, QToolBox, QVBoxLayout, QPushButton, QMessageBox
 from resources.utils.matplotlib_lazy import get_matplotlib_components
+from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import usuario_actual as _usuario_actual
+from services.audit_minimo import ACCION_GUARDAR
 
 class PruebaAnualHalcyon(PruebaAnual600):
     def __init__(self, user_id):
@@ -289,6 +292,11 @@ class PruebaAnualHalcyon(PruebaAnual600):
             cursor.execute(query, (self.ref, 0, imagen, imagen_perfil_horiz, picos_perfil))
             conn.commit()
             print("Imagen y perfil del MLC subidos exitosamente a la base de datos.")
+            # A6.4 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): archivo entero
+            # sin ninguna auditoría -- escritura aparte, no pasa por
+            # loadtablacomplex.
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                 "HC_imagen_perfil_mlc_anual", ref=self.ref)
             QMessageBox.information(self, "Éxito", "Imagen y perfil del MLC subidos exitosamente a la base de datos.")
         except Exception as e:
             print(f"Error subiendo imagen y perfil del MLC a la base de datos: {e}")

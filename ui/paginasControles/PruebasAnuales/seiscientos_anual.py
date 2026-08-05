@@ -3,6 +3,10 @@ from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.load import loadtablacomplex
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from PyQt5.QtWidgets import (QWidget, QToolBox, QMessageBox, QTableWidgetItem, QVBoxLayout, QHBoxLayout, QPushButton)
+from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import usuario_actual as _usuario_actual
+from services.audit_minimo import ACCION_GUARDAR
+from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 
 class PruebaAnual600(PruebaMensual600):
     def __init__(self, user_id, equipo_f='Clinac 600'):
@@ -78,7 +82,21 @@ class PruebaAnual600(PruebaMensual600):
             if hasattr(self, 'equipo_f') and self.equipo_f == 'Tomógrafo' and new_id:
                 self.old_id = False
             QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
-            
+
+            # A6.4 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): mismo patrón que
+            # el create_control mensual (data/ManejoDatos/load.py) -- el
+            # anual nunca dejaba rastro de la creación del control. Solo se
+            # audita el alta (INSERT); la reapertura (UPDATE más arriba)
+            # tampoco se audita en el mensual, por consistencia entre
+            # hermanos.
+            mes_creado, anio_creado = _mes_anio_de_fecha(fecha)
+            if mes_creado is not None:
+                detalle_legible = f"{maquina} -- Anual {mes_creado:02d}/{anio_creado}"
+            else:
+                detalle_legible = f"{maquina} -- Anual {fecha}"
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "controles",
+                                 ref=new_id, detalle=detalle_legible)
+
             return new_id
 
         except sqlite3.Error as e:
@@ -234,7 +252,16 @@ class PruebaAnual600(PruebaMensual600):
                     datos = []
                     print(f"Subiendo tabla {nombre_tabla} normalmente")
                     loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=getattr(self, "anual", False), id=id)
-                
+
+                # A6.4 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): uno de los
+                # 3 puntos de cierre reales de loadtablacomplex -- un solo
+                # click aquí puede subir VARIAS tablas FSE (una por energía)
+                # en bucle; 1 fila de auditoría para la acción completa, no
+                # una por tabla. Cubre también Halcyon anual, que hereda
+                # este método sin sobreescribirlo.
+                _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                     nombre_tabla, ref=ref)
+
                 self.bloquearboton(btn_guardar)
                 self._actualizar_tabla_despues_subida()
                 print(f"Tabla(s) {nombre_tabla} subida(s) correctamente")

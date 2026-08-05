@@ -304,18 +304,22 @@ ALLOWLIST = {
         "audita-el-llamador:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600.guardar_analisis_e_imagen",
     ("data/ManejoDatos/load.py", "crear_algo"):
         "audita-el-llamador:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600.guardar_analisis_e_imagen",
-    # loadtablacomplex: de sus 7 call-sites reales, ahora 2 auditan
-    # (fieldSize->subir_tabla, from_range=3, y _subir_tabla_optimizada,
-    # A6.3). Quedan los 2 guardar_todas_fse de A6.4 (seiscientos_anual.py /
-    # ix_anual.py) -- hasta que esos también auditen, sigue como
-    # PENDIENTE-A6.3 (ver PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7).
-    ("data/ManejoDatos/load.py", "loadtablacomplex"): "PENDIENTE-A6.3",
+    # loadtablacomplex: A6.4 cerró los 2 guardar_todas_fse que faltaban --
+    # sus 7 call-sites reales ahora auditan los 4: fieldSize->subir_tabla
+    # (from_range=3, ya de antes), _subir_tabla_optimizada (A6.3, cubre las
+    # 600 mensual/Halcyon mensual/parte anual con id_energia), y los dos
+    # guardar_todas_fse (seiscientos_anual.py/ix_anual.py, A6.4 -- cada uno
+    # cubre sus 2 branches, con/sin bucle de energías). Se referencia uno
+    # solo (el requisito del mecanismo); los otros 3 están verificados
+    # arriba en sus propias entradas de A6.3/A6.4.
+    ("data/ManejoDatos/load.py", "loadtablacomplex"):
+        "audita-el-llamador:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._subir_tabla_optimizada",
 
-    # --- PENDIENTE-A6.4: anual (600 / IX / Halcyon) ---
-    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py",
-     "PruebaAnual600.create_control"): "PENDIENTE-A6.4",
-    ("ui/paginasControles/PruebasAnuales/halcyon_anual.py",
-     "PruebaAnualHalcyon.subir_imagen_perfil_mlc_db"): "PENDIENTE-A6.4",
+    # --- A6.4 (anual 600/IX/Halcyon) cerrada 2026-08-04: create_control
+    # (mismo patrón que el mensual, solo audita el alta -- la reapertura
+    # tampoco audita en el hermano mensual), subir_imagen_perfil_mlc_db y
+    # los dos guardar_todas_fse ya auditan directamente -- no quedan
+    # entradas aquí. ---
 
     # --- PENDIENTE-A6.5: diario ---
     ("data/ManejoDatos/load.py", "conectarfueradeservicio"): "PENDIENTE-A6.5",
