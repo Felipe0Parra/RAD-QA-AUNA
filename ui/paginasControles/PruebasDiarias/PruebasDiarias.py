@@ -581,7 +581,7 @@ class PruebaBasico(QWidget):
 
     def ordenar_botones(self, maquina, fueraservicio = False, otro = None):
         #print("Entra a la función ordenar_botones en PruebasDiarias.py")
-        if fueraservicio != True:  
+        if fueraservicio != True:
             #print(" ! Condición NO fuera de servicio")
             # Obtener la lista de referencia con el orden correcto
             lista_referencia = self.datos_tabla
@@ -603,7 +603,7 @@ class PruebaBasico(QWidget):
                 #print("Después del add_info función ordenar_botones")
             if maquina == 'braqui' and (otro == "Posicionamiento Inicial"):
                 #print("    * Entra al if de si es braqui y Posicionamiento Incial en la función ordenar_botones")
-                
+
                 #print("Después del add_info función ordenar_botones")
                 pass
             elif maquina == 'aceleradorlineal_600':
@@ -619,7 +619,30 @@ class PruebaBasico(QWidget):
             elif maquina == 'aceleradorlineal_ix':
                 load_table(self, self.boolean_colums, self.dosis_ix, maquina)
 
+        # D1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): "fuera de
+        # servicio" es una decisión POR GUARDADO, no un modo persistente del
+        # formulario -- self.fueradeservicio se restablece al final de las
+        # DOS ramas. Antes de este fix nada la devolvía a False (solo el
+        # constructor la ponía en False), así que cualquier "Subir"
+        # posterior a un solo click en "Fuera de servicio" se iba por
+        # conectarfueradeservicio -- causa raíz de las 7 filas vacías del
+        # 2026-08-05 en aceleradorlineal_ix (conectarfueradeservicio inserta
+        # sin borrar la fecha previa, a diferencia de add_info).
+        self._restablecer_fuera_de_servicio()
+
+    def _restablecer_fuera_de_servicio(self):
+        """D1: apaga el modo "fuera de servicio" y devuelve el texto del
+        botón a como estaba -- llamarla siempre que el formulario deba
+        volver a su estado normal (fin de ordenar_botones, clean_info)."""
+        if getattr(self, "fueradeservicio", False):
+            texto_original = getattr(self, "_texto_original_btn_add", None)
+            if texto_original is not None:
+                self.btn_add.setText(texto_original)
+            self._texto_original_btn_add = None
+        self.fueradeservicio = False
+
     def clean_info(self, imagenes = False):
+        self._restablecer_fuera_de_servicio()
         for boton in self.datos_tabla:
             # Quitar propiedad 'estado'
             boton[0].setProperty("estado", "")
@@ -628,12 +651,12 @@ class PruebaBasico(QWidget):
             boton[0].update()
         self.botones_finales.clear()
         print("Limpiando data")
-        
+
         try:
             self.botones_ordenados.clear()
-            
+
         except ValueError:
-            pass   
+            pass
 
         for line in self.df_lines:
             dato = getattr(self, line)
@@ -1014,4 +1037,9 @@ class PruebaBasico(QWidget):
         self.btn_add.style().polish(self.btn_add)
         self.btn_add.update()
         self.btn_add.setEnabled(True)
+        # D1: deja constancia visible de que el siguiente "Subir" va a
+        # registrar el equipo fuera de servicio -- _restablecer_fuera_de_
+        # servicio() devuelve este texto al terminar ese guardado.
+        self._texto_original_btn_add = self.btn_add.text()
+        self.btn_add.setText(f"{self._texto_original_btn_add} (fuera de servicio)")
         self.fueradeservicio = True
