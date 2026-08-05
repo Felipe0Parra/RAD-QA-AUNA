@@ -638,6 +638,10 @@ def conectarfueradeservicio(self, nombre_tabla):
     cursor.execute(sql, lista)
     conn.commit()
 
+    # A6.5 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): declarar un equipo
+    # fuera de servicio el día, sin rastro hasta ahora.
+    _registrar_auditoria(user_id, ACCION_GUARDAR, nombre_tabla, ref=lista[0])
+
     QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
 
 def guardar_resultado_CambioFuente(

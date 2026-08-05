@@ -321,8 +321,8 @@ ALLOWLIST = {
     # los dos guardar_todas_fse ya auditan directamente -- no quedan
     # entradas aquí. ---
 
-    # --- PENDIENTE-A6.5: diario ---
-    ("data/ManejoDatos/load.py", "conectarfueradeservicio"): "PENDIENTE-A6.5",
+    # --- A6.5 (diario) cerrada 2026-08-04: conectarfueradeservicio ya
+    # audita directamente -- no queda entrada aquí. ---
 
     # --- PENDIENTE-A6.6: braquiterapia ---
     ("data/ManejoDatos/load.py", "guardar_resultado_CambioFuente"): "PENDIENTE-A6.6",
