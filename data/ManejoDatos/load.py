@@ -153,7 +153,17 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
         # confirmación -- hallazgo PLAN_FASE_H sección 1.6.2). El DELETE+
         # INSERT se mantiene (decisión de producto existente), pero ahora
         # requiere confirmación explícita si ya hay un registro.
-        cursor.execute(f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ?", (fecha_actual,))
+        # D3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): "activo" filtra
+        # las filas ANULADAS (E7/hallazgo S1) -- sin este filtro, guardar un
+        # control diario normal para una fecha que tuviera una fila anulada
+        # la borraría FÍSICAMENTE, contra la política de soft-delete
+        # (DA-03). Una fila anulada de esa fecha ya no cuenta como
+        # "reemplazo" ni se toca: el guardado normal simplemente inserta la
+        # suya al lado.
+        cursor.execute(
+            f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ? "
+            "AND (activo IS NULL OR activo = 1)",
+            (fecha_actual,))
         es_reemplazo = cursor.fetchone()[0] > 0
         if es_reemplazo:
             fecha_legible = self.date_box.date().toString("dd/MM/yyyy")
@@ -162,7 +172,10 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             # H2.4: el reemplazo confirmado en H2.2 queda en audit_log.
             _registrar_auditoria(user_id, ACCION_REEMPLAZO, nombre_tabla, ref=fecha_actual)
 
-        cursor.execute(f""" DELETE FROM {nombre_tabla} WHERE DATE(date) = ? """, (fecha_actual,))
+        cursor.execute(
+            f"DELETE FROM {nombre_tabla} WHERE DATE(date) = ? "
+            "AND (activo IS NULL OR activo = 1)",
+            (fecha_actual,))
         # Ejecutar la inserción
         sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
         cursor.execute(sql, lista)
@@ -639,7 +652,12 @@ def conectarfueradeservicio(self, nombre_tabla):
     # el mismo día (o una normal seguida de otra fuera de servicio, o
     # viceversa) acumulaban filas vacías. Causa raíz de las 7 filas del
     # 2026-08-05 en aceleradorlineal_ix.
-    cursor.execute(f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ?", (fecha_actual,))
+    # D3: "activo" filtra las filas ANULADAS (E7/hallazgo S1) -- una fila
+    # anulada de esa fecha no cuenta como "reemplazo" ni se borra.
+    cursor.execute(
+        f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ? "
+        "AND (activo IS NULL OR activo = 1)",
+        (fecha_actual,))
     es_reemplazo = cursor.fetchone()[0] > 0
     if es_reemplazo:
         fecha_legible = self.date_box.date().toString("dd/MM/yyyy")
@@ -647,7 +665,10 @@ def conectarfueradeservicio(self, nombre_tabla):
             return
         _registrar_auditoria(user_id, ACCION_REEMPLAZO, nombre_tabla, ref=fecha_actual)
 
-    cursor.execute(f"DELETE FROM {nombre_tabla} WHERE DATE(date) = ?", (fecha_actual,))
+    cursor.execute(
+        f"DELETE FROM {nombre_tabla} WHERE DATE(date) = ? "
+        "AND (activo IS NULL OR activo = 1)",
+        (fecha_actual,))
     sql = f"INSERT INTO {nombre_tabla} (date, user_id, observaciones) VALUES (?, ?, ?)"
     cursor.execute(sql, lista)
     conn.commit()

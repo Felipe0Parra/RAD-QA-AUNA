@@ -35,10 +35,14 @@ def bd_temporal(monkeypatch, tmp_path):
         "VALUES (?,?,?,?,?,?)",
         ("fisico", "x", "Físico de Prueba", 1, 1, "fisico"))
     conexion.con.commit()
+    # D3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): conectarfueradeservicio
+    # ahora filtra "activo" en el SELECT/DELETE de reemplazo (E7) -- esta
+    # tabla ficticia de prueba necesita la columna para no romper esa query,
+    # igual que las 4 tablas diarias reales (TABLAS_ANULABLES).
     conexion.con.execute(
         "CREATE TABLE IF NOT EXISTS aceleradorlineal_600_fuera_servicio "
         "(id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, user_id TEXT, "
-        "observaciones TEXT)")
+        "observaciones TEXT, activo INTEGER DEFAULT 1)")
     conexion.con.commit()
     yield ruta
     conexion.con.close()
