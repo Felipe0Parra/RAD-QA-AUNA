@@ -31,6 +31,9 @@ from models.PDF.reportes import reporte
 from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
 from analisisImagenes.Analisis_PlacaRC import analizar_lineas
 from analisisImagenes.ActividadFuente import graficar_linealidad, graficar_resultados, calcular_decaimiento
+from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import usuario_actual as _usuario_actual
+from services.audit_minimo import ACCION_GUARDAR, ACCION_ELIMINAR
 from data.ManejoDatos.load import (mostrar_db_linealidad, mostrar_db_mensualBraqui, verificar_eliminar, verificar_editar,
                                                 guardarEdicion, cancelarEdicion, abrir_pelicula)
 import datetime, sqlite3, html, re, traceback
@@ -1130,6 +1133,10 @@ class PruebaDiariaBraq(PruebaBasico):
             cursor.execute("DELETE FROM resultados WHERE id = ?", (id_fila,))
             conexion.commit()
             conexion.close()
+            # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): borrado sin
+            # auditar hasta ahora.
+            _registrar_auditoria(_usuario_actual(self), ACCION_ELIMINAR,
+                                 "resultados", ref=id_fila)
             self.cargar_y_mostrar_resultados()  # Refresca la tabla
 
     """ Muestra el canvas de matplotlib y la toolbar si están disponibles, y quita la tabla de resultados si está presente                                                                      """
@@ -2620,8 +2627,12 @@ class Linealidad(PruebaBasico):
                 VALUES ({placeholders})
             ''', datos)
 
+            ref = cursor.lastrowid
             conn.commit()
             conn.close()
+            # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): sin auditar
+            # hasta ahora.
+            _registrar_auditoria(user, ACCION_GUARDAR, "LinealidadBraquiterapia", ref=ref)
             QMessageBox.information(self, "Guardado", "Datos de linealidad almacenados correctamente.")
             mostrar_db_linealidad(self)
             self.tabla_resultados.viewport().update()
@@ -3386,6 +3397,10 @@ class PosicionamientoInicial(PruebaBasico):
             cursor.execute("DELETE FROM resultados WHERE id = ?", (id_fila,))
             conexion.commit()
             conexion.close()
+            # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): borrado sin
+            # auditar hasta ahora.
+            _registrar_auditoria(_usuario_actual(self), ACCION_ELIMINAR,
+                                 "resultados", ref=id_fila)
             self.cargar_y_mostrar_resultados()  # Refresca la tabla
 
     """ Muestra el canvas de matplotlib y la toolbar si están disponibles, y quita la tabla de resultados si está presente                                                                          """

@@ -324,16 +324,11 @@ ALLOWLIST = {
     # --- A6.5 (diario) cerrada 2026-08-04: conectarfueradeservicio ya
     # audita directamente -- no queda entrada aquí. ---
 
-    # --- PENDIENTE-A6.6: braquiterapia ---
-    ("data/ManejoDatos/load.py", "guardar_resultado_CambioFuente"): "PENDIENTE-A6.6",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py",
-     "PruebaMensualBraq.actualizar_desplazamiento_en_db"): "PENDIENTE-A6.6",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py",
-     "Linealidad.guardar_linealidad"): "PENDIENTE-A6.6",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py",
-     "PruebaDiariaBraq.eliminar_fila_resultado"): "PENDIENTE-A6.6",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py",
-     "PosicionamientoInicial.eliminar_fila_resultado"): "PENDIENTE-A6.6",
+    # --- A6.6 (braquiterapia) cerrada 2026-08-04: guardar_resultado_
+    # CambioFuente (11 escrituras -- TipoCalibracion + 5 tablas hijas -- 1
+    # sola fila), actualizar_desplazamiento_en_db, guardar_linealidad y los
+    # dos eliminar_fila_resultado ya auditan directamente -- no quedan
+    # entradas aquí. ---
 
     # --- PENDIENTE-A6.7: TAC / Catphan (los 2 padres en tac_mensual.py NO
     # escriben directo -- solo llaman a catphan_db.py -- por eso no aparecen

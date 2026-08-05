@@ -721,6 +721,12 @@ def guardar_resultado_CambioFuente(
     conn.commit()
     conn.close()
 
+    # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): 11 escrituras (cambio
+    # de fuente completo: TipoCalibracion + 5 tablas hijas) -- 1 sola fila
+    # de auditoría para la acción, no una por INSERT/DELETE/UPDATE.
+    _registrar_auditoria(user, ACCION_GUARDAR, "TipoCalibracion", ref=ref,
+                         detalle="cambio de fuente (braquiterapia)")
+
     return ref  # devolver la ref generada
 
 def mostrar_db_CambioFuente(self, tabla_a_mostrar="ResultadosActividad"):

@@ -13,6 +13,9 @@ from services.etiqueta_equipo import etiqueta_equipo
 from services.vigencia_equipo import es_vigente_en_fecha
 from analisisImagenes.ActividadFuente import  *
 from resources.utils.matplotlib_lazy import get_matplotlib_components
+from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import usuario_actual as _usuario_actual
+from services.audit_minimo import ACCION_ACTUALIZAR
 import traceback
 
 class PruebaMensualBraq(PruebaBasico):
@@ -104,6 +107,10 @@ class PruebaMensualBraq(PruebaBasico):
             """, (str(desplazamiento), self.ref_bd))
             conn.commit()
             print("Desplazamiento actualizado en base de datos.")
+            # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): sin auditar
+            # hasta ahora.
+            _registrar_auditoria(_usuario_actual(self), ACCION_ACTUALIZAR,
+                                 "CondicionesMedicion", ref=self.ref_bd)
             QMessageBox.information(self, "Éxito", "El desplazamiento fue guardado correctamente en la base de datos.")
             
 
