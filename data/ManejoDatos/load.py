@@ -311,18 +311,44 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
         # vez que el formulario empiece a guardar el dia real (F3), habria
         # creado un control nuevo cada vez que se abriera un dia distinto
         # del mismo mes.
+        # N1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): antes esta
+        # consulta no filtraba "activo" -- un control ANULADO se devolvía
+        # igual que uno activo, y como "Subir" ya bloquea sobre un control
+        # anulado (W1), el mes quedaba inutilizable en silencio (el físico
+        # tuvo que crear el siguiente control en el mes SIGUIENTE). Ahora se
+        # clasifica en dos candidatos independientes del mismo mes: el
+        # activo (comportamiento de siempre) y el anulado (se ofrece
+        # reactivar, DA-34).
         cursor.execute(
-            "SELECT id, fecha FROM controles WHERE equipo = ? AND control = ?",
+            "SELECT id, fecha, activo FROM controles WHERE equipo = ? AND control = ?",
             (maquina, tipo_control)
         )
-        control_id_existente = None
-        for fila_id, fecha_existente in cursor.fetchall():
-            if _mismo_mes(fecha_existente, fecha):
-                control_id_existente = fila_id
-                break
+        control_activo_id, fecha_activo = None, None
+        control_anulado_id, fecha_anulado = None, None
+        for fila_id, fecha_existente, activo in cursor.fetchall():
+            if not _mismo_mes(fecha_existente, fecha):
+                continue
+            if activo is None or activo == 1:
+                if control_activo_id is None:
+                    control_activo_id, fecha_activo = fila_id, fecha_existente
+            else:
+                if control_anulado_id is None:
+                    control_anulado_id, fecha_anulado = fila_id, fecha_existente
 
-        if control_id_existente is not None:
-            control_id = control_id_existente
+        if control_activo_id is None and control_anulado_id is not None:
+            if _ofrecer_reactivar_control(self, control_anulado_id):
+                control_activo_id, fecha_activo = control_anulado_id, fecha_anulado
+            else:
+                # Fallback seguro: NUNCA devolver None aquí -- con self.ref
+                # nulo, puede_editarse() deja pasar cualquier escritura sin
+                # ancla (incidente H-A, 2026-07-23: dosimetría huérfana tras
+                # borrar el control desde otra vista). Devolver el id
+                # anulado conserva el bloqueo de "Subir" que ya existe.
+                return control_anulado_id
+
+        if control_activo_id is not None:
+            control_id = control_activo_id
+            fecha_existente = fecha_activo
 
             # Actualizar el físico aunque ya exista el registro
             cursor.execute(
@@ -330,7 +356,7 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
                 (user_id, _nombre_fisico2, control_id)
             )
             conn.commit()
-            
+
             if hasattr(self, 'equipo_f') and self.equipo_f in ('Tomógrafo', 'Clinac ix', 'Halcyon'):
                 self.old_id = True
             # F4 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): decisión del
