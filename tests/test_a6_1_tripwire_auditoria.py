@@ -354,19 +354,29 @@ ALLOWLIST = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_uniformidad"):
         "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
 
-    # --- PENDIENTE-A6.8: Picket Fence / Starshot (mismo patrón: los 2
-    # padres en seiscientos_mensual.py no escriben directo) ---
-    ("services/MLCs_calibration_service.py", "pf_db_insertion"): "PENDIENTE-A6.8",
-    ("services/MLCs_calibration_service.py", "pf_picket_error_insertion"): "PENDIENTE-A6.8",
-    ("services/MLCs_calibration_service.py", "pf_leaf_error_insertion"): "PENDIENTE-A6.8",
-    ("services/MLCs_calibration_service.py",
-     "pf_highest_leaf_errors_insertion"): "PENDIENTE-A6.8",
-    ("services/MLCs_calibration_service.py", "starshot_insert"): "PENDIENTE-A6.8",
-    ("services/MLCs_calibration_service.py",
-     "starshot_residual_statistics_insert"): "PENDIENTE-A6.8",
-    ("services/MLCs_calibration_service.py", "starshot_angles_insertion"): "PENDIENTE-A6.8",
-    ("services/MLCs_calibration_service.py",
-     "starshot_angular_uniformity_insert"): "PENDIENTE-A6.8",
+    # --- A6.8 (Picket Fence / Starshot) cerrada 2026-08-04: mismo patrón
+    # que A6.3/A6.7 -- una sola acción de usuario dispara varias escrituras
+    # repartidas en 2 métodos (el que arranca el análisis + el que muestra
+    # resultados, éste último llamado SOLO desde el primero); el segundo
+    # método corre antes de la única llamada a registrar(), al final del
+    # primero -- así 1 fila cubre las 4 escrituras de cada análisis, sin
+    # duplicar por INSERT.
+    ("services/MLCs_calibration_service.py", "pf_db_insertion"):
+        "detalle-de:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._ejecutar_analisis_mlc",
+    ("services/MLCs_calibration_service.py", "pf_picket_error_insertion"):
+        "detalle-de:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._ejecutar_analisis_mlc",
+    ("services/MLCs_calibration_service.py", "pf_leaf_error_insertion"):
+        "detalle-de:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._ejecutar_analisis_mlc",
+    ("services/MLCs_calibration_service.py", "pf_highest_leaf_errors_insertion"):
+        "detalle-de:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._ejecutar_analisis_mlc",
+    ("services/MLCs_calibration_service.py", "starshot_insert"):
+        "detalle-de:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._ejecutar_analisis_starshot",
+    ("services/MLCs_calibration_service.py", "starshot_residual_statistics_insert"):
+        "detalle-de:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._ejecutar_analisis_starshot",
+    ("services/MLCs_calibration_service.py", "starshot_angles_insertion"):
+        "detalle-de:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._ejecutar_analisis_starshot",
+    ("services/MLCs_calibration_service.py", "starshot_angular_uniformity_insert"):
+        "detalle-de:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._ejecutar_analisis_starshot",
 }
 
 

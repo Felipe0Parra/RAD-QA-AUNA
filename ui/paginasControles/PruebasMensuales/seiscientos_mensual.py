@@ -990,8 +990,14 @@ class PruebaMensual600(PruebaBasico):
             
             self._mostrar_resultados_mlc(data, tolerance, action_tolerance)
            # print(data)
+            # A6.8 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): una sola
+            # acción de usuario dispara las 4 escrituras de Picket Fence
+            # (pf_db_insertion aquí + las 3 de _mostrar_resultados_mlc) --
+            # 1 fila para la acción completa, no una por INSERT.
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                 "picket_fence", ref=self.ref)
         except Exception as e:
-          
+
             print(e)
         
     def _procesar_data_mlc(self, data, tolerance, action_tolerance):
@@ -1458,9 +1464,15 @@ class PruebaMensual600(PruebaBasico):
             print(estadisticas)
             
             self._mostrar_resultados_starshot(ss_obj, tolerance)
-            
-            
-    
+
+            # A6.8 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): una sola
+            # acción de usuario dispara las 4 escrituras de Starshot
+            # (starshot_insert aquí + las 3 de
+            # _mostrar_resultados_starshot) -- 1 fila para la acción
+            # completa, no una por INSERT.
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                 "starshot", ref=self.ref)
+
         except Exception as e:
             if "sid" in str(e).lower() or "source-to-image" in str(e).lower():
                 QMessageBox.warning(self, "SID requerido",
