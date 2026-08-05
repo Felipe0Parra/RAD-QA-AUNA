@@ -78,6 +78,10 @@ class TestConectarFueraDeServicioAudita:
         conectarfueradeservicio(obj, "aceleradorlineal_600_fuera_servicio")
 
         filas = _audit_log(bd_temporal)
+        # D2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): el detalle ya no
+        # queda vacío -- antes esta fila era indistinguible en audit_log de
+        # un control diario normal.
         assert filas == [
             ("Físico de Prueba", "guardar",
-             "aceleradorlineal_600_fuera_servicio", "2026-08-04", "")]
+             "aceleradorlineal_600_fuera_servicio", "2026-08-04",
+             "equipo fuera de servicio")]

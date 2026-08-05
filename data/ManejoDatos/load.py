@@ -619,8 +619,9 @@ def conectarfueradeservicio(self, nombre_tabla):
     conn = Conexion().conectar()
     cursor = conn.cursor()
 
+    fecha_actual = self.date_box.date().toString('yyyy-MM-dd')
     lista = []
-    lista.append(self.date_box.date().toString('yyyy-MM-dd'))
+    lista.append(fecha_actual)
 
     user_id = self.user_id._nombre
     cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
@@ -631,16 +632,31 @@ def conectarfueradeservicio(self, nombre_tabla):
     lista.append(user_id)
     observaciones_text = self.observaciones.text() if self.observaciones else ""
     lista.append(observaciones_text)
-    
-    #columnas_str = ["date", "user_id", "observaciones"]
-    #placeholders = ", ".join(["?"] * len(columnas_str))
+
+    # D2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): mismo contrato de
+    # reemplazo por fecha que add_info (H2.2) -- antes este INSERT no
+    # borraba la fila previa de esa fecha, así que dos declaraciones para
+    # el mismo día (o una normal seguida de otra fuera de servicio, o
+    # viceversa) acumulaban filas vacías. Causa raíz de las 7 filas del
+    # 2026-08-05 en aceleradorlineal_ix.
+    cursor.execute(f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ?", (fecha_actual,))
+    es_reemplazo = cursor.fetchone()[0] > 0
+    if es_reemplazo:
+        fecha_legible = self.date_box.date().toString("dd/MM/yyyy")
+        if not _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha_legible):
+            return
+        _registrar_auditoria(user_id, ACCION_REEMPLAZO, nombre_tabla, ref=fecha_actual)
+
+    cursor.execute(f"DELETE FROM {nombre_tabla} WHERE DATE(date) = ?", (fecha_actual,))
     sql = f"INSERT INTO {nombre_tabla} (date, user_id, observaciones) VALUES (?, ?, ?)"
     cursor.execute(sql, lista)
     conn.commit()
 
     # A6.5 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): declarar un equipo
-    # fuera de servicio el día, sin rastro hasta ahora.
-    _registrar_auditoria(user_id, ACCION_GUARDAR, nombre_tabla, ref=lista[0])
+    # fuera de servicio el día. D2: detalle explícito -- antes esta fila
+    # era indistinguible en audit_log de un control diario normal.
+    _registrar_auditoria(user_id, ACCION_GUARDAR, nombre_tabla, ref=fecha_actual,
+                         detalle="equipo fuera de servicio")
 
     QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
 
