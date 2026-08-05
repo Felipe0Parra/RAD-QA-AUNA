@@ -330,22 +330,29 @@ ALLOWLIST = {
     # dos eliminar_fila_resultado ya auditan directamente -- no quedan
     # entradas aquí. ---
 
-    # --- PENDIENTE-A6.7: TAC / Catphan (los 2 padres en tac_mensual.py NO
-    # escriben directo -- solo llaman a catphan_db.py -- por eso no aparecen
-    # aquí como write-sites; van a `detalle-de:` cuando A6.7 los audite) ---
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py",
-     "guardar_prueba_completa_catphan"): "PENDIENTE-A6.7",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py",
-     "eliminar_datos_especificos"): "PENDIENTE-A6.7",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_espesor_corte"): "PENDIENTE-A6.7",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_tamano_pixel"): "PENDIENTE-A6.7",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py",
-     "guardar_resolucion_contraste"): "PENDIENTE-A6.7",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py",
-     "guardar_resolucion_espacial"): "PENDIENTE-A6.7",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_valores_ct"): "PENDIENTE-A6.7",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_linealidad_ct"): "PENDIENTE-A6.7",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_uniformidad"): "PENDIENTE-A6.7",
+    # --- A6.7 (TAC / Catphan) cerrada 2026-08-04: guardar_prueba_completa_
+    # catphan es el ÚNICO punto de entrada real de las 9 (los 2 llamadores
+    # de tac_mensual.py no escriben directo -- solo llaman a esta función),
+    # y ahora audita directamente. Las otras 8 -- eliminar_datos_
+    # especificos y los 7 guardar_<categoria> -- se llaman EXCLUSIVAMENTE
+    # desde dentro de ella (verificado, cero otros call-sites), así que son
+    # detalle de la misma acción.
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "eliminar_datos_especificos"):
+        "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_espesor_corte"):
+        "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_tamano_pixel"):
+        "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_resolucion_contraste"):
+        "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_resolucion_espacial"):
+        "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_valores_ct"):
+        "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_linealidad_ct"):
+        "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_uniformidad"):
+        "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
 
     # --- PENDIENTE-A6.8: Picket Fence / Starshot (mismo patrón: los 2
     # padres en seiscientos_mensual.py no escriben directo) ---

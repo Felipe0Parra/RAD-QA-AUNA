@@ -11,6 +11,8 @@ from PIL import Image
 from datetime import datetime
 from data.ManejoDatos.conection import Conexion
 from .leer_dicom import DicomVolume
+from services.audit_minimo import registrar as _registrar_auditoria
+from services.audit_minimo import ACCION_GUARDAR
 
 # ------------------------------------ FUNCIONES PARA MOSTRAR IMÁGENES ------------------------------------
 
@@ -597,6 +599,20 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
         
         conn.commit()
         print(f"✅ Prueba CatPhan guardada exitosamente con ID de sesión: {id_sesion}")
+
+        # A6.7 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): esta función es el
+        # único punto de entrada real de las 9 de catphan_db.py (los 2
+        # llamadores de tac_mensual.py no escriben directo) -- un solo
+        # guardado puede tocar varias categorías (espesor, tamaño de
+        # píxel, resolución...) en un bucle; 1 fila de auditoría para la
+        # acción completa, no una por categoría ni por tabla. `user_id`
+        # llega como el objeto de identidad (self.user_id), no como
+        # string -- mismo patrón que _usuario_actual, resuelto en línea
+        # porque esta función no recibe `self`.
+        _nombre_usuario = getattr(user_id, "_nombre", user_id)
+        _registrar_auditoria(_nombre_usuario, ACCION_GUARDAR, "pruebas", ref=id_sesion,
+                             detalle=f"CatPhan: {', '.join(resultados_por_categoria)}")
+
         return id_sesion
         
     except Exception as e:
