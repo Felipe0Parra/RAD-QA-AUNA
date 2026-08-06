@@ -2585,15 +2585,21 @@ class DialogCalculadoraDosis(QDialog):
                 
                 if datos.get('Lectura_neg_prom'):
                     self.Mminus.setText(str(datos['Lectura_neg_prom']))
-                
+
+                # Z1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): voltaje
+                # negativo (polaridad) -- campo distinto de tension_v1/v2
+                # (esas son las dos tensiones de la recombinación, ks).
+                if datos.get('tension_negativa'):
+                    self.tension_neg.setText(str(datos['tension_negativa']))
+
                 # Voltage data
                 if datos.get('tension_v1'):
                     self.tension_v1.setText(str(datos['tension_v1']))
-                
+
                 if datos.get('tension_v2'):
                     self.tension_v2.setText(str(datos['tension_v2']))
                 #
-                
+
                 # Recombination data
                 if datos.get('lectura_m2_1'):
                     self.lect_m2_1.setText(str(datos['lectura_m2_1']))
@@ -2614,13 +2620,31 @@ class DialogCalculadoraDosis(QDialog):
                 if datos.get('Zmax'):
                     self.Zmax.setText(str(datos['Zmax']))
                 
+                # Z1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): TPR20,10
+                # -- marcar "editado manualmente" ANTES de restaurar los PDD
+                # de abajo. Si no, _actualizar_tpr_desde_pdd (T2/T3) vería el
+                # setText de pdd20/pdd10 (self.blockSignals(True) NO bloquea
+                # señales de widgets HIJOS, D2.2) y recalcularía el TPR desde
+                # ellos, pisando el valor histórico guardado con el registro
+                # -- el mismo patrón de "el valor guardado gana" que ya usan
+                # factor_calibracion y Kq_0 en este método.
+                if datos.get('tpr2010'):
+                    self._tpr2010_editado_manualmente = True
+
                 # PDD values
                 if datos.get('pdd20'):
                     self.pdd20.setText(str(datos['pdd20']))
-                
+
                 if datos.get('pdd10'):
                     self.pdd10.setText(str(datos['pdd10']))
-                
+
+                # El propio TPR20,10 -- después de los PDD (que ya no lo
+                # pisan, por el flag puesto arriba) y antes de kQ (que sí
+                # depende de él vía actualizar_kCharge).
+                if datos.get('tpr2010'):
+                    self.tpr2010.setText(str(datos['tpr2010']))
+                    self.tpr2010.setToolTip(self._TOOLTIP_TPR_MANUAL)
+
                 if datos.get('pddzref'):
                     self.pddzref.setText(str(datos['pddzref']))
                 
@@ -2949,6 +2973,11 @@ class DialogCalculadoraDosis(QDialog):
             "pddzref": self.pddzref.text(),
             "tmrzref": self.tmrzref.text(),
             "dosis_maxima": self.dosis_maxima.text(),
+            # Z1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): antes no
+            # tenían columna y se perdían al cerrar el diálogo (anotación 1
+            # del handoff 05-08).
+            "tpr2010": self.tpr2010.text(),
+            "tension_negativa": self.tension_neg.text(),
             "protocolo_trs398": (self.combo_protocolo.currentData()
                                   if hasattr(self, "combo_protocolo") else "2000"),
             # E4 (auditoría 2026-07-10): sin esto, un registro de ELECTRONES

@@ -299,6 +299,15 @@ class DosisService():
                                    "energia", "TEXT")
             cls._asegurar_columna(cursor, "calculadora_dosimetrica",
                                    "vigente", "INTEGER DEFAULT 0")
+            # Z1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): el TPR20,10
+            # tecleado a mano y el voltaje negativo (polaridad) no tenían
+            # columna -- se perdían al cerrar el diálogo. tension_negativa,
+            # NO tension_neg, para no confundirla con tension_v1/v2 (las dos
+            # tensiones de la recombinación, ks -- ya existentes, otra cosa).
+            cls._asegurar_columna(cursor, "calculadora_dosimetrica",
+                                   "tpr2010", "TEXT")
+            cls._asegurar_columna(cursor, "calculadora_dosimetrica",
+                                   "tension_negativa", "TEXT")
             conn.commit()
             conn.close()
             return True

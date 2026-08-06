@@ -93,11 +93,16 @@ class TestMigracionColumnasEnergiaVigente:
         con.commit()
         con.close()
 
-        valores_antes = _dump_fila(bd_temporal, excluir=("energia", "vigente"))
+        # Z1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md) añadió tpr2010/
+        # tension_negativa a la misma crear_tabla() -- se excluyen aquí por
+        # el mismo motivo que energia/vigente: son columnas NUEVAS que este
+        # dump "antes" (tabla legacy manual, sin ellas) no puede tener.
+        excluidas = ("energia", "vigente", "tpr2010", "tension_negativa")
+        valores_antes = _dump_fila(bd_temporal, excluir=excluidas)
 
         assert DosisService.crear_tabla() is True
 
-        valores_despues = _dump_fila(bd_temporal, excluir=("energia", "vigente"))
+        valores_despues = _dump_fila(bd_temporal, excluir=excluidas)
         assert valores_antes == valores_despues, (
             "la migración modificó una columna preexistente de la fila legacy")
 
