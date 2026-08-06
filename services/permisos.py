@@ -17,6 +17,13 @@ conjunto codificado histórico {"admin", "lamaya"} CON aviso por consola --
 denegar dejaría a la física en jefe sin permisos en un turno clínico por un
 fallo pasajero, que es peor. Nunca se concede un permiso que un rol
 resuelto no dé: el fallback solo aplica cuando NO hay rol legible.
+
+DA-35 (2026-08-06, PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.1,
+decisión TEMPORAL del físico -- "por ahora asignar a todos el mismo nivel de
+permiso que administrador"): "fisico" se agregó a ROLES_ADMIN_EQUIVALENTE.
+Para revertir: quitar "fisico" de ese conjunto; no hay ningún otro punto que
+tocar. El respaldo legado USUARIOS_ADMIN_EQUIVALENTE NO cambia -- sigue
+aplicando solo cuando el rol no es resoluble.
 """
 
 import sqlite3
@@ -24,7 +31,8 @@ import sqlite3
 from data.ManejoDatos import conection as _conection
 
 ROLES_VALIDOS = {"admin", "jefe", "fisico"}
-ROLES_ADMIN_EQUIVALENTE = {"admin", "jefe"}
+# DA-35: temporal, ver docstring del módulo.
+ROLES_ADMIN_EQUIVALENTE = {"admin", "jefe", "fisico"}
 
 # Fallback legado (C3): solo se consulta cuando el rol no se puede resolver.
 USUARIOS_ADMIN_EQUIVALENTE = {"admin", "lamaya"}

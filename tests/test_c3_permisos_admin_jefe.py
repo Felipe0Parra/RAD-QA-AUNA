@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import QApplication, QLabel
 import data.ManejoDatos.conection as conection_mod
 import ui.paginasGuia.dialogs as dialogs_mod
 from data.ManejoDatos.conection import Conexion
+from data.ManejoDatos.encriptarInfo import encrypt_data
 from ui.paginasGuia.dialogs import (
     DialogAdminPermiso, DialogAdminPermiso2, DialogAdminPermisoEditar,
     DialogAdminPermisoEliminar)
@@ -229,3 +230,43 @@ class TestE4EditarReautenticaAlPropioFisico:
         textos = " ".join(lbl.text() for lbl in dlg.findChildren(QLabel))
         assert "cuenta de administrador" not in textos
         assert "propia contraseña" in textos
+
+
+class TestDA35FisicoEsAceptadoYAuditadoConSuNombre:
+    """DA-35 (2026-08-06, PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md
+    §3.1): con rol_sistema='fisico' RESUELTO en BD, DialogAdminPermisoEliminar
+    ahora ACEPTA (antes de DA-35 lo rechazaba -- ver
+    test_fisico_sin_permiso_admin_con_contrasena_correcta_es_rechazado, que
+    sigue en rojo hoy porque usa un login MOCKEADO sin rol resuelto en BD, no
+    porque DA-35 sea falsa).
+
+    Usa el login() REAL (sin mockear) para que el rastro de auditoría sea el
+    genuino escrito por usuariosManager.login() -- el requisito del plan es
+    que el intento quede auditado con el nombre del PROPIO físico y con
+    ACCION_AUTORIZACION, nunca con "admin"."""
+
+    def test_fisico_con_rol_resuelto_es_aceptado_y_auditado_con_su_nombre(
+            self, app, bd_temporal):
+        con = sqlite3.connect(bd_temporal)
+        con.execute(
+            "INSERT INTO users (user, password, fullname, active, idreal, "
+            "role, rol_sistema) VALUES (?, ?, ?, 1, '1', 'Físico Médico', 'fisico')",
+            ("accastellanos", encrypt_data("clave123"), "Cristian Castellanos"))
+        con.commit()
+        con.close()
+
+        dlg = DialogAdminPermisoEliminar(_UsuarioLogueadoFalso())
+        dlg.admin_user.setText("accastellanos")
+        dlg.admin_password.setText("clave123")
+        dlg.open_main_window()
+
+        assert dlg.res is not None
+        assert dlg.labelwarnign.text() == ""
+
+        # login() audita el ÉXITO con el fullname (identidad canónica en
+        # audit_log, A6.2-bis) -- no con el usuario tecleado ni con "admin".
+        con = sqlite3.connect(bd_temporal)
+        filas = con.execute(
+            "SELECT usuario, accion FROM audit_log").fetchall()
+        con.close()
+        assert filas == [("Cristian Castellanos", "autorizacion")]

@@ -130,6 +130,13 @@ class TestMigracion:
 
 class TestEsAdminEquivalente:
     def test_mismo_contrato_que_c3_pero_por_rol(self, bd_temporal):
+        """DA-35 (2026-08-06, decisión TEMPORAL del físico,
+        PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.1): 'fisico' se
+        agregó a ROLES_ADMIN_EQUIVALENTE -- los 5 físicos del plantel también
+        son admin-equivalentes mientras la decisión esté vigente. Antes de
+        DA-35 este bloque afirmaba lo contrario (ver test_permisos.py para el
+        anti-regresión de "rol NO resoluble sigue denegado", que DA-35 no
+        toca)."""
         ruta, conexion = bd_temporal
         _sembrar_plantel_legado(ruta)
         conexion._asegurar_roles_de_sistema()
@@ -138,7 +145,7 @@ class TestEsAdminEquivalente:
         assert es_admin_equivalente("lamaya") is True
         for user, _, _ in PLANTEL:
             if user not in ("admin", "lamaya"):
-                assert es_admin_equivalente(user) is False, user
+                assert es_admin_equivalente(user) is True, user  # DA-35
         assert es_admin_equivalente("") is False
         assert es_admin_equivalente(None) is False
 
@@ -189,4 +196,4 @@ class TestAddUser:
         con.close()
         assert rol_sistema == "fisico"          # permisos: nunca NULL
         assert role == "Físico Médico"          # cargo mostrado: lo que eligió
-        assert es_admin_equivalente("nfisico") is False
+        assert es_admin_equivalente("nfisico") is True  # DA-35, temporal
