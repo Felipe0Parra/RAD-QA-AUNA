@@ -1,4 +1,5 @@
 import traceback, sqlite3
+from PyQt5 import sip
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.load import loadtablacomplex
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
@@ -364,6 +365,19 @@ class PruebaAnual600(PruebaMensual600):
     def _calcular_discrepancias_tablas(self, tabla, columna_real, columna_esperada, columna_discrepancia=3, diferencia_tipo='porcentaje'):
         """Retorna una función callback que calcula discrepancias en las tablas de indicadores"""
         def calcular():
+            # Z9 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): este
+            # callback queda conectado a un textChanged/itemChanged con
+            # debouncing (~300ms, _configurar_eventos) -- si la tabla se
+            # destruye (se cierra/cambia de pantalla) antes de que el
+            # QTimer dispare, `tabla` sigue siendo un objeto Python válido
+            # pero su C/C++ subyacente ya no existe -- cualquier acceso
+            # revienta con "wrapped C/C++ object ... has been deleted".
+            # limpiar_recursos (heredado de PruebaMensual600) ya detiene
+            # los timers pendientes al destruir la vista -- esta guarda es
+            # la defensa complementaria para la ventana de carrera en que
+            # el timer ya estaba en curso cuando la tabla se destruyó.
+            if sip.isdeleted(tabla):
+                return
             try:
                 # Estructura de la tabla:      |      Medida      |      Valor Esperado     | Discrepancia
                 # Ejemplo: ["Tamaño de campo", "Factor de campo", "Factor de campo esperado", "Discrepancia"]
