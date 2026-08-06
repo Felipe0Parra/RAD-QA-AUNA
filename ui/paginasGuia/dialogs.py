@@ -1516,7 +1516,8 @@ class DialogCalculadoraDosis(QDialog):
         
         # Tipo de Escaneo
         escaneo_box, escaneo_layout = self.crear_bloque("Tipo de Escaneo", "#5b9ea8")
-        
+        self.escaneo_box = escaneo_box  # K1: expuesto para poder verificar su visibilidad
+
         self.pulse = QCheckBox("Pulse")
         self.pulse_scan = QCheckBox("Pulse-Scanned")
         self.estilo_checkbox(self.pulse)
@@ -1534,7 +1535,27 @@ class DialogCalculadoraDosis(QDialog):
         # G4 (auditoría 2026-07-10): "Pulse" es el modo que usa el físico casi
         # siempre -- lo pidió marcado por defecto (sigue siendo cambiable).
         self.pulse.setChecked(True)
-        
+
+        # K1 (2026-08-06, PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md
+        # §3.2, indicación directa de la física jefe): el bloque se oculta.
+        # Se oculta el CONTENEDOR, no los checkboxes -- self.pulse/
+        # self.pulse_scan siguen vivos, con su señal y su pertenencia al
+        # QButtonGroup exclusivo, así que guardado/carga/coeficientes ks
+        # (más abajo) siguen leyendo exactamente el mismo valor que antes.
+        escaneo_box.setVisible(False)
+
+        # Opción (b) del plan: un registro histórico guardado en
+        # 'Pulse scanned' usa otros coeficientes de recombinación (ver
+        # coeficientes_ks_pulse) -- ocultar el bloque sin más dejaría ese
+        # dato invisible. Etiqueta de solo lectura, visible SOLO cuando el
+        # modo activo no es el default "Pulsed". Sin símbolos (DA-18).
+        self.lbl_modo_escaneo_oculto = QLabel()
+        self.lbl_modo_escaneo_oculto.setStyleSheet("color:#5b9ea8; font-style: italic;")
+        self.lbl_modo_escaneo_oculto.setVisible(False)
+        self.col1.addWidget(self.lbl_modo_escaneo_oculto)
+        self.pulse.toggled.connect(self._actualizar_etiqueta_modo_escaneo)
+        self.pulse_scan.toggled.connect(self._actualizar_etiqueta_modo_escaneo)
+
         # Geometría (Fotones)
         geometria_box, geometria_layout = self.crear_bloque(" Geometría de Medición", "#5b9ea8")
         self.geometry_box = geometria_box
@@ -3530,7 +3551,19 @@ class DialogCalculadoraDosis(QDialog):
             # Un valor tecleado a mano por el físico no se toca.
             if self.Zref.text() and self.Zref.text() == self.zrefR50.text():
                 self.Zref.clear()
-    
+
+    def _actualizar_etiqueta_modo_escaneo(self, *_):
+        """K1 (2026-08-06): el bloque "Tipo de Escaneo" está oculto por
+        indicación de la física jefe; esta etiqueta evita que un registro
+        histórico en 'Pulse scanned' (coeficientes ks distintos, ver
+        coeficientes_ks_pulse) quede invisible en pantalla."""
+        if self.pulse_scan.isChecked():
+            self.lbl_modo_escaneo_oculto.setText(
+                "Tipo de escaneo: Pulse-Scanned")
+            self.lbl_modo_escaneo_oculto.setVisible(True)
+        else:
+            self.lbl_modo_escaneo_oculto.setVisible(False)
+
     def mostrar_tmr(self, checked):
         self.tmr_zref.setVisible(checked)
         self.tmrzref.setVisible(checked)
