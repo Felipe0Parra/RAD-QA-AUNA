@@ -2235,7 +2235,18 @@ class DialogCalculadoraDosis(QDialog):
         # G1 (auditoría 2026-07-10): una sola conexión -- ver on_aceptar_y_cerrar.
         self.btn_ok.clicked.connect(self.on_aceptar_y_cerrar)
         result_layout.addWidget(self.btn_ok)
-        
+
+        # Z4 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): botón de salida
+        # del modo consulta (ver _entrar_modo_consulta) -- oculto hasta que
+        # se cargue un cálculo guardado (_cargar_calculo_del_mes).
+        self.btn_nuevo_calculo = QPushButton("Nuevo cálculo")
+        self.btn_nuevo_calculo.setToolTip(
+            "Limpia el formulario y habilita la edición -- para empezar un "
+            "cálculo nuevo sin usar los datos del registro cargado.")
+        self.btn_nuevo_calculo.setVisible(False)
+        self.btn_nuevo_calculo.clicked.connect(self.iniciar_nuevo_calculo)
+        result_layout.addWidget(self.btn_nuevo_calculo)
+
 
 
     # =====================================================================
@@ -2488,6 +2499,12 @@ class DialogCalculadoraDosis(QDialog):
         Args:
             datos: Dictionary containing dosimetry data from database
         """
+        # Z4: fuera del try/except -- si _entrar_modo_consulta viviera
+        # DENTRO y algo en ella lanzara, el except la traga con un simple
+        # print y el diálogo quedaría editable en silencio (justo lo que
+        # el físico pidió evitar: nunca editar por accidente un cálculo
+        # cargado). Se activa solo si el bloque de abajo cargó de verdad.
+        cargado_exitosamente = False
         try:
             # B3-N: datos['Acelerador'] viene de buscar_por_fecha -- ya el
             # nombre canónico guardado (Clinac 600/Clinac iX/Halcyon), sin
@@ -2712,17 +2729,24 @@ class DialogCalculadoraDosis(QDialog):
 
                 # Re-enable signals
                 self.blockSignals(False)
-                
+
                 # Show success message
                 from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.information(self, "Data Loaded", 
+                QMessageBox.information(self, "Data Loaded",
                     f"Previous dosimetry data loaded successfully for {datos.get('Fecha', 'selected date')}")
+
+                cargado_exitosamente = True
             else:
                 pass
-            
+
         except Exception as e:
             print(f"Error loading data from database: {e}")
             self.blockSignals(False)
+
+        # Z4 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, anotación 1 del
+        # handoff 05-08): un cálculo cargado se VE, no se edita.
+        if cargado_exitosamente:
+            self._entrar_modo_consulta()
 
 
     def limpiar_campos_dosimetria(self):
@@ -2740,6 +2764,147 @@ class DialogCalculadoraDosis(QDialog):
             if hasattr(campo, 'clear'):
                 campo.clear()
 
+    # Z4 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): inventario COMPLETO
+    # de los widgets de texto que guardar_db() persiste (más Kq0r50_widget,
+    # que comparte la clave "Kq_0" con Kq_0 según el tipo de radiación) --
+    # fuente única para _entrar_modo_consulta e iniciar_nuevo_calculo, para
+    # no repetir el error de limpiar_campos_dosimetria (arriba), que solo
+    # cubre una muestra parcial.
+    # QualityR50/zrefR50 se incluyen aunque guardar_db no los persista: son
+    # estado del formulario (electrones) que sí arrastra el cálculo anterior
+    # si no se limpian -- _actualizar_visibilidad_zref reinyecta zrefR50 en
+    # Zref al marcar "Electrones", incluso en un cálculo nuevo. date_edit
+    # queda fuera a propósito -- lo gobierna F5, no Z4.
+    _CAMPOS_TEXTO_CALCULO = (
+        "visualize_calib", "temp_0", "pressure_0", "humr_cal", "temp",
+        "pressure", "humedad_r", "ktp", "lDV1_1", "lDV1_2", "lDV1_3",
+        "lDV1_prom", "unidades_monitor", "cociente", "Mplus", "Mminus1",
+        "Mminus2", "Mminus3", "Mminus", "Kpol", "tension_v1", "tension_v2",
+        "cociente_tensiones", "lect_m1", "lect_m2_1", "lect_m2_2",
+        "lect_m2_3", "lect_m2", "cociente_lecturas", "a0", "a1", "a2", "ks",
+        "MQvar", "Zref", "Zmax", "Kq_0", "Kq0r50_widget", "Dzref", "pdd20",
+        "pdd10", "pddzref", "tmrzref", "dosis_maxima", "tpr2010",
+        "tension_neg", "R50", "QualityR50", "zrefR50", "pddzrefE",
+    )
+    # Campos que NACEN en solo lectura (los calcula la cascada TRS-398; el
+    # físico nunca los teclea) -- verificado uno a uno contra los
+    # setReadOnly(True) de la construcción. "Nuevo cálculo" debe devolver el
+    # estado de FÁBRICA de cada campo, no "todos editables": abrirlos
+    # permitiría teclear a mano un ktp o una dosis máxima que hoy nadie
+    # puede falsear.
+    _CAMPOS_SOLO_LECTURA_SIEMPRE = frozenset({
+        "visualize_calib",     # :1586 (factor del catálogo, cargar_datos_equipo)
+        "ktp",                 # :1720
+        "cociente",            # :1795
+        "Kpol",                # :1895
+        "cociente_lecturas",   # :2005
+        "cociente_tensiones",  # :2013
+        "a0", "a1", "a2",      # :2029 (bucle)
+        "ks",                  # :2047
+        "MQvar",               # :2073
+        "Dzref",               # :2132
+        "dosis_maxima",        # :2200
+    })
+    _COMBOS_CALCULO = ("combo_modelos", "combo_series", "combo_fieldsize", "combo_protocolo")
+    # combo_series se excluye del reseteo explícito en iniciar_nuevo_calculo:
+    # restablecer combo_modelos ya lo vacía y lo deshabilita en cascada
+    # (on_modelo_cambiado) -- exactamente su estado en un diálogo recién
+    # abierto (nace deshabilitado, :1405, hasta elegir un modelo con series).
+    _COMBOS_RESET_EXPLICITO = ("combo_modelos", "combo_fieldsize", "combo_protocolo")
+    _CHECKS_CALCULO = ("fotones", "electrones", "pulse", "pulse_scan", "SSD")
+
+    def _entrar_modo_consulta(self):
+        """Un cálculo cargado se VE, no se edita -- "la intención es no
+        modificar esos valores y mucho menos usar esa carga para llenar más
+        rápido un nuevo cálculo" (anotación 1, handoff 05-08). Los campos
+        quedan en SOLO LECTURA (setReadOnly, no setEnabled) para que se
+        sigan viendo con claridad -- mismo criterio que F5 con la fecha
+        heredada del formulario mensual. "Nuevo cálculo" es la única salida.
+        """
+        for nombre in self._CAMPOS_TEXTO_CALCULO:
+            getattr(self, nombre).setReadOnly(True)
+        for nombre in self._COMBOS_CALCULO:
+            getattr(self, nombre).setEnabled(False)
+        for nombre in self._CHECKS_CALCULO:
+            getattr(self, nombre).setEnabled(False)
+        self.btn_ok.setEnabled(False)
+        self.btn_nuevo_calculo.setVisible(True)
+
+    def _resetear_checks_a_fabrica(self):
+        """Devuelve los checkboxes del cálculo a su estado de fábrica
+        (ninguna radiación, ninguna geometría, "Pulse" marcado por G4).
+
+        Limitación real de Qt (verificada empíricamente, Z4): en un
+        QButtonGroup EXCLUSIVO, una vez que un botón queda marcado, Qt
+        rechaza en silencio cualquier `setChecked(False)` sobre ese mismo
+        botón si dejaría el grupo con cero marcados -- `self.group_mode`
+        (fotones/electrones) y `self.group_geometry` (SSD, un único botón
+        exclusivo -- SAD está comentado) tienen este problema; llamar
+        `fotones.setChecked(False)`/`SSD.setChecked(False)` directo, como
+        hacía la primera versión de este método, era un no-op silencioso.
+        `group_escaneo` (pulse/pulse_scan) es una variable LOCAL de
+        `__init__`, no `self.` -- no tiene este problema (marcar uno
+        desmarca el otro de forma natural).
+
+        Solución: suspender temporalmente `setExclusive(False)` en cada
+        grupo afectado, hacer los cambios, y restaurar la exclusividad
+        original en un `finally` -- así el resto de la vida del diálogo no
+        se entera de que hubo un respiro sin exclusividad.
+        """
+        botones = [getattr(self, nombre) for nombre in self._CHECKS_CALCULO]
+        grupos = []
+        for boton in botones:
+            grupo = boton.group()
+            if grupo is not None and all(grupo is not g for g, _ in grupos):
+                grupos.append((grupo, grupo.exclusive()))
+        for grupo, _ in grupos:
+            grupo.setExclusive(False)
+        try:
+            self.SSD.setChecked(False)
+            self.pulse_scan.setChecked(False)
+            self.fotones.setChecked(False)
+            self.electrones.setChecked(False)
+            self.pulse.setChecked(True)   # G4: default de rutina del físico
+        finally:
+            for grupo, exclusivo in grupos:
+                grupo.setExclusive(exclusivo)
+        for boton in botones:
+            boton.setEnabled(True)
+
+    def iniciar_nuevo_calculo(self):
+        """Sale del modo consulta: limpia TODO el formulario (nunca
+        parcialmente -- evita exactamente lo que el físico temía, usar la
+        carga para llenar más rápido un cálculo nuevo) y deja el diálogo
+        como si se acabara de abrir."""
+        for nombre in self._CAMPOS_TEXTO_CALCULO:
+            campo = getattr(self, nombre)
+            campo.clear()
+            # Estado de FÁBRICA, no "editable a secas" -- ver
+            # _CAMPOS_SOLO_LECTURA_SIEMPRE (Kpol/ktp/a0-a2/ks/... nacen
+            # readOnly y deben seguir así, o el físico podría teclear a
+            # mano un valor que la cascada de cálculo debe producir sola).
+            campo.setReadOnly(nombre in self._CAMPOS_SOLO_LECTURA_SIEMPRE)
+        for nombre in self._COMBOS_RESET_EXPLICITO:
+            combo = getattr(self, nombre)
+            combo.setCurrentIndex(0)
+            combo.setEnabled(True)
+        # combo_series queda como on_modelo_cambiado lo dejó arriba (vacío y
+        # deshabilitado, :2347) -- ese SÍ es el estado real de un diálogo
+        # recién abierto (:1405), a diferencia de los otros 3 combos.
+        self._resetear_checks_a_fabrica()
+        self.equipo_id = None
+        # self.datos_equipo solo se limpia cuando combo_modelos CAMBIA de
+        # índice (limpiar_datos_equipo, disparado por el signal). Si el
+        # registro cargado tenía un modelo no encontrado en el catálogo
+        # (findData -> -1), el combo ya estaba en el índice 0 y
+        # setCurrentIndex(0) de arriba no dispara ningún signal -- sin este
+        # reset explícito, self.datos_equipo quedaría con el certificado del
+        # registro anterior.
+        self.datos_equipo = None
+        self.energia_calculo = None
+        self._tpr2010_editado_manualmente = False
+        self.btn_ok.setEnabled(True)
+        self.btn_nuevo_calculo.setVisible(False)
 
     # Campos exigidos completos antes de guardar (F3, auditoría 2026-07-10):
     # decisión explícita del usuario -- "todos los campos deben estar
