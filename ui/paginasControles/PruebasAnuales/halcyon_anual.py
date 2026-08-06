@@ -250,13 +250,24 @@ class PruebaAnualHalcyon(PruebaAnual600):
             self.toolbar.setParent(None)
 
         self.toolbar = NavigationToolbar(self.canvas, self)
-        subir_imagen_y_perfil = QPushButton("Subir")
+
+        # Z6 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): analizar_imagen
+        # puede llamarse más de una vez en la misma sesión (re-analizar tras
+        # elegir otra imagen) -- antes creaba un botón "Subir" NUEVO cada
+        # vez y lo apilaba en canvas_layout sin quitar el anterior (mismo
+        # síntoma que el toolbar de arriba, que sí tiene la guarda). Dos
+        # botones "Subir" casi uno encima del otro, cada uno conectado a su
+        # propia llamada -- exactamente lo que muestra audit_log con dos
+        # filas de HC_imagen_perfil_mlc_anual a 4 segundos de diferencia.
+        if hasattr(self, 'btn_subir_imagen_mlc') and self.btn_subir_imagen_mlc is not None:
+            self.btn_subir_imagen_mlc.setParent(None)
+        self.btn_subir_imagen_mlc = QPushButton("Subir")
 
         # Agrega el toolbar al layout del canvas
         canvas_layout = self.canvas.parent().layout()  # O usa el layout correcto si es diferente
         if canvas_layout is not None:
             canvas_layout.addWidget(self.toolbar)
-            canvas_layout.addWidget(subir_imagen_y_perfil)
+            canvas_layout.addWidget(self.btn_subir_imagen_mlc)
 
         # Convertir imagenes a blob y subir a la base de datos
         img_blob = cv2.imencode('.png', imagen)[1].tobytes()
@@ -273,7 +284,7 @@ class PruebaAnualHalcyon(PruebaAnual600):
         picos_str = ','.join(map(str, posiciones))  
 
         self.canvas.draw()
-        subir_imagen_y_perfil.clicked.connect(lambda: self.subir_imagen_perfil_mlc_db(img_blob, perfil_blob, picos_str))
+        self.btn_subir_imagen_mlc.clicked.connect(lambda: self.subir_imagen_perfil_mlc_db(img_blob, perfil_blob, picos_str))
 
         QMessageBox.information(self, "Éxito", "Imagen MLC analizada y perfil graficado.")
         return posiciones
