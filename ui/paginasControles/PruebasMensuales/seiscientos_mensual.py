@@ -81,7 +81,17 @@ class PruebaMensual600(PruebaBasico):
             id_f1_num = id_f1._nombre if hasattr(id_f1, "_nombre") else id_f1
             print(f"id_f1 recibido: {id_f1}, id_f1_num usado: {id_f1_num}")
             nombre_f1 = [fis[1] for fis in fisicos if fis[1] == id_f1_num] if id_f1_num is not None else []
-            print(f"Consulta de físicos exitosa: Nombre F1: {nombre_f1}")
+            # Z8 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): "exitosa"
+            # junto a una lista vacía es contradictorio -- una lista vacía
+            # es un resultado LEGÍTIMO (el usuario con sesión abierta no
+            # tiene role='Físico Médico', p.ej. admin/jefe verificando el
+            # formulario), no un fallo de la consulta.
+            if nombre_f1:
+                print(f"Consulta de físicos: usuario actual identificado como físico -- {nombre_f1[0]}")
+            else:
+                print("Consulta de físicos: el usuario actual no aparece en la "
+                      "lista de físicos (role='Físico Médico') -- normal si "
+                      "quien inició sesión no tiene ese rol")
         
             
             return fisicos, nombre_f1
@@ -235,12 +245,22 @@ class PruebaMensual600(PruebaBasico):
                     break
 
             if resultado:
-                self.fisico1.setText(resultado[0])
+                # Z8 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): fisico1/
+                # fisico2 son QComboBox -- setText() no existe ahí
+                # (AttributeError garantizado, atrapado en silencio por el
+                # except de abajo). Se seleccionan por texto, mismo patrón
+                # que el resto del archivo (líneas ~287-289, ~527-530).
+                if resultado[0]:
+                    indice_f1 = self.fisico1.findText(resultado[0])
+                    if indice_f1 >= 0:
+                        self.fisico1.setCurrentIndex(indice_f1)
                 if resultado[1]:
-                    self.fisico2.setCurrentText(resultado[1])
+                    indice_f2 = self.fisico2.findText(resultado[1])
+                    if indice_f2 >= 0:
+                        self.fisico2.setCurrentIndex(indice_f2)
             conn.close()
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error al actualizar el físico seleccionado: {e}")
            
                 
     
