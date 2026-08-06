@@ -104,16 +104,24 @@ class PruebaMensualIX(PruebaMensual600):
     def _configurar_mlcs_ix(self):
         """Configura widgets MLC específicos para IX"""
         try:
-            # Verificar si los widgets MLC existen
+            # Z10 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): esta
+            # comprobación buscaba 'ln_action_tolerance_ix' -- un nombre
+            # que NUNCA existe. El widget real, creado desde widgets.xlsx
+            # con el mismo nombre que usa 600 (_configurar_mlcs,
+            # seiscientos_mensual.py), es 'ln_action_tolerance' sin sufijo
+            # -- verificado instanciando el diálogo real: el widget SÍ
+            # está presente y configurado, pero el aviso de "no
+            # encontrados" salía siempre igual, 6 veces en la terminal.
+            # DA-18: sin símbolo de advertencia, aunque sea consola.
             if hasattr(self, 'ln_tolerance_mlc'):
                 print("ln tolerance encontrado")
-            if hasattr(self, 'ln_action_tolerance_ix'):
+            if hasattr(self, 'ln_action_tolerance'):
                 print("action tolerance encontrado")
-            if hasattr(self, 'ln_action_tolerance_ix') and hasattr(self, 'ln_tolerance_mlc'):
+            if hasattr(self, 'ln_action_tolerance') and hasattr(self, 'ln_tolerance_mlc'):
                 print("Widgets MLC encontrados y configurados")
             else:
-                print("⚠️ Widgets MLC no encontrados - revisar creación desde Excel")
-                
+                print("Widgets MLC no encontrados -- revisar creación desde Excel")
+
         except Exception as e:
             print(f"Error configurando MLCs para IX: {e}")
     def setupTap1(self):
