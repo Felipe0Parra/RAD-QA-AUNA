@@ -262,7 +262,14 @@ class PruebaAnual600(PruebaMensual600):
                 _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
                                      nombre_tabla, ref=ref)
 
-                self.bloquearboton(btn_guardar)
+                # Z5 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): el botón
+                # ya NO se bloquea tras el primer guardado -- la protección
+                # real contra un guardado indebido es la ventana de 2 meses
+                # (F4b/C1), la verificación de control activo (W1) y la
+                # auditoría de arriba (A6.4), no este botón. Bloquearlo solo
+                # impedía corregir un dato mal tecleado sin cerrar y reabrir
+                # el formulario (mismo criterio ya aplicado en ix_mensual.py,
+                # donde la llamada análoga está comentada desde antes).
                 self._actualizar_tabla_despues_subida()
                 print(f"Tabla(s) {nombre_tabla} subida(s) correctamente")
 
