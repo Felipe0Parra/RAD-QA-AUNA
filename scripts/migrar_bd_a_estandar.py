@@ -235,13 +235,30 @@ def _inventario_estructural(con):
             "GROUP BY name HAVING COUNT(*) > 1)").fetchone()[0]
     except sqlite3.OperationalError:
         seq_dup = 0
-    return {"cascada": cascada, "triggers": triggers, "roles": roles, "seq_dup": seq_dup}
+    try:
+        # Z11 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md §6.4-S7/§7): el
+        # índice se crea al arranque (_asegurar_indice_unico_controles), pero
+        # el reporte no decía nada al respecto -- desde aquí no había forma
+        # de confirmar que la unicidad de controles quedó activa.
+        indice_unico_controles = bool(con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='index' "
+            "AND name='idx_controles_unico_mes'").fetchone())
+    except sqlite3.OperationalError:
+        indice_unico_controles = False
+    return {"cascada": cascada, "triggers": triggers, "roles": roles,
+            "seq_dup": seq_dup, "indice_unico_controles": indice_unico_controles}
 
 
-def _reportar_cambios_estructurales(est_antes, est_despues):
+def _reportar_cambios_estructurales(est_antes, est_despues, duplicados_controles=None):
     """F2: antes, recrear 59 tablas a RESTRICT y crear triggers anti-borrado
     no aparecía en ningún lado del reporte -- el físico no tenía forma de
-    saber, leyendo la salida, que eso había ocurrido."""
+    saber, leyendo la salida, que eso había ocurrido.
+
+    Z11: la línea del índice único de controles SIEMPRE se imprime, con una
+    de tres estados posibles ("creado" / "ya existía" / "NO CREADO -- hay N
+    duplicados") -- que el silencio deje de ser un estado posible, mismo
+    criterio que _asegurar_indice_unico_controles ya aplica al imprimir por
+    consola en el arranque de la app."""
     print("\n--- Cambios estructurales ---")
     migradas = sorted(est_antes["cascada"] - est_despues["cascada"])
     if migradas:
@@ -264,6 +281,19 @@ def _reportar_cambios_estructurales(est_antes, est_despues):
             or (est_despues["roles"] and est_despues["roles"] != est_antes["roles"])
             or (est_antes["seq_dup"] and not est_despues["seq_dup"])):
         print("  (sin cambios estructurales -- la base ya estaba al día)")
+
+    if est_despues["indice_unico_controles"]:
+        if est_antes["indice_unico_controles"]:
+            print("  Índice único de controles: ya existía")
+        else:
+            print("  Índice único de controles: creado")
+    elif duplicados_controles:
+        print(f"  Índice único de controles: NO CREADO -- hay "
+              f"{len(duplicados_controles)} grupo(s) duplicado(s) por "
+              f"(equipo, control, mes/año) entre filas activas (ver "
+              f"'Duplicados de controles' arriba)")
+    else:
+        print("  Índice único de controles: NO CREADO")
 
 
 def _contar_catalogos_base(con):
@@ -435,7 +465,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                         sentinelas_antes, sentinelas_normalizadas,
                         catalogos_antes, catalogos_despues)
         _reportar_equipos(equipos)
-        _reportar_cambios_estructurales(estructural_antes, estructural_despues)
+        _reportar_cambios_estructurales(estructural_antes, estructural_despues,
+                                     duplicados_controles_despues)
         _reportar_qc(qc_antes, qc_despues)
         _reportar_censo_completo(censo_antes, censo_despues)
         _reportar_duplicados_controles(duplicados_controles_despues)
@@ -480,7 +511,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                     sentinelas_antes, sentinelas_normalizadas,
                     catalogos_antes, catalogos_despues)
     _reportar_equipos(equipos)
-    _reportar_cambios_estructurales(estructural_antes, estructural_despues)
+    _reportar_cambios_estructurales(estructural_antes, estructural_despues,
+                                     duplicados_controles_despues)
     hubo_perdida_qc = _reportar_qc(qc_antes, qc_despues)
     hubo_perdida_censo = _reportar_censo_completo(censo_antes, censo_despues)
     _reportar_duplicados_controles(duplicados_controles_despues)
