@@ -747,6 +747,15 @@ class PruebaDiariaBraq(PruebaBasico):
 
         
             
+    def clean_info(self, imagenes=False):
+        """Z7 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): 'Limpiar datos'
+        no limpiaba TODO -- self.df_lines excluye a propósito el campo
+        'observaciones' (storeDailyTests, para no confundirlo con un botón
+        Funciona/No funciona), y ese mismo filtro dejaba el texto de
+        observaciones vivo tras un click de 'Limpiar'."""
+        super().clean_info(imagenes)
+        self.observaciones.clear()
+
     def resetear_imagen_ui(self):
         # --- LIMPIAR LAYOUT DEL CANVAS ---
         # --- LIMPIAR FIGURA ---
@@ -2998,7 +3007,14 @@ class PosicionamientoInicial(PruebaBasico):
             self.limit2.dateChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
         
         self.search_bar.textChanged.connect(self._iniciar_busqueda_debounced)
-    
+
+    def clean_info(self, imagenes=False):
+        """Z7 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): mismo hueco que
+        PruebaDiariaBraq -- 'observaciones' queda fuera de self.df_lines a
+        propósito, y por eso fuera de 'Limpiar datos' también."""
+        super().clean_info(imagenes)
+        self.observaciones.clear()
+
     def enviar_desplazamiento(self):
         print("Enviando desplazamiento...")
         desplazamientos = self.guardar_datos_ini()

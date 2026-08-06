@@ -678,6 +678,29 @@ class PruebaMensualBraq(PruebaBasico):
         self.layout_lecturas.addWidget(contenedor)
         self.tabla_lecturas_widget = contenedor
 
+    def clean_info(self, imagenes=False):
+        """Z7 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): campos_maximos
+        (MEDIDAS MÁXIMO DE LA CÁMARA) y campos_lecturas (LECTURAS DEL
+        MÁXIMO) se crean con QLineEdit crudos en generar_tabla_medidas/
+        generar_tabla_lecturas -- fuera de self.df_lines (que solo cubre lo
+        que viene de widgets.xlsx) -- así que 'Limpiar datos' nunca los
+        tocaba. Se limpian solo las celdas EDITABLES (las medidas); las
+        columnas de posición/voltaje son etiquetas de referencia fijas
+        (estado de fábrica desde la construcción de la tabla, no dato del
+        físico) y el promedio vuelve a "-", su valor de fábrica."""
+        super().clean_info(imagenes)
+        for fila in getattr(self, "campos_maximos", []):
+            # [posición(RO), medida1, medida2, promedio(RO)]
+            fila[1].clear()
+            fila[2].clear()
+            fila[3].setText("-")
+        for fila in getattr(self, "campos_lecturas", []):
+            # [voltaje(RO), medida1, medida2, medida3, promedio(RO)]
+            fila[1].clear()
+            fila[2].clear()
+            fila[3].clear()
+            fila[4].setText("-")
+
     """Extrae la info ingresada en la tabla de los máximos de la cámara                                                                                                                                                 """
     def extraer_datos_medidas(self):
         posiciones = []
