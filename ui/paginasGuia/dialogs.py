@@ -2532,10 +2532,20 @@ class DialogCalculadoraDosis(QDialog):
                         self.combo_fieldsize.setCurrentIndex(index)
                 if datos.get('temperatura'):
                     self.temp_0.setText(str(datos['temperatura']))
-                
+
                 if datos.get('presion'):
                     self.pressure_0.setText(str(datos['presion']))
-                
+
+                # Z2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): se
+                # guardaban desde H2.2 pero nunca se restauraban -- tercera
+                # vez que aparece este patrón (D2.2, E4), cerrado ahora con
+                # un tripwire AST en vez de campo por campo.
+                if datos.get('Humedad_calibracion'):
+                    self.humr_cal.setText(str(datos['Humedad_calibracion']))
+
+                if datos.get('Humedad_relativa'):
+                    self.humedad_r.setText(str(datos['Humedad_relativa']))
+
                 if datos.get('temp_clinica'):
                     self.temp.setText(str(datos['temp_clinica']))
                 
