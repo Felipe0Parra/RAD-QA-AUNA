@@ -2521,10 +2521,18 @@ class DialogCalculadoraDosis(QDialog):
                     index = self.combo_modelos.findData(datos['Modelo_equipo'])
                     if index >= 0:  # Si se encontró
                         self.combo_modelos.setCurrentIndex(index)
-                if datos.get('Numero_serie'):
-                    # Buscar el índice del item que tiene este valor en su data
+                # Z3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): equipo_id
+                # es la fuente autoritativa (nombre honesto, desde B3);
+                # Numero_serie -- que guarda el MISMO id, F1, nombre de
+                # columna engañoso -- queda como fallback solo para
+                # registros anteriores a B3 que no tengan equipo_id.
+                if datos.get('equipo_id'):
+                    index = self.combo_series.findData(datos['equipo_id'])
+                    if index >= 0:
+                        self.combo_series.setCurrentIndex(index)
+                elif datos.get('Numero_serie'):
                     index = self.combo_series.findData(datos['Numero_serie'])
-                    if index >= 0:  # Si se encontró
+                    if index >= 0:
                         self.combo_series.setCurrentIndex(index)
                 if datos.get('Tamano_campo'):
                     index = self.combo_fieldsize.findData(datos['Tamano_campo'])

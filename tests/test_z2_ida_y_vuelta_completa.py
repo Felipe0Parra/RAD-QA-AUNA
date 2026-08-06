@@ -11,9 +11,12 @@ y falla si alguna no tiene restauración correspondiente en
 
 Barrido hecho antes de escribir el tripwire (documentado aquí para no tener
 que re-derivarlo): de 58 claves, 43 tenían `datos.get(...)` directo, y de las
-15 restantes, 13 están genuinamente cubiertas por otro mecanismo (ver
+15 restantes, 13 estaban genuinamente cubiertas por otro mecanismo (ver
 ALLOWLIST) y 2 eran un hueco real -- Humedad_calibracion y Humedad_relativa,
-cerrado en este mismo commit.
+cerrado en este mismo commit. Z3 (commit siguiente) movió 'equipo_id' de
+"restaurado indirecto" (cascada) a "restaurado directo" (datos.get expreso)
+-- quedan 12 en la ALLOWLIST, no 13; el propio test_la_allowlist_no_tiene_
+entradas_obsoletas lo detectó al ejecutar Z3.
 """
 import ast
 import os
@@ -29,12 +32,14 @@ import ui.paginasGuia.dialogs as dialogs_mod
 # Claves de guardar_db() que NO se restauran vía `datos.get('<clave>')` en
 # cargar_datos_desde_db(), con la razón verificada de por qué NO es un hueco:
 ALLOWLIST_NO_RESTAURADO = {
-    # Restaurado INDIRECTAMENTE: al restaurar 'Numero_serie' (el id del
-    # combo, F1) se dispara combo_series.setCurrentIndex -> on_serie_cambiada
-    # (dialogs.py), que asigna self.equipo_id = equipo_id. Confirmado con
-    # test_equipo_id_se_recupera_para_poder_regrabar (test_calculadora_
-    # dosis_guardar_cargar.py).
-    "equipo_id": "cascada de on_serie_cambiada al restaurar Numero_serie",
+    # NOTA: 'equipo_id' vivió aquí hasta Z3 (restaurado antes solo
+    # INDIRECTAMENTE, vía la cascada de on_serie_cambiada al restaurar
+    # Numero_serie) -- Z3 lo cambió a fuente autoritativa con
+    # datos.get('equipo_id') directo, así que ya no pertenece a esta lista.
+    # El propio test_la_allowlist_no_tiene_entradas_obsoletas de abajo
+    # detectó la entrada obsoleta al ejecutar Z3 -- exactamente la garantía
+    # para la que se diseñó.
+    #
     # Campos INTERMEDIOS de la cascada de cálculo TRS-398 (D2.2, 2026-07-08):
     # self.blockSignals(True) en cargar_datos_desde_db NO bloquea señales de
     # widgets HIJOS -- al restaurar los campos crudos (lecturas, T/P,
