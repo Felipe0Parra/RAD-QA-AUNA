@@ -67,7 +67,11 @@ def preparar_addInfo(monkeypatch, tmp_path, carpeta_mpc_falsa):
     monkeypatch.chdir(tmp_path)  # aisla el 'infoWidgets.csv' que addInfo escribe con ruta relativa
     monkeypatch.setattr(halcyon_mod, "seleccionar_carpeta_mpc",
                          lambda ruta_base, fecha: carpeta_mpc_falsa)
-    monkeypatch.setattr(halcyon_mod, "createDB", lambda *a, **k: None)
+    # H1-bis (2026-08-06): createDB ahora devuelve bool (antes no devolvía
+    # nada) -- el mock debe imitar el camino de ÉXITO, o addInfo lo trata
+    # como fallo y muestra QMessageBox.critical (sin mockear aquí a
+    # propósito: si algo lo dispara sin querer, debe fallar ruidoso).
+    monkeypatch.setattr(halcyon_mod, "createDB", lambda *a, **k: True)
     monkeypatch.setattr(halcyon_mod.QMessageBox, "information", staticmethod(lambda *a, **k: None))
 
 

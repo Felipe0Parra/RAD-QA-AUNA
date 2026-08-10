@@ -147,14 +147,35 @@ def addInfo(self, fecha, user):
             cursor.execute("SELECT * FROM halcyon WHERE date=?", (fecha,))
             fila = cursor.fetchone()
             
-            if fila: # Si ya existe, actualizar
+            if fila:
+                # H1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md
+                # §3.4, hallazgo F7 del 2026-07-07): antes solo imprimía en
+                # consola -- con el botón "Agregar" conectado, el físico va
+                # a pulsarlo y necesita ver que no pasó nada porque esa
+                # fecha ya está importada, no un silencio. NO se reemplaza
+                # (a diferencia de add_info/H2.2, otra función): solo se
+                # informa.
                 print("Ya existe la fecha")
-            else:
-                createDB(df_csv, fecha, user)
-                _registrar_auditoria(
-                    user, ACCION_GUARDAR, "halcyon", ref=fecha,
-                    detalle=f"carpeta MPC: {os.path.basename(folder_found)}"
+                QMessageBox.information(
+                    self, "Fecha ya importada",
+                    f"La fecha {fecha} ya está importada en el diario del Halcyon."
                 )
+            else:
+                if createDB(df_csv, fecha, user):
+                    _registrar_auditoria(
+                        user, ACCION_GUARDAR, "halcyon", ref=fecha,
+                        detalle=f"carpeta MPC: {os.path.basename(folder_found)}"
+                    )
+                else:
+                    # H1-bis: createDB ya no falla en silencio -- si
+                    # devuelve False, el físico se entera en vez de pulsar
+                    # "Agregar" y no ver ningún efecto.
+                    QMessageBox.critical(
+                        self, "Error al guardar",
+                        f"No se pudo guardar el diario del Halcyon para la "
+                        f"fecha {fecha}. Revise que el Results.csv de la "
+                        f"carpeta MPC tenga el formato esperado."
+                    )
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -236,27 +257,56 @@ def addInfoWidgets(df):
     return df_result
 
 def createDB(df, fecha, user):
+    """Devuelve True si la fila se guardó, False si no.
+
+    H1-bis (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md, hallazgo del
+    2026-08-06, diagnosticado por subagente Opus): el INSERT se arma
+    dinámicamente y POSICIONALMENTE desde PRAGMA table_info -- correcto
+    mientras la tabla tuviera exactamente 22 columnas no-`id` (date,
+    user_id + 20 de medición). Desde E7 (28-07,
+    PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md) `halcyon` -- como toda tabla de
+    `TABLAS_ANULABLES` -- tiene además `activo`, sin valor que ofrecerle
+    desde `descripciones`. El INSERT revenía SIEMPRE con "Incorrect number
+    of bindings supplied" desde entonces, atrapado en silencio por el
+    `except` de abajo -- nadie lo notó porque nadie reimportó un diario de
+    Halcyon con una BD ya migrada hasta este hallazgo (verificado contra
+    producción: 254 filas, la más reciente 2026-07-01, antes de E7).
+    """
     try:
-        #print("try createDB")
         with con.Conexion().conectar() as db:
-            #print("Creando tabla halcyon")
             cursor = db.cursor()
-            
-            # Obtener los nombres de las columnas de la tabla (excepto 'id')
+
+            # Columnas reales de la tabla, excepto 'id' (autoincremental) y
+            # 'activo' (E7 -- su DEFAULT=1 la llena sola; este INSERT no
+            # tiene un valor que darle porque inserta posicionalmente, no
+            # por nombre).
             cursor.execute("PRAGMA table_info(halcyon)")
-            columnas = [col[1] for col in cursor.fetchall() if col[1] != 'id']
-            #print(columnas)
+            columnas = [col[1] for col in cursor.fetchall()
+                        if col[1] not in ('id', 'activo')]
             descripciones = df['descripcion'].tolist()
-            # Armar la consulta SQL dinámicamente
-            #columnas = [f"col{i+1}" for i in range(len(descripciones))]
+
+            # Guarda de longitud: verificado contra el corpus real que una
+            # corrida degenerada del MPC puede traer menos resultados de
+            # los 20 esperados -- sin esto, esa carpeta produciría el mismo
+            # error de bindings, solo que con una causa distinta.
+            esperadas = len(columnas) - 2  # menos fecha y user_id
+            if len(descripciones) != esperadas:
+                print(
+                    f"createDB: el Results.csv trajo {len(descripciones)} "
+                    f"resultados, se esperaban {esperadas} -- no se guarda "
+                    f"la fecha {fecha}.")
+                return False
+
             sql = f"INSERT INTO halcyon ({', '.join(columnas)}) VALUES ({', '.join(['?'] * len(columnas))})"
-            cursor.execute(sql, [fecha] + [user] + descripciones)
-            
+            cursor.execute(sql, [fecha, user] + descripciones)
+
             db.commit()
+            return True
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"Error al agregar datos de la fecha NEA NO SE: {fecha}:", e)
+        print(f"Error al agregar datos de la fecha: {fecha}:", e)
+        return False
 
 '''def addInfoDB(df, fecha):
     print(fecha)

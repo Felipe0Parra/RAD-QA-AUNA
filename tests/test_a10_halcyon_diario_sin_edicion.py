@@ -46,6 +46,7 @@ class _HalcyonDiarioFalso(QWidget):
         self.edit_table = QPushButton("Editar")
         self.accept_edit = QPushButton()
         self.cancel_edit = QPushButton()
+        self.btn_add = QPushButton()  # H1: button_click() la conecta
 
     # button_click() los conecta directamente (no dentro de una lambda), así
     # que deben existir como atributos llamables ya al conectar -- no hace
@@ -54,6 +55,9 @@ class _HalcyonDiarioFalso(QWidget):
         pass
 
     def filtrarTabla(self):
+        pass
+
+    def importar_fecha_seleccionada(self):
         pass
 
 

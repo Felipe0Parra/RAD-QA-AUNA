@@ -90,7 +90,19 @@ class PruebaDiariaHc(PruebaBasico):
         }
         
     def convert_date_to_str(self):
-        # Convierte la fecha seleccionada a formato dd-mm-aaaa
+        self.importar_fecha_seleccionada()
+
+    def importar_fecha_seleccionada(self):
+        """H1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.4):
+        importa la fecha actualmente elegida en date_box -- mismo cuerpo que
+        antes vivía solo dentro de convert_date_to_str (disparado únicamente
+        por dateChanged). El botón "Agregar" (btn_add) nunca estuvo conectado
+        (git log -S"btn_add" confirma un solo commit, el estado virgen) y
+        setDate(QDate.currentDate()) en iniGUI se ejecuta ANTES de conectar
+        dateChanged, así que abrir el diario sin cambiar la fecha no
+        disparaba ninguna importación -- este método es el segundo
+        disparador que llena ese hueco, reutilizando la MISMA ruta ya
+        auditada (addInfo -> createDB -> ACCION_GUARDAR)."""
         selected_date = self.date_box.date()
         date_str = selected_date.toString("yyyy-MM-dd")
         self.date_box.setDisplayFormat("yyyy/MM/dd")
@@ -99,7 +111,7 @@ class PruebaDiariaHc(PruebaBasico):
             self.update_lineedit_blocks(df)
         load_table(self, boolean_keys= None, dosis= None, maquina= 'halcyon')
         asignar_encabezados(self, 'halcyon')
-        
+
     def update_lineedit_blocks(self, new_data):
         """
         Actualiza los valores de los QLineEdit block basados en un nuevo DataFrame.
@@ -278,11 +290,18 @@ class PruebaDiariaHc(PruebaBasico):
         db.close()
     
     def button_click(self):
-        #Falta btn_add (para el pdf)
         #falta btn_clean
         #falta btn_delete (no se en que utilzarlo)
-                
-      
+
+        # H1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.4):
+        # btn_add nunca estuvo conectado (comentario original de arriba,
+        # "Falta btn_add (para el pdf)" -- git log -S"btn_add" confirma un
+        # solo commit, el estado virgen). Reusa la MISMA ruta de importación
+        # que dateChanged ya dispara (importar_fecha_seleccionada -> addInfo
+        # -> createDB -> ACCION_GUARDAR): segundo disparador de la ruta ya
+        # probada y auditada, no una ruta nueva.
+        self.btn_add.clicked.connect(self.importar_fecha_seleccionada)
+
         if self.btn_submit.clicked:
             self.btn_submit.clicked.connect(
                 lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text(): 
