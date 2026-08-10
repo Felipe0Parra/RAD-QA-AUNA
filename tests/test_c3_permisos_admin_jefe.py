@@ -3,8 +3,18 @@ DialogAdminPermiso2 (Login.py: crear usuario / cambiar contraseña) y
 DialogAdminPermisoEliminar (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md: el
 físico pidió "verificar que solo el administrador puede eliminar un
 registro, o físico médico jefe") aceptan admin O lamaya con su propia
-contraseña; cualquier otro físico con contraseña válida queda rechazado con
-un mensaje distinto al de contraseña incorrecta.
+contraseña; un usuario cuyo rol NO se puede resolver en BD queda rechazado
+con un mensaje distinto al de contraseña incorrecta (respaldo legado
+{"admin","lamaya"}, ver services/permisos.py).
+
+NOTA (2026-08-06, DA-35, PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md
+§3.1, corrección §8/P3): la mayoría de tests de este archivo mockean
+`UsuarioData.login` SIN sembrar al usuario en la BD real -- su rol_sistema
+nunca resuelve, así que caen al respaldo LEGADO y son rechazados. Eso NO es
+"todo físico sin admin/jefe queda rechazado": bajo DA-35, un usuario con
+rol_sistema='fisico' RESUELTO en BD es admin-equivalente y SÍ es aceptado --
+ver TestDA35FisicoEsAceptadoYAuditadoConSuNombre, el único test de este
+archivo con rol_sistema realmente sembrado.
 """
 import os
 import sqlite3
@@ -64,8 +74,14 @@ class TestPermisosAdminJefe:
         assert dlg.res is not None
         assert dlg.labelwarnign.text() == ""
 
-    def test_fisico_sin_permiso_admin_con_contrasena_correcta_es_rechazado(
+    def test_usuario_con_rol_no_resoluble_es_rechazado(
             self, app, dialogo_cls, monkeypatch):
+        """El login se mockea SIN sembrar 'accastellanos' en la BD real --
+        su rol_sistema no resuelve, así que es_admin_equivalente cae al
+        respaldo legado {"admin","lamaya"} y deniega. NO prueba que todo
+        físico sea rechazado: bajo DA-35, un usuario con rol_sistema=
+        'fisico' RESUELTO en BD es aceptado (ver
+        TestDA35FisicoEsAceptadoYAuditadoConSuNombre)."""
         monkeypatch.setattr(
             dialogs_mod.UsuarioData, "login",
             _mock_login({"admin", "lamaya", "accastellanos"}))
@@ -104,12 +120,18 @@ def bd_temporal(monkeypatch, tmp_path):
     Conexion._instance = None
 
 
-class TestDialogAdminPermisoEliminarSoloAdminOJefe:
+class TestDialogAdminPermisoEliminarExigePermisoResuelto:
     """C3 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): antes este diálogo
     re-validaba la contraseña del USUARIO YA LOGUEADO (campo fijo, solo
     lectura) -- cualquier físico podía eliminar/anular un registro con su
-    propia clave. Ahora exige admin o física en jefe, igual que crear
-    usuario/cambiar contraseña."""
+    propia clave. Ahora exige es_admin_equivalente (admin/jefe siempre; bajo
+    DA-35 también un físico con rol_sistema RESUELTO en BD -- ver
+    TestDA35FisicoEsAceptadoYAuditadoConSuNombre), igual que crear
+    usuario/cambiar contraseña. Los tests de esta clase usan logins
+    mockeados SIN sembrar rol en BD -- por eso caen al respaldo legado y son
+    rechazados (renombrada 2026-08-06, DA-35, corrección §8/P3: el nombre
+    anterior, "...SoloAdminOJefe", sugería un rechazo categórico a
+    cualquier físico que DA-35 ya no es cierto)."""
 
     def test_admin_con_contrasena_correcta_es_aceptado(self, app, monkeypatch):
         monkeypatch.setattr(dialogs_mod.UsuarioData, "login", _mock_login({"admin"}))
@@ -130,11 +152,15 @@ class TestDialogAdminPermisoEliminarSoloAdminOJefe:
         assert dlg.res is not None
         assert dlg.labelwarnign.text() == ""
 
-    def test_el_propio_fisico_logueado_ya_no_puede_autorizar_con_su_clave(
+    def test_usuario_con_rol_no_resoluble_no_puede_autorizar_con_su_clave(
             self, app, monkeypatch):
         """El caso que motivó la tarea: 'accastellanos' es el usuario YA
-        LOGUEADO (el que antes se auto-aceptaba); ahora se rechaza igual que
-        cualquier otro físico sin permisos."""
+        LOGUEADO (el que antes se auto-aceptaba); el login se mockea SIN
+        sembrar su rol en BD, así que cae al respaldo legado y es
+        rechazado. Bajo DA-35, el MISMO usuario con rol_sistema='fisico'
+        resuelto en BD sería aceptado -- este test verifica el respaldo
+        legado (rol no resoluble), no una exclusión categórica de los
+        físicos."""
         monkeypatch.setattr(
             dialogs_mod.UsuarioData, "login",
             _mock_login({"admin", "lamaya", "accastellanos"}))
@@ -157,6 +183,11 @@ class TestDialogAdminPermisoEliminarSoloAdminOJefe:
         assert dlg.admin_user.isReadOnly() is False
 
     def test_intento_denegado_queda_auditado(self, app, bd_temporal, monkeypatch):
+        """'accastellanos' es denegado aquí por rol NO resoluble (login
+        mockeado sin sembrar rol_sistema en BD) -- ver la nota de DA-35 en
+        el docstring de la clase; lo que este test verifica es que un
+        intento denegado, cualquiera sea la razón, queda auditado con el
+        nombre de quien lo intentó."""
         monkeypatch.setattr(
             dialogs_mod.UsuarioData, "login",
             _mock_login({"admin", "lamaya", "accastellanos"}))
@@ -208,8 +239,14 @@ class TestE4EditarReautenticaAlPropioFisico:
         assert dlg.labelwarnign.text() == ""
 
     def test_asimetria_editar_acepta_eliminar_rechaza(self, app, monkeypatch):
-        """El MISMO físico con la MISMA clave válida: Editar acepta, Eliminar
-        exige permisos administrativos."""
+        """El MISMO físico con la MISMA clave válida: Editar acepta (E4,
+        reautenticación del propio físico, sin es_admin_equivalente);
+        Eliminar exige permisos administrativos (es_admin_equivalente). La
+        ASIMETRÍA en sí sigue existiendo en el código sin cambios; lo que
+        DA-35 cambia es A QUIÉN concede permiso es_admin_equivalente, no
+        esta asimetría -- aquí 'accastellanos' es rechazado en Eliminar
+        porque el login mockeado no siembra su rol en BD (rol no
+        resoluble), no porque DA-35 sea falsa."""
         monkeypatch.setattr(dialogs_mod.UsuarioData, "login",
                              _mock_login({"accastellanos"}))
 
@@ -235,10 +272,11 @@ class TestE4EditarReautenticaAlPropioFisico:
 class TestDA35FisicoEsAceptadoYAuditadoConSuNombre:
     """DA-35 (2026-08-06, PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md
     §3.1): con rol_sistema='fisico' RESUELTO en BD, DialogAdminPermisoEliminar
-    ahora ACEPTA (antes de DA-35 lo rechazaba -- ver
-    test_fisico_sin_permiso_admin_con_contrasena_correcta_es_rechazado, que
-    sigue en rojo hoy porque usa un login MOCKEADO sin rol resuelto en BD, no
-    porque DA-35 sea falsa).
+    ahora ACEPTA. No contradice a
+    TestDialogAdminPermisoEliminarExigePermisoResuelto::
+    test_usuario_con_rol_no_resoluble_no_puede_autorizar_con_su_clave --
+    ese test usa un login MOCKEADO SIN sembrar rol en BD (cae al respaldo
+    legado), este siembra rol_sistema='fisico' de verdad.
 
     Usa el login() REAL (sin mockear) para que el rastro de auditoría sea el
     genuino escrito por usuariosManager.login() -- el requisito del plan es
