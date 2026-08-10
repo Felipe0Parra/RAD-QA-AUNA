@@ -31,3 +31,20 @@ def _bd_sesion_por_defecto():
     conection_mod.ruta_base_datos = lambda: ruta
     yield
     conection_mod.ruta_base_datos = original
+
+
+@pytest.fixture(autouse=True)
+def _qtsql_sin_fugas():
+    """PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §9: `opeenDatabase`
+    fija `qt_sql_default_connection` (global al proceso) solo la primera vez
+    que se crea -- cualquier test que la ejercite (directo o vía código de
+    producción) la deja clavada a su BD temporal para el resto de la sesión
+    de pytest. Se destruye al final de cada test para que la condición
+    necesaria del fallo no sobreviva de un test al siguiente.
+    """
+    yield
+    from PyQt5.QtSql import QSqlDatabase
+
+    if QSqlDatabase.contains("qt_sql_default_connection"):
+        QSqlDatabase.database("qt_sql_default_connection").close()
+        QSqlDatabase.removeDatabase("qt_sql_default_connection")
