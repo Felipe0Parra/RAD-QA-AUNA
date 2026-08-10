@@ -33,24 +33,48 @@ def ruta_mpc_halcyon():
     return os.environ.get("RADQA_HALCYON_MPC", RUTA_MPC_POR_DEFECTO)
 
 
-def _results_csv_tiene_datos(carpeta):
-    """True si `carpeta` tiene Results.csv con al menos una fila de datos.
+def _contar_filas_datos(carpeta):
+    """Filas de datos del Results.csv de `carpeta`; 0 si no existe o no se lee.
 
     Una corrida abortada del MPC no genera Results.csv; una parcial lo genera
-    con solo la línea de cabecera. Solo una corrida completa trae filas de
-    datos detrás de la cabecera -- por eso este es el marcador de completitud
-    (confirmado con carpetas reales del Halcyon, ver PLAN_HALCYON_SELECCION_
-    CARPETA_21-07.md). Se leen solo las dos primeras líneas, no toda la
-    carpeta (~124 MB con las imágenes .xim).
+    con solo la cabecera, o truncado a unas pocas filas; una completa trae el
+    juego entero (253 filas en el corpus real). Se lee ese único fichero
+    (~20 KB) y nunca las imágenes `.xim` (~124 MB por carpeta).
     """
     ruta_csv = os.path.join(carpeta, 'Results.csv')
     try:
         with open(ruta_csv, 'r', encoding='utf-8', errors='ignore') as f:
-            f.readline()  # cabecera
-            segunda_linea = f.readline()
+            lineas = [linea for linea in f if linea.strip()]
+    except OSError:
+        return 0
+    return max(0, len(lineas) - 1)  # descontando la cabecera
+
+
+def _results_csv_tiene_datos(carpeta):
+    """True si `carpeta` tiene Results.csv con al menos una fila de datos.
+
+    Marcador mínimo de J1 (PLAN_HALCYON_SELECCION_CARPETA_21-07.md): descarta
+    abortadas (sin Results.csv) y vacías (solo cabecera). H2 lo refina con el
+    GRADO de completitud, ver `seleccionar_carpeta_mpc`.
+    """
+    return _contar_filas_datos(carpeta) > 0
+
+
+def _tiene_imagenes_adquiridas(carpeta):
+    """True si `carpeta` conserva las imágenes `.xim` de la adquisición.
+
+    Es lo que separa una corrida real de una REPUBLICACIÓN: cuando el MPC
+    vuelve a escribir un resultado ya cerrado deja una carpeta de 2-13
+    ficheros, con el mismo Results.csv completo pero SIN imágenes. Verificado
+    en el corpus real: 2026-07-02 05:17:44 (163 ficheros, 50 `.xim`) y
+    06-26-58 (2 ficheros, 0 `.xim`) traen un Results.csv byte-idéntico; ídem
+    2026-07-10. Sin este criterio, "la última del día" se queda con la
+    republicación, que no contiene toda la información de la prueba.
+    """
+    try:
+        return any(n.lower().endswith('.xim') for n in os.listdir(carpeta))
     except OSError:
         return False
-    return bool(segunda_linea.strip())
 
 
 def carpetas_mpc_de_fecha(ruta_base, fecha):
@@ -77,19 +101,53 @@ def carpetas_mpc_de_fecha(ruta_base, fecha):
 
 
 def seleccionar_carpeta_mpc(ruta_base, fecha):
-    """Carpeta MPC correcta de `fecha`: la más reciente entre las COMPLETAS.
+    """Carpeta MPC de `fecha`: la ÚLTIMA de entre las MÁS COMPLETAS.
+
+    H2 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.3). Dos
+    criterios, en este orden:
+
+    1. **Completitud primero.** El grado de completitud de una carpeta es la
+       pareja `(filas de datos del Results.csv, conserva las imágenes .xim)`,
+       y se toma el MÁXIMO de ese día. Es un criterio RELATIVO a las corridas
+       del propio día: no hay ningún umbral fijo que envejezca si Varian
+       cambia la plantilla. Descarta las dos formas de carpeta incompleta que
+       deja el MPC -- las corridas PARCIALES (Results.csv truncado: 2 filas
+       en vez de 253) y las REPUBLICACIONES del resultado ya cerrado
+       (Results.csv completo pero sin imágenes) -- que además suelen
+       generarse DESPUÉS de la corrida buena.
+
+    2. **Entre las empatadas, la última.** Si ese día el equipo repitió la
+       prueba -- p.ej. porque quedó un objeto en la zona de irradiación y la
+       primera corrida salió con artefactos -- la válida es la repetición, la
+       más reciente. Medido sobre el corpus real: 7 días con varias corridas
+       completas de contenido distinto, uno de ellos (2026-07-20) con OCHO.
 
     Nunca lanza -- ante cualquier problema para listar `ruta_base` devuelve
-    None, igual que si no hay ninguna corrida completa para esa fecha.
+    None, igual que si no hay ninguna corrida con datos para esa fecha.
     """
     try:
         candidatas = carpetas_mpc_de_fecha(ruta_base, fecha)
     except OSError:
         return None
-    completas = [c for c in candidatas if _results_csv_tiene_datos(c)]
-    if not completas:
+
+    # Una sola lectura de Results.csv por carpeta: esto corre sobre el share
+    # de red del hospital. Las imágenes solo se miran en las que YA traen
+    # datos, que son pocas -- un día normal deja decenas de carpetas de
+    # arranque fallido (sin CSV o solo cabecera) y una o dos corridas buenas.
+    con_datos = []
+    for carpeta in candidatas:
+        filas = _contar_filas_datos(carpeta)
+        if filas > 0:
+            con_datos.append((carpeta, filas))
+    if not con_datos:
         return None
-    return completas[-1]
+
+    grados = [(carpeta, (filas, _tiene_imagenes_adquiridas(carpeta)))
+              for carpeta, filas in con_datos]
+    mejor_grado = max(grado for _, grado in grados)
+    # `carpetas_mpc_de_fecha` devuelve de más antigua a más reciente (J1), así
+    # que el último de los empatados en el grado máximo es el más reciente.
+    return [carpeta for carpeta, grado in grados if grado == mejor_grado][-1]
 
 
 def addInfo(self, fecha, user):

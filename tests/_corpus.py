@@ -33,6 +33,11 @@ PDF_2000 = os.path.join(RAIZ, "NormaYEquipos_pdf", "TRS_398s_Web.pdf")
 # "PrimerosArchivosPruebas"; verificado en disco 2026-07-15.)
 HALCYON_DMAX = os.path.join(
     RAIZ, "PrimerosArchivosPruebas", "TRS-398 6 MV FFF Halcyon Dmax.xls")
+# Reportes MPC diarios del Halcyon (carpetas `HAL-TRT-SN1161-<fecha>-<hora>...`).
+# Es el corpus que sostiene J1 y H2: la selección de carpeta por completitud.
+# Solo se LEE, y solo el Results.csv de cada carpeta (~20 KB); las imágenes
+# `.xim` pesan ~124 MB por corrida y ningún test las abre.
+MPC_HALCYON = os.path.join(RAIZ, "ReportesDiariosQA001", "ReportesDiarioHalcyon")
 
 # Grafía may/min inconsistente por mes en el corpus real (organización del
 # físico, no de la app) -- igual que en test_corpus_2024_cross_check.
