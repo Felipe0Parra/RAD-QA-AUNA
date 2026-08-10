@@ -13,6 +13,38 @@ from PyQt5.QtGui import QPixmap, QColor, QBrush
 from pathlib import Path
 import sys # Para manejo de rutas en PyInstaller
 
+_FIRMAS_IMAGEN = (
+    b'\xff\xd8\xff',        # JPEG
+    b'\x89PNG\r\n\x1a\n',   # PNG
+    b'BM',                  # BMP
+    b'II*\x00',             # TIFF little-endian
+    b'MM\x00*',             # TIFF big-endian
+)
+
+
+def clasificar_certificado(blob):
+    """Clasifica un blob de `imagen_certificado` por sus bytes mágicos --
+    C1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.5): antes la
+    celda solo distinguía "hay blob o no", así que 12 filas con 3 bytes de
+    basura (residuo del off-by-one corregido en aa767fd, "1.0"/"0.0") se
+    anunciaban como "Imagen subida" igual que un certificado real. No se
+    tocan esos datos (DA-02/DA-28) -- esto solo deja de mentir sobre ellos.
+    """
+    if not blob:
+        return "Sin certificado válido"
+    # Verificado contra producción: las 12 filas de basura NO son bytes
+    # "1.0"/"0.0" literales -- son REAL (float) por afinidad dinámica de
+    # SQLite (typeof='real'), mismo off-by-one histórico. `blob[:4]`
+    # reventaría con TypeError si no se filtra el tipo primero.
+    if not isinstance(blob, (bytes, bytearray)):
+        return "Sin certificado válido"
+    if blob[:4] == b'%PDF':
+        return "PDF"
+    if any(blob.startswith(firma) for firma in _FIRMAS_IMAGEN):
+        return "Imagen"
+    return "Sin certificado válido"
+
+
 class ColoredTableWidgetItem(QTableWidgetItem):
     """Subclase de QTableWidgetItem que fuerza el color de fondo"""
     def __init__(self, text, bg_color=None, text_color=None):
@@ -582,17 +614,24 @@ class Config(PruebaBasico):
 
             # Insertar el estado del certificado
             certificado_blob = r[13]  # imagen_certificado
-            cert_item = ColoredTableWidgetItem("Imagen subida" if certificado_blob else "Sin imagen", 
-                                                bg_color, text_color)
+            etiqueta_certificado = clasificar_certificado(certificado_blob)
+            cert_item = ColoredTableWidgetItem(etiqueta_certificado, bg_color, text_color)
             cert_item.setFlags(cert_item.flags() & ~Qt.ItemIsEditable)
             cert_item.setData(Qt.UserRole, id_equipo)
+            if etiqueta_certificado in ("PDF", "Imagen"):
+                cert_item.setToolTip("Doble clic para abrir el certificado")
             self.table.setItem(row, self.table.columnCount() - 1, cert_item)
 
     def abrir_certificado(self, item):
         import tempfile, os, subprocess, sys
 
+        # C1: antes solo abría con el literal exacto "Imagen subida" --
+        # ahora la celda dice "PDF"/"Imagen"/"Sin certificado válido"
+        # (clasificar_certificado), así que el doble clic debe reconocer
+        # las dos etiquetas que sí tienen algo que abrir. "Sin certificado
+        # válido" (blob NULL o los 3 bytes de basura) no debe abrir nada.
         col_certificado = self.table.columnCount() - 1
-        if item.column() == col_certificado and item.text() == "Imagen subida":
+        if item.column() == col_certificado and item.text() in ("PDF", "Imagen"):
             id_equipo = item.data(Qt.UserRole)
 
             conn = Conexion().conectar()

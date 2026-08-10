@@ -915,9 +915,24 @@ class PruebaBasico(QWidget):
         if archivo: #cambiar nombre a imagen algo pero no es solo para braqui
             self.imagen_path = archivo
             self.archivo = archivo
-            self.pixmap_original = QPixmap(archivo)
             self.zoom_factor = 0.5
-            self.actualizar_imagen()
+            if archivo.lower().endswith(".pdf"):
+                # C1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md
+                # §3.5): QPixmap no sabe leer PDF -- construirlo deja un
+                # pixmap nulo, sin pintar nada y sin ningún aviso; el
+                # físico selecciona su PDF, no ve nada, y concluye
+                # razonablemente que no funcionó, aunque el blob se guarde
+                # íntegro más adelante (ver equipos.py, lee self.imagen_path
+                # con open(...,"rb"), no el pixmap). Sin símbolos (DA-18).
+                self.pixmap_original = QPixmap()
+                self.label_imagen.setText(
+                    f"Archivo seleccionado: {os.path.basename(archivo)}\n"
+                    "Se guardará el PDF. Podrá abrirlo desde la tabla con doble clic."
+                )
+                self.label_imagen.setStyleSheet("color: black; font-size: 14px;")
+            else:
+                self.pixmap_original = QPixmap(archivo)
+                self.actualizar_imagen()
             #self.preguntar_parametros()
 
             if not hasattr(self, "zoomConnected") or not self.zoomConnected:
