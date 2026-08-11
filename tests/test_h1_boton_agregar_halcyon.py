@@ -4,11 +4,10 @@
 el protocolo de verificación completo de §3.4:
 
 1. Rojo-antes-que-verde real (pulsar btn_add guarda una fila nueva).
-2. Anti-regresión de convert_date_to_str (el camino que ya funcionaba).
-3. Idempotencia: dos pulsaciones para la misma fecha -> una sola fila, una
+2. Idempotencia: dos pulsaciones para la misma fecha -> una sola fila, una
    sola fila de auditoría, aviso visible la segunda vez.
-4. La fila de auditoría lleva el usuario correcto.
-5. RADQA_HALCYON_MPC (J3) para no depender del share del hospital.
+3. La fila de auditoría lleva el usuario correcto.
+4. RADQA_HALCYON_MPC (J3) para no depender del share del hospital.
 
 **P1 (§8 del plan)**: el archivo original desapareció con un fake
 (`_HalcyonDiarioFalso` con un stub contador de `importar_fecha_seleccionada`)
@@ -16,7 +15,7 @@ que SOMBREABA el método real bajo prueba -- `button_click()` conectaba el
 stub, así que ninguna prueba de guardado ejecutaba código de producción.
 Aquí se separan deliberadamente dos roles:
 
-- `_HalcyonEspia`: fake con un stub CONTADOR de `importar_fecha_seleccionada`
+- `_HalcyonEspia`: fake con un stub CONTADOR de `agregar_fecha_seleccionada`
   -- solo para verificar el CABLEADO (que btn_add.clicked llega a ese
   método), nunca para verificar qué hace ese método.
 - `_construir_halcyon_real`: objeto que enlaza los métodos REALES de
@@ -25,8 +24,18 @@ Aquí se separan deliberadamente dos roles:
 
 Un tripwire (`test_no_esta_sombreado_por_un_stub`) deja explícito que el
 objeto "real" de verdad resuelve al método de la clase, no a un stub -- si
-alguien reintroduce un `def importar_fecha_seleccionada(self): pass` en el
+alguien reintroduce un `def agregar_fecha_seleccionada(self): pass` en el
 objeto "real" por error, este test lo delata antes que ningún otro.
+
+H3 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §H3), sesión posterior:
+`importar_fecha_seleccionada` -- el método único que H1 conectó a la vez a
+`dateChanged` Y a `btn_add`, y que por eso GUARDABA con solo cambiar la
+fecha -- se partió en dos: `previsualizar_fecha_seleccionada` (dateChanged,
+cero escrituras) y `agregar_fecha_seleccionada` (btn_add, el único que
+guarda). Este archivo se actualizó para seguir probando btn_add/guardado
+contra el método nuevo; `test_h3_previsualizar_no_escribe.py` cubre la mitad
+que antes no existía como comportamiento separado (que elegir la fecha
+NO guarde).
 """
 import os
 import sqlite3
@@ -119,7 +128,7 @@ def _mockear_mensajes(monkeypatch):
 
 class _HalcyonEspia(QWidget):
     """Solo para el cableado -- el stub CONTADOR nunca debe usarse para
-    verificar qué hace importar_fecha_seleccionada, solo que se invoca."""
+    verificar qué hace agregar_fecha_seleccionada, solo que se invoca."""
 
     def __init__(self):
         super().__init__()
@@ -146,7 +155,7 @@ class _HalcyonEspia(QWidget):
     def filtrarTabla(self):
         pass
 
-    def importar_fecha_seleccionada(self):
+    def agregar_fecha_seleccionada(self):
         self.contador += 1
 
 
@@ -156,8 +165,8 @@ class _UsuarioFalso:
 
 def _construir_halcyon_real():
     """Objeto QWidget con los métodos REALES de PruebaDiariaHc enlazados --
-    ejecuta producción de verdad (addInfo -> createDB -> auditoría), a
-    diferencia de _HalcyonEspia."""
+    ejecuta producción de verdad (agregar_halcyon -> createDB -> auditoría),
+    a diferencia de _HalcyonEspia."""
     obj = QWidget()
     obj.date_box = QDateEdit()
     obj.date_box.setDate(QDate(2026, 7, 1))
@@ -178,8 +187,10 @@ def _construir_halcyon_real():
     obj.accept_edit = QPushButton()
     obj.cancel_edit = QPushButton()
 
-    obj.importar_fecha_seleccionada = types.MethodType(
-        PruebaDiariaHc.importar_fecha_seleccionada, obj)
+    obj.agregar_fecha_seleccionada = types.MethodType(
+        PruebaDiariaHc.agregar_fecha_seleccionada, obj)
+    obj.previsualizar_fecha_seleccionada = types.MethodType(
+        PruebaDiariaHc.previsualizar_fecha_seleccionada, obj)
     obj.convert_date_to_str = types.MethodType(
         PruebaDiariaHc.convert_date_to_str, obj)
     obj.button_click = types.MethodType(PruebaDiariaHc.button_click, obj)
@@ -193,18 +204,18 @@ def _construir_halcyon_real():
 
 def test_no_esta_sombreado_por_un_stub(app):
     """P1 (§8 del plan): tripwire -- si algo vuelve a definir un
-    importar_fecha_seleccionada propio sobre el objeto 'real', este test lo
+    agregar_fecha_seleccionada propio sobre el objeto 'real', este test lo
     delata antes que cualquier prueba de guardado."""
     obj = _construir_halcyon_real()
-    assert obj.importar_fecha_seleccionada.__func__ is \
-        PruebaDiariaHc.importar_fecha_seleccionada
+    assert obj.agregar_fecha_seleccionada.__func__ is \
+        PruebaDiariaHc.agregar_fecha_seleccionada
 
 
 class TestCableadoBotonAgregar:
-    """Verifica SOLO que btn_add.clicked llega a importar_fecha_seleccionada
+    """Verifica SOLO que btn_add.clicked llega a agregar_fecha_seleccionada
     -- con el fake espía, sin ejecutar producción real."""
 
-    def test_click_dispara_importar_fecha_seleccionada(self, app):
+    def test_click_dispara_agregar_fecha_seleccionada(self, app):
         espia = _HalcyonEspia()
         PruebaDiariaHc.button_click(espia)
 
@@ -232,24 +243,6 @@ class TestGuardadoReal:
             ("2026-07-01",)).fetchall()
         con.close()
         assert filas == [("2026-07-01", "Físico de Prueba")]
-
-    def test_convert_date_to_str_sigue_funcionando_igual(
-            self, app, bd_temporal, carpeta_mpc, monkeypatch):
-        """Anti-regresión: el camino que ya funcionaba (dateChanged ->
-        convert_date_to_str) no debe romperse por la extracción de H1."""
-        _mockear_mensajes(monkeypatch)
-        carpeta_mpc("2026-07-02")
-        obj = _construir_halcyon_real()
-        obj.date_box.setDate(QDate(2026, 7, 2))
-
-        obj.convert_date_to_str()
-
-        con = sqlite3.connect(bd_temporal)
-        n = con.execute(
-            "SELECT COUNT(*) FROM halcyon WHERE date=?",
-            ("2026-07-02",)).fetchone()[0]
-        con.close()
-        assert n == 1
 
 
 class TestIdempotenciaYAviso:

@@ -150,23 +150,26 @@ def seleccionar_carpeta_mpc(ruta_base, fecha):
     return [carpeta for carpeta, grado in grados if grado == mejor_grado][-1]
 
 
-def addInfo(self, fecha, user):
-
+def _localizar_y_leer_mpc(self, fecha):
+    """Localiza la carpeta MPC de `fecha` y lee su Results.csv -- lógica
+    COMPARTIDA por la previsualización (`dateChanged`) y el guardado
+    ("Agregar"), H3 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §H3).
+    Nunca escribe en la BD. Devuelve `(folder_found, df_widgets)`, o
+    `(None, None)` si no hay carpeta completa o el CSV no se pudo leer --
+    en ese caso ya se avisó en pantalla (ruta inaccesible, sin corrida
+    completa, o no encontrada)."""
     ruta_actual = ruta_mpc_halcyon()
 
     print("Listando carpetas...")
     folder_found = seleccionar_carpeta_mpc(ruta_actual, fecha)
 
-    if folder_found:
-        print(f"Carpeta encontrada: {folder_found}")
-        QMessageBox.information(self, "Encontrada", f"Se encontró la carpeta:\n{folder_found}")
-    else:
+    if not folder_found:
         try:
             candidatas = carpetas_mpc_de_fecha(ruta_actual, fecha)
         except Exception as e:
             print(f"Error al listar carpetas: {e}")
             QMessageBox.critical(self, "Error", f"No se pudo acceder a la ruta.\n{e}")
-            return
+            return None, None
         if candidatas:
             print(f"Hay {len(candidatas)} carpeta(s) para {fecha}, ninguna corrida completa.")
             QMessageBox.warning(
@@ -177,63 +180,92 @@ def addInfo(self, fecha, user):
         else:
             print("No se encontró carpeta para esa fecha.")
             QMessageBox.warning(self, "No encontrada", "No se encontró una carpeta para esa fecha.")
-        return
+        return None, None
 
-    nombre_archivo = os.path.join(folder_found,'Results.csv')
-    
+    print(f"Carpeta encontrada: {folder_found}")
+    nombre_archivo = os.path.join(folder_found, 'Results.csv')
+
     try:
         df = pd.read_csv(nombre_archivo)
-    
     except FileNotFoundError:
         QMessageBox.critical(self, "Error", f"No se encontró el archivo Results.csv en la carpeta {fecha}.")
-        return
+        return None, None
 
     df[['hipergroup', 'group', 'subgroup', 'subsubgroup']] = df['Name [Unit]'].str.split('/', expand=True)
     df.fillna('', inplace=True)
-    df_widgets = addInfoWidgets(df)
-    
+    return folder_found, addInfoWidgets(df)
+
+
+def _fecha_ya_importada(fecha):
+    with con.Conexion().conectar() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT 1 FROM halcyon WHERE date=?", (fecha,))
+        return cursor.fetchone() is not None
+
+
+def previsualizar_halcyon(self, fecha):
+    """H3: la fecha elegida (`dateChanged`) SOLO llena los campos --
+    localiza la carpeta, lee el Results.csv, y avisa si la fecha ya está
+    importada (informativo, no bloquea la previsualización). CERO
+    escrituras en la BD; para guardar hace falta pulsar "Agregar"
+    (`agregar_halcyon`)."""
+    folder_found, df_widgets = _localizar_y_leer_mpc(self, fecha)
+    if df_widgets is None:
+        return None
+
+    if _fecha_ya_importada(fecha):
+        print("Ya existe la fecha")
+        QMessageBox.information(
+            self, "Fecha ya importada",
+            f"La fecha {fecha} ya está importada en el diario del Halcyon."
+        )
+
+    return df_widgets
+
+
+def agregar_halcyon(self, fecha, user):
+    """H3: "Agregar" -- localiza la carpeta MPC de `fecha` (misma ruta que
+    la previsualización), comprueba que la fecha no exista ya, llama a
+    `createDB` y audita. Único punto de escritura del diario del Halcyon;
+    antes lo hacía `addInfo` en la MISMA pasada que `dateChanged`, así que
+    seleccionar la fecha ya guardaba sin que el físico lo pidiera."""
+    folder_found, df_widgets = _localizar_y_leer_mpc(self, fecha)
+    if df_widgets is None:
+        return None
+
+    if _fecha_ya_importada(fecha):
+        # H1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.4,
+        # hallazgo F7 del 2026-07-07): NO se reemplaza (a diferencia de
+        # add_info/H2.2, otra función): solo se informa.
+        print("Ya existe la fecha")
+        QMessageBox.information(
+            self, "Fecha ya importada",
+            f"La fecha {fecha} ya está importada en el diario del Halcyon."
+        )
+        return df_widgets
+
     df_csv = df_widgets.copy()
     df_csv = df_csv.loc[df_csv['type'] == 'resultado']
     df_csv.to_csv('infoWidgets.csv', index=False)
     df_csv['fecha'] = fecha
     df_csv['user_id'] = user
-    #print(df_csv)
 
     try:
-        with con.Conexion().conectar() as db:
-            cursor = db.cursor()
-            cursor.execute("SELECT * FROM halcyon WHERE date=?", (fecha,))
-            fila = cursor.fetchone()
-            
-            if fila:
-                # H1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md
-                # §3.4, hallazgo F7 del 2026-07-07): antes solo imprimía en
-                # consola -- con el botón "Agregar" conectado, el físico va
-                # a pulsarlo y necesita ver que no pasó nada porque esa
-                # fecha ya está importada, no un silencio. NO se reemplaza
-                # (a diferencia de add_info/H2.2, otra función): solo se
-                # informa.
-                print("Ya existe la fecha")
-                QMessageBox.information(
-                    self, "Fecha ya importada",
-                    f"La fecha {fecha} ya está importada en el diario del Halcyon."
-                )
-            else:
-                if createDB(df_csv, fecha, user):
-                    _registrar_auditoria(
-                        user, ACCION_GUARDAR, "halcyon", ref=fecha,
-                        detalle=f"carpeta MPC: {os.path.basename(folder_found)}"
-                    )
-                else:
-                    # H1-bis: createDB ya no falla en silencio -- si
-                    # devuelve False, el físico se entera en vez de pulsar
-                    # "Agregar" y no ver ningún efecto.
-                    QMessageBox.critical(
-                        self, "Error al guardar",
-                        f"No se pudo guardar el diario del Halcyon para la "
-                        f"fecha {fecha}. Revise que el Results.csv de la "
-                        f"carpeta MPC tenga el formato esperado."
-                    )
+        if createDB(df_csv, fecha, user):
+            _registrar_auditoria(
+                user, ACCION_GUARDAR, "halcyon", ref=fecha,
+                detalle=f"carpeta MPC: {os.path.basename(folder_found)}"
+            )
+        else:
+            # H1-bis: createDB ya no falla en silencio -- si devuelve
+            # False, el físico se entera en vez de pulsar "Agregar" y no
+            # ver ningún efecto.
+            QMessageBox.critical(
+                self, "Error al guardar",
+                f"No se pudo guardar el diario del Halcyon para la "
+                f"fecha {fecha}. Revise que el Results.csv de la "
+                f"carpeta MPC tenga el formato esperado."
+            )
     except Exception as e:
         import traceback
         traceback.print_exc()

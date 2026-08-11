@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QVBoxLayout, QLabel, QHBoxLayout, QSplitter, QWidget
 from PyQt5.QtSql import QSqlQuery
 from PyQt5.QtCore import QDate, Qt
 from data.GraficasyTablas.tablas import load_table, asignar_encabezados
-from data.ManejoDatos.obtenerDatosHalcyon import addInfo
+from data.ManejoDatos.obtenerDatosHalcyon import previsualizar_halcyon, agregar_halcyon
 from data.GraficasyTablas.unovsuno import graficarvstiempo
 from models.PDF.reportes import reporte
 import pandas as pd
@@ -90,23 +90,33 @@ class PruebaDiariaHc(PruebaBasico):
         }
         
     def convert_date_to_str(self):
-        self.importar_fecha_seleccionada()
+        self.previsualizar_fecha_seleccionada()
 
-    def importar_fecha_seleccionada(self):
-        """H1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.4):
-        importa la fecha actualmente elegida en date_box -- mismo cuerpo que
-        antes vivía solo dentro de convert_date_to_str (disparado únicamente
-        por dateChanged). El botón "Agregar" (btn_add) nunca estuvo conectado
-        (git log -S"btn_add" confirma un solo commit, el estado virgen) y
-        setDate(QDate.currentDate()) en iniGUI se ejecuta ANTES de conectar
-        dateChanged, así que abrir el diario sin cambiar la fecha no
-        disparaba ninguna importación -- este método es el segundo
-        disparador que llena ese hueco, reutilizando la MISMA ruta ya
-        auditada (addInfo -> createDB -> ACCION_GUARDAR)."""
+    def previsualizar_fecha_seleccionada(self):
+        """H3 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §H3): elegir la
+        fecha (dateChanged) localiza la carpeta MPC, lee el Results.csv y
+        llena los campos -- CERO escrituras en la BD. Antes esto guardaba
+        directamente (H1 conectó addInfo, que hacía las tres cosas de una
+        sola pasada, a dateChanged Y al botón "Agregar"): el físico
+        esperaba que elegir la fecha solo previsualizara y "Agregar"
+        guardara, igual que el flujo de importar un .mcc -- ver
+        agregar_fecha_seleccionada."""
         selected_date = self.date_box.date()
         date_str = selected_date.toString("yyyy-MM-dd")
         self.date_box.setDisplayFormat("yyyy/MM/dd")
-        df = addInfo(self, date_str, self.user_id._nombre)
+        df = previsualizar_halcyon(self, date_str)
+        if df is not None and not df.empty:
+            self.update_lineedit_blocks(df)
+        load_table(self, boolean_keys= None, dosis= None, maquina= 'halcyon')
+        asignar_encabezados(self, 'halcyon')
+
+    def agregar_fecha_seleccionada(self):
+        """H3: "Agregar" -- toma la fecha elegida, guarda (localiza,
+        comprueba que la fecha no exista, llama a createDB, audita) y avisa
+        del resultado. Único punto de escritura del diario del Halcyon."""
+        selected_date = self.date_box.date()
+        date_str = selected_date.toString("yyyy-MM-dd")
+        df = agregar_halcyon(self, date_str, self.user_id._nombre)
         if df is not None and not df.empty:
             self.update_lineedit_blocks(df)
         load_table(self, boolean_keys= None, dosis= None, maquina= 'halcyon')
@@ -296,11 +306,13 @@ class PruebaDiariaHc(PruebaBasico):
         # H1 (PLAN_ACTUALIZACION_HALCYON_CERT_PERMISOS_06-08.md §3.4):
         # btn_add nunca estuvo conectado (comentario original de arriba,
         # "Falta btn_add (para el pdf)" -- git log -S"btn_add" confirma un
-        # solo commit, el estado virgen). Reusa la MISMA ruta de importación
-        # que dateChanged ya dispara (importar_fecha_seleccionada -> addInfo
-        # -> createDB -> ACCION_GUARDAR): segundo disparador de la ruta ya
-        # probada y auditada, no una ruta nueva.
-        self.btn_add.clicked.connect(self.importar_fecha_seleccionada)
+        # solo commit, el estado virgen).
+        # H3 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §H3): btn_add ya
+        # NO comparte método con dateChanged -- dateChanged solo
+        # previsualiza (previsualizar_fecha_seleccionada, cero escrituras);
+        # "Agregar" es el único que guarda (agregar_fecha_seleccionada ->
+        # agregar_halcyon -> createDB -> ACCION_GUARDAR).
+        self.btn_add.clicked.connect(self.agregar_fecha_seleccionada)
 
         if self.btn_submit.clicked:
             self.btn_submit.clicked.connect(

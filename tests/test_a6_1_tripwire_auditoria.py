@@ -281,7 +281,7 @@ ALLOWLIST = {
     ("services/dosis_service.py", "DosisService.guardar_datos"):
         "audita-el-llamador:ui/paginasGuia/dialogs.py::DialogCalculadoraDosis.guardar_db",
     ("data/ManejoDatos/obtenerDatosHalcyon.py", "createDB"):
-        "audita-el-llamador:data/ManejoDatos/obtenerDatosHalcyon.py::addInfo",
+        "audita-el-llamador:data/ManejoDatos/obtenerDatosHalcyon.py::agregar_halcyon",
 
     # --- A6.2 (identidad y catálogo) cerrada 2026-07-27: add_user,
     # update_password y eliminarEquipo ya auditan directamente -- no quedan

@@ -57,7 +57,10 @@ class _HalcyonDiarioFalso(QWidget):
     def filtrarTabla(self):
         pass
 
-    def importar_fecha_seleccionada(self):
+    def agregar_fecha_seleccionada(self):
+        # H3 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §H3): antes se
+        # llamaba `importar_fecha_seleccionada`; al separarse el flujo en
+        # previsualizar/agregar, `button_click` conecta btn_add a este nombre.
         pass
 
 
