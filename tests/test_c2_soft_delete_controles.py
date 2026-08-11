@@ -165,24 +165,28 @@ class TestEliminarRegistroSoloAnulaControles:
         """E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11) AMPLIÓ la lista de
         tablas que anulan en vez de borrar (TipoCalibracion pasó a anular --
         ver test_e7_soft_delete_bloque_qc.py, que reemplaza esta afirmación
-        para esa tabla en concreto). "control_conos" queda deliberadamente
-        FUERA de `services.anulacion.TABLAS_ANULABLES` (a diferencia de su
-        vecina "control_cunas", que sí entró) -- sigue siendo el ejemplo de
-        que `eliminarRegistro` conserva el DELETE físico para tablas de
-        detalle sin botón de borrado propio en la interfaz."""
+        para esa tabla en concreto). M1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_
+        11-08.md) hizo que "control_conos" TAMBIÉN entrara a
+        `services.anulacion.TABLAS_ANULABLES` (junto a su vecina
+        "control_cunas") -- este test pasa a usar "HC_fantomas" (hija del
+        mensual de Halcyon, sin botón de borrado propio en la interfaz y
+        deliberadamente fuera de la lista) como el ejemplo de que
+        `eliminarRegistro` conserva el DELETE físico para tablas de detalle
+        que no están en la lista blanca."""
         con = sqlite3.connect(bd_temporal)
         con.execute(
-            "INSERT INTO control_conos (id, ref, medida, valor) VALUES (99, 1, '10x10', 1)")
+            "INSERT INTO HC_fantomas (id, ref, id_energia, modelo1, serie1) "
+            "VALUES (99, 1, 1, 'modelo', 'serie')")
         con.commit()
         con.close()
 
         _no_confirmar_qmessagebox(monkeypatch)
         tabla = _tabla_con_fila(99)
 
-        eliminarRegistro(_DlgFalso(), tabla, "control_conos")
+        eliminarRegistro(_DlgFalso(), tabla, "HC_fantomas")
 
         con = sqlite3.connect(bd_temporal)
-        n = con.execute("SELECT COUNT(*) FROM control_conos WHERE id = 99").fetchone()[0]
+        n = con.execute("SELECT COUNT(*) FROM HC_fantomas WHERE id = 99").fetchone()[0]
         con.close()
         assert n == 0, "las tablas fuera de la lista blanca siguen con DELETE físico"
 

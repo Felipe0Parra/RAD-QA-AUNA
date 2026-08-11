@@ -44,6 +44,15 @@ TABLAS_ANULABLES = frozenset({
     "control_cunas",
     "tamano_campo",
     "analisis_placa_franjas",
+    # M1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md): control_conos no tiene
+    # una ruta de borrado alcanzable desde la interfaz (a diferencia de
+    # control_cunas, cuyo `activo` viene de ese criterio de E7) -- entra aquí
+    # por una razón distinta: M2 convierte el guardado mensual en un
+    # reemplazo de bloque (anular lo activo de ese `ref` e insertar el
+    # nuevo), y eso exige que las dos mitades del mismo control -- cuñas y
+    # conos -- puedan distinguir el bloque vigente del anterior de la misma
+    # forma.
+    "control_conos",
     # Hijas anuales con botón de borrado (crear_ventanas_emergentes_tablas,
     # data/ManejoDatos/Tablas_Anuales/tablas_anuales.py)
     "tabla_factor_campo",

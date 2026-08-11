@@ -2766,10 +2766,12 @@ def mostrar_seguridad(parent, id_ref, ix=False):
 
     def cargar_datos(tabla, columnas, id_ref):
         cols = ", ".join(columnas)
-        # E7: solo "control_cunas" está en la lista blanca de anulación
-        # (services/anulacion.py) -- "control_conos" no tiene columna
-        # `activo`, filtrarla ahí rompería la consulta.
-        filtro_activo = " AND (activo IS NULL OR activo = 1)" if tabla == "control_cunas" else ""
+        # M1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md): el filtro de
+        # `activo` ya no está codificado contra "control_cunas" -- se aplica
+        # a cualquier tabla de la lista blanca de anulación
+        # (services/anulacion.py::TABLAS_ANULABLES), para que la próxima
+        # tabla que entre a esa lista no repita el olvido.
+        filtro_activo = " AND (activo IS NULL OR activo = 1)" if tabla in TABLAS_ANULABLES else ""
         cursor.execute(f"""SELECT {cols} FROM {tabla} WHERE ref=?{filtro_activo}""", (id_ref,))
         return cursor.fetchall()
 
