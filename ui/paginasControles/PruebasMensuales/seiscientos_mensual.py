@@ -2938,7 +2938,16 @@ class PruebaMensual600(PruebaBasico):
         # --------------------------------------------------------------------------------------
         if combos_seguridad is not None and combobox is None:
             subido_cunas = self.Traerinfo_cunas()
-            
+
+            # M3 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M3): conos es
+            # exclusivo de iX (control_conos no existe para 600) -- se
+            # restaura en el mismo punto del armado del formulario en el
+            # que se restauran cuñas, la primera vez que existe una lectura
+            # para conos (nunca se había escrito, `Traerinfo_conos` vive en
+            # ix_mensual.py).
+            if hasattr(self, "esIX") and self.esIX and hasattr(self, "Traerinfo_conos"):
+                self.Traerinfo_conos()
+
             layout = categoria.layout()
             if layout is not None:
                 buttonLayout = QHBoxLayout()
@@ -3256,9 +3265,20 @@ class PruebaMensual600(PruebaBasico):
     def Traerinfo_cunas(self):
         """
         Función optimizada para leer datos de cuñas desde BD
+
+        M3 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M3): la función ya
+        restauraba -- se le añaden las dos garantías que le faltaban, ambas
+        obligatorias tras M2 (que deja acumulándose el historial anulado en
+        la misma tabla): filtrar `activo = 1` (si no, un bloque anulado
+        podría restaurarse) y desempatar de forma determinista (`ORDER BY
+        angulo, id DESC`, quedándose con la primera fila de cada ángulo --
+        la más reciente, por si alguna vez hubiera más de una fila activa
+        del mismo ángulo). Con un solo bloque activo por ref (garantizado
+        por M2), esto es solo una defensa adicional, no cambia el resultado
+        normal.
         """
         #print("------ Función Traerinfo_cunas (optimizada)")
-        
+
         try:
             conn = self.db_manager.obtener_conexion()
             cursor = conn.cursor()
@@ -3266,15 +3286,27 @@ class PruebaMensual600(PruebaBasico):
             cursor.execute("""
                 SELECT angulo, in_val, out_val, right_val, left_val
                 FROM control_cunas
-                WHERE ref = ?
-                ORDER BY angulo
+                WHERE ref = ? AND activo = 1
+                ORDER BY angulo, id DESC
             """, (self.ref,))
-            
+
             results = cursor.fetchall()
 
             if not results:
                 #print("No hay datos guardados de cuñas para esta ref:", self.ref)
                 return False
+
+            # Desempate determinista: con ORDER BY angulo, id DESC, la
+            # primera fila que se ve de cada ángulo es la más reciente.
+            vistos = set()
+            results_desempatados = []
+            for row in results:
+                angulo = row[0]
+                if angulo in vistos:
+                    continue
+                vistos.add(angulo)
+                results_desempatados.append(row)
+            results = results_desempatados
 
             # Mapeo optimizado de ángulos a widgets
             combo_dict = {
