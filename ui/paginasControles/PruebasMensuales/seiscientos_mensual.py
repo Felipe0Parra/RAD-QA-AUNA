@@ -3053,6 +3053,17 @@ class PruebaMensual600(PruebaBasico):
 
             # Inserción por lotes para mejor rendimiento
             if filas_a_insertar:
+                # M2 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M2): mismo
+                # contrato de reemplazo de bloque que control_cunas/
+                # control_conos -- anula lo activo de este ref ANTES de
+                # insertar el nuevo, dentro de la misma transacción ya
+                # abierta arriba. Solo si hay algo nuevo que insertar: un
+                # guardado con datos insuficientes (fuera de este if) no
+                # debe anular el bloque activo existente sin reemplazarlo.
+                cursor.execute(
+                    "UPDATE equipos_medicion SET activo = 0 "
+                    "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
+                    (self.ref,))
                 cursor.executemany(f"""
                     INSERT INTO equipos_medicion (ref, tipo_camara, equip_type, model, serie, calibr_fact, fecha_calibr, equipo_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -3113,38 +3124,57 @@ class PruebaMensual600(PruebaBasico):
         no producir 2 filas por un solo click, esa llamada pasa
         `auditar=False` y `guardar_todo_ix` audita una vez, después de que
         ambas escrituras terminan.
+
+        M2 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M2): "Subir" ya no
+        acumula -- reemplaza el bloque. `INSERT OR REPLACE` se retira (nunca
+        chocaba: la tabla no tiene índice UNIQUE, así que siempre insertaba,
+        causa raíz de la duplicación); en su lugar, dentro de la MISMA
+        transacción, se anula (`activo = 0`) lo que estuviera activo de este
+        `ref` y se inserta el bloque nuevo. Nunca DELETE físico: borraría en
+        silencio una fila anulada desde el popup "Ver tabla" si el control
+        se vuelve a guardar después (hallazgo S1, el mismo que D3 cerró para
+        el reemplazo diario).
         """
         print("\n -> Entra en subir_control_cunas en 600")
         conn = Conexion().conectar()
         cursor = conn.cursor()
 
-        for angulo, posiciones in combos_seguridad.items():
-            in_val    = 1 if posiciones["in"].currentText() == "Funciona" else 0
-            out_val   = 1 if posiciones["out"].currentText() == "Funciona" else 0
-            right_val = 1 if posiciones["right"].currentText() == "Funciona" else 0
-            left_val  = 1 if posiciones["left"].currentText() == "Funciona" else 0
+        cursor.execute("BEGIN TRANSACTION")
+        try:
+            cursor.execute(
+                "UPDATE control_cunas SET activo = 0 "
+                "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
+                (self.ref,))
 
-            cursor.execute("""
-                INSERT OR REPLACE INTO control_cunas (ref, angulo, in_val, out_val, right_val, left_val)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (self.ref, angulo, in_val, out_val, right_val, left_val))
+            for angulo, posiciones in combos_seguridad.items():
+                in_val    = 1 if posiciones["in"].currentText() == "Funciona" else 0
+                out_val   = 1 if posiciones["out"].currentText() == "Funciona" else 0
+                right_val = 1 if posiciones["right"].currentText() == "Funciona" else 0
+                left_val  = 1 if posiciones["left"].currentText() == "Funciona" else 0
 
-        if df_lines is not None:
-            for line in df_lines:
-                if line == "observaciones_segu":
-                    line_edit = getattr(self, line, None)
-                    print(f"line: {line}, widget: {line_edit}")
-                    if line_edit is not None and isinstance(line_edit, QLineEdit):
-                        print(f"Texto actual en {line}: '{line_edit.text()}'")
-                        texto = line_edit.text().strip()
-                        cursor.execute("""
-                            UPDATE control_cunas
-                            SET observaciones = ?
-                            WHERE ref = ?
-                        """, (texto, self.ref))
+                cursor.execute("""
+                    INSERT INTO control_cunas (ref, angulo, in_val, out_val, right_val, left_val)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (self.ref, angulo, in_val, out_val, right_val, left_val))
 
+            if df_lines is not None:
+                for line in df_lines:
+                    if line == "observaciones_segu":
+                        line_edit = getattr(self, line, None)
+                        print(f"line: {line}, widget: {line_edit}")
+                        if line_edit is not None and isinstance(line_edit, QLineEdit):
+                            print(f"Texto actual en {line}: '{line_edit.text()}'")
+                            texto = line_edit.text().strip()
+                            cursor.execute("""
+                                UPDATE control_cunas
+                                SET observaciones = ?
+                                WHERE ref = ? AND activo = 1
+                            """, (texto, self.ref))
 
-        conn.commit()
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
         #QMessageBox.information(self, "Éxito", "Datos de control de cuñas insertados correctamente.")
         print("Datos de control de cuñas insertados correctamente")
         if auditar:

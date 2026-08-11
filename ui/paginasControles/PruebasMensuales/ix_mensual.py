@@ -403,6 +403,12 @@ class PruebaMensualIX(PruebaMensual600):
                 dato.textChanged.connect(updateSubirButton)
 
     def guardar_control_conos(self):
+        """M2 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M2): mismo
+        contrato de reemplazo de bloque que `subir_control_cunas` --
+        `INSERT` pelado se retira; dentro de una transacción se anula
+        (`activo = 0`) lo activo de este `ref` y se inserta el bloque
+        nuevo. Solo si hay al menos una medida marcada (nunca DELETE
+        físico, nunca anular sin tener con qué reemplazar)."""
         print(f"\n Función guardar_control_conos en IX")
         try:
             conn = Conexion().conectar()
@@ -416,6 +422,7 @@ class PruebaMensualIX(PruebaMensual600):
                 ("20x20", self.btn_20_fun, self.btn_20_nofun),
                 ("25x25", self.btn_25_fun, self.btn_25_nofun)
             ]
+            filas_nuevas = []
             for medida, btn_fun, btn_nofun in medidas:
                 if btn_fun.isChecked():
                     valor = 1
@@ -425,12 +432,23 @@ class PruebaMensualIX(PruebaMensual600):
                     valor = None  # Ninguno seleccionado
 
                 if valor is not None:
-                    cursor.execute("""
+                    filas_nuevas.append((self.ref, medida, valor))
+
+            if filas_nuevas:
+                cursor.execute("BEGIN TRANSACTION")
+                try:
+                    cursor.execute(
+                        "UPDATE control_conos SET activo = 0 "
+                        "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
+                        (self.ref,))
+                    cursor.executemany("""
                         INSERT INTO control_conos (ref, medida, valor)
                         VALUES (?, ?, ?)
-                    """, (self.ref, medida, valor))
-
-            conn.commit()
+                    """, filas_nuevas)
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
             #QMessageBox.information(self, "Éxito", "Datos de control de conos guardados correctamente.")
             #print("Datos de control de conos guardados correctamente")
         except Exception as e:
