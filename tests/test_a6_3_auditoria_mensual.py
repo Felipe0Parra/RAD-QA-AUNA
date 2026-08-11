@@ -200,8 +200,12 @@ class TestGuardarTodoIxAuditaUnaSolaVez:
         # cuenta, y guardar_control_conos no audita nunca por sí misma.
         filas = _audit_log(bd_temporal)
         assert len(filas) == 1
+        # M4 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M4): la fila única
+        # ya no nombra la tabla inventada "control_cunas_y_conos" -- usa
+        # "control_cunas" (tabla real) y el detalle nombra las dos.
         assert filas[0][:4] == ("Físico de Prueba", "guardar",
-                                "control_cunas_y_conos", str(ref))
+                                "control_cunas", str(ref))
+        assert filas[0][4] == "cuñas + conos (mensual iX)"
 
 
 class TestGuardarAnalisisEImagenAuditaUnaSolaVez:

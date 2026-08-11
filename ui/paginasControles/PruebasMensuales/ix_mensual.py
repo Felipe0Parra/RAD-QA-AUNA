@@ -538,10 +538,15 @@ class PruebaMensualIX(PruebaMensual600):
             #print("OK, Conos guardados en IX")
 
             # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): una sola acción
-            # de usuario dispara cuñas Y conos -- 1 fila para las dos.
+            # de usuario dispara cuñas Y conos -- 1 fila para las dos (DA-16).
+            # M4 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M4):
+            # "control_cunas_y_conos" no es ninguna tabla real -- las dos
+            # tablas que sí existen son "control_cunas" y "control_conos".
+            # Se mantiene la fila única, pero con el nombre de una tabla que
+            # existe (control_cunas); el detalle nombra las dos.
             _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
-                                 "control_cunas_y_conos", ref=getattr(self, "ref", None),
-                                 detalle="mensual iX: cuñas + conos")
+                                 "control_cunas", ref=getattr(self, "ref", None),
+                                 detalle="cuñas + conos (mensual iX)")
 
             #self.bloquearboton(self.btn_guardar_ix)
         except Exception as e:
