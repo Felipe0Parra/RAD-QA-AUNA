@@ -2710,9 +2710,6 @@ class PruebaMensual600(PruebaBasico):
             SELECT DISTINCT {selected_column}
             FROM equipos
             WHERE {filter_column} = ? AND activo = 1
-            AND id IN (
-                SELECT MAX(id) FROM equipos GROUP BY serie
-            )
             ORDER BY {selected_column}
             """, (valor_ref,))
             
