@@ -293,8 +293,21 @@ class DialogAdminPermisoEliminar(QDialog):
         title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: rgb(153, 176, 6)")
 
         # Etiqueta informativa
-        subtitle_label = QLabel("Para continuar ingrese la cuenta de administrador y su contraseña.")
+        # U1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §U1): antes decía
+        # sin condición "ingrese la cuenta de administrador" -- con DA-35
+        # vigente (TEMPORAL: todos los roles cuentan como administrador) eso
+        # es falso, cualquier físico logueado sirve. El texto se DERIVA de
+        # es_admin_equivalente() en vez de codificar el supuesto de DA-35,
+        # así sigue siendo cierto tanto ahora como el día que DA-35 se
+        # revierta, sin volver a tocar este mensaje.
+        nombre_usuario = getattr(self.user, "_nombre", None) or getattr(self.user, "_usuario", "")
+        if es_admin_equivalente(getattr(self.user, "_usuario", None)):
+            texto_permiso = f"Para continuar, confirme su contraseña, {nombre_usuario}."
+        else:
+            texto_permiso = "Para continuar ingrese una cuenta con permiso de administrador."
+        subtitle_label = QLabel(texto_permiso)
         subtitle_label.setWordWrap(True)
+        self.subtitle_label = subtitle_label
 
         # Línea de usuario
         # C3 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md / PLAN_AUDITORIA_DOS_EJES
