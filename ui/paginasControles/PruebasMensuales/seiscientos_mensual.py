@@ -2835,6 +2835,47 @@ class PruebaMensual600(PruebaBasico):
             self.dynamic_tabs[text] = new_tab
             self.tab_widget.setCurrentWidget(new_tab) 
     
+    def _poblar_combo_series(self, modelo, combo_serie, fecha_referencia):
+        """E2 (PLAN_CONOS_MENSUAL_12-08.md §4-E2): fuente única para poblar
+        un combo de series con una entrada por CALIBRACIÓN activa del
+        modelo dado -- compartida por el cambio de modelo en vivo
+        (`setEquipoSeleccionado`) y por la restauración de un control
+        guardado (`Traerinfo`). Mismo texto (`etiqueta_equipo`), mismo
+        coloreado de vencida y mismo `userData` (equipo_id) en los dos
+        casos -- lo restaurado queda indistinguible de lo elegido a mano
+        (misma razón que `widget_a_columna`/H2.7 o `etiqueta_equipo`/F9:
+        si dos sitios derivan el mismo contenido por separado, divergen).
+
+        F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): una entrada por
+        CALIBRACIÓN activa (ya no una por serie) -- igual que la
+        calculadora (K-fix.4). El combo guarda el id del equipo en
+        `currentData()`; `setCalibracion` resuelve el factor por ese id,
+        nunca por texto. Una calibración vencida se MUESTRA y se puede
+        elegir (uso retroactivo, A092535); solo desaparece si el equipo
+        está `activo=0`.
+
+        V1 (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.5): la vigencia se evalúa
+        contra `fecha_referencia` (la fecha del CONTROL, no "hoy" ni
+        ninguna columna congelada).
+        """
+        combo_serie.blockSignals(True)
+        combo_serie.clear()
+
+        series_data = self.obtenerSeriesConVigencia(modelo)
+
+        combo_serie.addItem('Seleccionar...', None)
+        for eq_id, serie, fecha_calibr, equip_type in series_data:
+            equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
+                     "equip_type": equip_type}
+            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
+            combo_serie.addItem(texto, eq_id)
+            if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
+                item = combo_serie.model().item(combo_serie.count() - 1)
+                item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
+                item.setToolTip("Calibración vencida - Requiere recalibración")
+
+        combo_serie.blockSignals(False)
+
     def setEquipoSeleccionado(self):
         sender_combo = self.sender()
         index = self.commenu.index(sender_combo)
@@ -2844,41 +2885,11 @@ class PruebaMensual600(PruebaBasico):
         next_combo = self.commenu[index + 1]
         next_combo.setEnabled(True)
 
-        # Bloquear señales para evitar que al limpiar y agregar items se emitan eventos
-        next_combo.blockSignals(True)
-        next_combo.clear()
-
-        # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): una entrada por
-        # CALIBRACIÓN activa (ya no una por serie) -- igual que la
-        # calculadora (K-fix.4). El combo guarda el id del equipo en
-        # `currentData()`; `setCalibracion` resuelve el factor por ese id,
-        # nunca por texto (elimina el `set()+lista[0]` no determinista de
-        # `buscarModeloActivo`, R3 del plan). Una calibración vencida se
-        # MUESTRA y se puede elegir (uso retroactivo, A092535); solo
-        # desaparece si el equipo está `activo=0`.
-        series_data = self.obtenerSeriesConVigencia(modelo)
-
-        # V1 (PLAN_AUDITORIA_DOS_EJES_21-07.md §7.5): la vigencia se evalúa
-        # contra la fecha del CONTROL que se está llenando (self.date_box),
-        # no contra hoy ni contra ninguna columna congelada -- así un
-        # control retroactivo con fecha pasada no marca "vencido" un equipo
-        # que sí estaba vigente en esa fecha. No escribe nada en `equipos`.
         fecha_referencia = (
             self.date_box.date() if hasattr(self, 'date_box') and self.date_box
             else QDate.currentDate()
         )
-
-        next_combo.addItem('Seleccionar...', None)
-        for eq_id, serie, fecha_calibr, equip_type in series_data:
-            equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
-                     "equip_type": equip_type}
-            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
-            next_combo.addItem(texto, eq_id)
-            if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
-                item = next_combo.model().item(next_combo.count() - 1)
-                item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
-                item.setToolTip("Calibración vencida - Requiere recalibración")
-        next_combo.blockSignals(False)
+        self._poblar_combo_series(modelo, next_combo, fecha_referencia)
 
         # Configurar el QLineEdit siguiente
         self.commenu[index + 2].setReadOnly(True)
@@ -2911,11 +2922,16 @@ class PruebaMensual600(PruebaBasico):
         # Caso: equipos (combo_menu)
         # --------------------------------------------------------------------------------------
         if combobox is not None and combos_seguridad is None:
-            subido =  self.Traerinfo(combobox) #False
-            if subido:
-                #print('Ya se subieron los datos para equipos_mensual')
-                return
-
+            # E2 (PLAN_CONOS_MENSUAL_12-08.md §4-E2): `conectarDB` (listas
+            # completas de modelos) y la creación del botón "Subir" corren
+            # SIEMPRE -- antes, si el control tenía equipos guardados,
+            # `Traerinfo` devolvía True y la función salía ANTES de las dos
+            # cosas: los combos de modelo quedaban con un único ítem (el
+            # que `Traerinfo` había añadido) y la sección se quedaba sin
+            # botón de guardar. `Traerinfo` pasa de "poblar o no poblar" a
+            # "seleccionar lo guardado sobre una lista ya completa" -- por
+            # eso corre DESPUÉS de `conectarDB`, no antes. Su valor de
+            # retorno ya no gobierna el flujo (se conserva solo para log).
             self.conectarDB(combobox)
             layout = categoria.layout()
             if layout is not None:
@@ -2948,6 +2964,8 @@ class PruebaMensual600(PruebaBasico):
                     #print(f"\nLa variable equipo_f en la función botonescomboboox equipos es: {self.equipo_f}")
 
                 btn_guardar.clicked.connect(subir)
+
+            self.Traerinfo(combobox)
 
         # --------------------------------------------------------------------------------------
         # Caso: cuñas (combos_seguridad)
@@ -2989,6 +3007,18 @@ class PruebaMensual600(PruebaBasico):
 
                     btn_guardar.clicked.connect(subir)
 
+    def _tipos_camara(self):
+        """E3 (PLAN_CONOS_MENSUAL_12-08.md §4-E3): el orden de `tipo_camara`
+        por máquina -- fuente única para escritura (`subirtodo_modificado`)
+        y lectura (`Traerinfo`). Misma razón que `columnas_identificadoras`
+        en A1: si lectura y escritura derivan el orden de sitios distintos,
+        vuelven a divergir. El índice de cada tipo en esta lista es el
+        `base_index // 3` de su grupo de widgets en `self.commenu`.
+        """
+        if hasattr(self, "esIX") and self.esIX:
+            return ['Principal Fotones', 'Principal Electrones', 'Secundaria', 'Electrómetro']
+        return ['Principal', 'Secundaria', 'Electrómetro']
+
     def subirtodo_modificado(self, datos):
         """
         Versión optimizada para insertar datos de equipos con transacciones agrupadas.
@@ -3029,12 +3059,10 @@ class PruebaMensual600(PruebaBasico):
             filas_a_insertar = []
             
             # Procesar grupos de 3 elementos
+            tipos_camara = self._tipos_camara()
             grupos = [0, 3, 6, 9] if hasattr(self, "esIX") and self.esIX else [0, 3, 6]
-            for base in grupos: 
-                if hasattr(self, "esIX") and self.esIX:
-                    tipo_camara = ('Principal Fotones' if base == 0 else 'Principal Electrones' if base == 3 else 'Secundaria' if base == 6 else 'Electrómetro')
-                else:
-                    tipo_camara = ('Principal' if base == 0 else 'Secundaria' if base == 3 else 'Electrómetro')
+            for base in grupos:
+                tipo_camara = tipos_camara[base // 3]
                 try:
                     model = datos[base] if base < len(datos) else ""
                     calibr_fact = datos[base + 2] if (base + 2) < len(datos) else ""
@@ -3211,65 +3239,133 @@ class PruebaMensual600(PruebaBasico):
             self._actualizar_tabla_despues_subida()
     
     def Traerinfo(self, combenu):
-        """Función optimizada para cargar información de equipos desde BD"""
-        #print("------ Función Traerinfo (optimizada)")
-        
+        """E2+E3 (PLAN_CONOS_MENSUAL_12-08.md §4): selecciona sobre una
+        lista de modelos YA COMPLETA (poblada por `conectarDB` antes de
+        esta llamada, E2) lo que el control tiene guardado -- ya no decide
+        si poblar o no poblar la lista.
+
+        E3: restaura el bloque VIGENTE (`activo=1`, la fila de mayor `id`
+        por `tipo_camara`, tras M2) y coloca cada equipo en el hueco de SU
+        tipo_camara (`_tipos_camara`), no en el de su posición de
+        inserción -- el hueco que M3 dejó abierto aquí (a diferencia de
+        `Traerinfo_cunas`/`Traerinfo_conos`, que sí tenían el filtro de
+        `activo` y el desempate determinista).
+        """
         try:
             conn = self.db_manager.obtener_conexion()
             cursor = conn.cursor()
-            
-            # Query optimizada con ordenamiento
-            cursor.execute(f"""
-                SELECT model, serie, calibr_fact 
+
+            cursor.execute("""
+                SELECT tipo_camara, model, serie, calibr_fact, equipo_id, id
                 FROM equipos_medicion
-                WHERE ref = ? 
-                ORDER BY id
+                WHERE ref = ? AND (activo IS NULL OR activo = 1)
+                ORDER BY tipo_camara, id DESC
             """, (self.ref,))
-            
+
             results = cursor.fetchall()
-            
             if not results:
                 return False
-            
-            # Procesar resultados de manera más segura
-            for i, (model, serie, calibr_fact) in enumerate(results):
-                base_index = i * 3 # Cada registro usa 3 widgets
-                
-                # Verificar que hay suficientes widgets
+
+            # Una fila por tipo_camara: la primera de cada grupo, por el
+            # ORDER BY ... id DESC (la de id más alto -- el bloque vigente
+            # cuando hay varios activos, caso real ref=30).
+            filas_por_tipo = {}
+            for tipo_camara, model, serie, calibr_fact, equipo_id, _fila_id in results:
+                if tipo_camara not in filas_por_tipo:
+                    filas_por_tipo[tipo_camara] = (model, serie, calibr_fact, equipo_id)
+
+            tipos_camara = self._tipos_camara()
+            fecha_referencia = (
+                self.date_box.date() if hasattr(self, 'date_box') and self.date_box
+                else QDate.currentDate()
+            )
+
+            for tipo_camara, (model, serie, calibr_fact, equipo_id) in filas_por_tipo.items():
+                if tipo_camara not in tipos_camara:
+                    print(f"Advertencia: tipo_camara desconocido '{tipo_camara}' "
+                          f"en ref={self.ref}")
+                    continue
+                base_index = tipos_camara.index(tipo_camara) * 3
                 if base_index + 2 >= len(combenu):
-                    print(f"Advertencia: No hay suficientes widgets para el registro {i+1}")
-                    break
-                
+                    print(f"Advertencia: no hay widgets para tipo_camara "
+                          f"'{tipo_camara}' (ref={self.ref})")
+                    continue
+
                 try:
-                    # Configurar modelo (ComboBox)
                     modelo_widget = combenu[base_index]
-                    if isinstance(modelo_widget, QComboBox):
-                        modelo_widget.addItem(model)
-                        modelo_widget.setCurrentText(model)
-                        modelo_widget.setEnabled(True)
-                    
-                    # Configurar serie (ComboBox)
                     serie_widget = combenu[base_index + 1]
-                    if isinstance(serie_widget, QComboBox):
-                        serie_str = str(serie)
-                        serie_widget.addItem(serie_str)
-                        serie_widget.setCurrentText(serie_str)
-                        serie_widget.setEnabled(True)
-                    
-                    # Configurar factor de calibración (LineEdit)
                     calibr_widget = combenu[base_index + 2]
+
+                    # 1. Modelo: `findText` sobre la lista ya poblada por
+                    # `conectarDB`. Solo si no aparece (equipo anulado
+                    # después de guardarse el control), se agrega como
+                    # respaldo, dejando constancia por consola.
+                    if isinstance(modelo_widget, QComboBox):
+                        idx_modelo = modelo_widget.findText(model)
+                        if idx_modelo == -1:
+                            print(f"Advertencia: modelo '{model}' ya no está activo "
+                                  f"(ref={self.ref}, tipo_camara={tipo_camara}); "
+                                  f"se agrega como respaldo")
+                            modelo_widget.addItem(model)
+                            idx_modelo = modelo_widget.findText(model)
+                        modelo_widget.setCurrentIndex(idx_modelo)
+                        modelo_widget.setEnabled(True)
+
+                    # 2. Series: las señales aún no están conectadas
+                    # (`button_click` corre después de `iniGUI`), así que
+                    # `setEquipoSeleccionado` no se dispara solo -- se
+                    # poblán explícitamente con el mismo helper que la
+                    # selección en vivo.
+                    if isinstance(serie_widget, QComboBox):
+                        self._poblar_combo_series(model, serie_widget, fecha_referencia)
+
+                        # 3. Selección de la serie: por `equipo_id` cuando
+                        # la fila lo tiene (todas las escritas desde F9).
+                        # Para las históricas con `equipo_id = NULL`,
+                        # respaldo por texto. Si ninguno acierta, se añade
+                        # una entrada al final con el id resuelto por
+                        # (model, serie) y se avisa por consola.
+                        idx_serie = -1
+                        if equipo_id is not None:
+                            idx_serie = serie_widget.findData(equipo_id)
+                        if idx_serie == -1:
+                            idx_serie = serie_widget.findText(
+                                f"Serie: {serie}", Qt.MatchStartsWith)
+                        if idx_serie == -1:
+                            cursor.execute("""
+                                SELECT id FROM equipos
+                                WHERE model = ? AND serie = ? AND activo = 1
+                                ORDER BY id DESC LIMIT 1
+                            """, (model, serie))
+                            fila_equipo = cursor.fetchone()
+                            equipo_id_resuelto = fila_equipo[0] if fila_equipo else None
+                            print(f"Advertencia: no se pudo ubicar la serie '{serie}' "
+                                  f"de '{model}' en el combo (ref={self.ref}, "
+                                  f"tipo_camara={tipo_camara}); se agrega al final")
+                            serie_widget.addItem(f"Serie: {serie}", equipo_id_resuelto)
+                            idx_serie = serie_widget.count() - 1
+                        serie_widget.setCurrentIndex(idx_serie)
+                        serie_widget.setEnabled(True)
+
+                    # 4. Factor de calibración: se restaura el valor
+                    # HISTÓRICO guardado en `equipos_medicion`, no el
+                    # vigente del catálogo -- y se re-aplica AL FINAL,
+                    # después de tocar los combos (el histórico gana sobre
+                    # lo que la cascada recalcula, patrón D2.2/K3). Hoy no
+                    # se dispara `setCalibracion` porque las señales aún no
+                    # existen, pero el orden queda escrito para que no
+                    # rompa si algún día se conectan antes.
                     if isinstance(calibr_widget, QLineEdit):
                         calibr_widget.setText(str(calibr_fact))
                         calibr_widget.setEnabled(True)
-                    
-                    #print(f"[DB equipos] Cargado: {model}, {serie}, {calibr_fact}")
-                    
+
                 except (IndexError, AttributeError) as e:
-                    print(f"Error configurando widgets para registro {i+1}: {e}")
+                    print(f"Error configurando widgets para tipo_camara "
+                          f"'{tipo_camara}': {e}")
                     continue
-            
+
             return True
-            
+
         except sqlite3.Error as e:
             print(f"Error de BD en Traerinfo: {e}")
             return False
