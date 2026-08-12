@@ -2117,7 +2117,7 @@ class PruebaMensual600(PruebaBasico):
             
             if datos_tabla['source'] == 'database':
                 readonly_mode = False
-                self._llenar_tabla_bd(table, datos_tabla['data'])
+                self._llenar_tabla_bd(table, datos_tabla['data'], nombre_tabla)
                 #table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             else:
                 self._llenar_tabla_defaults(table, datos_tabla['data'] if nombre_tabla != "HC_precision_posicion_multilaminas_anual" else datos, editar_primera_columna=True)
@@ -2167,18 +2167,37 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error cargando datos para {nombre_tabla}: {e}")
             return {'source': 'default', 'data': datos_default}
 
-    def _llenar_tabla_bd(self, table, datos_bd):
-        """Llena tabla con datos de BD optimizadamente"""
+    def _llenar_tabla_bd(self, table, datos_bd, nombre_tabla=None):
+        """Llena tabla con datos de BD optimizadamente.
+
+        A1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §A1): en la ruta
+        anual, `pruebatalas` devuelve la fila COMPLETA (`SELECT *`), así que
+        hay que recortar el prefijo identificador antes de los datos
+        visibles. Ese recorte se deriva ahora del esquema real de la tabla
+        (`columnas_identificadoras`, load.py -- misma fuente que usa
+        `loadtablacomplex` al guardar) en vez de estar fijo en 3: las tablas
+        anuales con `[id, ref, id_energia]` siguen recortando 3, pero
+        `tabla_factores_sobre_eje` tiene además `tam_pdd` y necesita 4. Con
+        el 3 fijo, `tam_pdd` se colaba en la primera columna de la vista
+        ("Profundidad (cm)" mostraba 'PPD (20 x 20)' en vez de 5) y corría
+        todas las demás una posición; si el físico volvía a pulsar "Subir"
+        sobre esa vista, la corrupción se persistía.
+        """
         try:
+            if hasattr(self, 'anual') and self.anual:
+                identificadoras = columnas_identificadoras(nombre_tabla) if nombre_tabla else ()
+                # El 3 de siempre queda como respaldo para cualquier caso
+                # degenerado (sin nombre de tabla, o esquema ilegible): un
+                # recorte de 0 pondría el `id` en la primera columna.
+                prefijo = len(identificadoras) if identificadoras else 3
+            else:
+                prefijo = 1
             for fila, fila_datos in enumerate(datos_bd):
                 if fila >= table.rowCount():
                     break
-                # Omitir primer elemento (ID) si existe
-                if hasattr(self, 'anual') and self.anual:
-                    datos_fila =  fila_datos[3:] if len(fila_datos) > table.columnCount() else fila_datos
-                else:
-                    datos_fila = fila_datos[1:] if len(fila_datos) > table.columnCount() else fila_datos
-                
+                # Omitir las columnas identificadoras si la fila las trae
+                datos_fila = fila_datos[prefijo:] if len(fila_datos) > table.columnCount() else fila_datos
+
                 for columna, dato in enumerate(datos_fila[:table.columnCount()]):
                     item = QTableWidgetItem(str(dato))
                     if columna == 0:

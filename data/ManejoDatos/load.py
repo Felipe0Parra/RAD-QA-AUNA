@@ -476,19 +476,39 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
     
     ref = reference
     datos = []
-        
+
+    # A1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §A1): las columnas que
+    # identifican el BLOQUE que este "Subir" reemplaza. Se calculan UNA sola
+    # vez y las usan las DOS mitades de la operación -- el prefijo de cada
+    # fila insertada y el DELETE de más abajo -- para que no puedan
+    # divergir: se borra exactamente el bloque que se vuelve a escribir, ni
+    # una fila más.
+    #
+    # Antes el DELETE era `WHERE ref=?` a secas, así que cada guardado
+    # arrasaba con TODO el control anual, no con el bloque en curso:
+    #   - subir la energía 15 MV borraba lo ya guardado de 6 MV en
+    #     tabla_factor_campo / tabla_factores_transmision /
+    #     tabla_control_camaras_monitoras (las 3 tienen `id_energia`);
+    #   - y en tabla_factores_sobre_eje ni siquiera sobrevivía UN clic: el
+    #     bucle de `guardar_todas_fse` llama aquí una vez por cada tamaño de
+    #     PDD, y cada llamada borraba las PDD que las anteriores acababan de
+    #     escribir -- de las 9 filas de una energía quedaban solo las 3 de
+    #     la última PDD del bucle.
+    #
+    # El desglose reproduce EXACTAMENTE el que tenía la cadena if/elif de
+    # abajo (`tam_pdd` solo cuenta en la rama anual con energía y pdd),
+    # para no cambiar de paso qué se inserta.
+    identificadores = [("ref", ref)]
+    if id_energia is not None:
+        identificadores.append(("id_energia", id_energia))
+    if anual and id_energia is not None and pdd is not None:
+        identificadores.append(("tam_pdd", pdd))
+
+    print(f"Bloque identificado por {[col for col, _ in identificadores]} "
+          f"para la tabla {nombre_tabla}, id = {id}")
+
     for fila in range(from_range, table.rowCount()):
-        if anual and id_energia is not None and pdd is not None:
-            print(f"Anual con energia y pdd para la tabla {nombre_tabla}")
-            datafila = [ref, id_energia, pdd]
-        elif anual and id_energia is not None:
-            print(f"Anual con energia para la tabla {nombre_tabla}, id = {id}")
-            datafila = [ref, id_energia]
-        elif id_energia is not None:
-            print(f"Con energia para la tabla {nombre_tabla}")
-            datafila = [ref, id_energia]
-        else:
-            datafila = [ref]
+        datafila = [valor for _, valor in identificadores]
         for columna in range(0, table.columnCount()):
             dato_item = table.item(fila, columna)
             dato = dato_item.text() if dato_item else ""
@@ -517,11 +537,23 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
 
         conn.execute("BEGIN TRANSACTION")
 
-        # borrar registros anteriores
-        cursor.execute(
-            f"DELETE FROM {nombre_tabla} WHERE ref=?",
-            (ref,)
-        )
+        # borrar el bloque anterior -- solo ESTE bloque (A1, ver arriba).
+        # Se acota contra las columnas que la tabla tiene de verdad: si un
+        # llamador pasara `pdd` para una tabla sin `tam_pdd`, un DELETE
+        # contra una columna inexistente lanzaría, el rollback dejaría al
+        # físico sin guardar nada y el `except` de abajo solo lo imprime en
+        # consola. Acotar de menos es el fallo seguro (es lo que hacía
+        # antes); acotar contra una columna que no existe, no.
+        columnas_reales = {fila[1] for fila in
+                           cursor.execute(f"PRAGMA table_info({nombre_tabla})")}
+        acotacion = [(col, valor) for col, valor in identificadores
+                     if col in columnas_reales]
+        if acotacion:
+            where = " AND ".join(f"{col}=?" for col, _ in acotacion)
+            cursor.execute(
+                f"DELETE FROM {nombre_tabla} WHERE {where}",
+                tuple(valor for _, valor in acotacion)
+            )
 
         cursor.executemany(sql, datos)
 
@@ -665,6 +697,48 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
         print("Error al guardar:", ex)
     finally:
         cursor.close()
+
+COLUMNAS_IDENTIFICADORAS = ("id", "ref", "id_energia", "tam_pdd")
+
+
+def columnas_identificadoras(nombre_tabla):
+    """Prefijo de columnas con las que el esquema identifica un bloque de
+    datos anual, ANTES de los datos visibles de la tabla.
+
+    A1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §A1): ÚNICA fuente para
+    las dos mitades de la operación, igual que `widget_a_columna` lo es
+    para dosimetriaMen -- `loadtablacomplex` acota su DELETE al bloque que
+    reemplaza, y `_llenar_tabla_bd` sabe cuántas columnas recortar al
+    releerlo. Que las dos lo deriven del MISMO esquema evita que vuelvan a
+    divergir: el recorte estaba fijo en 3 y `tabla_factores_sobre_eje`
+    tiene CUATRO identificadoras (id, ref, id_energia, tam_pdd, porque
+    dentro de cada energía hay una tabla PDD por tamaño de campo), así que
+    `tam_pdd` se colaba en la primera columna de la vista y corría todas
+    las demás una posición.
+
+    Se leen del esquema en orden y solo mientras sigan siendo
+    identificadoras: la primera columna de datos corta el prefijo aunque
+    más adelante hubiera otra columna con uno de estos nombres.
+    """
+    conn = Conexion().conectar()
+    cursor = conn.cursor()
+    try:
+        columnas = [fila[1] for fila in
+                    cursor.execute(f"PRAGMA table_info({nombre_tabla})")]
+    except Exception:
+        traceback.print_exc()
+        return ()
+    finally:
+        cursor.close()
+        conn.close()
+
+    prefijo = []
+    for columna in columnas:
+        if columna not in COLUMNAS_IDENTIFICADORAS:
+            break
+        prefijo.append(columna)
+    return tuple(prefijo)
+
 
 def encontrar_columnas(nombre_tabla, id = True, delete = 1):
 
