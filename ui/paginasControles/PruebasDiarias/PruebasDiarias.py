@@ -374,6 +374,15 @@ class PruebaBasico(QWidget):
     def completar(self, selected, rejected, maquina = None):
         selected_btn = selected[0]
         rejected_btn = rejected[0]
+        # T1 (PLAN_CONOS_MENSUAL_12-08.md §4-T1): los botones nacen
+        # `setCheckable(True)` sin `QButtonGroup` -- sin esto, un segundo
+        # clic sobre el mismo botón lo apaga (D2) y corregirse de un botón
+        # al otro deja los DOS marcados (D1). Forzar el estado aquí hace
+        # que cualquier clic aterrice siempre en exactamente
+        # (seleccionado=True, rechazado=False), sea cual sea el estado
+        # previo de los dos botones.
+        selected_btn.setChecked(True)
+        rejected_btn.setChecked(False)
         self.cambiar_estilo(selected_btn, rejected_btn)
         self.otra_funcion(selected, rejected, maquina=maquina)
 
