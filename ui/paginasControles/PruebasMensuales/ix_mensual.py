@@ -504,6 +504,16 @@ class PruebaMensualIX(PruebaMensual600):
 
                 btn_fun.setChecked(valor == 1)
                 btn_nofun.setChecked(valor == 0)
+                # T2 (PLAN_CONOS_MENSUAL_12-08.md §4-T2): `setChecked` por
+                # sí solo no tiene efecto visual -- las reglas de
+                # `estilo.qss` para estos botones dependen SOLO de la
+                # propiedad dinámica `estado`, no existe ninguna regla
+                # `:checked`. Sin este paso, el botón correcto queda
+                # marcado internamente pero en pantalla se ve igual que
+                # uno sin marcar (D3), lo que induce a pulsarlo (D2).
+                seleccionado, otro = (
+                    (btn_fun, btn_nofun) if valor == 1 else (btn_nofun, btn_fun))
+                self.cambiar_estilo(seleccionado, otro)
                 registros_procesados += 1
 
             return registros_procesados > 0
