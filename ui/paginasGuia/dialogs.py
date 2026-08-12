@@ -3129,7 +3129,20 @@ class DialogCalculadoraDosis(QDialog):
             "Acelerador": self.acelerador_actual,
             "equipo_id": self.equipo_id,
             "Modelo_equipo": self.combo_modelos.currentData(),
-            "Numero_serie": self.combo_series.currentData(),
+            # C1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md): de aquí en
+            # adelante se guarda la serie REAL de la cámara
+            # (self.datos_equipo, cargado por on_serie_cambiada ->
+            # cargar_datos_equipo, EquiposService.obtener_por_id), no el id
+            # interno del combo (F1, el nombre de columna engañoso que Z3 ya
+            # corrigió del lado del reporte). No se reescribe ningún dato
+            # histórico (DA-02/DA-28): las filas guardadas antes de este
+            # cambio conservan el id bajo Numero_serie, y el fallback de
+            # cargar_datos_desde_db (Z3, activo solo sin equipo_id) sigue
+            # funcionando igual para ellas. Si self.datos_equipo no llegó a
+            # cargarse (equipo_id sin resolver), se conserva el
+            # comportamiento anterior como último recurso.
+            "Numero_serie": (self.datos_equipo.get("serie")
+                              if self.datos_equipo else self.combo_series.currentData()),
             "factor_calibracion": self.visualize_calib.text(),
             "Tamano_campo": self.combo_fieldsize.currentText(),
             "Tipo_de_radiacion": "Electrones" if self.electrones.isChecked() else "Fotones",

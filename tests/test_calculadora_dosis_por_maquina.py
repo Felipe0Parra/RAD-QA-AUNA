@@ -195,9 +195,9 @@ class TestFotonesConfigDeOroPorMaquina:
         # búsqueda, así que el registro se encuentra igual (línea 186-190).
         assert datos_bd["Acelerador"] == nombre_canonico(acelerador_esperado)
         assert datos_bd["Modelo_equipo"] == "N31010"
-        # Numero_serie persiste el ID del combo_series (currentData()), no el
-        # string de serie -- nombre de columna heredado, algo engañoso.
-        assert datos_bd["Numero_serie"] == str(EQUIPO_FOTONES_ORO["id"])
+        # C1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md): Numero_serie ya
+        # persiste la serie REAL de la cámara (antes el id del combo).
+        assert datos_bd["Numero_serie"] == EQUIPO_FOTONES_ORO["serie"]
         assert datos_bd["dosis_maxima"] not in (None, "")
 
         cargado = factory()
