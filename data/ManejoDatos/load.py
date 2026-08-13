@@ -408,30 +408,6 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
     except sqlite3.Error as e:
         QMessageBox.critical(self, "Error", f"Error en la consulta: {e}")
 
-def buscarModelo(self, filter_column, selected_column, valor_ref):
-    conn = Conexion().conectar()
-    cursor = conn.cursor()
-    modelos = set()
-    try:
-        cursor.execute(f"""
-        SELECT {selected_column}
-        FROM equipos
-        WHERE {filter_column} = ?
-        AND id IN (
-            SELECT MAX(id) FROM equipos GROUP BY serie
-        )
-        """, (valor_ref,))
-        
-        rows = cursor.fetchall()
-        for row in rows:
-            modelos.add(row[0])
-    except Exception as e:
-        traceback.print_exc()
-        print("Error en la consulta:", e)
-    finally:
-        conn.commit()
-    return modelos
-
 def crear_algo(self, ref, imagen):
     print(f"\nEntra a la función crear_algo en load.py con ref: {ref} y imagen: {imagen}")
     conn = Conexion().conectar()
