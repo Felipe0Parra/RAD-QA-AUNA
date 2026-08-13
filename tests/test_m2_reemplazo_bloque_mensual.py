@@ -14,7 +14,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication, QPushButton, QWidget
+from PyQt5.QtWidgets import QApplication, QMessageBox, QPushButton, QWidget
 
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
@@ -188,10 +188,18 @@ class TestReemplazoBloqueConos:
         assert all(f[1] == 0 for f in activas), "el bloque activo trae el valor de la 3a llamada"
 
     def test_guardado_sin_ninguna_medida_marcada_no_anula_el_bloque_activo(
-            self, app, bd_temporal):
-        """Defensivo: si "Subir" se dispara sin que ningún botón esté
-        marcado, no debe anular el bloque vigente sin tener con qué
-        reemplazarlo."""
+            self, app, bd_temporal, monkeypatch):
+        """T3 (PLAN_CONOS_MENSUAL_12-08.md §4-T3, DA-37) reforzó esta ruta:
+        ya no es solo defensiva -- guardar con conos sin marcar está
+        explícitamente bloqueado (los 5 o ninguno), y el aviso nombra
+        cuáles faltan. El resultado que este test ya fijaba (nada nuevo se
+        inserta, el bloque activo original sigue activo) sigue siendo
+        válido porque T3 refuerza ese contrato, no lo cambia."""
+        avisos = []
+        monkeypatch.setattr(
+            QMessageBox, "warning",
+            staticmethod(lambda *a, **k: avisos.append(a[-1]) or QMessageBox.Ok))
+
         ref = _insertar_control(bd_temporal, equipo="Clinac ix")
         self._instancia(bd_temporal, ref, 1).guardar_control_conos()
         assert len([f for f in self._filas(bd_temporal, ref) if f[2] == 1]) == 5
@@ -204,7 +212,12 @@ class TestReemplazoBloqueConos:
         obj_vacio.btn_15_fun, obj_vacio.btn_15_nofun = botones["15x15"]
         obj_vacio.btn_20_fun, obj_vacio.btn_20_nofun = botones["20x20"]
         obj_vacio.btn_25_fun, obj_vacio.btn_25_nofun = botones["25x25"]
-        obj_vacio.guardar_control_conos()
+        resultado = obj_vacio.guardar_control_conos()
+
+        assert resultado is False, "T3/DA-37: bloqueado, no se guardó nada"
+        assert len(avisos) == 1
+        for medida in ("6x6", "10x10", "15x15", "20x20", "25x25"):
+            assert medida in avisos[0], f"el aviso no nombra {medida}"
 
         filas = self._filas(bd_temporal, ref)
         assert len(filas) == 5, "nada nuevo que insertar -- nada se toca"

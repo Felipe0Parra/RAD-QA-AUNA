@@ -162,9 +162,17 @@ class TestSubirControlCunasAudita:
 
 class TestGuardarTodoIxAuditaUnaSolaVez:
     """El caso "ojo" del plan: cuñas + conos, mismo click en iX -- 1 fila,
-    no 2."""
+    no 2.
 
-    def _instancia(self, bd_temporal):
+    T3 (PLAN_CONOS_MENSUAL_12-08.md §4-T3) hizo el detalle de auditoría
+    condicional al resultado de `guardar_control_conos` (True = los 5 conos
+    se guardaron, False = el bloqueo de DA-37 impidió escribir). El spy
+    devuelve explícitamente cada valor -- True en el caso normal, False en
+    el caso "conos incompletos" -- para que las dos ramas del `detalle`
+    queden cubiertas, en vez de depender del `None` implícito de una
+    función sin `return`."""
+
+    def _instancia(self, bd_temporal, conos_guardados=True):
         class _ComboFalso:
             def currentText(self):
                 return "Funciona"
@@ -183,6 +191,7 @@ class TestGuardarTodoIxAuditaUnaSolaVez:
 
         def _guardar_control_conos_spy():
             llamadas.append(("guardar_control_conos", None))
+            return conos_guardados
 
         obj.subir_control_cunas = _subir_control_cunas_spy
         obj.guardar_control_conos = _guardar_control_conos_spy
@@ -190,7 +199,7 @@ class TestGuardarTodoIxAuditaUnaSolaVez:
 
     def test_ambas_escrituras_se_disparan_pero_solo_una_fila_de_auditoria(
             self, app, bd_temporal):
-        obj, ref, llamadas = self._instancia(bd_temporal)
+        obj, ref, llamadas = self._instancia(bd_temporal, conos_guardados=True)
         obj.guardar_todo_ix()
 
         # Las dos escrituras SÍ ocurrieron...
@@ -206,6 +215,19 @@ class TestGuardarTodoIxAuditaUnaSolaVez:
         assert filas[0][:4] == ("Físico de Prueba", "guardar",
                                 "control_cunas", str(ref))
         assert filas[0][4] == "cuñas + conos (mensual iX)"
+
+    def test_conos_incompletos_deja_el_detalle_correspondiente(
+            self, app, bd_temporal):
+        """T3/DA-37: si `guardar_control_conos` bloqueó por faltar alguna
+        medida (devuelve False), sigue habiendo UNA fila de auditoría --
+        pero el detalle dice que los conos no se guardaron, en vez de
+        afirmar falsamente que sí."""
+        obj, ref, llamadas = self._instancia(bd_temporal, conos_guardados=False)
+        obj.guardar_todo_ix()
+
+        filas = _audit_log(bd_temporal)
+        assert len(filas) == 1
+        assert filas[0][4] == "cuñas + conos incompletos, no se guardaron (mensual iX)"
 
 
 class TestGuardarAnalisisEImagenAuditaUnaSolaVez:

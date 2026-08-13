@@ -407,8 +407,21 @@ class PruebaMensualIX(PruebaMensual600):
         contrato de reemplazo de bloque que `subir_control_cunas` --
         `INSERT` pelado se retira; dentro de una transacción se anula
         (`activo = 0`) lo activo de este `ref` y se inserta el bloque
-        nuevo. Solo si hay al menos una medida marcada (nunca DELETE
-        físico, nunca anular sin tener con qué reemplazar)."""
+        nuevo.
+
+        T3 (PLAN_CONOS_MENSUAL_12-08.md §4-T3, DA-37): los 5 conos son
+        obligatorios -- si queda alguna medida sin marcar, no se escribe
+        NADA (ni se anula el bloque activo anterior sin tener con qué
+        reemplazarlo) y se avisa nombrando exactamente cuáles faltan, sin
+        símbolos (DA-18). Con T1 aplicado, (F,F) solo sobrevive como
+        estado inicial de un control nunca tocado -- este bloqueo nunca
+        puede dispararse por un cono que el físico marcó y que la app
+        perdió, solo por uno que nunca tocó.
+
+        Devuelve True si guardó, False si bloqueó o falló -- el llamador
+        (`guardar_todo_ix`) usa el resultado para el detalle de auditoría,
+        sin dejar de guardar cuñas por esto (el bloqueo es de la tabla de
+        conos, no del guardado entero)."""
         print(f"\n Función guardar_control_conos en IX")
         try:
             conn = Conexion().conectar()
@@ -423,6 +436,7 @@ class PruebaMensualIX(PruebaMensual600):
                 ("25x25", self.btn_25_fun, self.btn_25_nofun)
             ]
             filas_nuevas = []
+            faltantes = []
             for medida, btn_fun, btn_nofun in medidas:
                 if btn_fun.isChecked():
                     valor = 1
@@ -433,27 +447,35 @@ class PruebaMensualIX(PruebaMensual600):
 
                 if valor is not None:
                     filas_nuevas.append((self.ref, medida, valor))
+                else:
+                    faltantes.append(medida)
 
-            if filas_nuevas:
-                cursor.execute("BEGIN TRANSACTION")
-                try:
-                    cursor.execute(
-                        "UPDATE control_conos SET activo = 0 "
-                        "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
-                        (self.ref,))
-                    cursor.executemany("""
-                        INSERT INTO control_conos (ref, medida, valor)
-                        VALUES (?, ?, ?)
-                    """, filas_nuevas)
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-                    raise
-            #QMessageBox.information(self, "Éxito", "Datos de control de conos guardados correctamente.")
+            if faltantes:
+                QMessageBox.warning(
+                    self, "Conos incompletos",
+                    "Faltan por registrar estos conos: " + ", ".join(faltantes))
+                return False
+
+            cursor.execute("BEGIN TRANSACTION")
+            try:
+                cursor.execute(
+                    "UPDATE control_conos SET activo = 0 "
+                    "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
+                    (self.ref,))
+                cursor.executemany("""
+                    INSERT INTO control_conos (ref, medida, valor)
+                    VALUES (?, ?, ?)
+                """, filas_nuevas)
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
             #print("Datos de control de conos guardados correctamente")
+            return True
         except Exception as e:
             QMessageBox.information(self, "Error", "No se pudo insertar los datos.")
             print(f"Error guardar_control_conos: {traceback.print_exc(e)}")
+            return False
 
     def Traerinfo_conos(self):
         """M3 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M3): lectura que
@@ -527,7 +549,17 @@ class PruebaMensualIX(PruebaMensual600):
         #print("\n ~~~~~~ Entrando en guardar_todo_ix de", self, "~~~~~~")
         #print("Método definido en clase:", self.__class__.__name__)
         try:
-            # 1. Guardar cuñas (copiado de la lógica de botonescombobox del padre)
+            # 1. Guardar conos PRIMERO (T3, PLAN_CONOS_MENSUAL_12-08.md
+            # §4-T3): si faltan medidas, `guardar_control_conos` avisa y no
+            # escribe nada -- ese aviso debe aparecer ANTES del mensaje de
+            # éxito que `subir_control_cunas` emite más abajo, para que no
+            # quede tapado ni se confunda con un guardado completo. El
+            # bloqueo es de la tabla de conos, no del guardado entero: las
+            # cuñas se guardan igual, estén los conos completos o no.
+            conos_guardados = self.guardar_control_conos()
+            #print("OK, Conos guardados en IX")
+
+            # 2. Guardar cuñas (copiado de la lógica de botonescombobox del padre)
             if hasattr(self, "combos_seguridad") and self.combos_seguridad:
                 datos_seguridad = []
                 for angulo, posiciones in self.combos_seguridad.items():
@@ -543,20 +575,20 @@ class PruebaMensualIX(PruebaMensual600):
                                          auditar=False)
                 #print("OK, Cuñas guardadas en IX")
 
-            # 2. Guardar conos (tu lógica adicional)
-            self.guardar_control_conos()
-            #print("OK, Conos guardados en IX")
-
             # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): una sola acción
             # de usuario dispara cuñas Y conos -- 1 fila para las dos (DA-16).
             # M4 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M4):
             # "control_cunas_y_conos" no es ninguna tabla real -- las dos
             # tablas que sí existen son "control_cunas" y "control_conos".
             # Se mantiene la fila única, pero con el nombre de una tabla que
-            # existe (control_cunas); el detalle nombra las dos.
+            # existe (control_cunas); el detalle nombra las dos y dice si
+            # los conos entraron o no (T3) -- mismo verbo, sin inventar uno
+            # nuevo.
+            detalle = ("cuñas + conos (mensual iX)" if conos_guardados
+                      else "cuñas + conos incompletos, no se guardaron (mensual iX)")
             _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
                                  "control_cunas", ref=getattr(self, "ref", None),
-                                 detalle="cuñas + conos (mensual iX)")
+                                 detalle=detalle)
 
             #self.bloquearboton(self.btn_guardar_ix)
         except Exception as e:
