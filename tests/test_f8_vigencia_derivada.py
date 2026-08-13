@@ -198,8 +198,13 @@ class TestTripwireNingunModuloLeeEquiposVigente:
     2. Acceso por clave: `.get('vigente')`/`['vigente']` sobre un dict de
        EquiposService. El único sitio conocido era `dialogs.py` (calculadora,
        K-fix.4) -- F9 (§9 punto 2 del plan) ya lo migró al helper
-       `services/etiqueta_equipo.py`, así que la allowlist queda vacía: si
-       aparece en CUALQUIER archivo de producción, el test debe fallar.
+       `services/etiqueta_equipo.py`. `scripts/observador_contrato.py`
+       (OB1, PLAN_CONTRATO_GUARDADO_13-08.md §5) es la única excepción
+       deliberada: su clave `"vigente"` es el nombre que el propio plan le
+       da al censo de huellas de filas activas -- un concepto sin relación
+       con `equipos.vigente` (no lee `EquiposService` ni la tabla
+       `equipos`). Cualquier otro archivo de producción que aparezca aquí
+       sí debe hacer fallar el test.
     """
 
     ROOT = Path(__file__).resolve().parent.parent
@@ -211,7 +216,7 @@ class TestTripwireNingunModuloLeeEquiposVigente:
     SQL_PERMITIDO = {
         "ui/paginasGuia/equipos.py",
     }
-    ACCESO_POR_CLAVE_PENDIENTE_F9 = set()
+    ACCESO_POR_CLAVE_PERMITIDO = {"scripts/observador_contrato.py"}
 
     def _archivos_produccion(self):
         for path in sorted(self.ROOT.rglob("*.py")):
@@ -263,11 +268,12 @@ class TestTripwireNingunModuloLeeEquiposVigente:
             texto = path.read_text(encoding="utf-8")
             if patron.search(texto):
                 encontrados.add(str(rel))
-        assert encontrados == self.ACCESO_POR_CLAVE_PENDIENTE_F9, (
+        assert encontrados == self.ACCESO_POR_CLAVE_PERMITIDO, (
             f"Acceso por clave 'vigente' fuera de lo ya inventariado: "
-            f"{encontrados - self.ACCESO_POR_CLAVE_PENDIENTE_F9} (nuevo) / "
-            f"{self.ACCESO_POR_CLAVE_PENDIENTE_F9 - encontrados} (ya no está, "
-            f"actualizar esta allowlist -- probablemente F9 ya lo migró)")
+            f"{encontrados - self.ACCESO_POR_CLAVE_PERMITIDO} (nuevo -- revisa si "
+            f"lee equipos.vigente de verdad o es un caso legítimo como OB1) / "
+            f"{self.ACCESO_POR_CLAVE_PERMITIDO - encontrados} (ya no está, "
+            f"actualizar esta allowlist)")
 
     def test_equipos_service_ya_no_devuelve_vigente_en_su_codigo_fuente(self):
         """Cinturón y tirantes: el propio código fuente de EquiposService no
