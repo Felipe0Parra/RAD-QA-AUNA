@@ -526,6 +526,15 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
                      if col in columnas_reales]
         if acotacion:
             where = " AND ".join(f"{col}=?" for col, _ in acotacion)
+            # FG1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-FG1, hallazgo H1): sin
+            # este filtro, este DELETE borraba también las filas que el
+            # popup "Ver tabla" ya había anulado (activo=0) -- el
+            # soft-delete de E7 se perdía sin rastro en el siguiente
+            # "Subir" del mismo bloque, incumpliendo DA-03. Es una
+            # restricción del DELETE, nunca una ampliación: acota a un
+            # subconjunto de lo que ya borraba, jamás borra de más.
+            if nombre_tabla in TABLAS_ANULABLES and "activo" in columnas_reales:
+                where += " AND (activo IS NULL OR activo = 1)"
             cursor.execute(
                 f"DELETE FROM {nombre_tabla} WHERE {where}",
                 tuple(valor for _, valor in acotacion)
