@@ -676,28 +676,79 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
     if columnas_lista[-1] == "energia":
         datos[-1] = "6mv"  # ya fue appendeado como None, sobreescribir
 
-    # 3. INSERT o UPDATE
-    cursor.execute(f"SELECT ref FROM {nombre_tabla} WHERE ref = ?", (ref,))
-    if cursor.fetchone() is None:
-        sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
-    else:
-        # H2.8 (auditoría 2026-07-16): el UPDATE SOLO toca columnas con un
-        # widget presente en ESTE guardado -- antes ponía en NULL cualquier
-        # columna del esquema sin widget correspondiente (p.ej. el panel
-        # MLCS de Halcyon, con un único widget ajeno a dosimetriaMen, borraba
-        # TODA la dosimetría ya guardada de ese mes con solo pulsar "Subir"
-        # ahí). Si este guardado no aporta NINGUNA columna real, no hay nada
-        # que actualizar -- no se toca la fila existente.
-        columnas_a_actualizar = [col for col in columnas_lista
-                                  if col != "ref" and col in valores_por_columna]
-        if not columnas_a_actualizar:
-            print(f"Nada que actualizar en {nombre_tabla} para ref={ref} "
+    # 3. DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): anular+insertar sobre
+    # la clave (ref[, energia]) para las tablas del bloque de QC --
+    # dosimetriaMen ya está en TABLAS_ANULABLES; `preguntas` se suma sola
+    # el día que PR1 le agregue la columna `activo` (misma rama de abajo,
+    # sin tocar este código de nuevo). El matiz H2.8 (auditoría 2026-07-16)
+    # se preserva componiendo el bloque nuevo a partir del vigente: antes
+    # el UPDATE solo tocaba columnas con widget presente en ESTE guardado
+    # para no borrar las demás (el bug del panel MLCS de Halcyon); bajo
+    # anular+insertar, insertar solo lo tocado dejaría en NULL el resto --
+    # el bloque nuevo hereda TODO lo del vigente y solo sobreescribe lo que
+    # este guardado sí trae.
+    columnas_reales_tabla = {fila[1] for fila in
+                             cursor.execute(f"PRAGMA table_info({nombre_tabla})")}
+    if nombre_tabla in TABLAS_ANULABLES and "activo" in columnas_reales_tabla:
+        # Invariante 3 del contrato (mismo criterio que CT2): se exige que
+        # al menos una columna de valores_por_columna sea una columna REAL
+        # del esquema -- no basta con que el diccionario no esté vacío, un
+        # widget huérfano (H2.8, p.ej. el panel MLCS de Halcyon) también
+        # produce una entrada, solo que a una clave que no es ninguna
+        # columna real; sin este chequeo se anularía y reinsertaría un
+        # bloque idéntico por nada.
+        if not any(col in columnas_lista for col in valores_por_columna):
+            print(f"Nada que guardar en {nombre_tabla} para ref={ref} "
                   "(ningún widget de este guardado corresponde a una columna real).")
             cursor.close()
             return
-        set_clause = ", ".join([f"{col} = ?" for col in columnas_a_actualizar])
-        sql = f"UPDATE {nombre_tabla} SET {set_clause} WHERE ref = ?"
-        datos = [valores_por_columna[col] for col in columnas_a_actualizar] + [ref]
+
+        cursor.execute(
+            f"SELECT {columnas_str} FROM {nombre_tabla} "
+            f"WHERE ref = ? AND (activo IS NULL OR activo = 1)", (ref,))
+        fila_vigente = cursor.fetchone()
+        valores_compuestos = dict(zip(columnas_lista, fila_vigente)) if fila_vigente else {}
+        valores_compuestos.update(valores_por_columna)
+
+        if anual and id_energia is not None:
+            datos = [ref, id_energia]
+        else:
+            datos = [ref]
+        for col in columnas_lista:
+            if col in ("ref", "id_energia"):
+                continue
+            datos.append(valores_compuestos.get(col))
+        if columnas_lista[-1] == "energia":
+            datos[-1] = "6mv"
+
+        if fila_vigente is not None:
+            cursor.execute(
+                f"UPDATE {nombre_tabla} SET activo = 0 "
+                f"WHERE ref = ? AND (activo IS NULL OR activo = 1)", (ref,))
+        sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
+    else:
+        # Fuera del bloque de QC (preguntas, hasta que PR1 le agregue
+        # `activo`): sigue con el contrato original (INSERT o UPDATE
+        # parcial), sin cambios -- fuera de alcance de esta tarea.
+        cursor.execute(f"SELECT ref FROM {nombre_tabla} WHERE ref = ?", (ref,))
+        if cursor.fetchone() is None:
+            sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
+        else:
+            # H2.8 (auditoría 2026-07-16): el UPDATE SOLO toca columnas con
+            # un widget presente en ESTE guardado -- antes ponía en NULL
+            # cualquier columna del esquema sin widget correspondiente. Si
+            # este guardado no aporta NINGUNA columna real, no hay nada que
+            # actualizar -- no se toca la fila existente.
+            columnas_a_actualizar = [col for col in columnas_lista
+                                      if col != "ref" and col in valores_por_columna]
+            if not columnas_a_actualizar:
+                print(f"Nada que actualizar en {nombre_tabla} para ref={ref} "
+                      "(ningún widget de este guardado corresponde a una columna real).")
+                cursor.close()
+                return
+            set_clause = ", ".join([f"{col} = ?" for col in columnas_a_actualizar])
+            sql = f"UPDATE {nombre_tabla} SET {set_clause} WHERE ref = ?"
+            datos = [valores_por_columna[col] for col in columnas_a_actualizar] + [ref]
 
     try:
         cursor.execute(sql, datos)

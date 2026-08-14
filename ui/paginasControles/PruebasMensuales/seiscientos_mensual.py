@@ -3572,6 +3572,13 @@ class PruebaMensual600(PruebaBasico):
             if pdd is not None:
                 sql += " AND tam_pdd = ?"
                 params.append(pdd)
+            # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): este read
+            # genérico sirve tanto al "Ver tabla" mensual del grupo C como
+            # a la relectura de dosimetriaMen -- sin este filtro, un
+            # reguardado (que ya anula en vez de pisar) dejaría visible el
+            # bloque anulado en vez del vigente. filtro_activo() no hace
+            # nada si la tabla no está en el bloque de QC.
+            sql += filtro_activo(nombre_tabla)
             cursor.execute(sql, params)
             results = cursor.fetchall()
             if (id and hasattr(self, 'anual') and not self.anual) or (id and not hasattr(self, 'anual') and hasattr(self, 'esHc') and self.esHc):

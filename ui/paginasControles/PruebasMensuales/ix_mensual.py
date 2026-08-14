@@ -14,6 +14,7 @@ from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
 from services.ventana_edicion import motivo_bloqueo as _motivo_bloqueo
+from services.anulacion import TABLAS_ANULABLES
 
 
 class PruebaMensualIX(PruebaMensual600):
@@ -245,7 +246,58 @@ class PruebaMensualIX(PruebaMensual600):
             columnas_str = ", ".join(columnas)
             placeholders = ", ".join(["?"] * len(columnas))
 
-            # --- 4. Armar lista de datos en orden ---
+            # --- 4/5. Anular + insertar sobre (ref, energia) ---
+            # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): misma
+            # transformación que subirlineasmensuales (load.py) -- ver ahí
+            # el razonamiento completo. El bloque nuevo se compone a partir
+            # del vigente para preservar H2.8 (auditoría 2026-07-16: UPDATE
+            # solo de columnas con widget presente en ESTA energía -- el
+            # caso concreto fue el panel MLCS de Halcyon); insertar solo lo
+            # tocado dejaría en NULL el resto. Invariante 3: si esta
+            # energía no aporta ninguna columna real, no se toca nada.
+            columnas_reales_tabla = {fila[1] for fila in
+                                     cursor.execute(f"PRAGMA table_info({nombre_tabla})")}
+            es_bloque_qc = (nombre_tabla in TABLAS_ANULABLES
+                            and "activo" in columnas_reales_tabla)
+            # Se exige que al menos una clave de campos_db sea una columna
+            # REAL del esquema -- un widget huérfano (H2.8) también deja
+            # una entrada en campos_db, solo que a una clave que no existe
+            # en la tabla; sin este chequeo se anularía y reinsertaría un
+            # bloque idéntico por nada.
+            if not any(col in columnas for col in campos_db):
+                continue
+
+            if es_bloque_qc:
+                cursor.execute(
+                    f"SELECT {columnas_str} FROM {nombre_tabla} WHERE ref = ? "
+                    f"AND energia = ? AND (activo IS NULL OR activo = 1)",
+                    (ref, energia)
+                )
+                fila_vigente = cursor.fetchone()
+                valores_compuestos = dict(zip(columnas, fila_vigente)) if fila_vigente else {}
+                valores_compuestos.update(campos_db)
+
+                datos = []
+                for col in columnas:
+                    if col == "ref":
+                        datos.append(ref)
+                    elif col == "energia":
+                        datos.append(energia)
+                    else:
+                        datos.append(valores_compuestos.get(col))
+
+                if fila_vigente is not None:
+                    cursor.execute(
+                        f"UPDATE {nombre_tabla} SET activo = 0 WHERE ref = ? "
+                        f"AND energia = ? AND (activo IS NULL OR activo = 1)",
+                        (ref, energia)
+                    )
+                sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
+                cursor.execute(sql, datos)
+                continue
+
+            # Fuera del bloque de QC: contrato original (INSERT o UPDATE
+            # parcial), sin cambios -- fuera de alcance de esta tarea.
             datos = []
             for col in columnas:
                 if col == "ref":
@@ -255,7 +307,6 @@ class PruebaMensualIX(PruebaMensual600):
                 else:
                     datos.append(campos_db.get(col, None))
 
-            # --- 5. Insertar o actualizar ---
             cursor.execute(
                 f"SELECT ref FROM {nombre_tabla} WHERE ref = ? AND energia = ?",
                 (ref, energia)
@@ -263,27 +314,19 @@ class PruebaMensualIX(PruebaMensual600):
             if cursor.fetchone() is None:
                 sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
                 cursor.execute(sql, datos)
-
             else:
-                # H2.8 (auditoría 2026-07-16): UPDATE solo de columnas con
-                # widget presente en ESTA energía -- mismo fix que
-                # subirlineasmensuales (load.py); ver ahí el caso concreto
-                # (panel MLCS de Halcyon) que motivó el cambio.
                 columnas_update = [col for col in columnas
                                     if col not in ("ref", "energia") and col in campos_db]
                 if not columnas_update:
                     continue
                 set_clause = ", ".join([f"{col} = ?" for col in columnas_update])
-
                 sql = f"""
                     UPDATE {nombre_tabla}
                     SET {set_clause}
                     WHERE ref = ? AND energia = ?
                 """
-
                 datos_update = [campos_db[col] for col in columnas_update]
                 datos_update.extend([ref, energia])
-
                 cursor.execute(sql, datos_update)
 
         conn.commit()
@@ -311,8 +354,13 @@ class PruebaMensualIX(PruebaMensual600):
         cursor = conn.cursor()
         encontrado = False
         for energia in self.ENERGIAS:
+            # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): desde que un
+            # reguardado anula la fila vieja en vez de pisarla, esta lectura
+            # necesita distinguir vigente de superada -- antes solo había
+            # UNA fila por (ref, energia) y el filtro era inerte.
             cursor.execute(
-                f"SELECT * FROM {nombre_tabla} WHERE ref = ? AND energia = ?",
+                f"SELECT * FROM {nombre_tabla} WHERE ref = ? AND energia = ? "
+                f"AND (activo IS NULL OR activo = 1)",
                 (ref, energia))
             row = cursor.fetchone()
             if row is None:

@@ -309,9 +309,13 @@ class TestSubirReabrirRoundTripIX:
     escribe, _cargar_dosimetria_bd_ix (objeto fresco = reabrir) relee."""
 
     def _contar(self, ruta_bd, ref, energia):
+        """Cuenta la fila VIGENTE. DO1 (PLAN_CONTRATO_GUARDADO_13-08.md
+        §6-DO1): un segundo "Subir" ya no hace UPDATE de la misma fila --
+        anula la vieja e inserta la nueva."""
         con = sqlite3.connect(ruta_bd)
         n = con.execute(
-            "SELECT COUNT(*) FROM dosimetriaMen WHERE ref=? AND energia=?",
+            "SELECT COUNT(*) FROM dosimetriaMen WHERE ref=? AND energia=? "
+            "AND (activo IS NULL OR activo = 1)",
             (ref, energia)).fetchone()[0]
         con.close()
         return n
@@ -400,11 +404,19 @@ class TestSubirReabrirRoundTrip600:
         subirlineasmensuales(obj2, "dosimetriaMen", 0, ref=444, usarid=False)
 
         con = sqlite3.connect(bd_temporal)
+        # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): el segundo "Subir"
+        # ya no hace UPDATE de la misma fila -- anula la vieja e inserta la
+        # nueva. "Sin duplicar" ahora significa UNA sola fila VIGENTE, no
+        # una sola fila en total (la vieja sigue ahí, histórica).
         n = con.execute(
-            "SELECT COUNT(*) FROM dosimetriaMen WHERE ref=444").fetchone()[0]
+            "SELECT COUNT(*) FROM dosimetriaMen WHERE ref=444 "
+            "AND (activo IS NULL OR activo = 1)").fetchone()[0]
         fila = con.execute(
             "SELECT val_teo_calidad, simetria_inplane FROM dosimetriaMen "
-            "WHERE ref=444").fetchone()
+            "WHERE ref=444 AND (activo IS NULL OR activo = 1)").fetchone()
+        total = con.execute(
+            "SELECT COUNT(*) FROM dosimetriaMen WHERE ref=444").fetchone()[0]
         con.close()
         assert n == 1
         assert fila == (0.665, 0.9)
+        assert total == 2, "el bloque anterior debía quedar histórico, no perdido"

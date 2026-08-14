@@ -155,10 +155,17 @@ class TestSubirNoNuleaColumnasAusentes:
 
         subirlineasmensuales(obj, "dosimetriaMen", 0, ref=112, usarid=False)
 
+        # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): este guardado SÍ
+        # aporta una columna real -- ya no es un UPDATE de la misma fila,
+        # es anular la vieja e insertar la nueva (compuesta a partir de la
+        # vigente, que es justo lo que este test verifica: lo no tocado se
+        # conserva). Filtrar por vigente para leer la fila correcta.
         con = sqlite3.connect(bd_temporal)
         fila = dict(zip(
             [d[1] for d in con.execute("PRAGMA table_info(dosimetriaMen)")],
-            con.execute("SELECT * FROM dosimetriaMen WHERE ref=112").fetchone()))
+            con.execute(
+                "SELECT * FROM dosimetriaMen WHERE ref=112 "
+                "AND (activo IS NULL OR activo = 1)").fetchone()))
         con.close()
         assert fila["observaciones_dosi"] == "observación nueva"
         for columna, valor_esperado in valores_originales.items():

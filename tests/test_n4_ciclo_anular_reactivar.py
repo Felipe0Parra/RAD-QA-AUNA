@@ -91,9 +91,15 @@ def _formulario():
 
 
 def _dosimetria_de(ruta_bd, control_id):
+    """Cuenta la dosimetría VIGENTE (activa) de este control. DO1
+    (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): un reguardado ya no hace
+    UPDATE de la misma fila -- anula la vieja e inserta la nueva, así que
+    sin este filtro un segundo "Subir" se vería como una fila de más
+    aunque siga habiendo UNA sola vigente."""
     con = sqlite3.connect(ruta_bd)
     n = con.execute(
-        "SELECT COUNT(*) FROM dosimetriaMen WHERE ref = ?", (control_id,)).fetchone()[0]
+        "SELECT COUNT(*) FROM dosimetriaMen WHERE ref = ? "
+        "AND (activo IS NULL OR activo = 1)", (control_id,)).fetchone()[0]
     con.close()
     return n
 
