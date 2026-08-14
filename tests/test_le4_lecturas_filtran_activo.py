@@ -102,9 +102,9 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("scripts/migrar_bd_a_estandar.py", 147): "migración/censo (_contar_qc)",
     ("scripts/migrar_bd_a_estandar.py", 179): "migración/censo (_contar_todas_las_tablas)",
     ("scripts/migrar_bd_a_estandar.py", 311): "migración/censo (_contar_catalogos_base)",
-    ("scripts/observador_contrato.py", 141): "censo (OB1, censo.total -- cuenta TODAS las filas a propósito)",
-    ("scripts/observador_contrato.py", 145): "censo (OB1, censo.activas -- calcula su propio filtro, no importa filtro_activo para no arrastrar PyQt5)",
-    ("scripts/observador_contrato.py", 154): "censo (OB1, vigente -- mismo motivo)",
+    ("scripts/observador_contrato.py", 142): "censo (OB1, censo.total -- cuenta TODAS las filas a propósito)",
+    ("scripts/observador_contrato.py", 146): "censo (OB1, censo.activas -- calcula su propio filtro, no importa filtro_activo para no arrastrar PyQt5)",
+    ("scripts/observador_contrato.py", 155): "censo (OB1, vigente -- mismo motivo)",
     ("scripts/saneamiento_bloque_qc.py", 42): "SA1/SA2 -- ya filtra 'activo' a mano en el WHERE (visible en el propio texto), no importa filtro_activo() para no arrastrar PyQt5 en un script que solo usa sqlite3",
 }
 
