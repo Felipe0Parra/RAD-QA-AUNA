@@ -369,11 +369,18 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
         # `activo` ya existe en las 8 tablas antes de llegar aquí.
         from scripts.saneamiento_bloque_qc import sanear_bloque_qc
         resultado_bloque_qc = sanear_bloque_qc(ruta_bd, usuario=usuario)
+
+        # CL1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-CL1): declara la clave de
+        # cada bloque en el esquema, DESPUÉS de SA1 -- un índice UNIQUE no
+        # puede crearse si quedó algún duplicado, así que su creación
+        # exitosa es la prueba de que el saneamiento funcionó.
+        from scripts.indices_bloque_qc import crear_indices
+        resultado_indices = crear_indices(ruta_bd)
     finally:
         conection_mod.ruta_base_datos = ruta_original
         conection_mod.Conexion._instance = instancia_previa
         conection_mod.USUARIO_RESPALDO_MIGRACION = usuario_respaldo_previo
-    return filas_centinela, resultado_equipos, resultado_bloque_qc
+    return filas_centinela, resultado_equipos, resultado_bloque_qc, resultado_indices
 
 
 def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas,
@@ -450,6 +457,24 @@ def _reportar_saneamiento_bloque_qc(anuladas):
                   f"gana rowid={f['gano_rowid']}")
 
 
+def _reportar_indices_bloque_qc(resultado_indices):
+    """CL1: mismo criterio de Z11 (test_z11_reporte_indice_unico.py) --
+    tres estados posibles por tabla, nunca silencio."""
+    print("\n--- Índices UNIQUE parciales del bloque de QC (CL1) ---")
+    creados = [t for t, r in resultado_indices.items() if r == "creado"]
+    ya = [t for t, r in resultado_indices.items() if r == "ya existía"]
+    no_creados = {t: r for t, r in resultado_indices.items()
+                  if r not in ("creado", "ya existía")}
+    if creados:
+        print(f"  creados en esta corrida: {len(creados)} -- {sorted(creados)}")
+    if ya:
+        print(f"  ya existían: {len(ya)}")
+    if no_creados:
+        print(f"  NO creados: {len(no_creados)}")
+        for tabla, motivo in sorted(no_creados.items()):
+            print(f"    {tabla}: {motivo}")
+
+
 def migrar(ruta_bd, aplicar=False, usuario=None):
     """Punto de entrada reutilizable (además de la CLI). Devuelve un dict
     con el resultado -- útil para tests y para invocarlo desde la propia
@@ -481,7 +506,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             # simulación debe verlos igual que los vería la app real.
             _copiar_set_sqlite(ruta_bd, copia)
             _consolidar_wal(copia)
-            sentinelas_normalizadas, equipos, bloque_qc = _aplicar_migracion_en(copia, usuario=usuario)
+            sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc = _aplicar_migracion_en(copia, usuario=usuario)
             con_copia = sqlite3.connect(copia)
             try:
                 inventario_despues = _inventario_esquema(con_copia)
@@ -497,6 +522,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                         catalogos_antes, catalogos_despues)
         _reportar_equipos(equipos)
         _reportar_saneamiento_bloque_qc(bloque_qc)
+        _reportar_indices_bloque_qc(indices_bloque_qc)
         _reportar_cambios_estructurales(estructural_antes, estructural_despues,
                                      duplicados_controles_despues)
         _reportar_qc(qc_antes, qc_despues)
@@ -504,7 +530,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         _reportar_duplicados_controles(duplicados_controles_despues)
         return {"aplicado": False, "integridad_antes": integridad_antes,
                 "sentinelas_antes": sentinelas_antes, "equipos": equipos,
-                "bloque_qc": bloque_qc,
+                "bloque_qc": bloque_qc, "indices_bloque_qc": indices_bloque_qc,
                 "qc_antes": qc_antes, "qc_despues": qc_despues,
                 "censo_antes": censo_antes, "censo_despues": censo_despues,
                 "duplicados_controles": duplicados_controles_despues}
@@ -525,7 +551,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     shutil.copy(ruta_bd, respaldo)
     print(f"Backup creado: {respaldo}")
 
-    sentinelas_normalizadas, equipos, bloque_qc = _aplicar_migracion_en(ruta_bd, usuario=usuario)
+    sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc = _aplicar_migracion_en(ruta_bd, usuario=usuario)
 
     con_despues = sqlite3.connect(ruta_bd)
     try:
@@ -545,6 +571,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                     catalogos_antes, catalogos_despues)
     _reportar_equipos(equipos)
     _reportar_saneamiento_bloque_qc(bloque_qc)
+    _reportar_indices_bloque_qc(indices_bloque_qc)
     _reportar_cambios_estructurales(estructural_antes, estructural_despues,
                                      duplicados_controles_despues)
     hubo_perdida_qc = _reportar_qc(qc_antes, qc_despues)
@@ -552,9 +579,11 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     _reportar_duplicados_controles(duplicados_controles_despues)
 
     # SA2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-SA2): guardián independiente
-    # del índice UNIQUE de CL1 (que todavía no existe en esta fase) -- si
-    # SA1 dejara pasar algún caso, esto lo dice ruidosamente en vez de
-    # dejarlo para que CL1 falle en silencio más adelante.
+    # de CL1 -- un chequeo Python distinto del mecanismo SQL del índice
+    # (defensa en profundidad, mismo criterio que hubo_perdida_qc/
+    # hubo_perdida_censo más abajo). Si SA1 dejara pasar algún caso, esto
+    # lo dice ruidosamente aquí, no como un "NO CREADO" que hay que ir a
+    # leer en el reporte de CL1.
     from scripts.saneamiento_bloque_qc import verificar_sin_duplicados_activos
     con_verificar = sqlite3.connect(ruta_bd)
     try:
@@ -568,6 +597,22 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
               f"avise -- esto no debería poder pasar.")
         for v in violaciones_duplicados:
             print(f"    {v['tabla']}: {v['clave']} -- rowids {v['rowids']}")
+        sys.exit(1)
+
+    # CL1: un índice "NO CREADO" por falta de columna activo es normal
+    # (preguntas, hasta PR1) -- un "NO CREADO" por CUALQUIER OTRO motivo
+    # (típicamente UNIQUE constraint failed) significa que quedó un
+    # duplicado que ni SA1 ni SA2 atraparon, y es tan grave como una
+    # pérdida de filas: la garantía estructural que este plan existe para
+    # dar no quedó puesta.
+    fallos_indices = {
+        t: r for t, r in indices_bloque_qc.items()
+        if r.startswith("NO CREADO") and "no tiene columna activo" not in r}
+    if fallos_indices:
+        print(f"\nALERTA GRAVE: {len(fallos_indices)} índice(s) del bloque "
+              f"de QC no se pudieron crear (ver 'Índices UNIQUE parciales' "
+              f"arriba) -- probablemente un duplicado que SA1/SA2 no "
+              f"atraparon. Restaure el backup ({respaldo}) y avise.")
         sys.exit(1)
 
     if integridad_despues != "ok":
@@ -593,7 +638,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             "integridad_despues": integridad_despues,
             "sentinelas_normalizadas": sentinelas_normalizadas,
             "equipos": equipos,
-            "bloque_qc": bloque_qc,
+            "bloque_qc": bloque_qc, "indices_bloque_qc": indices_bloque_qc,
             "qc_antes": qc_antes, "qc_despues": qc_despues,
             "censo_antes": censo_antes, "censo_despues": censo_despues,
             "duplicados_controles": duplicados_controles_despues}
