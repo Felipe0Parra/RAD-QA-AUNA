@@ -513,9 +513,9 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
 
         conn.execute("BEGIN TRANSACTION")
 
-        # borrar el bloque anterior -- solo ESTE bloque (A1, ver arriba).
+        # Reemplazar el bloque anterior -- solo ESTE bloque (A1, ver arriba).
         # Se acota contra las columnas que la tabla tiene de verdad: si un
-        # llamador pasara `pdd` para una tabla sin `tam_pdd`, un DELETE
+        # llamador pasara `pdd` para una tabla sin `tam_pdd`, una sentencia
         # contra una columna inexistente lanzaría, el rollback dejaría al
         # físico sin guardar nada y el `except` de abajo solo lo imprime en
         # consola. Acotar de menos es el fallo seguro (es lo que hacía
@@ -524,17 +524,37 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
                            cursor.execute(f"PRAGMA table_info({nombre_tabla})")}
         acotacion = [(col, valor) for col, valor in identificadores
                      if col in columnas_reales]
-        if acotacion:
-            where = " AND ".join(f"{col}=?" for col, _ in acotacion)
-            # FG1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-FG1, hallazgo H1): sin
-            # este filtro, este DELETE borraba también las filas que el
-            # popup "Ver tabla" ya había anulado (activo=0) -- el
-            # soft-delete de E7 se perdía sin rastro en el siguiente
-            # "Subir" del mismo bloque, incumpliendo DA-03. Es una
-            # restricción del DELETE, nunca una ampliación: acota a un
-            # subconjunto de lo que ya borraba, jamás borra de más.
-            if nombre_tabla in TABLAS_ANULABLES and "activo" in columnas_reales:
+        es_bloque_qc = nombre_tabla in TABLAS_ANULABLES and "activo" in columnas_reales
+
+        if es_bloque_qc:
+            # CT2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-CT2): el bloque
+            # anterior se ANULA (activo=0), nunca se borra -- la misma
+            # transformación que M2 (11-08) ya aplicó a
+            # control_cunas/control_conos/equipos_medicion, generalizada
+            # ahora a las 17 tablas del grupo C. Con el índice UNIQUE
+            # parcial de CL1 ya puesto, un fallo de esta anulación se
+            # manifestaría como violación de UNIQUE al insertar el bloque
+            # nuevo -- ruidoso, no silencioso.
+            #
+            # Invariante 3 del contrato: si no hay bloque nuevo válido que
+            # insertar (`datos` vacío -- p.ej. la tabla del widget quedó
+            # sin filas), NO se anula el vigente. Antes, el DELETE corría
+            # igual y el control se quedaba sin ese bloque hasta que
+            # alguien lo notara -- mismo criterio que T3 ya estableció
+            # para los conos.
+            if acotacion and datos:
+                where = " AND ".join(f"{col}=?" for col, _ in acotacion)
                 where += " AND (activo IS NULL OR activo = 1)"
+                cursor.execute(
+                    f"UPDATE {nombre_tabla} SET activo = 0 WHERE {where}",
+                    tuple(valor for _, valor in acotacion)
+                )
+        elif acotacion:
+            # Fuera del bloque de QC (p.ej. indicadores_brazo/
+            # indicadores_angulares_colimador del mensual 600/iX, que no
+            # tienen `activo`): sigue con DELETE físico, sin cambios --
+            # fuera de alcance de este plan.
+            where = " AND ".join(f"{col}=?" for col, _ in acotacion)
             cursor.execute(
                 f"DELETE FROM {nombre_tabla} WHERE {where}",
                 tuple(valor for _, valor in acotacion)
@@ -1164,11 +1184,19 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
         # ELIMINAR DATOS DUPLICADOS
         # =========================
 
-        # Borra análisis anteriores de este ref
-        cursor.execute(
-            "DELETE FROM analisis_placa_franjas WHERE ref = ?",
-            (ref,)
-        )
+        # CT2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-CT2): analisis_placa_franjas
+        # es del grupo C -- se anula, no se borra (mismo criterio que
+        # loadtablacomplex). analisis_placa_verificaciones/_correcciones NO
+        # están en TABLAS_ANULABLES (sin columna activo): siguen con DELETE
+        # físico, fuera de alcance de este plan. Invariante 3: solo se anula
+        # si hay franjas nuevas que insertar -- si `datos["franjas"]` viniera
+        # vacío, el bloque anterior queda intacto en vez de desaparecer.
+        if datos["franjas"]:
+            cursor.execute(
+                "UPDATE analisis_placa_franjas SET activo = 0 "
+                "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
+                (ref,)
+            )
 
         cursor.execute(
             "DELETE FROM analisis_placa_verificaciones WHERE ref = ?",

@@ -233,6 +233,47 @@ class TestD5NingunDeleteAlcanzableSobreDosimetria:
         assert hallazgos == [], f"DELETE alcanzable sobre tabla sensible: {hallazgos}"
 
 
+class TestCT3NingunDeleteAlcanzableSobreGrupoC:
+    """CT3 (PLAN_CONTRATO_GUARDADO_13-08.md §6-CT3): extiende la garantía de
+    TestD5 (arriba, escrita para dosimetriaMen/HC_dosimetria_anual) a las 17
+    tablas del grupo C -- las que loadtablacomplex versiona desde CT2.
+    Mismo mecanismo: ningún archivo de producción puede tener un DELETE
+    FROM literal sobre estas tablas. Encontró un sitio real al escribirse
+    (guardar_analisis_placa600, un guardado de análisis de placa aparte de
+    loadtablacomplex, con su propio DELETE de analisis_placa_franjas) --
+    ya corregido; este test evita que vuelva."""
+
+    TABLAS_GRUPO_C = (
+        "tamano_campo", "analisis_placa_franjas",
+        "tabla_factor_campo", "tabla_factores_transmision",
+        "tabla_factores_sobre_eje", "tabla_control_camaras_monitoras",
+        "HC_indicadores_brazo", "HC_indicadores_colimador", "HC_indicadores_laser",
+        "HC_indicadores_camilla", "HC_desplazamiento_isocentro_mensual",
+        "HC_velocidad_multilaminas_anual", "HC_precision_posicion_multilaminas_anual",
+        "HC_imagen_perfil_mlc_anual", "HC_dosimetria_anual",
+        "HC_linealidad_unidades_monitor_anual", "HC_tamanos_campo_radiacion",
+    )
+
+    def _archivos_produccion(self):
+        for p in ROOT.rglob("*.py"):
+            if any(parte in EXCLUDE_DIRS for parte in p.relative_to(ROOT).parts):
+                continue
+            yield p
+
+    def test_sin_delete_literal_sobre_el_grupo_c(self):
+        import re
+        patron = re.compile(
+            r"DELETE\s+FROM\s+[\"']?(" + "|".join(self.TABLAS_GRUPO_C) + r")\b",
+            re.IGNORECASE)
+        hallazgos = []
+        for archivo in self._archivos_produccion():
+            texto = archivo.read_text(encoding="utf-8")
+            for m in patron.finditer(texto):
+                linea = texto[:m.start()].count("\n") + 1
+                hallazgos.append((str(archivo.relative_to(ROOT)), linea, m.group(1)))
+        assert hallazgos == [], f"DELETE alcanzable sobre tabla del grupo C: {hallazgos}"
+
+
 class TestTripwireDeAlcance:
     """Toda tabla que reciba una ruta de borrado nueva (verificar_eliminar/
     eliminarRegistro/_mostrar_dialogo/crear_ventanas_emergentes_tablas) debe

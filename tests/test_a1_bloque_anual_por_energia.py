@@ -104,9 +104,15 @@ def _pulsar_subir(tabla):
 
 
 def _filas(ruta_bd, tabla_bd, ref):
+    """Filas VIGENTES -- lo que el físico ve. CT2
+    (PLAN_CONTRATO_GUARDADO_13-08.md §6-CT2): desde que loadtablacomplex
+    anula en vez de borrar, un reguardado deja también la fila anulada en
+    la tabla; sin este filtro estas pruebas verían el histórico acumulado,
+    no el estado vigente que es lo que en verdad prueban."""
     con = sqlite3.connect(ruta_bd)
     filas = con.execute(
-        f"SELECT * FROM {tabla_bd} WHERE ref = ? ORDER BY id", (ref,)).fetchall()
+        f"SELECT * FROM {tabla_bd} WHERE ref = ? "
+        f"AND (activo IS NULL OR activo = 1) ORDER BY id", (ref,)).fetchall()
     con.close()
     return filas
 
@@ -185,8 +191,19 @@ class TestGuardarUnaEnergiaNoBorraLasOtras:
 
         filas = [f for f in _filas(bd_temporal, "tabla_factor_campo", ref)
                  if f[3] == "3x3"]
-        assert len(filas) == 1, "el reguardado acumuló en vez de reemplazar"
+        assert len(filas) == 1, "el reguardado acumuló en vez de reemplazar (vigente)"
         assert filas[0][4] == 0.95, "quedó el valor viejo, no el corregido"
+
+        # CT2: el valor viejo no se borró -- quedó anulado (DA-03), no
+        # perdido. El histórico completo tiene las 2 filas.
+        con = sqlite3.connect(bd_temporal)
+        historico = con.execute(
+            "SELECT factor_campo, activo FROM tabla_factor_campo "
+            "WHERE ref = ? AND tamano_campo = '3x3'", (ref,)).fetchall()
+        con.close()
+        assert sorted(historico) == [(0.9, 0), (0.95, 1)], (
+            "el valor corregido debía quedar histórico (activo=0), no "
+            f"perdido: {historico}")
 
 
 class TestUnSoloClicGuardaLasTresTablasPDD:
