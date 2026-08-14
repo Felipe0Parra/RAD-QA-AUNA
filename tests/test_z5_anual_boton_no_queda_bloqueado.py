@@ -88,7 +88,9 @@ def _audit_log(ruta_bd):
 
 class TestSeiscientosAnualBotonNoQuedaBloqueado:
     def test_boton_sigue_habilitado_tras_guardar(self, app, bd_temporal, monkeypatch):
-        monkeypatch.setattr(anual_mod, "loadtablacomplex", lambda *a, **k: None)
+        # AV1: el mock representa un guardado EXITOSO -- debe devolver True,
+        # el mismo contrato que loadtablacomplex tiene ahora.
+        monkeypatch.setattr(anual_mod, "loadtablacomplex", lambda *a, **k: True)
         obj = _anual_pelado(PruebaAnual600)
         obj.ref = 7
         layout = QHBoxLayout()
@@ -123,9 +125,12 @@ class TestGuardarDosVecesEscribeLasDos:
 
     def test_dos_clics_seguidos_suben_dos_veces(self, app, bd_temporal, monkeypatch):
         llamadas = []
-        monkeypatch.setattr(
-            anual_mod, "loadtablacomplex",
-            lambda *a, **k: llamadas.append(a))
+
+        def _mock_exitoso(*a, **k):
+            llamadas.append(a)
+            return True  # AV1: éxito real, no solo "fue llamada"
+
+        monkeypatch.setattr(anual_mod, "loadtablacomplex", _mock_exitoso)
         obj = _anual_pelado(PruebaAnual600)
         obj.ref = 13
         layout = QHBoxLayout()

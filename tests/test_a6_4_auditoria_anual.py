@@ -148,7 +148,8 @@ class TestGuardarTodasFseSeiscientosAnualAudita:
         return obj
 
     def test_tabla_individual_audita_una_vez(self, app, bd_temporal, monkeypatch):
-        monkeypatch.setattr(anual_mod, "loadtablacomplex", lambda *a, **k: None)
+        # AV1: el mock representa un guardado EXITOSO -- debe devolver True.
+        monkeypatch.setattr(anual_mod, "loadtablacomplex", lambda *a, **k: True)
         obj = self._instancia()
         layout = QHBoxLayout()
         tabla = object()
@@ -165,9 +166,12 @@ class TestGuardarTodasFseSeiscientosAnualAudita:
         """El caso citado en el plan: un solo click puede subir VARIAS
         tablas FSE (una por energía) -- 1 fila, no una por tabla."""
         llamadas = []
-        monkeypatch.setattr(
-            anual_mod, "loadtablacomplex",
-            lambda *a, **k: llamadas.append(a))
+
+        def _mock_exitoso(*a, **k):
+            llamadas.append(a)
+            return True  # AV1: éxito real, no solo "fue llamada"
+
+        monkeypatch.setattr(anual_mod, "loadtablacomplex", _mock_exitoso)
         obj = self._instancia()
         tabla_1 = object()
         tabla_2 = object()

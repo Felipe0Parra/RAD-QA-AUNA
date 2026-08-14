@@ -742,7 +742,17 @@ class PruebaMensual600(PruebaBasico):
             ]['nombres']
 
             # Crear listas de widgets
-            self.combo_menu = [getattr(self, combo, None) for combo in df_combo if getattr(self, combo, None)]
+            # AV2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-AV, hallazgo H4): cada
+            # widget lleva su propio nombre de atributo como `objectName` --
+            # es lo que permite a `subir()` decir CUÁL combo falta en vez de
+            # abortar en silencio (mismo mecanismo que ya usa
+            # `equipos.py::verificarCampos`, `item.objectName()`).
+            self.combo_menu = []
+            for combo in df_combo:
+                widget = getattr(self, combo, None)
+                if widget:
+                    widget.setObjectName(combo)
+                    self.combo_menu.append(widget)
             self.combo_menu_seguridad = [getattr(self, combo, None) for combo in df_combo_seguridad if getattr(self, combo, None)]
 
             # Configurar combos de seguridad (cuñas)
@@ -2946,18 +2956,35 @@ class PruebaMensual600(PruebaBasico):
                 # ---- funciones locales ----
                 def subir():
                     #print(f"\n ..... Entra a botonescombobox.subir() en {self.__class__.__name__} .....")
+                    # AV2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-AV, hallazgo
+                    # H4): antes, en cuanto un combo quedaba en
+                    # 'Seleccionar...' (p.ej. el de serie, que se repuebla
+                    # al cambiar el de modelo), esta función hacía `return`
+                    # sin guardar y SIN avisar -- el clic en "Subir" no
+                    # hacía nada y no lo decía. Mismo criterio que T3 con
+                    # los conos (DA-37): si falta algo, no se guarda NADA y
+                    # se avisa nombrando qué falta, sin símbolos (DA-18).
                     datos = []
+                    faltantes = []
                     for widget in combobox:
                         if isinstance(widget, QComboBox):
                             texto = widget.currentText()
                         elif isinstance(widget, QLineEdit):
                             texto = widget.text()
                         else:
-                            return
+                            faltantes.append(widget.objectName() or "un campo de tipo inesperado")
+                            continue
                         if texto not in ('Seleccionar...', '', None):
                             datos.append(texto)
                         else:
-                            return
+                            faltantes.append(widget.objectName() or "un campo sin nombre")
+
+                    if faltantes:
+                        QMessageBox.warning(
+                            self, "Equipos incompletos",
+                            "Faltan por seleccionar: " + ", ".join(faltantes))
+                        return
+
                     self.subirtodo_modificado(datos)
                     QMessageBox.information(self, "", "Datos subidos correctamente")
                     self._actualizar_tabla_despues_subida()

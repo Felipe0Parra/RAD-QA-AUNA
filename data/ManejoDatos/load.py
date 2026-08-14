@@ -543,10 +543,19 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
         cursor.executemany(sql, datos)
 
         conn.commit()
+        return True
 
     except Exception:
+        # AV1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-AV, hallazgo H3): antes
+        # este `except` se tragaba la excepción entera -- la pantalla se
+        # veía igual si el guardado salía bien o si fallaba. El valor de
+        # retorno es lo que permite a los llamadores (p.ej.
+        # guardar_todas_fse) avisar el resultado real en vez de asumir
+        # éxito. No cambia ninguna escritura: solo propaga hacia arriba un
+        # resultado que antes se descartaba.
         conn.rollback()
         traceback.print_exc()
+        return False
 
     finally:
         cursor.close()

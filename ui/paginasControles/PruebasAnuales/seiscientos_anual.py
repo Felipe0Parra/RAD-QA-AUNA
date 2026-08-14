@@ -242,24 +242,44 @@ class PruebaAnual600(PruebaMensual600):
 
             # --- MODIFICACIÓN: Guardar todas las tablas FSE si es la última ---
             def guardar_todas_fse():
+                # AV1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-AV, hallazgo H3):
+                # antes esta función no avisaba NADA del resultado -- solo
+                # imprimía en consola, igual si el guardado salía bien o
+                # fallaba. loadtablacomplex ahora devuelve si tuvo éxito;
+                # se junta el resultado de cada llamada (puede ser varias,
+                # una por PDD) para saber si guardó TODO antes de avisar.
+                resultados = []
                 if hasattr(self, "tablas_fse") and table in [t['tabla'] for t in self.tablas_fse]:
                     for entry in self.tablas_fse:
                         tabla_fse = entry['tabla']
                         ppd = entry['pdd']
                         datos = []
-                        loadtablacomplex(nombre_tabla, tabla_fse, datos, reference=ref, from_range=0, anual=getattr(self, "anual", False), pdd=ppd, id=id)
+                        resultados.append(loadtablacomplex(nombre_tabla, tabla_fse, datos, reference=ref, from_range=0, anual=getattr(self, "anual", False), pdd=ppd, id=id))
                 else:
                     # Comportamiento normal para otras tablas
                     datos = []
                     print(f"Subiendo tabla {nombre_tabla} normalmente")
-                    loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=getattr(self, "anual", False), id=id)
+                    resultados.append(loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=getattr(self, "anual", False), id=id))
+
+                self._actualizar_tabla_despues_subida()
+
+                if not all(resultados):
+                    QMessageBox.critical(
+                        self, "Error",
+                        f"No se pudo guardar {nombre_tabla}. Revise la "
+                        "consola para el detalle -- no se avisó nada antes "
+                        "de este arreglo, así que si ve este mensaje, "
+                        "vuelva a intentarlo.")
+                    return
 
                 # A6.4 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): uno de los
                 # 3 puntos de cierre reales de loadtablacomplex -- un solo
                 # click aquí puede subir VARIAS tablas FSE (una por energía)
                 # en bucle; 1 fila de auditoría para la acción completa, no
                 # una por tabla. Cubre también Halcyon anual, que hereda
-                # este método sin sobreescribirlo.
+                # este método sin sobreescribirlo. AV1: solo se audita un
+                # guardado que de verdad ocurrió -- auditar un guardado
+                # fallido dejaría un rastro de una acción que no pasó.
                 _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
                                      nombre_tabla, ref=ref)
 
@@ -271,8 +291,8 @@ class PruebaAnual600(PruebaMensual600):
                 # impedía corregir un dato mal tecleado sin cerrar y reabrir
                 # el formulario (mismo criterio ya aplicado en ix_mensual.py,
                 # donde la llamada análoga está comentada desde antes).
-                self._actualizar_tabla_despues_subida()
                 print(f"Tabla(s) {nombre_tabla} subida(s) correctamente")
+                QMessageBox.information(self, "", "Datos subidos correctamente")
 
             btn_guardar.clicked.connect(guardar_todas_fse)
         except Exception as e:
