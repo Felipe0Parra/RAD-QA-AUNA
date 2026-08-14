@@ -64,9 +64,10 @@ def crear_indices(ruta_db):
     """Crea los índices UNIQUE parciales declarados en CLAVES_INDICE sobre
     `ruta_db`. Devuelve dict tabla -> "creado" | "ya existía" |
     "NO CREADO -- <motivo>". Idempotente (CREATE INDEX IF NOT EXISTS: una
-    segunda corrida no repite ni falla). `preguntas` se salta con motivo
-    explícito hasta que tenga columna `activo` (PR1) -- nunca falla en
-    silencio, dice por qué no se creó."""
+    segunda corrida no repite ni falla). Si alguna tabla de CLAVES_INDICE
+    todavía no tuviera columna `activo` (como le pasó a `preguntas` hasta
+    PR1) se salta con motivo explícito -- nunca falla en silencio, dice por
+    qué no se creó."""
     con = sqlite3.connect(ruta_db)
     resultado = {}
     try:

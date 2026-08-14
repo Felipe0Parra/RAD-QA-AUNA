@@ -34,7 +34,7 @@ def bd_con_indices(app, monkeypatch, tmp_path):
     conexion = Conexion()
     conexion.con.close()
     Conexion._instance = None
-    crear_indices(ruta)  # deja fuera solo `preguntas` (sin activo, PR1)
+    crear_indices(ruta)  # las 22, incluida `preguntas` desde PR1
     yield ruta
 
 
@@ -81,12 +81,10 @@ def _sql_de(ruta, indice):
     return fila[0] if fila else None
 
 
-def test_las_21_tablas_creables_tienen_su_indice_con_las_columnas_declaradas(bd_con_indices):
+def test_las_22_tablas_tienen_su_indice_con_las_columnas_declaradas(bd_con_indices):
     faltantes = []
     con_columnas_distintas = []
     for tabla, clave in CLAVES_INDICE.items():
-        if tabla == "preguntas":
-            continue  # PR1 lo crea después
         sql = _sql_de(bd_con_indices, nombre_indice(tabla))
         if sql is None:
             faltantes.append(tabla)
@@ -105,26 +103,22 @@ def test_las_21_tablas_creables_tienen_su_indice_con_las_columnas_declaradas(bd_
 
 def test_los_indices_son_unique_y_parciales_sobre_activo(bd_con_indices):
     for tabla in CLAVES_INDICE:
-        if tabla == "preguntas":
-            continue
         sql = _sql_de(bd_con_indices, nombre_indice(tabla))
         assert sql is not None, tabla
         assert "UNIQUE" in sql.upper(), f"{tabla}: {sql}"
         assert "activo" in sql, f"{tabla}: sin condición sobre activo: {sql}"
 
 
-def test_toda_tabla_indexada_menos_preguntas_esta_en_tablas_anulables():
+def test_toda_tabla_indexada_esta_en_tablas_anulables():
     """Guardia de coherencia: si `TABLAS_ANULABLES` cambiara y una de estas
-    21 tablas dejara de estar ahí, este test lo señala -- CLAVES_INDICE no
+    22 tablas dejara de estar ahí, este test lo señala -- CLAVES_INDICE no
     debe quedar desincronizado de la lista blanca real."""
     for tabla in CLAVES_INDICE:
-        if tabla == "preguntas":
-            continue
         assert tabla in TABLAS_ANULABLES, (
             f"{tabla} tiene clave de índice declarada pero ya no está en "
             f"TABLAS_ANULABLES -- revisar CLAVES_INDICE")
 
 
-def test_preguntas_esta_declarada_para_cuando_pr1_le_agregue_activo():
+def test_preguntas_tiene_su_indice_desde_pr1():
     assert "preguntas" in CLAVES_INDICE
     assert CLAVES_INDICE["preguntas"] == ("ref",)

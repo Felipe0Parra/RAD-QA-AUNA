@@ -75,6 +75,13 @@ TABLAS_ANULABLES = frozenset({
     # su diálogo -- E5 -- sigue sin conectar) pero ya nace preparada para
     # anular en vez de borrar en cuanto se conecte.
     "dosimetriaMen",
+    # PR1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-PR1): mismo criterio que
+    # dosimetriaMen -- preguntas tampoco tiene ruta de borrado alcanzable
+    # desde la interfaz todavía, pero entra a la lista para que
+    # `_asegurar_activo_bloque_qc` le agregue `activo` y su guardado
+    # (subirlineasmensuales, mismo camino que dosimetriaMen desde DO1)
+    # empiece a anular en vez de pisar el bloque anterior.
+    "preguntas",
 })
 
 

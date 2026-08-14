@@ -51,18 +51,16 @@ def _indices_reales(ruta):
     return nombres
 
 
-def test_crea_21_de_las_22_tablas_preguntas_queda_fuera(bd_temporal):
+def test_crea_las_22_tablas_incluida_preguntas_desde_pr1(bd_temporal):
     resultado = crear_indices(bd_temporal)
 
-    assert resultado["preguntas"] == "NO CREADO -- la tabla aún no tiene columna activo"
-    creados_o_existentes = {t: r for t, r in resultado.items() if t != "preguntas"}
-    assert all(r == "creado" for r in creados_o_existentes.values()), (
+    assert all(r == "creado" for r in resultado.values()), (
         f"algún índice no se creó: "
-        f"{[(t, r) for t, r in creados_o_existentes.items() if r != 'creado']}")
-    assert len(creados_o_existentes) == 21
+        f"{[(t, r) for t, r in resultado.items() if r != 'creado']}")
+    assert len(resultado) == 22
 
     nombres_reales = _indices_reales(bd_temporal)
-    for tabla in creados_o_existentes:
+    for tabla in resultado:
         assert nombre_indice(tabla) in nombres_reales
 
 
@@ -71,8 +69,6 @@ def test_segunda_corrida_es_idempotente(bd_temporal):
     resultado2 = crear_indices(bd_temporal)
 
     for tabla, r in resultado2.items():
-        if tabla == "preguntas":
-            continue
         assert r == "ya existía", f"{tabla}: {r}"
 
 
@@ -136,4 +132,4 @@ def test_claves_coinciden_con_las_del_plan_para_las_8_de_h2():
     for tabla, clave in esperadas_h2.items():
         assert CLAVES_INDICE[tabla] == clave
 
-    assert len(CLAVES_INDICE) == 22  # 21 hijas + preguntas 
+    assert len(CLAVES_INDICE) == 22  # 21 hijas + preguntas

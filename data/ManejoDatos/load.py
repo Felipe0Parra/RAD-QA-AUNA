@@ -703,29 +703,44 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
             cursor.close()
             return
 
+        # `columnas_lista` viene recortada por `num_delet` (p.ej.
+        # preguntas.imagen, fuera del alcance de este contrato de texto --
+        # se guarda por su propio camino, crear_algo/dbImagen). Componer
+        # solo con esa lista recortada perdería esa columna en el bloque
+        # NUEVO (una fila insertada sin especificarla queda NULL): el
+        # bloque vigente la tenía, así que se compone con el esquema
+        # COMPLETO para que sobreviva el reemplazo igual que sobrevive hoy
+        # un UPDATE (que nunca la toca por no estar en su SET).
+        columnas_completas = list(columnas_lista)
+        for col in columnas_reales_tabla:
+            if col != "activo" and col not in columnas_completas:
+                columnas_completas.append(col)
+        columnas_completas_str = ", ".join(columnas_completas)
+        placeholders_completas = ", ".join(["?"] * len(columnas_completas))
+
         cursor.execute(
-            f"SELECT {columnas_str} FROM {nombre_tabla} "
+            f"SELECT {columnas_completas_str} FROM {nombre_tabla} "
             f"WHERE ref = ? AND (activo IS NULL OR activo = 1)", (ref,))
         fila_vigente = cursor.fetchone()
-        valores_compuestos = dict(zip(columnas_lista, fila_vigente)) if fila_vigente else {}
+        valores_compuestos = dict(zip(columnas_completas, fila_vigente)) if fila_vigente else {}
         valores_compuestos.update(valores_por_columna)
+        if "energia" in columnas_completas:
+            valores_compuestos["energia"] = "6mv"
 
         if anual and id_energia is not None:
             datos = [ref, id_energia]
         else:
             datos = [ref]
-        for col in columnas_lista:
+        for col in columnas_completas:
             if col in ("ref", "id_energia"):
                 continue
             datos.append(valores_compuestos.get(col))
-        if columnas_lista[-1] == "energia":
-            datos[-1] = "6mv"
 
         if fila_vigente is not None:
             cursor.execute(
                 f"UPDATE {nombre_tabla} SET activo = 0 "
                 f"WHERE ref = ? AND (activo IS NULL OR activo = 1)", (ref,))
-        sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
+        sql = f"INSERT INTO {nombre_tabla} ({columnas_completas_str}) VALUES ({placeholders_completas})"
     else:
         # Fuera del bloque de QC (preguntas, hasta que PR1 le agregue
         # `activo`): sigue con el contrato original (INSERT o UPDATE

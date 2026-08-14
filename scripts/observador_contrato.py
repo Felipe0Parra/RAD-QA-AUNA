@@ -43,12 +43,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ANULACION_PATH = ROOT / "services" / "anulacion.py"
 
-# `preguntas` no está en TABLAS_ANULABLES (no tiene ruta de borrado
-# alcanzable desde la interfaz todavía -- ver docstring de anulacion.py)
-# pero SÍ está dentro del alcance de este plan (§1: "las 28 tablas de
-# TABLAS_ANULABLES más `preguntas`"), como preparación para PR1.
-TABLA_EXTRA_FUERA_DE_LISTA_BLANCA = "preguntas"
-
 
 def _tablas_del_bloque_qc():
     """Lee `TABLAS_ANULABLES` del código fuente sin importar el módulo (que
@@ -85,7 +79,12 @@ def _tablas_del_bloque_qc():
 
 
 def _tablas_en_alcance():
-    return sorted(_tablas_del_bloque_qc() | {TABLA_EXTRA_FUERA_DE_LISTA_BLANCA})
+    # PR1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-PR1): `preguntas` entró a
+    # TABLAS_ANULABLES, así que ya no hace falta unirla a mano -- antes de
+    # PR1 este observador la vigilaba por fuera de la lista blanca (§1: "las
+    # 28 tablas de TABLAS_ANULABLES más `preguntas`") porque el plan la
+    # incluía en su alcance antes de que el código la reconociera.
+    return sorted(_tablas_del_bloque_qc())
 
 
 def _uri_solo_lectura(ruta_bd):
