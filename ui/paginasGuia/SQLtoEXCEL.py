@@ -17,6 +17,7 @@ from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import QWidget
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
+from services.anulacion import filtro_activo
 connect = sql.connect(_conection.ruta_base_datos())
 class Color(QWidget):
     def __init__(self, color):
@@ -183,7 +184,12 @@ class ExportarExcel(QWidget):
             self.preview_table.setColumnCount(0)
             return
         try:
-            df = pd.read_sql_query(f'SELECT * FROM "{table_name}" LIMIT 30', connect)
+            # LE3 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE3): distingue
+            # vigente de superado -- el LIMIT 30 en sí NO se toca (fuera de
+            # alcance, §1: cuántas filas exporta se decide aparte).
+            df = pd.read_sql_query(
+                f'SELECT * FROM "{table_name}" WHERE 1=1{filtro_activo(table_name)} LIMIT 30',
+                connect)
         except Exception:
             self.preview_table.clear()
             self.preview_table.setRowCount(0)
@@ -434,11 +440,15 @@ class ExportarExcel(QWidget):
             for table in selected_tables:
                 self.date_column = self.date_columns_map.get(table)
                 
+                # LE3 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE3): el Excel
+                # exporta solo lo vigente (DP-30 deja la opción "incluir
+                # superadas" para cuando se atienda el Excel aparte).
+                filtro = filtro_activo(table)
                 if self.date_column and self.start_date and self.end_date:
-                    query = f"SELECT * FROM {table} WHERE {self.date_column} BETWEEN '{self.start_date}' AND '{self.end_date}'"
+                    query = f"SELECT * FROM {table} WHERE {self.date_column} BETWEEN '{self.start_date}' AND '{self.end_date}'{filtro}"
                     print(self.date_column)
                 else:
-                    query = f"SELECT * FROM {table}"
+                    query = f"SELECT * FROM {table} WHERE 1=1{filtro}"
                 
                 df = pd.read_sql_query(query, connect)
                 # Cambiar nombres de columnas si es necesario

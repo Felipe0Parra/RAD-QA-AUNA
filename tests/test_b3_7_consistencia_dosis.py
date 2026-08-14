@@ -30,7 +30,7 @@ def bd_temporal(monkeypatch):
     con.execute("""
         CREATE TABLE dosimetriaMen (
             ref INTEGER, val_teo_dosis REAL, val_teo_calidad REAL,
-            dosis_ref_cgy_um REAL, energia TEXT,
+            dosis_ref_cgy_um REAL, energia TEXT, activo INTEGER DEFAULT 1,
             FOREIGN KEY (ref) REFERENCES controles(id)
         )
     """)

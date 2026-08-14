@@ -135,6 +135,11 @@ TABLAS_QC = ["controles", "dosimetriaMen", "preguntas", "tamano_campo",
              "pruebas", "calculadora_dosimetrica"]
 
 
+# LE2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE2, contrato regla 5): las 3
+# funciones `_contar_*` de este archivo son la excepción censal explícita a
+# "toda lectura filtra por activo" -- censan TOTAL de filas (incluidas las
+# anuladas) a propósito, porque lo que verifican es justo que ninguna fila
+# se pierda en la migración; filtrar aquí ocultaría una pérdida real.
 def _contar_qc(con):
     conteos = {}
     for tabla in TABLAS_QC:

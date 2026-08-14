@@ -20,6 +20,7 @@ from data.ManejoDatos import conection as _conection
 from services.dosis_service import DosisService
 from services.nombres_acelerador import nombre_canonico
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
+from services.anulacion import filtro_activo
 
 TOLERANCIA_DEFECTO = 0.03  # 3%, del mismo orden que tolerancia_dosis real
 
@@ -43,11 +44,15 @@ def verificar_consistencia(mes=None, anio=None, tolerancia=TOLERANCIA_DEFECTO):
     con = sqlite3.connect(_conection.ruta_base_datos())
     con.row_factory = sqlite3.Row
     cur = con.cursor()
-    cur.execute("""
+    # LE1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE1): dosimetriaMen empieza a
+    # versionar con DO1 -- sin este filtro, un bloque anulado aparecería
+    # mezclado con el vigente en el reporte de consistencia.
+    filtro = filtro_activo("dosimetriaMen").replace("activo", "d.activo")
+    cur.execute(f"""
         SELECT d.ref, d.energia, d.dosis_ref_cgy_um, c.equipo, c.fecha
         FROM dosimetriaMen d
         JOIN controles c ON c.id = d.ref
-        WHERE d.energia IS NOT NULL AND d.dosis_ref_cgy_um IS NOT NULL
+        WHERE d.energia IS NOT NULL AND d.dosis_ref_cgy_um IS NOT NULL{filtro}
         ORDER BY d.ref
     """)
     filas = cur.fetchall()

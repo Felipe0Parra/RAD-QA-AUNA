@@ -18,6 +18,7 @@ except Exception:
         raise
 from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
 from models.PDF.PDFWindow import PdfViewer
+from services.anulacion import filtro_activo
 
 class ReporteMensual:
     """Clase para generar reportes PDF de controles mensuales"""
@@ -331,7 +332,14 @@ def _obtener_datos_linealidad_braquiterapia(db, ref_id):
 def _obtener_datos_tabla_relacionada(db, ref_id, tabla):
     """Obtiene datos de una tabla relacionada específica"""
     query = QSqlQuery(db)
-    query.prepare(f"SELECT * FROM {tabla} WHERE ref = ?")
+    # LE1/LE2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE): `tabla` recorre
+    # `tablas_por_maquina` (mezcla tablas del bloque de QC con otras que no
+    # lo son) -- filtro_activo() no hace nada si `tabla` no está en la
+    # lista blanca, así que este único punto cubre equipos_medicion,
+    # tamano_campo, dosimetriaMen, control_cunas/conos,
+    # analisis_placa_franjas y las 4 HC_* de Halcyon sin distinguir caso
+    # por caso.
+    query.prepare(f"SELECT * FROM {tabla} WHERE ref = ?{filtro_activo(tabla)}")
     query.addBindValue(ref_id)
     
     datos = []
@@ -349,7 +357,10 @@ def _obtener_datos_dosimetria_ix(db, ref_id):
     """Obtiene datos de dosimetría para iX (múltiples energías)"""
     query = QSqlQuery(db)
     # Asumiendo que hay un campo 'energia' en dosimetriaMen para identificar cada energía
-    query.prepare("SELECT * FROM dosimetriaMen WHERE ref = ? ORDER BY energia")
+    # LE1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE1): dosimetriaMen empieza a
+    # versionar con DO1 -- sin este filtro, un bloque anulado saldría
+    # impreso en el PDF junto al vigente.
+    query.prepare(f"SELECT * FROM dosimetriaMen WHERE ref = ?{filtro_activo('dosimetriaMen')} ORDER BY energia")
     query.addBindValue(ref_id)
     
     datos_por_energia = []

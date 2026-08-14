@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from data.ManejoDatos.load import verificar_editar, guardarEdicion, cancelarEdicion, verificar_eliminar
 from data.ManejoDatos.load import _dialogo_con_identidad
+from services.anulacion import filtro_activo
 
 # Tablas relacionadas al control para cada equipo
 
@@ -43,20 +44,20 @@ def tablas_relacionadas():
         ]
     }
 
-# E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): filtro compartido por las
-# tres funciones de abajo -- cubren TODA la lista de hijas anuales del
+# LE0 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE0): filtro unificado en
+# services/anulacion.py::filtro_activo -- antes esta constante era una de
+# las DOS copias independientes del mismo cálculo que había en el proyecto
+# (la otra, load.py:2824). Cubre TODA la lista de hijas anuales del
 # inventario (equipos_medicion, tabla_factor_campo/factores_transmision/
 # factores_sobre_eje/control_camaras_monitoras, y los 10 HC_* anuales) desde
-# un solo punto. "activo IS NULL OR activo = 1" tolera BD sin la columna
-# aún (migración `_asegurar_activo_bloque_qc` en conection.py).
-_FILTRO_ACTIVO = "(activo IS NULL OR activo = 1)"
+# un solo punto.
 
 
 def buscar_datos_db(tabla, tipo_equipo, parametros, ref_id):
     """Busca datos de una tabla específica para un control anual"""
     con = Conexion().conectar()
     cursor = con.cursor()
-    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND {_FILTRO_ACTIVO}"
+    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ?{filtro_activo(tabla)}"
     cursor.execute(query, (ref_id,))
     datos = cursor.fetchall()
     con.close()
@@ -66,7 +67,7 @@ def buscar_datos_db_energia(tabla, tipo_equipo, parametros, ref_id, id_energia):
     """Busca datos de una tabla específica filtrada por energía para un control anual"""
     con = Conexion().conectar()
     cursor = con.cursor()
-    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND id_energia = ? AND {_FILTRO_ACTIVO}"
+    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND id_energia = ?{filtro_activo(tabla)}"
     cursor.execute(query, (ref_id, id_energia))
     datos = cursor.fetchall()
     con.close()
@@ -76,7 +77,7 @@ def buscar_datos_db_energia_pdd(tabla, tipo_equipo, parametros, ref_id, id_energ
     """Busca datos de una tabla específica filtrada por energía y PDD para un control anual"""
     con = Conexion().conectar()
     cursor = con.cursor()
-    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND id_energia = ? AND pdd = ? AND {_FILTRO_ACTIVO}"
+    query = f"SELECT {parametros} FROM {tabla} WHERE ref = ? AND id_energia = ? AND pdd = ?{filtro_activo(tabla)}"
     cursor.execute(query, (ref_id, id_energia, pdd))
     datos = cursor.fetchall()
     con.close()
@@ -625,9 +626,12 @@ def mostrar_tabla_factor_campo_anual(parent, id_ref, equipo):
     cursor = conn.cursor()
 
     for energia_id in energias:
-        cursor.execute("""
+        # LE1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE1): tabla_factor_campo
+        # empieza a versionar con CT2 -- sin este filtro, un bloque
+        # anulado (activo=0) aparecería mezclado con el vigente.
+        cursor.execute(f"""
             SELECT tamano_campo, factor_campo, factor_campo_esperado, discrepancia
-            FROM tabla_factor_campo WHERE ref=? AND id_energia=?
+            FROM tabla_factor_campo WHERE ref=? AND id_energia=?{filtro_activo("tabla_factor_campo")}
         """, (id_ref, energia_id))
         data = cursor.fetchall()
 
@@ -677,9 +681,10 @@ def mostrar_tabla_factores_transmision_anual(parent, id_ref, equipo):
     cursor = conn.cursor()
 
     for energia_id in energias:
-        cursor.execute("""
+        # LE1: tabla_factores_transmision empieza a versionar con CT2.
+        cursor.execute(f"""
             SELECT angulo, factor_transmision, factor_transmision_esperado, discrepancia
-            FROM tabla_factores_transmision WHERE ref=? AND id_energia=?
+            FROM tabla_factores_transmision WHERE ref=? AND id_energia=?{filtro_activo("tabla_factores_transmision")}
         """, (id_ref, energia_id))
         data = cursor.fetchall()
 
@@ -735,9 +740,10 @@ def mostrar_tabla_factores_sobre_eje_anual(parent, id_ref, equipo):
         energia_layout = QVBoxLayout(energia_widget)
 
         for ppd in ppds:
-            cursor.execute("""
+            # LE1: tabla_factores_sobre_eje empieza a versionar con CT2.
+            cursor.execute(f"""
                 SELECT tam_pdd, profundidad, ppd, ppd_esperado, discrepancia
-                FROM tabla_factores_sobre_eje WHERE ref=? AND id_energia=? AND tam_pdd=?
+                FROM tabla_factores_sobre_eje WHERE ref=? AND id_energia=? AND tam_pdd=?{filtro_activo("tabla_factores_sobre_eje")}
             """, (id_ref, energia_id, ppd))
             data = cursor.fetchall()
 
@@ -793,9 +799,10 @@ def mostrar_tabla_control_camaras_anual(parent, id_ref, equipo):
     cursor = conn.cursor()
 
     for energia_id in energias:
-        cursor.execute("""
+        # LE1: tabla_control_camaras_monitoras empieza a versionar con CT2.
+        cursor.execute(f"""
             SELECT indicador_medir, valor_medido
-            FROM tabla_control_camaras_monitoras WHERE ref=? AND id_energia=?
+            FROM tabla_control_camaras_monitoras WHERE ref=? AND id_energia=?{filtro_activo("tabla_control_camaras_monitoras")}
         """, (id_ref, energia_id))
         data = cursor.fetchall()
 
@@ -855,9 +862,10 @@ def check_imagen_mlc_subida(id_ref):
     """Verifica si hay una imagen de perfil MLC subida para un control anual"""
     conn = Conexion().conectar()
     cursor = conn.cursor()
-    cursor.execute("""
+    # LE1: HC_imagen_perfil_mlc_anual empieza a versionar con CT2.
+    cursor.execute(f"""
         SELECT imagen_perfil_horiz
-        FROM HC_imagen_perfil_mlc_anual WHERE ref=?
+        FROM HC_imagen_perfil_mlc_anual WHERE ref=?{filtro_activo("HC_imagen_perfil_mlc_anual")}
     """, (id_ref,))
     row = cursor.fetchone()
     conn.close()
@@ -873,13 +881,14 @@ def mostrar_dosimetria_anual(parent, id_ref):
 
     conn = Conexion().conectar()
     cursor = conn.cursor()
-    cursor.execute("""
+    # LE1: HC_dosimetria_anual empieza a versionar con CT2.
+    cursor.execute(f"""
         SELECT  dosis_ref_cgy_um, discrepancia_dosis, tolerancia_dosis,
             calidad_pdd20_10, discrepancia_calidad, tolerancia_calidad,
             simetria_inplane, simetria_crossplane, tolerancia_simetria,
             planicidad_inplane, planicidad_crossplane, tolerancia_planicidad
         FROM HC_dosimetria_anual
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo("HC_dosimetria_anual")}
     """, (id_ref,))
     resultados = cursor.fetchall()
     conn.close()
@@ -974,12 +983,15 @@ def mostrar_tabla_simple_anual(parent, id_ref, tabla_nombre, headers_config):
     """Muestra una tabla simple sin separación por energías (para Halcyon)"""
     conn = Conexion().conectar()
     cursor = conn.cursor()
-    
+
     # Extraer nombres de columnas de la configuración de headers
     columnas = ', '.join([h[0] for h in headers_config])
+    # LE1/LE2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE): las 8 tablas HC_*
+    # que llaman a este helper genérico (Halcyon anual) empiezan a
+    # versionar con CT2.
     cursor.execute(f"""
         SELECT {columnas}
-        FROM {tabla_nombre} WHERE ref=?
+        FROM {tabla_nombre} WHERE ref=?{filtro_activo(tabla_nombre)}
     """, (id_ref,))
     data = cursor.fetchall()
     conn.close()

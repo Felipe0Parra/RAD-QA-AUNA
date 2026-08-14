@@ -18,7 +18,7 @@ from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
 from services.ventana_edicion import motivo_bloqueo as _motivo_bloqueo
-from services.anulacion import TABLAS_ANULABLES, anular_fila
+from services.anulacion import TABLAS_ANULABLES, anular_fila, filtro_activo
 from services.reactivacion import reactivar_control as _reactivar_control
 def _dialogo_con_identidad(dlg, parent):
     """Propaga al diálogo la identidad del físico del formulario que lo abre.
@@ -2838,9 +2838,11 @@ def mostrar_seguridad(parent, id_ref, ix=False):
         # `activo` ya no está codificado contra "control_cunas" -- se aplica
         # a cualquier tabla de la lista blanca de anulación
         # (services/anulacion.py::TABLAS_ANULABLES), para que la próxima
-        # tabla que entre a esa lista no repita el olvido.
-        filtro_activo = " AND (activo IS NULL OR activo = 1)" if tabla in TABLAS_ANULABLES else ""
-        cursor.execute(f"""SELECT {cols} FROM {tabla} WHERE ref=?{filtro_activo}""", (id_ref,))
+        # tabla que entre a esa lista no repita el olvido. LE0
+        # (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE0): unificado en
+        # services/anulacion.py::filtro_activo -- este era uno de los dos
+        # sitios que tenían su propia copia del mismo cálculo.
+        cursor.execute(f"""SELECT {cols} FROM {tabla} WHERE ref=?{filtro_activo(tabla)}""", (id_ref,))
         return cursor.fetchall()
 
     # Datos de cunas y conos
@@ -2931,7 +2933,7 @@ def mostrar_indc_angulares(parent, id_ref):
         cursor.execute(f"""
             SELECT nivel, indicador_luminoso_consola, indicador_luminoso_equipo
             FROM {tabla}
-            WHERE ref=?
+            WHERE ref=?{filtro_activo(tabla)}
         """, (id_ref,))
         datos = cursor.fetchall()
 
@@ -3231,7 +3233,7 @@ def mostrar_tam_campos_HC(parent, id_ref):
         cursor.execute(f"""
             SELECT indicado_inplane, indicado_crossplane, medido_inplane, medido_crossplane
             FROM {tabla}
-            WHERE ref=?
+            WHERE ref=?{filtro_activo(tabla)}
         """, (id_ref,))
         datos = cursor.fetchall()
 
@@ -3299,7 +3301,7 @@ def mostrar_des_isoc(parent, id_ref):
         cursor.execute(f"""
             SELECT ubicacion, teorico, medido, diferencia
             FROM {tabla}
-            WHERE ref=?
+            WHERE ref=?{filtro_activo(tabla)}
         """, (id_ref,))
         datos = cursor.fetchall()
 
@@ -3368,7 +3370,7 @@ def mostrar_indicadores_camilla(parent, id_ref):
         cursor.execute(f"""
             SELECT ubicacion, desplazamiento, medido_cm, diferencia
             FROM {tabla}
-            WHERE ref=?
+            WHERE ref=?{filtro_activo(tabla)}
         """, (id_ref,))
         datos = cursor.fetchall()
 
@@ -3443,7 +3445,7 @@ def mostrar_laseres(parent, id_ref):
         cursor.execute(f"""
             SELECT ubicacion, concordancia, dif_isocentro
             FROM {tabla}
-            WHERE ref=?
+            WHERE ref=?{filtro_activo(tabla)}
         """, (id_ref,))
         datos = cursor.fetchall()
 
@@ -3510,7 +3512,7 @@ def mostrar_indc_brazo_HC(parent, id_ref):
         cursor.execute(f"""
             SELECT nivel, valor_medido, discrepancia
             FROM {tabla}
-            WHERE ref=?
+            WHERE ref=?{filtro_activo(tabla)}
         """, (id_ref,))
         datos = cursor.fetchall()
 
@@ -3661,18 +3663,26 @@ def mostrar_analisis_franjas(parent, id_ref):
     cursor = conn.cursor()
 
     # Si no se pasa id_ref, usamos el último guardado
+    # LE1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE1): si el ref más reciente
+    # quedó sin ninguna fila activa, MAX(ref) a secas lo elegiría igual y
+    # la consulta de abajo devolvería vacío -- se busca el más reciente que
+    # todavía tenga algo vigente.
     if id_ref is None:
-        cursor.execute("SELECT MAX(ref) FROM analisis_placa_franjas")
+        cursor.execute(
+            f"SELECT MAX(ref) FROM analisis_placa_franjas WHERE 1=1{filtro_activo('analisis_placa_franjas')}")
         id_ref = cursor.fetchone()[0]
 
-    cursor.execute("""
+    # LE1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE1): analisis_placa_franjas
+    # ya versiona (grupo C) -- sin este filtro, un bloque anulado aparecería
+    # mezclado con el vigente.
+    cursor.execute(f"""
         SELECT franja, ancho_media_h, ancho_media_v,
             penumbra_izq_h, penumbra_izq_v,
             penumbra_der_h, penumbra_der_v,
             diferencia_arriba_izq, diferencia_arriba_der,
             diferencia_abajo_izq, diferencia_abajo_der
         FROM analisis_placa_franjas
-        WHERE ref=?
+        WHERE ref=?{filtro_activo("analisis_placa_franjas")}
     """, (id_ref,))
     filas = cursor.fetchall()
     conn.close()

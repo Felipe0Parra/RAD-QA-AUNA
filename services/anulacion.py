@@ -78,6 +78,22 @@ TABLAS_ANULABLES = frozenset({
 })
 
 
+def filtro_activo(tabla):
+    """LE0 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE0): punto único del
+    fragmento SQL que distingue una fila vigente de una superada. Antes
+    existían DOS copias independientes del mismo concepto
+    (`tablas_anuales.py::_FILTRO_ACTIVO`, `load.py:2824`) -- que es
+    precisamente por qué el filtro se aplicó de forma desigual por el
+    proyecto (§2.5 del plan). Cualquier lectura nueva sobre una tabla del
+    bloque de QC debe filtrar por esto (contrato, regla 5).
+
+    Devuelve `" AND (activo IS NULL OR activo = 1)"` si `tabla` está en la
+    lista blanca de anulación; cadena vacía si no -- así un `WHERE` que lo
+    use nunca queda con un `AND` colgando cuando la tabla no versiona.
+    """
+    return " AND (activo IS NULL OR activo = 1)" if tabla in TABLAS_ANULABLES else ""
+
+
 def anular_fila(db, tabla, id_valor, usuario, detalle="", id_where=None,
                 valor_where=None, ref=None):
     """`UPDATE {tabla} SET activo = 0 WHERE ...`, auditado con

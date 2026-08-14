@@ -43,6 +43,7 @@ def bd_con_fila_legacy(monkeypatch):
     con.execute("""
         CREATE TABLE dosimetriaMen (
             ref INTEGER, dosis_ref_cgy_um REAL, energia TEXT,
+            activo INTEGER DEFAULT 1,
             FOREIGN KEY (ref) REFERENCES controles(id)
         )
     """)
