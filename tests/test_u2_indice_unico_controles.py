@@ -229,6 +229,18 @@ class TestEnsayoSobreCopiaDeBDReales:
 
             censo_despues = _conteo_todas_las_tablas(con)
             for tabla, antes in censo_antes.items():
+                # SA1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-SA1): `audit_log`
+                # es la única tabla que la migración puede hacer CRECER de
+                # verdad -- cada saneamiento (equipos H26, claves
+                # duplicadas SA1) audita la fila que anula (DA-16). El
+                # resto del censo debe quedar exactamente igual: es la
+                # prueba de que ni el saneamiento ni ningún otro paso
+                # perdió una fila de registro clínico.
+                if tabla == "audit_log":
+                    assert censo_despues.get(tabla, 0) >= antes, (
+                        f"audit_log: {antes} -> {censo_despues.get(tabla)} "
+                        f"(nunca debería BAJAR)")
+                    continue
                 assert censo_despues.get(tabla, 0) == antes, (
                     f"{tabla}: {antes} -> {censo_despues.get(tabla)}")
 

@@ -361,11 +361,19 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
         # destino (el script ya lo hace vía registrar(ruta_db=...)).
         from scripts.saneamiento_equipos_h26 import aplicar_saneamiento
         resultado_equipos = aplicar_saneamiento(ruta_bd, usuario=usuario)
+
+        # SA1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-SA1, DA-38): mismo
+        # criterio que I1 arriba -- corre POR DEFECTO, sin flag. Seguro
+        # incluso sobre una BD que no tenga duplicados (no encuentra
+        # grupos, no anula nada). `Conexion()` ya corrió arriba, así que
+        # `activo` ya existe en las 8 tablas antes de llegar aquí.
+        from scripts.saneamiento_bloque_qc import sanear_bloque_qc
+        resultado_bloque_qc = sanear_bloque_qc(ruta_bd, usuario=usuario)
     finally:
         conection_mod.ruta_base_datos = ruta_original
         conection_mod.Conexion._instance = instancia_previa
         conection_mod.USUARIO_RESPALDO_MIGRACION = usuario_respaldo_previo
-    return filas_centinela, resultado_equipos
+    return filas_centinela, resultado_equipos, resultado_bloque_qc
 
 
 def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas,
@@ -424,6 +432,24 @@ def _reportar_equipos(resultado_equipos):
               "nada que corregir)")
 
 
+def _reportar_saneamiento_bloque_qc(anuladas):
+    """SA1: qué claves duplicadas resolvió esta corrida."""
+    print("\n--- Saneamiento de claves duplicadas del bloque de QC (SA1, DA-38) ---")
+    if not anuladas:
+        print("  (ninguna clave duplicada activa -- nada que sanear)")
+        return
+    print(f"  {len(anuladas)} fila(s) pasadas a histórica (activo=0), "
+          f"cero borradas:")
+    por_tabla = {}
+    for a in anuladas:
+        por_tabla.setdefault(a["tabla"], []).append(a)
+    for tabla, filas in sorted(por_tabla.items()):
+        print(f"    {tabla}: {len(filas)} fila(s)")
+        for f in filas:
+            print(f"      rowid={f['rowid']} clave={f['clave']} -- "
+                  f"gana rowid={f['gano_rowid']}")
+
+
 def migrar(ruta_bd, aplicar=False, usuario=None):
     """Punto de entrada reutilizable (además de la CLI). Devuelve un dict
     con el resultado -- útil para tests y para invocarlo desde la propia
@@ -455,7 +481,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             # simulación debe verlos igual que los vería la app real.
             _copiar_set_sqlite(ruta_bd, copia)
             _consolidar_wal(copia)
-            sentinelas_normalizadas, equipos = _aplicar_migracion_en(copia, usuario=usuario)
+            sentinelas_normalizadas, equipos, bloque_qc = _aplicar_migracion_en(copia, usuario=usuario)
             con_copia = sqlite3.connect(copia)
             try:
                 inventario_despues = _inventario_esquema(con_copia)
@@ -470,6 +496,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                         sentinelas_antes, sentinelas_normalizadas,
                         catalogos_antes, catalogos_despues)
         _reportar_equipos(equipos)
+        _reportar_saneamiento_bloque_qc(bloque_qc)
         _reportar_cambios_estructurales(estructural_antes, estructural_despues,
                                      duplicados_controles_despues)
         _reportar_qc(qc_antes, qc_despues)
@@ -477,6 +504,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         _reportar_duplicados_controles(duplicados_controles_despues)
         return {"aplicado": False, "integridad_antes": integridad_antes,
                 "sentinelas_antes": sentinelas_antes, "equipos": equipos,
+                "bloque_qc": bloque_qc,
                 "qc_antes": qc_antes, "qc_despues": qc_despues,
                 "censo_antes": censo_antes, "censo_despues": censo_despues,
                 "duplicados_controles": duplicados_controles_despues}
@@ -497,7 +525,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     shutil.copy(ruta_bd, respaldo)
     print(f"Backup creado: {respaldo}")
 
-    sentinelas_normalizadas, equipos = _aplicar_migracion_en(ruta_bd, usuario=usuario)
+    sentinelas_normalizadas, equipos, bloque_qc = _aplicar_migracion_en(ruta_bd, usuario=usuario)
 
     con_despues = sqlite3.connect(ruta_bd)
     try:
@@ -516,11 +544,31 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                     sentinelas_antes, sentinelas_normalizadas,
                     catalogos_antes, catalogos_despues)
     _reportar_equipos(equipos)
+    _reportar_saneamiento_bloque_qc(bloque_qc)
     _reportar_cambios_estructurales(estructural_antes, estructural_despues,
                                      duplicados_controles_despues)
     hubo_perdida_qc = _reportar_qc(qc_antes, qc_despues)
     hubo_perdida_censo = _reportar_censo_completo(censo_antes, censo_despues)
     _reportar_duplicados_controles(duplicados_controles_despues)
+
+    # SA2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-SA2): guardián independiente
+    # del índice UNIQUE de CL1 (que todavía no existe en esta fase) -- si
+    # SA1 dejara pasar algún caso, esto lo dice ruidosamente en vez de
+    # dejarlo para que CL1 falle en silencio más adelante.
+    from scripts.saneamiento_bloque_qc import verificar_sin_duplicados_activos
+    con_verificar = sqlite3.connect(ruta_bd)
+    try:
+        violaciones_duplicados = verificar_sin_duplicados_activos(con_verificar)
+    finally:
+        con_verificar.close()
+    if violaciones_duplicados:
+        print(f"\nALERTA GRAVE: SA1 corrió pero quedan "
+              f"{len(violaciones_duplicados)} clave(s) con más de una fila "
+              f"activa (ver arriba). Restaure el backup ({respaldo}) y "
+              f"avise -- esto no debería poder pasar.")
+        for v in violaciones_duplicados:
+            print(f"    {v['tabla']}: {v['clave']} -- rowids {v['rowids']}")
+        sys.exit(1)
 
     if integridad_despues != "ok":
         print(f"ALERTA: integrity_check después de migrar dio "
@@ -545,6 +593,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             "integridad_despues": integridad_despues,
             "sentinelas_normalizadas": sentinelas_normalizadas,
             "equipos": equipos,
+            "bloque_qc": bloque_qc,
             "qc_antes": qc_antes, "qc_despues": qc_despues,
             "censo_antes": censo_antes, "censo_despues": censo_despues,
             "duplicados_controles": duplicados_controles_despues}

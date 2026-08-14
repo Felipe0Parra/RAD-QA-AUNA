@@ -103,6 +103,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("scripts/observador_contrato.py", 143): "censo (OB1, censo.total -- cuenta TODAS las filas a propósito)",
     ("scripts/observador_contrato.py", 147): "censo (OB1, censo.activas -- calcula su propio filtro, no importa filtro_activo para no arrastrar PyQt5)",
     ("scripts/observador_contrato.py", 156): "censo (OB1, vigente -- mismo motivo)",
+    ("scripts/saneamiento_bloque_qc.py", 42): "SA1/SA2 -- ya filtra 'activo' a mano en el WHERE (visible en el propio texto), no importa filtro_activo() para no arrastrar PyQt5 en un script que solo usa sqlite3",
 }
 
 # Sitios LITERALES (tabla nombrada a secas tras FROM) donde el filtro SÍ
