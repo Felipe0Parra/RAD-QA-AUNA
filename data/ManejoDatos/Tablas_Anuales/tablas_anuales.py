@@ -592,9 +592,15 @@ def mostrar_tabla_equipos_anual(parent, id_ref):
     """Muestra la tabla de equipos de medición para un control anual"""
     conn = Conexion().conectar()
     cursor = conn.cursor()
-    cursor.execute("""
+    # RP2 (PLAN_LECTURA_VIGENTE_18-08.md §6-RP2): sin filtro de activo,
+    # mostraba TODAS las generaciones de equipos_medicion de ese control
+    # (activas e históricas) mezcladas -- 8 filas en vez de 4 en el
+    # rebuild del 18-08. ORDER BY id: mismo criterio de estabilidad que el
+    # resto de listados de este bloque (control_cunas/control_conos).
+    cursor.execute(f"""
         SELECT tipo_camara, equip_type, model, serie
-        FROM equipos_medicion WHERE ref=?
+        FROM equipos_medicion WHERE ref=?{filtro_activo('equipos_medicion')}
+        ORDER BY tipo_camara, id
     """, (id_ref,))
     data = cursor.fetchall()
     conn.close()

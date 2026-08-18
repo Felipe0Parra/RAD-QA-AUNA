@@ -424,7 +424,12 @@ def crear_algo(self, ref, imagen):
     
     lista = [imagen_blob, ref]
     lista2 = [ref, imagen_blob]
-    cursor.execute("SELECT ref FROM preguntas WHERE ref = ?", (ref,))
+    # RP3 (PLAN_LECTURA_VIGENTE_18-08.md §6-RP3): sin filtro de activo, el
+    # SELECT de existencia podía encontrar una fila HISTÓRICA (activo=0) y
+    # dar "no existía" con una fila vigente ya presente, y el UPDATE
+    # escribía la imagen en TODAS las filas del ref -- incluidas las
+    # anuladas, reescribiendo un snapshot que debía quedar fijo.
+    cursor.execute(f"SELECT ref FROM preguntas WHERE ref = ?{filtro_activo('preguntas')}", (ref,))
     if cursor.fetchone() is None:
         QMessageBox.information(self, "Éxito", f"No existía")
         sql = f"INSERT INTO preguntas (ref, imagen) VALUES (?,?)"
@@ -432,7 +437,7 @@ def crear_algo(self, ref, imagen):
         conn.commit()
         QMessageBox.information(self, "Éxito", "Se guardó la imagen.")
     else:
-        sql = "UPDATE preguntas SET imagen = ? WHERE ref = ?"
+        sql = f"UPDATE preguntas SET imagen = ? WHERE ref = ?{filtro_activo('preguntas')}"
         cursor.execute(sql, lista)
         conn.commit()
         QMessageBox.information(self, "Éxito", "Se guardó la imagen.")
@@ -1425,22 +1430,40 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
     conn = Conexion().conectar()
     cursor = conn.cursor()
 
+    # RP1 (PLAN_LECTURA_VIGENTE_18-08.md §6-RP1): el JOIN a `preguntas` y la
+    # subconsulta de `dosimetriaMen` filtraban por `cm.activo` (el control),
+    # nunca por el suyo propio -- desde que ambas tablas versionan
+    # (PR1/DO1, 14-08), un control con varias generaciones de aspectos
+    # mecánicos aparecía DUPLICADO en pantalla, y la dosis de referencia
+    # mostraba la fila más vieja (a menudo vacía) en vez de la vigente.
+    # `filtro_activo(...)` calificado con el alias (mismo patrón que
+    # services/consistencia_dosis.py) más `ORDER BY id DESC` en la
+    # subconsulta: filtrar solo no basta, hace falta decir cuál es la
+    # vigente cuando hay más de una fila activa.
+    # `filtro_p` se precomputa porque hace falta calificarlo con el alias
+    # 'p.' (igual que services/consistencia_dosis.py) -- `filtro_activo()`
+    # solo devuelve el fragmento sin calificar. `filtro_activo('dosimetriaMen')`
+    # sí se interpola DIRECTO más abajo (sin variable intermedia): la
+    # subconsulta no tiene alias que calificar, y así queda reconocible por
+    # el censo estático de ES1 sin necesitar una excepción revisada a mano.
+    filtro_p = filtro_activo('preguntas').replace('activo', 'p.activo')
     if equipo_filtrar == "Halcyon":
-        query = """
-        SELECT 
+        query = f"""
+        SELECT
             cm.id,
             cm.fecha,
             u.fullname,
             cm.equipo,
-            (SELECT dosis_ref_cgy_um FROM dosimetriaMen 
-            WHERE ref = cm.id AND energia = '6mv' LIMIT 1) as dosis_ref_cgy_um
+            (SELECT dosis_ref_cgy_um FROM dosimetriaMen
+            WHERE ref = cm.id AND energia = '6mv'{filtro_activo('dosimetriaMen')}
+            ORDER BY rowid DESC LIMIT 1) as dosis_ref_cgy_um
         FROM controles cm
         LEFT JOIN users u ON cm.user_id = u.fullname
-        LEFT JOIN preguntas p ON cm.id = p.ref
+        LEFT JOIN preguntas p ON cm.id = p.ref{filtro_p}
         """
     else:
-        query = """
-        SELECT 
+        query = f"""
+        SELECT
             cm.id,
             cm.fecha,
             u.fullname,
@@ -1457,11 +1480,12 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
             p.laser_techo,
             p.laser_lateral9,
             p.laser_lateral27,
-            (SELECT dosis_ref_cgy_um FROM dosimetriaMen 
-            WHERE ref = cm.id AND energia = '6mv' LIMIT 1) as dosis_ref_cgy_um
+            (SELECT dosis_ref_cgy_um FROM dosimetriaMen
+            WHERE ref = cm.id AND energia = '6mv'{filtro_activo('dosimetriaMen')}
+            ORDER BY rowid DESC LIMIT 1) as dosis_ref_cgy_um
         FROM controles cm
         LEFT JOIN users u ON cm.user_id = u.fullname
-        LEFT JOIN preguntas p ON cm.id = p.ref
+        LEFT JOIN preguntas p ON cm.id = p.ref{filtro_p}
         """
 
     # C2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): un control anulado
