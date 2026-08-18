@@ -22,6 +22,7 @@ import tempfile
 import pytest
 
 import data.ManejoDatos.conection as conection_mod
+import _rt1_interceptor_sql as _rt1
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -31,6 +32,46 @@ def _bd_sesion_por_defecto():
     conection_mod.ruta_base_datos = lambda: ruta
     yield
     conection_mod.ruta_base_datos = original
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _rt1_interceptor_de_sql():
+    """RT1 (PLAN_LECTURA_VIGENTE_18-08.md §6-RT1): frente DINÁMICO -- ve el
+    SQL ya resuelto de TODA conexión sqlite3 que abra la suite (incluida la
+    que abre el código de producción bajo prueba), complementando a ES1
+    (ciego al SQL armado en variable que no puede resolver estáticamente).
+    Falla al final de la sesión si algo quedó sin filtrar `activo` sobre
+    una tabla del bloque de QC -- el mismo criterio de AN1, aplicado al
+    texto REAL en vez de al reconstruido.
+
+    Solo se vigila el SQL cuyo llamador INMEDIATO de `.execute()` vive en
+    el árbol de producción: los helpers de verificación de la propia suite
+    leen activas + históricas a propósito y no son defectos (ver el
+    docstring de `_rt1_interceptor_sql`)."""
+    _rt1.reiniciar()
+    _rt1.activar()
+    yield
+    _rt1.desactivar()
+    if _rt1.hallazgos_sesion:
+        detalle = "\n".join(
+            f"  {archivo}::{funcion}:{linea}\n"
+            f"    {sql.strip()[:200]!r}\n"
+            f"    -> {h}"
+            for sql, (archivo, funcion, linea), hs in _rt1.hallazgos_sesion
+            for h in hs)
+        raise AssertionError(
+            f"RT1: {len(_rt1.hallazgos_sesion)} sentencia(s) SQL ejecutada(s) "
+            f"por código de PRODUCCIÓN sin filtrar 'activo' sobre una tabla "
+            f"del bloque de QC (visto por el interceptor con el SQL ya "
+            f"resuelto, no por el AST):\n{detalle}")
+
+
+def pytest_terminal_summary(terminalreporter):
+    """§9.3 del plan: la cobertura real de RT1 es un ENTREGABLE, no un
+    detalle interno -- se publica al final de cada corrida completa."""
+    if _rt1.estadisticas()["sentencias_vistas"]:
+        terminalreporter.write_sep("-", "RT1 cobertura")
+        terminalreporter.write_line(_rt1.informe_cobertura())
 
 
 @pytest.fixture(autouse=True)
