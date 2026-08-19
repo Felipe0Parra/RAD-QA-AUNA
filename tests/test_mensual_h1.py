@@ -2,12 +2,12 @@
 
 H1.2: la tabla de indicadores angulares del colimador nacía con solo 3 filas
 (0°/90°/270°) mientras que la del brazo siempre tuvo 4 (incluye 180°) --
-seiscientos_mensual.py:871 (heredado por PruebaMensualIX) y su equivalente
+seiscientos_mensual.py:872 (heredado por PruebaMensualIX) y su equivalente
 propio en Halcyon (HC_indicadores_colimador, halcyon_mensual.py:160). Ambas
 tablas son "por fila" en BD (ref + nivel + valores, sin columnas fijas por
 ángulo -- ver conection.py) así que agregar la fila no requiere migración.
 
-H1.3: `fieldSize` (seiscientos_mensual.py:2368, solo 600/iX -- Halcyon tiene
+H1.3: `fieldSize` (seiscientos_mensual.py:2369, solo 600/iX -- Halcyon tiene
 su propia tabla ya correcta en _crear_tablas_aspectos_dosimetricos) prellenaba
 las 8 columnas de MEDICIÓN con el valor NOMINAL repetido cuando no había datos
 en BD ni JSON -- el físico veía números que parecían mediciones reales sin

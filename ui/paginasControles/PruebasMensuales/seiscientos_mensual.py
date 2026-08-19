@@ -51,6 +51,7 @@ import numpy as np
 # services/db_pool.py. Se re-exporta el nombre para no cambiar ningún
 # call-site ni ningún import existente (~11 en este archivo, más tests).
 from services.db_pool import DatabaseManager
+from services.conexiones_qt import conectar_unico
 
 # Clase principal para el control mensual del Clinac 600
 class PruebaMensual600(PruebaBasico):
@@ -2629,7 +2630,12 @@ class PruebaMensual600(PruebaBasico):
             # imagen) -- auditar cada una por separado habría dejado 2 filas
             # para 1 acción real. Un solo handler que hace ambas cosas y
             # audita una vez.
-            self.guardar_analisis.clicked.connect(self.guardar_analisis_e_imagen)
+            # SN1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-SN1): este método
+            # corre una vez POR CADA análisis de imagen, no solo al
+            # construir el formulario -- `connect` sin desconectar antes
+            # acumulaba una conexión por análisis (N análisis + 1 clic en
+            # "Guardar" = N guardados y N filas de auditoría).
+            conectar_unico(self.guardar_analisis.clicked, self.guardar_analisis_e_imagen)
 
     def guardar_analsis(self):
             guardar_analisis_placa600(self.ref, self.res)
