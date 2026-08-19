@@ -224,7 +224,7 @@ class PruebaMensual600(PruebaBasico):
             mostrar_controles_anuales(self, tabla_widget, equipo_filtrar=self.equipo_f)
         else:
             print(f"Actualizando tabla de controles mensuales para {self.equipo_f}")
-            mostrar_controles_mensuales(None, tabla_widget, equipo_filtrar=self.equipo_f)
+            mostrar_controles_mensuales(self, tabla_widget, equipo_filtrar=self.equipo_f)
     
     def actualizar_fisicos(self):
         # F2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): mismo criterio que
@@ -2527,7 +2527,7 @@ class PruebaMensual600(PruebaBasico):
         if hasattr(self, 'anual') and self.anual:
             mostrar_controles_anuales(self, self.tabla, equipo_filtrar=self.equipo_f)
         else:
-            mostrar_controles_mensuales(None, self.tabla, equipo_filtrar=self.equipo_f)
+            mostrar_controles_mensuales(self, self.tabla, equipo_filtrar=self.equipo_f)
 
     def analizar_imagen(self):
         self.boton_siguiente.show()

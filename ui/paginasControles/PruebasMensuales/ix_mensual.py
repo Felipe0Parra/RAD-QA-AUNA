@@ -128,7 +128,7 @@ class PruebaMensualIX(PruebaMensual600):
     def setupTap1(self):
         #print("Función setupTap1 en la clase PruebaMensualIX")
         super().setupTap1()
-        mostrar_controles_mensuales(None, self.tabla, equipo_filtrar=self.equipo_f)
+        mostrar_controles_mensuales(self, self.tabla, equipo_filtrar=self.equipo_f)
     # def actualizar_fisicos(self):
     #     fecha = self.date_box.date()
     #     fecha = fecha.toString("MM/yyyy")
@@ -440,7 +440,7 @@ class PruebaMensualIX(PruebaMensual600):
             except Exception as e:
                 print("Error al subir datos IX:", e)
                 return
-            mostrar_controles_mensuales(None, self.tabla, equipo_filtrar=self.equipo_f)
+            mostrar_controles_mensuales(self, self.tabla, equipo_filtrar=self.equipo_f)
 
         btn_guardar.clicked.connect(subir)
 

@@ -145,7 +145,7 @@ class PruebaMensualHc(PruebaMensual600):
     def setupTap1(self):
         #print("Función setupTap1 en la clase PruebaMensualHc")
         super().setupTap1()
-        mostrar_controles_mensuales(None, self.tabla, equipo_filtrar=self.equipo_f)
+        mostrar_controles_mensuales(self, self.tabla, equipo_filtrar=self.equipo_f)
 
     def _crear_tablas_aspectos_mecanicos(self):
             """Crea las tablas de indicadores angulares"""
