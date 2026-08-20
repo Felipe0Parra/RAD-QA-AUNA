@@ -144,12 +144,92 @@ def cierre_transitivo_fk(con, raices):
     return visitados
 
 
+def tablas_pendientes_lf():
+    """LF2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF2): las tablas de
+    `EXCEPCIONES_INVENTARIO` cuyo motivo empieza con `"PENDIENTE-LF"` --
+    las 30 que entran a `TABLAS_ANULABLES` en MI1, una vez sus lecturas ya
+    filtren. NO incluye `equipos_anual` (se retira, DA-44) ni
+    `posicionamiento_reposicionamiento` (huérfana, DP-38): ninguna de las
+    dos va a versionar nunca, así que exigirles filtro no tendría sentido.
+    Lee el motivo, no solo la clave (a diferencia de `excepciones_inventario()`,
+    que IV2 usa para completitud del inventario, no para alcance de lectura)."""
+    arbol = ast.parse(_ANULACION_PATH.read_text(encoding="utf-8"))
+    for nodo in ast.walk(arbol):
+        if not (isinstance(nodo, ast.Assign) and len(nodo.targets) == 1
+                and isinstance(nodo.targets[0], ast.Name)
+                and nodo.targets[0].id == "EXCEPCIONES_INVENTARIO"):
+            continue
+        if not isinstance(nodo.value, ast.Dict):
+            raise RuntimeError(
+                "EXCEPCIONES_INVENTARIO ya no es un dict literal en "
+                f"{_ANULACION_PATH} -- actualiza tablas_pendientes_lf().")
+        tablas = set()
+        for clave, valor in zip(nodo.value.keys, nodo.value.values):
+            if not (isinstance(clave, ast.Constant) and isinstance(clave.value, str)):
+                raise RuntimeError(
+                    f"Clave no literal en EXCEPCIONES_INVENTARIO: {ast.dump(clave)}")
+            if not (isinstance(valor, ast.Constant) and isinstance(valor.value, str)):
+                raise RuntimeError(
+                    f"Motivo no literal en EXCEPCIONES_INVENTARIO: {ast.dump(valor)}")
+            if valor.value.startswith("PENDIENTE-LF"):
+                tablas.add(clave.value)
+        return frozenset(tablas)
+    raise RuntimeError(f"No se encontró EXCEPCIONES_INVENTARIO en {_ANULACION_PATH}")
+
+
 def tablas_hijas_del_bloque_qc():
-    """Alcance de este analizador: `TABLAS_ANULABLES` menos las raíces
-    ([[DP-31]], fuera de `PLAN_LECTURA_VIGENTE_18-08.md`). Se deriva en cada
+    """Alcance de este analizador: `TABLAS_ANULABLES` MÁS las tablas
+    `PENDIENTE-LF` de `EXCEPCIONES_INVENTARIO` ([[LF2]]), menos las raíces
+    ([[DP-31]], fuera de `PLAN_LECTURA_VIGENTE_18-08.md`). La unión con
+    `tablas_pendientes_lf()` es lo que permite exigir el filtro ANTES de
+    que `MI1` amplíe el frozenset de verdad (§4.4 del plan del 19-08): sin
+    esto, ES1/RT1 no verían las 30 tablas nuevas hasta después de MI1, y
+    quedaría exactamente el mismo hueco que originó el plan (una tabla
+    puede tener lecturas sin filtrar durante toda la ventana entre 'ya
+    versiona' y 'alguien se acordó de vigilarla'). Se deriva en cada
     llamada -- nunca una copia guardada -- para que no pueda quedar
     desincronizado del contrato real."""
-    return tablas_anulables() - RAICES_FUERA_DE_ALCANCE
+    return (tablas_anulables() | tablas_pendientes_lf()) - RAICES_FUERA_DE_ALCANCE
+
+
+def tablas_con_filtro_no_op():
+    """LF3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF3): las tablas que están en
+    el alcance de vigilancia pero para las que `filtro_activo()` devuelve
+    HOY la cadena vacía -- es decir, aquellas cuyo filtro existe en el
+    FUENTE y no puede existir en el SQL EJECUTADO.
+
+    Por qué hace falta nombrarlas: ES1 y RT1 comparten el criterio
+    (`analizar()`) pero observan objetos distintos, y durante la ventana
+    LF→MI1 esos dos objetos DIVERGEN por diseño:
+
+      - ES1 mira el FUENTE. Ve `f"... {filtro_activo('pruebas')}"` y lo
+        reconstruye como el marcador `{FILTRO_ACTIVO}`: puede comprobar que
+        la llamada está escrita, que es exactamente lo que LF1 entrega.
+      - RT1 mira el SQL YA RESUELTO. Python ya evaluó `filtro_activo('pruebas')`
+        a `""` (porque `pruebas` sigue en `EXCEPCIONES_INVENTARIO`, a la
+        espera de MI1), así que el texto ejecutado NO contiene ninguna
+        cláusula de `activo` -- y no debe contenerla: la columna todavía no
+        existe en el esquema, y el plan (§2.6, §3 regla 4) pide
+        explícitamente que LF sea un **no-op observable**, con el SQL
+        "idéntico" al de antes.
+
+    Exigirle a RT1 que vea el filtro en estas tablas es pedir algo que solo
+    se podría satisfacer escribiendo la cláusula a mano -- rompiendo el
+    punto único de LE0 y ejecutando SQL contra una columna inexistente. Por
+    eso RT1 DIFIERE su fallo duro sobre ellas (las sigue contando y
+    publicando, ver `_rt1_interceptor_sql`), mientras ES1 las cubre entera
+    y estáticamente.
+
+    **La resta es lo que hace la excepción auto-cancelable**, y es
+    deliberada, no cosmética: en cuanto MI1 mueva una tabla a
+    `TABLAS_ANULABLES`, deja de estar aquí y RT1 vuelve a exigirle el filtro
+    en el acto -- sin que nadie tenga que acordarse de vaciar una lista. Y
+    si MI1 la moviera al frozenset SIN quitarla de `EXCEPCIONES_INVENTARIO`
+    (el descuido plausible: IV2 comprueba una UNIÓN, así que una tabla
+    duplicada en los dos sitios lo pasa), la resta la saca igual. No hay
+    forma de que una tabla que ya versiona siga difiriéndose.
+    """
+    return tablas_pendientes_lf() - tablas_anulables()
 
 
 @dataclass(frozen=True)
@@ -161,11 +241,20 @@ class SinFiltro:
     motivo: str  # "sin filtro de activo" | "LIMIT sin ORDER BY"
 
 
+#     `tamaño_pixel` (única tabla del bloque de QC con un carácter no-ASCII en
+#     el nombre) no coincidía con `[A-Za-z_][A-Za-z0-9_]*`: el motor de regex
+#     paraba en la 'ñ' y capturaba "tama" en silencio -- ni un error, ni una
+#     ausencia detectable, un nombre de tabla DISTINTO e inexistente. La
+#     tabla quedaba invisible para ES1/RT1 en todos sus sitios de lectura,
+#     descubierto al ampliar el alcance en LF2 (PLAN_CONTRATO_COMPLETO_19-08.md
+#     §6-LF2). `[^\W\d]` (carácter de palabra que no es dígito) y `\w`
+#     coinciden con cualquier letra Unicode -- identificador SQLite válido,
+#     no solo ASCII.
 _RE_FROM_JOIN = re.compile(
-    r'\b(?:FROM|JOIN)\s+"?([A-Za-z_][A-Za-z0-9_]*)"?'
-    r'(?:\s+(?:AS\s+)?([A-Za-z_][A-Za-z0-9_]*))?',
+    r'\b(?:FROM|JOIN)\s+"?([^\W\d]\w*)"?'
+    r'(?:\s+(?:AS\s+)?([^\W\d]\w*))?',
     re.IGNORECASE)
-_RE_UPDATE = re.compile(r'\bUPDATE\s+"?([A-Za-z_][A-Za-z0-9_]*)"?', re.IGNORECASE)
+_RE_UPDATE = re.compile(r'\bUPDATE\s+"?([^\W\d]\w*)"?', re.IGNORECASE)
 _RE_LIMIT = re.compile(r'\bLIMIT\b', re.IGNORECASE)
 _RE_ORDER_BY = re.compile(r'\bORDER\s+BY\b', re.IGNORECASE)
 _RE_SELECT_INICIO = re.compile(r'^\s*SELECT\b', re.IGNORECASE)

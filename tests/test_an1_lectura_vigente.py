@@ -22,8 +22,15 @@ from services import lectura_vigente as lv
 def test_tablas_hijas_del_bloque_qc_excluye_solo_las_7_raices():
     hijas = lv.tablas_hijas_del_bloque_qc()
     anulables = lv.tablas_anulables()
+    pendientes = lv.tablas_pendientes_lf()
 
-    assert hijas == anulables - lv.RAICES_FUERA_DE_ALCANCE
+    # LF2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF2): el alcance de AN1 es la
+    # UNIÓN de TABLAS_ANULABLES con las 30 tablas "PENDIENTE-LF" -- no solo
+    # TABLAS_ANULABLES -- para poder exigir el filtro ANTES de que MI1
+    # amplíe el frozenset de verdad (§4.4).
+    assert hijas == (anulables | pendientes) - lv.RAICES_FUERA_DE_ALCANCE
+    assert pendientes, "debería haber tablas PENDIENTE-LF mientras MI1 no se ejecute"
+    assert pendientes - anulables, "las PENDIENTE-LF son justamente las que faltan en TABLAS_ANULABLES"
     for raiz in ("controles", "TipoCalibracion", "LinealidadBraquiterapia",
                  "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui"):
         assert raiz not in hijas
@@ -34,6 +41,11 @@ def test_tablas_hijas_del_bloque_qc_excluye_solo_las_7_raices():
     for tabla in ("preguntas", "dosimetriaMen", "equipos_medicion",
                   "control_cunas", "control_conos", "tamano_campo"):
         assert tabla in hijas, f"{tabla} debería estar en el alcance de AN1"
+
+    # LF2: una tabla PENDIENTE-LF real (aún no en TABLAS_ANULABLES) también
+    # debe estar en el alcance -- si no, LF1 no tendría nada que vigilar.
+    assert "pruebas" in hijas
+    assert "pruebas" not in anulables
 
 
 def test_alcance_crece_solo_si_TABLAS_ANULABLES_crece(tmp_path, monkeypatch):
@@ -47,6 +59,7 @@ def test_alcance_crece_solo_si_TABLAS_ANULABLES_crece(tmp_path, monkeypatch):
             "preguntas",
             "tabla_ficticia_de_prueba",
         })
+        EXCEPCIONES_INVENTARIO = {}
     """), encoding="utf-8")
     monkeypatch.setattr(lv, "_ANULACION_PATH", fuente_falso)
 
@@ -54,6 +67,28 @@ def test_alcance_crece_solo_si_TABLAS_ANULABLES_crece(tmp_path, monkeypatch):
     assert "tabla_ficticia_de_prueba" in hijas
     assert "controles" not in hijas  # raíz, sigue excluida
     assert "preguntas" in hijas
+
+
+def test_alcance_crece_tambien_con_una_tabla_pendiente_lf(tmp_path, monkeypatch):
+    """LF2: el alcance también debe crecer solo si EXCEPCIONES_INVENTARIO
+    gana una tabla PENDIENTE-LF nueva -- sin tocar este módulo, mismo
+    espíritu que la prueba anterior pero sobre la mitad que LF2 añadió."""
+    fuente_falso = tmp_path / "anulacion_falsa_pendiente.py"
+    fuente_falso.write_text(textwrap.dedent('''
+        TABLAS_ANULABLES = frozenset({
+            "controles",
+            "preguntas",
+        })
+        EXCEPCIONES_INVENTARIO = {
+            "tabla_pendiente_de_prueba": "PENDIENTE-LF: ficticia",
+            "tabla_retirada_de_prueba": "se retira, DA-44 -- ficticia",
+        }
+    '''), encoding="utf-8")
+    monkeypatch.setattr(lv, "_ANULACION_PATH", fuente_falso)
+
+    hijas = lv.tablas_hijas_del_bloque_qc()
+    assert "tabla_pendiente_de_prueba" in hijas
+    assert "tabla_retirada_de_prueba" not in hijas  # motivo distinto de PENDIENTE-LF
 
 
 def test_tablas_anulables_falla_ruidosamente_si_la_forma_cambia(tmp_path, monkeypatch):

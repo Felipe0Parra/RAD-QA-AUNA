@@ -889,6 +889,7 @@ def _dibujar_analisis_estadistico(fig, canvas, processed):
 # MODELO DE BASE DE DATOS 
 
 from data.ManejoDatos.conection import Conexion
+from services.anulacion import filtro_activo
 
 # tabla 1: ref_control / equipo / usuario / usuario 2 / Tolerancia / Action tolerance / 
 
@@ -898,7 +899,7 @@ def pf_db_insertion(ref, fecha, equipo ,action_tolerance, tolerance, fisico_1, f
         conn = Conexion().conectar()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM configuracion_picketfence WHERE ref=?", (ref,))
-        cursor.execute(""" UPDATE configuracion_picketfence SET fecha=?, equipo=?, fisico_1=?, fisico_2=?, tolerancia=?, action_tolerance=?, imagen_mlc=? WHERE ref=?""", ( fecha, equipo, fisico_1, fisico_2, tolerance, action_tolerance, imagen, ref))
+        cursor.execute(f""" UPDATE configuracion_picketfence SET fecha=?, equipo=?, fisico_1=?, fisico_2=?, tolerancia=?, action_tolerance=?, imagen_mlc=? WHERE ref=?{filtro_activo('configuracion_picketfence')}""", ( fecha, equipo, fisico_1, fisico_2, tolerance, action_tolerance, imagen, ref))
         if cursor.rowcount == 0:  
             cursor.execute(""" 
                     INSERT OR REPLACE INTO configuracion_picketfence 
@@ -919,10 +920,10 @@ def pf_picket_error_insertion(ref,processed):
         cursor.execute("DELETE FROM error_picket WHERE ref=?", (ref,))
 
         for ps in processed["picket_stats"]:
-            cursor.execute("""
+            cursor.execute(f"""
                 UPDATE error_picket
                 SET picket_mean_error=?, picket_max_error=?
-                WHERE ref=? AND picket=?
+                WHERE ref=? AND picket=?{filtro_activo('error_picket')}
             """, (ps["picket_mean_error"], ps["picket_max_error"], ref, ps["picket"]))
 
             if cursor.rowcount == 0:
@@ -944,9 +945,9 @@ def pf_leaf_error_insertion(ref, processed):
         cursor.execute("DELETE FROM leaf_error WHERE ref=?", (ref,))
         
         for hoja in processed["leafs"]:
-            cursor.execute("""
+            cursor.execute(f"""
                 UPDATE leaf_error SET error=?
-                WHERE ref=? AND leaf=?
+                WHERE ref=? AND leaf=?{filtro_activo('leaf_error')}
             """, (hoja["leaf_error"], ref, hoja["leaf"]))
 
             if cursor.rowcount == 0:
@@ -971,10 +972,10 @@ def pf_highest_leaf_errors_insertion(ref, processed, top_n=10):
         for hoja in peores:
             picket_asociado = int(hoja["errors"].index(max(hoja["errors"], key=abs)))
 
-            cursor.execute("""
+            cursor.execute(f"""
                 UPDATE highest_leaf_errors
                 SET leaf_out=?, picket_asociado=?, desviacion=?
-                WHERE ref=? AND leaf_out=?
+                WHERE ref=? AND leaf_out=?{filtro_activo('highest_leaf_errors')}
             """, (hoja["leaf"], picket_asociado, hoja["max_error"], ref, hoja["leaf"]))
 
             if cursor.rowcount == 0:
@@ -1869,7 +1870,7 @@ def starshot_insert(ref, fecha, equipo ,sid, tolerance, fisico_1, fisico_2, imag
         cursor = conn.cursor()
         cursor.execute("DELETE FROM configuracion_starshot WHERE ref=?", (ref,))
         
-        cursor.execute(""" UPDATE configuracion_starshot SET fecha=?, equipo=?, fisico_1=?, fisico_2=?, tolerancia=?, sid=?, imagen_mlc_spoke=? WHERE ref=?""", ( fecha, equipo, fisico_1, fisico_2, tolerance, sid, imagen, ref))
+        cursor.execute(f""" UPDATE configuracion_starshot SET fecha=?, equipo=?, fisico_1=?, fisico_2=?, tolerancia=?, sid=?, imagen_mlc_spoke=? WHERE ref=?{filtro_activo('configuracion_starshot')}""", ( fecha, equipo, fisico_1, fisico_2, tolerance, sid, imagen, ref))
         if cursor.rowcount == 0:  
             cursor.execute(""" 
                     INSERT OR REPLACE INTO configuracion_starshot 

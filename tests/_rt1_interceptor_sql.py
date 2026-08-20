@@ -44,6 +44,31 @@ invocación que aparecen en el árbol: `Connection.execute` (atajo),
 Si una función de producción (p.ej. `mostrar_controles_mensuales`) es la
 que llama a `.execute()`, cuenta como producción sin importar qué test la
 invocó -- que es exactamente lo que hace falta vigilar.
+
+LF3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF3) -- el alcance de RT1 y el de
+ES1 son el MISMO conjunto de tablas (`tablas_hijas_del_bloque_qc`, fuente
+única), pero el fallo duro de RT1 se DIFIERE sobre las tablas
+`PENDIENTE-LF`, y esto no es una excepción de conveniencia: es la
+consecuencia de que los dos frentes observen objetos distintos. LF1 escribió
+`filtro_activo(tabla)` en los 74 sitios; para una tabla que todavía no está
+en `TABLAS_ANULABLES` esa llamada evalúa a `""`, así que el SQL ejecutado
+sale sin cláusula de `activo` -- correctamente, porque la columna aún no
+existe y el plan pide que LF sea un no-op observable con el SQL "idéntico"
+al de antes (§2.6, §3 regla 4). ES1 puede verificar esos sitios (ve la
+llamada en el fuente); RT1 no puede (ve el resultado, que es la cadena
+vacía), y exigírselo solo se podría satisfacer escribiendo la cláusula a
+mano contra una columna inexistente, rompiendo el punto único de LE0.
+
+Difiere, pero no queda ciego, por tres razones que se sostienen entre sí:
+los hallazgos diferidos se cuentan y se PUBLICAN en `informe_cobertura()`
+(no desaparecen, se miden); el conjunto se deriva de la resta
+`PENDIENTE-LF - TABLAS_ANULABLES`, así que se vacía SOLO en cuanto MI1
+amplíe el frozenset -- sin lista que nadie tenga que acordarse de borrar,
+y sin que una tabla que ya versiona pueda seguir difiriéndose ni por
+descuido; y el reparto es por HALLAZGO, no por sentencia, así que un JOIN
+entre una tabla que ya versiona y una PENDIENTE-LF sigue fallando por la
+primera. `TestDiferidasHastaMI1` (en `test_rt1_interceptor_sql.py`)
+demuestra las tres, incluida la reactivación simulando MI1.
 """
 import ast
 import re
@@ -115,6 +140,19 @@ SITIOS_CENSALES_PERMITIDOS = {
 # (sql, origen, [SinFiltro, ...]) por cada sentencia con hallazgos.
 hallazgos_sesion = []
 
+# LF3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF3): hallazgos sobre una tabla
+# cuyo `filtro_activo()` es HOY un no-op (ver
+# `lectura_vigente.tablas_con_filtro_no_op`). NO fallan la sesión -- el SQL
+# ejecutado no puede llevar la cláusula mientras la columna no exista -- pero
+# se cuentan y se publican, para no perder de vista que existen ni cuántos
+# son. Clave: (archivo, funcion, linea, tabla); valor: cuántas ejecuciones.
+#
+# Esta excepción no es una lista escrita a mano y no hay que vaciarla en MI1:
+# se deriva de la resta `PENDIENTE-LF - TABLAS_ANULABLES`, así que se vacía
+# sola en cuanto MI1 amplíe el frozenset, y RT1 recupera el fallo duro sobre
+# esas tablas en la misma corrida.
+sitios_diferidos = {}
+
 # Medición de cobertura exigida por §9.3 del plan ("con el número de
 # funciones lectoras realmente ejercitadas publicado"): qué funciones de
 # PRODUCCIÓN llegaron a ejecutar de verdad una sentencia sobre una tabla
@@ -134,9 +172,11 @@ _estadisticas = {
     "sentencias_produccion_con_tabla_versionada": 0,
     "sentencias_sin_filtro_descartadas_por_origen": 0,
     "sentencias_censales_permitidas": 0,
+    "hallazgos_diferidos_filtro_no_op": 0,
 }
 
 _tablas_cache = None
+_diferidas_cache = None
 
 
 def _tablas():
@@ -144,6 +184,16 @@ def _tablas():
     if _tablas_cache is None:
         _tablas_cache = lv.tablas_hijas_del_bloque_qc()
     return _tablas_cache
+
+
+def _diferidas():
+    """Las tablas cuyo hallazgo se difiere (no falla la sesión) porque su
+    `filtro_activo()` todavía evalúa a `""`. Se deriva del mismo módulo que
+    el alcance -- ni una segunda lista, ni un criterio propio."""
+    global _diferidas_cache
+    if _diferidas_cache is None:
+        _diferidas_cache = lv.tablas_con_filtro_no_op()
+    return _diferidas_cache
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +280,20 @@ def _rastrear_sql(sql):
     if (origen[0], origen[2]) in SITIOS_CENSALES_PERMITIDOS:
         _estadisticas["sentencias_censales_permitidas"] += 1
         return
-    hallazgos_sesion.append((sql, origen, hallazgos))
+    # LF3: el reparto es POR HALLAZGO, no por sentencia. Un JOIN entre una
+    # tabla que ya versiona y una PENDIENTE-LF debe seguir fallando por la
+    # primera; agrupar por sentencia dejaría que la segunda le prestara
+    # cobertura -- el mismo error de "filtro por sentencia y no por tabla"
+    # que fue el hueco 4 de LE4 (ver el docstring de `lectura_vigente`).
+    diferidas = _diferidas()
+    diferidos = [h for h in hallazgos if h.tabla in diferidas]
+    exigibles = [h for h in hallazgos if h.tabla not in diferidas]
+    for h in diferidos:
+        _estadisticas["hallazgos_diferidos_filtro_no_op"] += 1
+        clave = (origen[0], origen[1], origen[2], h.tabla)
+        sitios_diferidos[clave] = sitios_diferidos.get(clave, 0) + 1
+    if exigibles:
+        hallazgos_sesion.append((sql, origen, exigibles))
 
 
 _connect_original = sqlite3.connect
@@ -252,6 +315,7 @@ def desactivar():
 
 def reiniciar():
     hallazgos_sesion.clear()
+    sitios_diferidos.clear()
     funciones_produccion_ejercitadas.clear()
     descartados_por_origen.clear()
     for k in _estadisticas:
@@ -262,6 +326,7 @@ def estadisticas():
     d = dict(_estadisticas)
     d["funciones_produccion_ejercitadas"] = len(funciones_produccion_ejercitadas)
     d["sitios_de_test_descartados_por_origen"] = len(descartados_por_origen)
+    d["sitios_diferidos_filtro_no_op"] = len(sitios_diferidos)
     return d
 
 
@@ -280,6 +345,21 @@ def informe_cobertura():
         f"  lecturas censales de producción permitidas (4 sitios revisados): "
         f"{e['sentencias_censales_permitidas']}",
     ]
+    # LF3: la ventana LF→MI1, publicada en vez de silenciada. Estas
+    # sentencias SÍ salieron sin cláusula de `activo`, y es lo correcto hoy
+    # (`filtro_activo()` devuelve "" mientras la tabla no versione); ES1 es
+    # quien comprueba, sobre el fuente, que la llamada está escrita.
+    diferidas = sorted(_diferidas())
+    lineas.append(
+        f"  hallazgos DIFERIDOS hasta MI1 (filtro_activo() aún es no-op en "
+        f"{len(diferidas)} tablas PENDIENTE-LF): "
+        f"{e['hallazgos_diferidos_filtro_no_op']} ejecuciones en "
+        f"{e['sitios_diferidos_filtro_no_op']} sitios")
+    for (archivo, funcion, linea, tabla), veces in sorted(sitios_diferidos.items()):
+        lineas.append(f"    {archivo}::{funcion}:{linea} -> {tabla} (x{veces})")
+    if not diferidas:
+        lineas.append("    (ninguna: MI1 ya amplió TABLAS_ANULABLES, RT1 "
+                      "exige el filtro sobre todo el bloque de QC)")
     lectoras = lectoras_del_bloque_qc()
     cubiertas = lectoras & funciones_produccion_ejercitadas
     pendientes = lectoras - funciones_produccion_ejercitadas

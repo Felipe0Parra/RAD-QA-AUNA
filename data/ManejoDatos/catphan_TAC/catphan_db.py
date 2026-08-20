@@ -13,6 +13,7 @@ from data.ManejoDatos.conection import Conexion
 from .leer_dicom import DicomVolume
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
+from services.anulacion import filtro_activo
 
 # ------------------------------------ FUNCIONES PARA MOSTRAR IMÁGENES ------------------------------------
 
@@ -542,26 +543,26 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             if not id_tipo:
                 continue
             
-            cursor.execute("""
-                SELECT id_prueba FROM pruebas 
-                WHERE id_sesion = ? AND id_tipo = ?
+            cursor.execute(f"""
+                SELECT id_prueba FROM pruebas
+                WHERE id_sesion = ? AND id_tipo = ?{filtro_activo('pruebas')}
             """, (id_sesion, id_tipo))
-            
+
             entrada_existente = cursor.fetchone()
-            
+
             if entrada_existente:
                 id_prueba = entrada_existente[0]
                 if imagen_blob:
-                    cursor.execute("""
-                        UPDATE pruebas 
+                    cursor.execute(f"""
+                        UPDATE pruebas
                         SET kv = ?, ma = ?, espesor_corte = ?, imagen_path = ?, equipo = ?
-                        WHERE id_prueba = ?
+                        WHERE id_prueba = ?{filtro_activo('pruebas')}
                     """, (kv, ma, espesor_corte, imagen_blob, equipo, id_prueba))
                 else:
-                    cursor.execute("""
-                        UPDATE pruebas 
+                    cursor.execute(f"""
+                        UPDATE pruebas
                         SET kv = ?, ma = ?, espesor_corte = ?, equipo = ?
-                        WHERE id_prueba = ?
+                        WHERE id_prueba = ?{filtro_activo('pruebas')}
                     """, (kv, ma, espesor_corte, equipo, id_prueba))
                 
                 eliminar_datos_especificos(cursor, categoria, id_prueba)
@@ -1005,11 +1006,12 @@ def consultar_pruebas_disponibles(id_sesion):
         conn = Conexion().conectar()
         cursor = conn.cursor()
         
-        cursor.execute("""
+        filtro_p = filtro_activo('pruebas').replace("activo", "p.activo")
+        cursor.execute(f"""
             SELECT p.id_prueba, p.id_tipo, tp.nombre_prueba, p.kv, p.ma, p.espesor_corte, p.created_at
             FROM pruebas p
             LEFT JOIN tipos_prueba tp ON p.id_tipo = tp.id_tipo
-            WHERE p.id_sesion = ?
+            WHERE p.id_sesion = ?{filtro_p}
             ORDER BY p.created_at
         """, (id_sesion,))
         
@@ -1080,10 +1082,10 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
         
         #print(f"🔍 Buscando datos para categorías: {categorias}")
         
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT id_prueba, id_tipo, kv, ma, espesor_corte, imagen_path, imagen_resultado
-            FROM pruebas 
-            WHERE id_sesion = ?
+            FROM pruebas
+            WHERE id_sesion = ?{filtro_activo('pruebas')}
         """, (id_sesion,))
         
         pruebas = cursor.fetchall()
@@ -1188,9 +1190,9 @@ def reconstruir_espesor_corte(cursor, id_prueba, imagen_resultado):
     """
     Reconstruye los datos de espesor de corte desde la base de datos
     """
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT espesor_promedio_mm, espesor_teorico_mm, diferencia_mm, error_pct
-        FROM espesor_corte WHERE id_prueba = ?
+        FROM espesor_corte WHERE id_prueba = ?{filtro_activo('espesor_corte')}
     """, (id_prueba,))
     
     row = cursor.fetchone()
@@ -1224,9 +1226,9 @@ def reconstruir_tamano_pixel(cursor, id_prueba, imagen_resultado):
     """
     Reconstruye los datos de tamaño de pixel desde la base de datos
     """
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT valor_teorico_dicom, X, Y, diferencia_x, diferencia_y
-        FROM tamaño_pixel WHERE id_prueba = ?
+        FROM tamaño_pixel WHERE id_prueba = ?{filtro_activo('tamaño_pixel')}
     """, (id_prueba,))
     
     row = cursor.fetchone()
@@ -1248,10 +1250,10 @@ def reconstruir_tamano_pixel(cursor, id_prueba, imagen_resultado):
 def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
     """Reconstruye los resultados de resolución de contraste desde la BD"""
     # 1. Obtener resumen
-    cursor.execute("""
-        SELECT rois_visibles_cnr, rois_visibles_visibilidad, total_rois, diametro_minimo_visible, 
+    cursor.execute(f"""
+        SELECT rois_visibles_cnr, rois_visibles_visibilidad, total_rois, diametro_minimo_visible,
                     pasa_test_cnr, pasa_test_visibilidad, metodo_recomendado
-        FROM resolucion_contraste WHERE id_prueba = ?
+        FROM resolucion_contraste WHERE id_prueba = ?{filtro_activo('resolucion_contraste')}
     """, (id_prueba,))
     
     resumen = cursor.fetchone()
@@ -1262,10 +1264,10 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
     pasa_test_cnr, pasa_test_visibilidad, metodo_recomendado) = resumen
     
     # 2. Obtener detalles por ROI
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT diametro_mm, centro_x, centro_y, roi_promedio_hu, background_promedio_hu,
                 contraste_michelson, cnr, snr, visibilidad_lim, pasa_cnr, pasa_visibilidad_lim
-        FROM resolucion_contraste_rois WHERE id_prueba = ?
+        FROM resolucion_contraste_rois WHERE id_prueba = ?{filtro_activo('resolucion_contraste_rois')}
         ORDER BY diametro_mm DESC
     """, (id_prueba,))
     
@@ -1309,10 +1311,10 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
 def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
     """Reconstruye los resultados de resolución espacial desde la BD"""
     # 1. Obtener resumen
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT regiones_analizadas, regiones_exitosas, lp_mm_maximo, ultima_region_exitosa, gap_size_minimo_cm,
                 num_picos_totales, mtf_10_pct, mtf_20_pct, mtf_50_pct
-        FROM resolucion_espacial WHERE id_prueba = ?
+        FROM resolucion_espacial WHERE id_prueba = ?{filtro_activo('resolucion_espacial')}
     """, (id_prueba,))
     
     resumen = cursor.fetchone()
@@ -1322,9 +1324,9 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
     (regiones_analizadas, regiones_exitosas, lp_mm_maximo, ultima_region, gap_size_minimo, num_picos, mtf_10, mtf_20, mtf_50) = resumen
     
     # 2. Obtener detalles por región
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT region_nombre, lp_mm, peak_mean, valley_mean, gap_size_cm, n_peaks_used, n_valleys_used, status
-        FROM resolucion_espacial_regiones WHERE id_prueba = ?
+        FROM resolucion_espacial_regiones WHERE id_prueba = ?{filtro_activo('resolucion_espacial_regiones')}
         ORDER BY lp_mm
     """, (id_prueba,))
     
@@ -1367,12 +1369,13 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
 
 def reconstruir_valores_ct(cursor, id_prueba, imagen_resultado):
     """Reconstruye los resultados de valores CT desde la BD"""
-    cursor.execute("""
+    filtro_vc = filtro_activo('valores_ct').replace("activo", "vc.activo")
+    cursor.execute(f"""
         SELECT m.nombre_material, vc.promedio_hu, vc.error_absoluto, vc.error_relativo,
                 m.rango_referencia_min, m.rango_referencia_max
         FROM valores_ct vc
         JOIN materiales_ct m ON vc.id_material = m.id_material
-        WHERE vc.id_prueba = ?
+        WHERE vc.id_prueba = ?{filtro_vc}
         ORDER BY m.id_material
     """, (id_prueba,))
     
@@ -1413,11 +1416,11 @@ def reconstruir_linealidad_ct(cursor, id_prueba, imagen_resultado):
         dict: Resultados reconstruidos
     """
     try:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT pendiente, intercepto, r_cuadrado, referencia, escala_contraste,
                     num_materiales, rango_hu_min, rango_hu_max, linealidad_aceptable
-            FROM linealidad_ct 
-            WHERE id_prueba = ?
+            FROM linealidad_ct
+            WHERE id_prueba = ?{filtro_activo('linealidad_ct')}
         """, (id_prueba,))
         
         row = cursor.fetchone()
@@ -1444,10 +1447,10 @@ def reconstruir_linealidad_ct(cursor, id_prueba, imagen_resultado):
 def reconstruir_uniformidad(cursor, id_prueba, imagen_resultado):
     """Reconstruye los resultados de uniformidad desde la BD"""
     # 1. Obtener datos globales
-    cursor.execute("""
-        SELECT max_diferencia, desviacion_global, uniformity_index_max, uniformity_index_roi, 
+    cursor.execute(f"""
+        SELECT max_diferencia, desviacion_global, uniformity_index_max, uniformity_index_roi,
                     integral_non_uniformity, integral_non_uniformity_pct, pasa_ui, pasa_inu, pasa_global
-        FROM uniformidad_global WHERE id_prueba = ?
+        FROM uniformidad_global WHERE id_prueba = ?{filtro_activo('uniformidad_global')}
     """, (id_prueba,))
     
     global_data = cursor.fetchone()
@@ -1457,11 +1460,12 @@ def reconstruir_uniformidad(cursor, id_prueba, imagen_resultado):
     (max_diferencia, desviacion_global, ui_max, ui_roi, inu, inu_pct, pasa_ui, pasa_inu, pasa_global) = global_data
     
     # 2. Obtener datos por región
-    cursor.execute("""
+    filtro_ur = filtro_activo('uniformidad_ruido').replace("activo", "ur.activo")
+    cursor.execute(f"""
         SELECT r.nombre_region, ur.hu_promedio, ur.desviacion
         FROM uniformidad_ruido ur
         JOIN regiones_uniformidad r ON ur.id_region = r.id_region
-        WHERE ur.id_prueba = ?
+        WHERE ur.id_prueba = ?{filtro_ur}
         ORDER BY r.id_region
     """, (id_prueba,))
     

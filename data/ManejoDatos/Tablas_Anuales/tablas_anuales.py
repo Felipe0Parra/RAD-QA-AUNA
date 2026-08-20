@@ -842,9 +842,9 @@ def mostrar_tabla_fantomas_anual(parent, id_ref):
     cursor = conn.cursor()
     
     # Obtener datos de la base de datos
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT modelo1, serie1, modelo2, serie2, modelo3, serie3
-        FROM HC_fantomas WHERE ref=?
+        FROM HC_fantomas WHERE ref=?{filtro_activo('HC_fantomas')}
     """, (id_ref,))
     row = cursor.fetchone()
     conn.close()

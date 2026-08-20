@@ -1529,9 +1529,9 @@ class CalRedundanteFuente(PruebaMensualBraq):
                 self.conversion.setText(str(tipo_data[4]))
 
             # 3. SistemaMedicion
-            cursor.execute('''
+            cursor.execute(f'''
                 SELECT modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0
-                FROM SistemaMedicion WHERE fecha = ?
+                FROM SistemaMedicion WHERE fecha = ?{filtro_activo('SistemaMedicion')}
             ''', (fecha,))
             sis_data = cursor.fetchone()
             if sis_data:
@@ -1546,10 +1546,10 @@ class CalRedundanteFuente(PruebaMensualBraq):
                 self.h0.setText(str(sis_data[8]))
 
             # 4. CondicionesMedicion
-            cursor.execute('SELECT t, p, h FROM CondicionesMedicion WHERE fecha = ?', (fecha,))
+            cursor.execute(f'SELECT t, p, h FROM CondicionesMedicion WHERE fecha = ?{filtro_activo("CondicionesMedicion")}', (fecha,))
             cond_data = cursor.fetchone()
 
-            cursor.execute('SELECT actividad_monitor FROM ResultadosActividad WHERE fecha = ?', (fecha,))
+            cursor.execute(f'SELECT actividad_monitor FROM ResultadosActividad WHERE fecha = ?{filtro_activo("ResultadosActividad")}', (fecha,))
             actividad_data = cursor.fetchone()
 
             if cond_data and actividad_data:
@@ -1560,7 +1560,7 @@ class CalRedundanteFuente(PruebaMensualBraq):
 
 
             # 5. MaximosCamaras
-            cursor.execute('SELECT posicion, medida1, medida2 FROM MaximosCamaras WHERE fecha = ?', (fecha,))
+            cursor.execute(f'SELECT posicion, medida1, medida2 FROM MaximosCamaras WHERE fecha = ?{filtro_activo("MaximosCamaras")}', (fecha,))
             filas_maximos = cursor.fetchall()
             ncam = len(filas_maximos)
             self.generar_tabla_medidas()
@@ -1586,10 +1586,10 @@ class CalRedundanteFuente(PruebaMensualBraq):
             fecha_cambio_fuente = fila_fecha_cf[0]
 
             # Obtener TODAS las lecturas asociadas a esa fecha
-            cursor.execute('''
+            cursor.execute(f'''
                 SELECT voltaje, V_300, V_150, Vn_300
                 FROM LecturasMaximos
-                WHERE fecha = ?
+                WHERE fecha = ?{filtro_activo('LecturasMaximos')}
             ''', (fecha_cambio_fuente,))
             filas_lecturas = cursor.fetchall()
 
@@ -2755,11 +2755,12 @@ class Linealidad(PruebaBasico):
         # Funcion para graficar los datos de máximos de cámara
         def graficar_maximos_camara(canvas, query, fecha):
             """Grafica los datos de máximos de cámara para una fecha específica"""
-            query.prepare("""
+            filtro_mc = filtro_activo('MaximosCamaras').replace("activo", "mc.activo")
+            query.prepare(f"""
                 SELECT mc.posicion, mc.promedio
                 FROM MaximosCamaras mc
                 JOIN TipoCalibracion tc ON mc.ref = tc.id
-                WHERE DATE(tc.fecha) = ?
+                WHERE DATE(tc.fecha) = ?{filtro_mc}
                 ORDER BY mc.posicion ASC
             """)
             query.bindValue(0, fecha)

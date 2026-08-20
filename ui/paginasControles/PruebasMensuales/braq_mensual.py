@@ -16,6 +16,7 @@ from resources.utils.matplotlib_lazy import get_matplotlib_components
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_ACTUALIZAR
+from services.anulacion import filtro_activo
 import traceback
 
 class PruebaMensualBraq(PruebaBasico):
@@ -100,10 +101,10 @@ class PruebaMensualBraq(PruebaBasico):
         conn = Conexion().conectar()
         cursor = conn.cursor()
         try:
-            cursor.execute("""
+            cursor.execute(f"""
                 UPDATE CondicionesMedicion
                 SET desplazamiento_ini = ?
-                WHERE ref = ?
+                WHERE ref = ?{filtro_activo('CondicionesMedicion')}
             """, (str(desplazamiento), self.ref_bd))
             conn.commit()
             print("Desplazamiento actualizado en base de datos.")
@@ -1110,10 +1111,10 @@ class PruebaMensualBraq(PruebaBasico):
     def mostrar_tabla_maximos(self, ref):
         conn = Conexion().conectar()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT posicion, medida1, medida2, promedio 
-            FROM MaximosCamaras 
-            WHERE ref = ?
+        cursor.execute(f"""
+            SELECT posicion, medida1, medida2, promedio
+            FROM MaximosCamaras
+            WHERE ref = ?{filtro_activo('MaximosCamaras')}
             ORDER BY posicion ASC
         """, (ref,))
         resultados = cursor.fetchall()
@@ -1142,10 +1143,10 @@ class PruebaMensualBraq(PruebaBasico):
     def mostrar_tabla_lecturas(self, ref):
         conn = Conexion().conectar()
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT voltaje, V_300, V_150, Vn_300, promediosV 
-            FROM LecturasMaximos 
-            WHERE ref = ?
+        cursor.execute(f"""
+            SELECT voltaje, V_300, V_150, Vn_300, promediosV
+            FROM LecturasMaximos
+            WHERE ref = ?{filtro_activo('LecturasMaximos')}
         """, (ref,))
         resultados = cursor.fetchall()
         conn.close()
@@ -1322,10 +1323,10 @@ class PruebaMensualBraq(PruebaBasico):
             # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas
             # -- son las 4 que se leen más abajo (modelo, serie_cp,
             # modelo_elec, serie_ele), por nombre en los 4 casos.
-            query.prepare("""
+            query.prepare(f"""
                 SELECT modelo, serie_cp, modelo_elec, serie_ele FROM SistemaMedicion
-                WHERE DATE(fecha) = ?
-                OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?
+                WHERE (DATE(fecha) = ?
+                OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('SistemaMedicion')}
 
             """)
             query.addBindValue((fecha_str))
@@ -1387,10 +1388,10 @@ class PruebaMensualBraq(PruebaBasico):
             return
        
         query = QSqlQuery(db)
-        query.prepare("""
-            SELECT t,p,h FROM CondicionesMedicion 
-            WHERE DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ? 
-            
+        query.prepare(f"""
+            SELECT t,p,h FROM CondicionesMedicion
+            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('CondicionesMedicion')}
+
         """)
         query.addBindValue((fecha_str))
         query.addBindValue((fecha_str))
@@ -1427,10 +1428,10 @@ class PruebaMensualBraq(PruebaBasico):
             return
        
         query = QSqlQuery(db)
-        query.prepare("""
-            SELECT actividad_monitor FROM ResultadosActividad 
-            WHERE DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ? 
-            
+        query.prepare(f"""
+            SELECT actividad_monitor FROM ResultadosActividad
+            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('ResultadosActividad')}
+
         """)
         query.addBindValue((fecha_str))
         query.addBindValue((fecha_str))
@@ -1457,10 +1458,10 @@ class PruebaMensualBraq(PruebaBasico):
             return []
 
         query = QSqlQuery(db)
-        query.prepare("""
+        query.prepare(f"""
             SELECT posicion, medida1, medida2, promedio
             FROM MaximosCamaras
-            WHERE DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ? 
+            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('MaximosCamaras')}
             ORDER BY posicion DESC
         """)
         query.addBindValue((fecha_str))
@@ -1512,10 +1513,10 @@ class PruebaMensualBraq(PruebaBasico):
             return []
 
         query = QSqlQuery(db)
-        query.prepare("""
+        query.prepare(f"""
             SELECT voltaje, V_300, V_150, Vn_300, promediosV
             FROM LecturasMaximos
-            WHERE DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ? 
+            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('LecturasMaximos')}
             ORDER BY DATE(fecha) DESC
             LIMIT 3
         """)
@@ -1580,11 +1581,12 @@ class PruebaMensualBraq(PruebaBasico):
         # Funcion para graficar los datos de máximos de cámara
         def graficar_maximos_camara(canvas, query, fecha):
             """Grafica los datos de máximos de cámara para una fecha específica"""
-            query.prepare("""
+            filtro_mc = filtro_activo('MaximosCamaras').replace("activo", "mc.activo")
+            query.prepare(f"""
                 SELECT mc.posicion, mc.promedio
                 FROM MaximosCamaras mc
                 JOIN TipoCalibracion tc ON mc.ref = tc.id
-                WHERE DATE(tc.fecha) = ?
+                WHERE DATE(tc.fecha) = ?{filtro_mc}
                 ORDER BY mc.posicion ASC
             """)
             query.bindValue(0, fecha)
@@ -1706,7 +1708,14 @@ class PruebaMensualBraq(PruebaBasico):
                 # CondicionesMedicion). encontrar_columnas solo excluye
                 # `activo` cuando de verdad está presente.
                 columnas_str, _ = encontrar_columnas(nombre_tabla, id=True, delete=0)
-                cursor.execute(f"SELECT {columnas_str} FROM {nombre_tabla} WHERE {uid} = ?", (ref,))
+                # LF (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF): `nombre_tabla`
+                # es dinámico -- SistemaMedicion/CondicionesMedicion son
+                # PENDIENTE-LF hoy (no-op); TipoCalibracion es raíz (DP-31,
+                # filtro_activo() es "" siempre, no-op también, sin cambiar
+                # nada para esa rama).
+                cursor.execute(
+                    f"SELECT {columnas_str} FROM {nombre_tabla} WHERE {uid} = ?{filtro_activo(nombre_tabla)}",
+                    (ref,))
                 results = cursor.fetchall()
                 return results
 

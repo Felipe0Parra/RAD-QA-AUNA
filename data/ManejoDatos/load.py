@@ -1180,13 +1180,13 @@ def mostrar_db_mensualBraqui(self):
 
     for fila_idx, (ref, user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion) in enumerate(entradas):
         # Extraer datos vinculados por ref
-        cursor.execute("SELECT modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0 FROM SistemaMedicion WHERE ref=?", (ref,))
+        cursor.execute(f"SELECT modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0 FROM SistemaMedicion WHERE ref=?{filtro_activo('SistemaMedicion')}", (ref,))
         sistema = cursor.fetchone()
 
-        cursor.execute("SELECT t, p, h, desplazamiento_ini, observaciones FROM CondicionesMedicion WHERE ref=?", (ref,))
+        cursor.execute(f"SELECT t, p, h, desplazamiento_ini, observaciones FROM CondicionesMedicion WHERE ref=?{filtro_activo('CondicionesMedicion')}", (ref,))
         condiciones = cursor.fetchone()
 
-        cursor.execute("SELECT Ks, Kp, Ktp, actividad_monitor, actividad_calculada, actividad_decaimiento FROM ResultadosActividad WHERE ref=?", (ref,))
+        cursor.execute(f"SELECT Ks, Kp, Ktp, actividad_monitor, actividad_calculada, actividad_decaimiento FROM ResultadosActividad WHERE ref=?{filtro_activo('ResultadosActividad')}", (ref,))
         resultados = cursor.fetchone()
 
         if not (sistema and condiciones and resultados):
@@ -1770,19 +1770,23 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
     tableWidget.clearContents()
     tableWidget.setRowCount(0)
     tableWidget.setColumnCount(0)
-    cursor.execute("""
+    # LF1b: filtro de 'pruebas' en el ON del LEFT JOIN, no en el WHERE --
+    # así un control sin pruebas VIGENTES (todas anuladas) sigue apareciendo
+    # con num_pruebas=0, en vez de desaparecer de la lista (WHERE lo haría).
+    filtro_p_on = filtro_activo('pruebas').replace("activo", "p.activo")
+    cursor.execute(f"""
     SELECT c.id, c.fecha, c.equipo, c.control, COUNT(p.id_prueba) as num_pruebas
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     WHERE c.equipo = 'Clinac ix' AND c.control = 'Anual'
         AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
     """)
     print("Usted está aquí mostrar controles imgIX anual ")
     print(cursor.fetchall())
-   
-    query = """
-    SELECT 
+
+    query = f"""
+    SELECT
         c.id as id_sesion,
         substr(c.fecha, 4, 4) || '-' || substr(c.fecha, 1, 2) as fecha,
         u.fullname,
@@ -1794,7 +1798,7 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
         MAX(p.imagen_resultado) as imagen_resultado,
         MIN(p.id_prueba) as id_prueba
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Clinac ix'
     AND c.control = 'Anual'
@@ -1802,7 +1806,7 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
     GROUP BY c.id, c.fecha, c.equipo
     ORDER BY c.fecha DESC
     """
-    
+
 
     cursor.execute(query)
     rows = cursor.fetchall()
@@ -1955,10 +1959,14 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
     tableWidget.clearContents()
     tableWidget.setRowCount(0)
     tableWidget.setColumnCount(0)
-    cursor.execute("""
+    # LF1b: filtro de 'pruebas' en el ON del LEFT JOIN, no en el WHERE --
+    # así un control sin pruebas VIGENTES (todas anuladas) sigue apareciendo
+    # con num_pruebas=0, en vez de desaparecer de la lista (WHERE lo haría).
+    filtro_p_on = filtro_activo('pruebas').replace("activo", "p.activo")
+    cursor.execute(f"""
     SELECT c.id, c.fecha, c.equipo, c.control, COUNT(p.id_prueba) as num_pruebas
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     WHERE c.equipo = 'Clinac ix' AND c.control = 'Mensual'
         AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
@@ -1969,20 +1977,20 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
     if "mes_control" not in columns:
         print("mes control")
         cursor.execute("ALTER TABLE pruebas ADD COLUMN mes_control TEXT")
-        
-    query_addmonth = """ 
+
+    query_addmonth = f"""
                     UPDATE pruebas
                     SET mes_control = strftime('%Y-%m', created_at)
-                    WHERE mes_control IS NULL    
+                    WHERE mes_control IS NULL{filtro_activo('pruebas')}
                     """
     cursor.execute(query_addmonth)
     conn.commit()
-    
-    
+
+
     "-----------------------------------------------------------------------------------------------------------------"
-    
-    query = """
-    SELECT 
+
+    query = f"""
+    SELECT
     c.id as id_sesion,
     c.fecha as fecha,
     u.fullname,
@@ -1994,7 +2002,7 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
     MAX(p.imagen_resultado) as imagen_resultado,
     MIN(p.id_prueba) as id_prueba
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Clinac ix'
     AND c.control = 'Mensual'
@@ -2002,7 +2010,7 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
     GROUP BY c.id, c.equipo
     ORDER BY c.fecha DESC
     """
-    
+
     cursor.execute(query)
     rows = cursor.fetchall()
     conn.commit()
@@ -2160,19 +2168,20 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
     tableWidget.clearContents()
     tableWidget.setRowCount(0)
     tableWidget.setColumnCount(0)
-    cursor.execute("""
+    filtro_p_on = filtro_activo('pruebas').replace("activo", "p.activo")
+    cursor.execute(f"""
     SELECT c.id, c.fecha, c.equipo, c.control, COUNT(p.id_prueba) as num_pruebas
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     WHERE c.equipo = 'Halcyon' AND c.control = 'Anual'
         AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
     """)
     print("Usted está aquí mostrar controles HC anual ")
     print(cursor.fetchall())
-   
-    query = """
-    SELECT 
+
+    query = f"""
+    SELECT
         c.id as id_sesion,
         substr(c.fecha, 4, 4) || '-' || substr(c.fecha, 1, 2) as fecha,
         u.fullname,
@@ -2184,7 +2193,7 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
         MAX(p.imagen_resultado) as imagen_resultado,
         MIN(p.id_prueba) as id_prueba
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Halcyon'
     AND c.control = 'Anual'
@@ -2350,10 +2359,11 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
     tableWidget.clearContents()
     tableWidget.setRowCount(0)
     tableWidget.setColumnCount(0)
-    cursor.execute("""
+    filtro_p_on = filtro_activo('pruebas').replace("activo", "p.activo")
+    cursor.execute(f"""
     SELECT c.id, c.fecha, c.equipo, c.control, COUNT(p.id_prueba) as num_pruebas
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     WHERE c.equipo = 'Halcyon' AND c.control = 'Mensual'
         AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
@@ -2364,20 +2374,20 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
     if "mes_control" not in columns:
         print("mes control")
         cursor.execute("ALTER TABLE pruebas ADD COLUMN mes_control TEXT")
-        
-    query_addmonth = """ 
+
+    query_addmonth = f"""
                     UPDATE pruebas
                     SET mes_control = strftime('%Y-%m', created_at)
-                    WHERE mes_control IS NULL    
+                    WHERE mes_control IS NULL{filtro_activo('pruebas')}
                     """
     cursor.execute(query_addmonth)
     conn.commit()
-    
-    
+
+
     "-----------------------------------------------------------------------------------------------------------------"
-    
-    query = """
-    SELECT 
+
+    query = f"""
+    SELECT
     c.id as id_sesion,
     c.fecha as fecha,
     u.fullname,
@@ -2389,7 +2399,7 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
     MAX(p.imagen_resultado) as imagen_resultado,
     MIN(p.id_prueba) as id_prueba
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Halcyon'
     AND c.control = 'Mensual'
@@ -2397,7 +2407,7 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
     GROUP BY c.id, c.equipo
     ORDER BY c.fecha DESC
     """
-    
+
     cursor.execute(query)
     rows = cursor.fetchall()
     conn.commit()
@@ -2550,10 +2560,11 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
     tableWidget.clearContents()
     tableWidget.setRowCount(0)
     tableWidget.setColumnCount(0)
-    cursor.execute("""
+    filtro_p_on = filtro_activo('pruebas').replace("activo", "p.activo")
+    cursor.execute(f"""
     SELECT c.id, c.fecha, c.equipo, c.control, COUNT(p.id_prueba) as num_pruebas
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     WHERE c.equipo = 'Tomógrafo' AND c.control = 'Mensual'
         AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id
@@ -2564,20 +2575,20 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
     if "mes_control" not in columns:
         print("mes control")
         cursor.execute("ALTER TABLE pruebas ADD COLUMN mes_control TEXT")
-        
-    query_addmonth = """ 
+
+    query_addmonth = f"""
                     UPDATE pruebas
                     SET mes_control = strftime('%Y-%m', created_at)
-                    WHERE mes_control IS NULL    
+                    WHERE mes_control IS NULL{filtro_activo('pruebas')}
                     """
     cursor.execute(query_addmonth)
     conn.commit()
-    
-    
+
+
     "-----------------------------------------------------------------------------------------------------------------"
-    
-    query = """
-    SELECT 
+
+    query = f"""
+    SELECT
     c.id as id_sesion,
     c.fecha as fecha,
     u.fullname,
@@ -2589,7 +2600,7 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
     MAX(p.imagen_resultado) as imagen_resultado,
     MIN(p.id_prueba) as id_prueba
     FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id
+    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
     LEFT JOIN users u ON c.user_id = u.fullname
     WHERE c.equipo = 'Tomógrafo'
     AND c.control = 'Mensual'
@@ -2597,7 +2608,7 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
     GROUP BY c.id, c.equipo
     ORDER BY c.fecha DESC
     """
-    
+
     cursor.execute(query)
     rows = cursor.fetchall()
     conn.commit()
@@ -2763,11 +2774,18 @@ def _mostrar_tabla_generica(parent, mes_control, config):
 
     col_names = ', '.join([col[1] for col in config['columnas']])
     col_names = ', '.join([f"t.{col[1]}" for col in config['columnas']])
+    # LF (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF): `config['tabla']` es una de
+    # las 7 hijas de TAC (PENDIENTE-LF, hoy no-op) y 'pruebas' también --
+    # cada una calificada con su propio alias, ya que el SQL nombra dos
+    # tablas versionadas a la vez (§4 hueco 4 de LE4: el filtro se comprueba
+    # por tabla, no por sentencia).
+    filtro_t = filtro_activo(config['tabla']).replace("activo", "t.activo")
+    filtro_p = filtro_activo('pruebas').replace("activo", "p.activo")
     query = f"""
     SELECT {col_names}
     FROM {config['tabla']} t
     JOIN pruebas p ON t.id_prueba = p.id_prueba
-    WHERE p.id_sesion = ?
+    WHERE p.id_sesion = ?{filtro_t}{filtro_p}
     """
 
     cursor.execute(query, (mes_control,))
@@ -3901,21 +3919,21 @@ def mostrar_veri_corr(parent, id_ref):
         cursor = conn.cursor()
 
         # --------- TABLA 1: VERIFICACIONES ---------
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT lado_arriba, lado_abajo, lado_izquierda, lado_derecha,
                 desv_vert_izq, desv_vert_der, desv_horiz_arriba, desv_horiz_abajo,
                 alineado_horizontal, simetrico
             FROM analisis_placa_verificaciones
-            WHERE ref = ? AND tipo = 'verificacion_inicial'
+            WHERE ref = ? AND tipo = 'verificacion_inicial'{filtro_activo('analisis_placa_verificaciones')}
         """, (id_ref,))
         datos_inicial = cursor.fetchone()
 
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT lado_arriba, lado_abajo, lado_izquierda, lado_derecha,
                 desv_vert_izq, desv_vert_der, desv_horiz_arriba, desv_horiz_abajo,
                 alineado_horizontal, simetrico
             FROM analisis_placa_verificaciones
-            WHERE ref = ? AND tipo = 'verificacion_ideal'
+            WHERE ref = ? AND tipo = 'verificacion_ideal'{filtro_activo('analisis_placa_verificaciones')}
         """, (id_ref,))
         datos_ideal = cursor.fetchone()
 
@@ -3959,10 +3977,10 @@ def mostrar_veri_corr(parent, id_ref):
             tabla_verif.setColumnWidth(col, text_width + 70)
 
         # --------- TABLA 2: CORRECCIONES (dx, dy) ---------
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT vertice, delta_x, delta_y
             FROM analisis_placa_correcciones
-            WHERE ref = ?
+            WHERE ref = ?{filtro_activo('analisis_placa_correcciones')}
         """, (id_ref,))
         datos_correcciones = cursor.fetchall()
 
@@ -3987,10 +4005,11 @@ def mostrar_veri_corr(parent, id_ref):
             # Agregamos un pequeño margen
             tabla_corr.setColumnWidth(col, text_width + 70)
         # --------- TABLA 3: DIFERENCIAS ---------
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT diferencia_arriba, diferencia_abajo, diferencia_izquierda, diferencia_derecha
             FROM analisis_placa_correcciones
-            WHERE ref = ?
+            WHERE ref = ?{filtro_activo('analisis_placa_correcciones')}
+            ORDER BY rowid DESC
             LIMIT 1
         """, (id_ref,))
         fila = cursor.fetchone()
@@ -4277,11 +4296,11 @@ def guardarEdicion(dlg, tabla_widget, nombre_tabla, id_ref):
 
                     # Actualizar ResultadosActividad
                     query_update = QSqlQuery(db)
-                    sql = """
+                    sql = f"""
                         UPDATE ResultadosActividad
                         SET Ks = ?, Kp = ?, Ktp = ?,
                             actividad_calculada = ?, actividad_decaimiento = ?
-                        WHERE ref = ?
+                        WHERE ref = ?{filtro_activo('ResultadosActividad')}
                     """
                     query_update.prepare(sql)
                     query_update.addBindValue(round(Ks, 3))
@@ -4651,10 +4670,10 @@ def consulta_mesualBraq(self, id):
     cursor = conn.cursor()
 
     # --- CondicionesMedicion ---
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT t, p
         FROM CondicionesMedicion
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('CondicionesMedicion')}
     """, (id,))
     row = cursor.fetchone()
     if row:
@@ -4663,10 +4682,10 @@ def consulta_mesualBraq(self, id):
         raise Exception(f"No se encontraron condiciones de medición con ref={id}")
     
     # --- SistemasMedicion ---
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT t0, p0, calibracion, electrometro
         FROM SistemaMedicion
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('SistemaMedicion')}
     """, (id,))
     row = cursor.fetchone()
     if row:
@@ -4676,10 +4695,10 @@ def consulta_mesualBraq(self, id):
         raise Exception(f"No se encontraron condiciones de medición con ref={id}")
 
     # --- LecturasMaximos (traer todas las lecturas de ese ref) ---
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT voltaje, promediosV
         FROM LecturasMaximos
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('LecturasMaximos')}
     """, (id,))
     rows = cursor.fetchall()
     if not rows:

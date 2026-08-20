@@ -48,6 +48,7 @@ from models.PDF.PDFWindow import PdfViewer
 
 # Importar funciones de reconstrucción desde catphan_db
 from data.ManejoDatos.catphan_TAC.catphan_db import reconstruir_resultados_desde_bd
+from services.anulacion import filtro_activo
 
 class ReporteControlSistemaImagenes:
     """
@@ -220,7 +221,7 @@ class ReporteControlSistemaImagenes:
             bool: True si hay pruebas disponibles, False en caso contrario
         """
         query = QSqlQuery(db)
-        query.prepare("SELECT COUNT(*) FROM pruebas WHERE id_sesion = ?") # COUNT es para verificar existencia
+        query.prepare(f"SELECT COUNT(*) FROM pruebas WHERE id_sesion = ?{filtro_activo('pruebas')}") # COUNT es para verificar existencia
         query.addBindValue(ref)
         
         if query.exec() and query.next():
@@ -280,10 +281,11 @@ class ReporteControlSistemaImagenes:
         # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas,
         # las mismas 7 que devuelve el dict de abajo. Un campo nuevo se
         # agrega en los DOS sitios -- aquí y en el dict --, no solo en uno.
-        query.prepare("""
+        query.prepare(f"""
             SELECT id_prueba, id_tipo, kv, ma, espesor_corte, imagen_path, imagen_resultado
             FROM pruebas
-            WHERE id_sesion = ? AND id_tipo = ?
+            WHERE id_sesion = ? AND id_tipo = ?{filtro_activo('pruebas')}
+            ORDER BY id_prueba DESC
             LIMIT 1
         """)
         query.addBindValue(ref)
@@ -317,11 +319,12 @@ class ReporteControlSistemaImagenes:
         
         # Consultar todas las imágenes resultado de la sesión
         query = QSqlQuery(db)
-        query.prepare("""
+        filtro_p = filtro_activo('pruebas').replace("activo", "p.activo")
+        query.prepare(f"""
             SELECT p.id_prueba, p.id_tipo, p.imagen_path, p.imagen_resultado, tp.nombre_prueba
             FROM pruebas p
             JOIN tipos_prueba tp ON p.id_tipo = tp.id_tipo
-            WHERE p.id_sesion = ? AND p.imagen_resultado IS NOT NULL
+            WHERE p.id_sesion = ? AND p.imagen_resultado IS NOT NULL{filtro_p}
         """)
         query.addBindValue(ref)
         

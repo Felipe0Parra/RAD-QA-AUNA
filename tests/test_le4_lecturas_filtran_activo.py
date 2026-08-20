@@ -101,13 +101,21 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("data/ManejoDatos/load.py", 893): "raíz (DP-31, diarias -- ya filtra activo a mano)",
     ("data/ManejoDatos/load.py", 204): "raíz (DP-31, diarias -- ya filtra activo a mano)",
     ("data/ManejoDatos/load.py", 1020): "código muerto (mostrar_db_CambioFuente, sin llamadores)",
-    ("data/ManejoDatos/load.py", 4591): "identidad (fila antes de anular/borrar)",
+    ("data/ManejoDatos/load.py", 4610): "identidad (fila antes de anular/borrar)",
     ("models/PDF/reportes.py", 67): "raíz (DP-31, diarias)",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1709): "tablas no anulables (TipoCalibracion es raíz DP-31; SistemaMedicion/CondicionesMedicion no están en TABLAS_ANULABLES)",
+    # NOTA (LF, gap hallado por el subagente que resolvió LF3): hasta aquí
+    # decía "TipoCalibracion es raíz DP-31; SistemaMedicion/CondicionesMedicion
+    # no están en TABLAS_ANULABLES" -- cierto antes de LF2, falso después
+    # (ambas son PENDIENTE-LF). Corregido: `addsomething::consulta` ahora
+    # llama a `filtro_activo(nombre_tabla)` directamente sobre la MISMA
+    # variable dinámica -- protegido por construcción (ver docstring del
+    # módulo, "Tabla dinámica"), por eso el sitio YA NO aparece en absoluto
+    # en el censo (ni fallo ni dinámico): el propio analizador reconoce la
+    # llamada. No hace falta entrada aquí.
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 271): "DO1 (subirlineasmensuales_ix -- SELECT del bloque vigente para componer el nuevo; ya filtra activo a mano, tabla dinámica)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 310): "DO1 (subirlineasmensuales_ix, rama fuera del bloque de QC)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 361): "DO1 (_cargar_dosimetria_bd_ix -- ya filtra activo a mano, tabla dinámica)",
-    ("data/ManejoDatos/load.py", 2773): "tabla no anulable (_mostrar_tabla_generica -- módulo TAC/Catphan: 'pruebas' y las 7 tablas de CT (valores_ct, uniformidad_ruido, uniformidad_global, resolucion_espacial, linealidad_ct, espesor_corte, tamaño_pixel), ninguna está en TABLAS_ANULABLES)",
+    ("data/ManejoDatos/load.py", 2791): "tabla dinámica (_mostrar_tabla_generica -- módulo TAC/Catphan: 'config[\"tabla\"]' es una de las 7 hijas de TAC, PENDIENTE-LF hoy; JOIN literal con 'pruebas' (también PENDIENTE-LF). LF: corregido el gap que decía \"ninguna está en TABLAS_ANULABLES\" (cierto antes de LF2) -- ahora filtra las DOS con `filtro_t`/`filtro_p` calificados por alias, invisibles para el detector de texto por ir en variables intermedias)",
     # scripts/: excepciones censales explícitas (contrato regla 5) --
     # documentadas en cada archivo, no solo aquí.
     ("scripts/migrar_bd_a_estandar.py", 147): "migración/censo (_contar_qc)",
@@ -137,6 +145,44 @@ EXCEPCIONES_LITERALES = {
         "preguntas -- RP1, mismo `filtro_p` que la excepción anterior, "
         "usado en la segunda rama (equipo_filtrar no truthy) de "
         "mostrar_controles_mensuales",
+    # LF1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF1): mismo patrón, aplicado a
+    # las 30 tablas nuevas -- variable intermedia califica filtro_activo()
+    # con el alias del JOIN antes de interpolarse.
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1010):
+        "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
+        "del LEFT JOIN (variable `filtro_p`) en consultar_pruebas_disponibles",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1373):
+        "valores_ct -- filtro_activo('valores_ct') se califica con el alias "
+        "'vc.' del JOIN (variable `filtro_vc`) en reconstruir_valores_ct",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1464):
+        "uniformidad_ruido -- filtro_activo('uniformidad_ruido') se califica "
+        "con el alias 'ur.' del JOIN (variable `filtro_ur`) en "
+        "reconstruir_uniformidad",
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 323):
+        "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
+        "del JOIN (variable `filtro_p`) en _obtener_imagenes_blob",
+    # LF1b (§6-LF1): 'pruebas' se une con LEFT JOIN a 'controles' (raíz) --
+    # el filtro va en el ON, no en el WHERE (si fuera WHERE, un control sin
+    # pruebas VIGENTES desaparecería de la lista en vez de mostrar
+    # num_pruebas=0). Variable `filtro_p_on`, 5 funciones gemelas
+    # (mostrar_controles_imgIX[_anual], mostrar_controles_imgHC[_anual],
+    # mostrar_controles_tac), 2 sitios cada una (COUNT + SELECT MAX).
+    ("data/ManejoDatos/load.py", 1777): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX_anual, COUNT)",
+    ("data/ManejoDatos/load.py", 1811): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX_anual, SELECT MAX)",
+    ("data/ManejoDatos/load.py", 1966): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX, COUNT)",
+    ("data/ManejoDatos/load.py", 2014): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX, SELECT MAX)",
+    ("data/ManejoDatos/load.py", 2172): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC_anual, COUNT)",
+    ("data/ManejoDatos/load.py", 2206): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC_anual, SELECT MAX)",
+    ("data/ManejoDatos/load.py", 2363): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC, COUNT)",
+    ("data/ManejoDatos/load.py", 2411): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC, SELECT MAX)",
+    ("data/ManejoDatos/load.py", 2564): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_tac, COUNT)",
+    ("data/ManejoDatos/load.py", 2612): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_tac, SELECT MAX)",
+    # MaximosCamaras JOIN TipoCalibracion (raíz) -- mismo patrón, variable
+    # `filtro_mc` calificada con el alias 'mc.'. Dos hallazgos en la misma
+    # línea (el analizador reporta 'sin filtro' y 'LIMIT sin ORDER BY' por
+    # separado aunque sea un solo sitio revisado).
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2759): "MaximosCamaras -- filtro_mc calificado con el alias 'mc.' (graficar_maximos_camara)",
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1585): "MaximosCamaras -- filtro_mc calificado con el alias 'mc.' (graficar_maximos_camara)",
 }
 
 # ES1 (NUEVO, hueco 1): sitios donde el argumento de execute() no es un
@@ -155,14 +201,20 @@ EXCEPCIONES_LITERALES = {
 #     (`sql += filtro_activo(nombre_tabla)`, una llamada real, no un
 #     literal -- por eso es opaca para el resolver aunque esté bien).
 SITIOS_OPACOS_PERMITIDOS = {
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 874): "INSERT (linealidad_ct)",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 875): "INSERT (linealidad_ct)",
     ("data/ManejoDatos/conection.py", 534): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",
     ("data/ManejoDatos/conection.py", 1934): "INSERT (users, no está en TABLAS_ANULABLES)",
     ("data/ManejoDatos/load.py", 222): "INSERT (diarias -- tabla dinámica; raíz DP-31 de todos modos)",
     ("data/ManejoDatos/load.py", 384): "INSERT (controles, raíz DP-31)",
-    ("data/ManejoDatos/load.py", 4206): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",
-    ("data/ManejoDatos/load.py", 4286): "UPDATE ResultadosActividad -- no está en TABLAS_ANULABLES (hija de la raíz braquiterapia TipoCalibracion, DP-31)",
-    ("data/ManejoDatos/load.py", 4622): "DELETE por id_where -- rama de eliminarRegistro para tablas FUERA de TABLAS_ANULABLES (las anulables van por anular_fila, no llegan aquí)",
+    ("data/ManejoDatos/load.py", 4225): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",
+    # LF (gap hallado por el subagente que resolvió LF3): decía "no está en
+    # TABLAS_ANULABLES" -- cierto antes de LF2, falso después (PENDIENTE-LF).
+    # Corregido: la sentencia ahora SÍ llama a `filtro_activo('ResultadosActividad')`
+    # -- sigue "opaca" para AN1 no por el filtro sino porque `sql` se
+    # reasigna en varias ramas de `guardarEdicion` (misma función que la
+    # entrada anterior), irresoluble a propósito por diseño de AN1.
+    ("data/ManejoDatos/load.py", 4305): "UPDATE ResultadosActividad -- ya filtra con filtro_activo('ResultadosActividad'); opaca a AN1 por reasignación de `sql` en varias ramas de guardarEdicion, no por falta de filtro",
+    ("data/ManejoDatos/load.py", 4641): "DELETE por id_where -- rama de eliminarRegistro para tablas FUERA de TABLAS_ANULABLES (las anulables van por anular_fila, no llegan aquí)",
     ("data/ManejoDatos/obtenerDatosHalcyon.py", 391): "INSERT (halcyon, raíz DP-31)",
     ("services/dosis_service.py", 281): "DDL (CREATE TABLE calculadora_dosimetrica, no está en TABLAS_ANULABLES -- tiene su propia columna `vigente`, mecanismo de versionado independiente de este contrato)",
     ("services/dosis_service.py", 391): "INSERT (calculadora_dosimetrica, no está en TABLAS_ANULABLES)",

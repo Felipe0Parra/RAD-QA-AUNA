@@ -7,6 +7,7 @@ from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle, Paragraph
 from PyQt5.QtCore import QByteArray
 import io
+from services.anulacion import filtro_activo
 
 def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ", 
                 id_maquina = " ", nombre_pdf="lab_report.pdf",
@@ -1140,11 +1141,11 @@ def _leer_datos_mlc_db(ref):
     cursor = conn.cursor()
 
     # ── configuracion_picketfence ─────────────────────────────────
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT fecha, equipo, fisico_1, fisico_2,
                tolerancia, action_tolerance, imagen_mlc
         FROM configuracion_picketfence
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('configuracion_picketfence')}
         ORDER BY id DESC LIMIT 1
     """, (ref,))
     row = cursor.fetchone()
@@ -1159,35 +1160,35 @@ def _leer_datos_mlc_db(ref):
 
     imagen_blob = dicom_to_png_blob(imagen_blob)
     # Obtener el id real de configuracion_picketfence
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT id FROM configuracion_picketfence
-        WHERE ref = ? ORDER BY id DESC LIMIT 1
+        WHERE ref = ?{filtro_activo('configuracion_picketfence')} ORDER BY id DESC LIMIT 1
     """, (ref,))
     cfg_id = cursor.fetchone()[0]
 
     # ── error_picket ──────────────────────────────────────────────
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT picket, picket_mean_error, picket_max_error
         FROM error_picket
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('error_picket')}
         ORDER BY picket
     """, (ref,))
     picket_rows = cursor.fetchall()
 
     # ── leaf_error ────────────────────────────────────────────────
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT leaf, error
         FROM leaf_error
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('leaf_error')}
         ORDER BY leaf
     """, (ref,))
     leaf_rows = cursor.fetchall()
 
     # ── highest_leaf_errors ───────────────────────────────────────
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT leaf_out, picket_asociado, desviacion
         FROM highest_leaf_errors
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('highest_leaf_errors')}
         ORDER BY desviacion DESC
     """, (ref,))
     worst_rows = cursor.fetchall()
@@ -1639,11 +1640,11 @@ def _leer_datos_starshot_db(ref):
     cursor = conn.cursor()
  
     # ── configuracion_starshot ────────────────────────────────────
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT fecha, equipo, fisico_1, fisico_2,
                tolerancia, sid, imagen_mlc_spoke
         FROM configuracion_starshot
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('configuracion_starshot')}
         ORDER BY id DESC LIMIT 1
     """, (ref,))
     row = cursor.fetchone()
@@ -1660,10 +1661,10 @@ def _leer_datos_starshot_db(ref):
         pass  # Si falla la conversión, simplemente no se incluye la imagen
  
     # ── estadisticas_starshot ─────────────────────────────────────
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT std_mm, rms_mm, pm_95
         FROM estadisticas_starshot
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('estadisticas_starshot')}
         ORDER BY id DESC LIMIT 1
     """, (ref,))
     stats_row = cursor.fetchone()
@@ -1673,21 +1674,21 @@ def _leer_datos_starshot_db(ref):
         std_mm = rms_mm = p95_mm = None
  
     # ── angulo_starshot ───────────────────────────────────────────
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT spoke_index, angulo_nominal_deg,
                angulo_real_deg, desviacion_deg
         FROM angulo_starshot
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('angulo_starshot')}
         ORDER BY spoke_index
     """, (ref,))
     spoke_rows = cursor.fetchall()   # [(idx, nominal, real, desv), ...]
  
     # ── uniformidad_angular_starshot ──────────────────────────────
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT gap_index, spoke_inicial, spoke_final,
                separacion_deg, separacion_ideal_deg, error_deg
         FROM uniformidad_angular_starshot
-        WHERE ref = ?
+        WHERE ref = ?{filtro_activo('uniformidad_angular_starshot')}
         ORDER BY gap_index
     """, (ref,))
     uniformidad_rows = cursor.fetchall()   # [(gap_idx, ini, fin, sep, ideal, err), ...]
