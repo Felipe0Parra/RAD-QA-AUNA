@@ -89,6 +89,61 @@ def tablas_anulables():
     raise RuntimeError(f"No se encontró TABLAS_ANULABLES en {_ANULACION_PATH}")
 
 
+def excepciones_inventario():
+    """IV2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV2): lee
+    `EXCEPCIONES_INVENTARIO` de `services/anulacion.py` con el mismo criterio
+    que `tablas_anulables()` -- AST, sin importar el módulo (PyQt5). Devuelve
+    el conjunto de nombres de tabla (las claves), no los motivos: IV2 solo
+    necesita saber CUÁLES están clasificadas como excepción, no por qué."""
+    arbol = ast.parse(_ANULACION_PATH.read_text(encoding="utf-8"))
+    for nodo in ast.walk(arbol):
+        if not (isinstance(nodo, ast.Assign) and len(nodo.targets) == 1
+                and isinstance(nodo.targets[0], ast.Name)
+                and nodo.targets[0].id == "EXCEPCIONES_INVENTARIO"):
+            continue
+        if not isinstance(nodo.value, ast.Dict):
+            raise RuntimeError(
+                "EXCEPCIONES_INVENTARIO ya no es un dict literal en "
+                f"{_ANULACION_PATH} -- actualiza excepciones_inventario().")
+        tablas = set()
+        for clave in nodo.value.keys:
+            if not (isinstance(clave, ast.Constant) and isinstance(clave.value, str)):
+                raise RuntimeError(
+                    f"Clave no literal en EXCEPCIONES_INVENTARIO: {ast.dump(clave)}")
+            tablas.add(clave.value)
+        return frozenset(tablas)
+    raise RuntimeError(f"No se encontró EXCEPCIONES_INVENTARIO en {_ANULACION_PATH}")
+
+
+def cierre_transitivo_fk(con, raices):
+    """IV1/IV2 (PLAN_CONTRATO_COMPLETO_19-08.md): todas las tablas alcanzables
+    desde `raices` siguiendo claves foráneas HIJO -> PADRE en sentido inverso
+    (quién apunta a quién), transitivamente. No incluye las propias raíces.
+    Única implementación -- la usan tanto `scripts/derivar_inventario_qc.py`
+    (generar el texto para pegar) como el tripwire IV2 (verificar que no hay
+    huecos), para que las dos vistas del mismo cierre no puedan divergir entre
+    sí por tener cada una su propia copia del algoritmo."""
+    tablas = [r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' "
+        "AND name NOT LIKE 'sqlite_%'").fetchall()]
+    hijos_de = {}
+    for tabla in tablas:
+        for fk in con.execute(f'PRAGMA foreign_key_list("{tabla}")').fetchall():
+            hijos_de.setdefault(fk[2], set()).add(tabla)
+
+    visitados = set()
+
+    def recorrer(padre):
+        for hijo in sorted(hijos_de.get(padre, ())):
+            if hijo not in visitados:
+                visitados.add(hijo)
+                recorrer(hijo)
+
+    for raiz in raices:
+        recorrer(raiz)
+    return visitados
+
+
 def tablas_hijas_del_bloque_qc():
     """Alcance de este analizador: `TABLAS_ANULABLES` menos las raíces
     ([[DP-31]], fuera de `PLAN_LECTURA_VIGENTE_18-08.md`). Se deriva en cada

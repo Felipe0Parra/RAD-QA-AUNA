@@ -157,7 +157,7 @@ EXCEPCIONES_LITERALES = {
 SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 874): "INSERT (linealidad_ct)",
     ("data/ManejoDatos/conection.py", 534): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",
-    ("data/ManejoDatos/conection.py", 1922): "INSERT (users, no está en TABLAS_ANULABLES)",
+    ("data/ManejoDatos/conection.py", 1934): "INSERT (users, no está en TABLAS_ANULABLES)",
     ("data/ManejoDatos/load.py", 222): "INSERT (diarias -- tabla dinámica; raíz DP-31 de todos modos)",
     ("data/ManejoDatos/load.py", 384): "INSERT (controles, raíz DP-31)",
     ("data/ManejoDatos/load.py", 4201): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",

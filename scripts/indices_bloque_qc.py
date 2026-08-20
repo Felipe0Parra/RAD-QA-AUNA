@@ -53,6 +53,53 @@ CLAVES_INDICE = {
     "HC_velocidad_multilaminas_anual": ("ref", "id_energia", "banco"),
     "HC_precision_posicion_multilaminas_anual": ("ref", "id_energia", "medida"),
     "preguntas": ("ref",),
+
+    # IV3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV3): claves de las 30 tablas
+    # nuevas del bloque de QC (§2.8 del plan), ensayadas contra los datos
+    # reales del rebuild 19-08. Las 4 tablas diarias (clave DATE(date), una
+    # EXPRESIÓN, no una columna) NO van aquí -- crear_indices() todavía no
+    # sabe validar claves por expresión; eso y su ampliación van juntos en
+    # MI3 (Fase 4), no aquí (IV3 solo "declara").
+    #
+    # Rama braquiterapia:
+    "CondicionesMedicion": ("ref",),
+    "SistemaMedicion": ("ref",),
+    "ResultadosActividad": ("ref",),
+    "MaximosCamaras": ("ref", "posicion"),
+    "LecturasMaximos": ("ref", "voltaje"),
+    # Rama placa (el hallazgo que originó el plan del 19-08):
+    "analisis_placa_verificaciones": ("ref", "tipo"),
+    "analisis_placa_correcciones": ("ref", "vertice"),
+    # Mecánica mensual:
+    "indicadores_brazo": ("ref", "nivel"),
+    "indicadores_angulares_colimador": ("ref", "nivel"),
+    # Rama TAC/Catphan (pruebas es la raíz de esta rama, ref = id_sesion+id_tipo):
+    "pruebas": ("id_sesion", "id_tipo"),
+    "espesor_corte": ("id_prueba",),
+    "linealidad_ct": ("id_prueba",),
+    "resolucion_contraste": ("id_prueba",),
+    "resolucion_espacial": ("id_prueba",),
+    "tamaño_pixel": ("id_prueba",),
+    "uniformidad_global": ("id_prueba",),
+    "resolucion_contraste_rois": ("id_prueba", "diametro_mm"),
+    "resolucion_espacial_regiones": ("id_prueba", "region_nombre"),
+    "uniformidad_ruido": ("id_prueba", "id_region"),
+    "valores_ct": ("id_prueba", "id_material"),
+    # Vacías hoy, con CREATE TABLE real (DA-42) -- se declaran para que la
+    # ampliación futura de TABLAS_ANULABLES (MI1) no tenga huecos:
+    "HC_fantomas": ("ref", "id_energia"),
+    "configuracion_picketfence": ("ref",),
+    "error_picket": ("ref", "picket"),
+    "leaf_error": ("ref", "leaf"),
+    "highest_leaf_errors": ("ref", "leaf_out"),
+    "configuracion_starshot": ("ref",),
+    "estadisticas_starshot": ("ref",),
+    "angulo_starshot": ("ref", "spoke_index"),
+    "uniformidad_angular_starshot": ("ref", "gap_index"),
+    # angulos_entre_lineas_starshot gana la columna ordinal par_index en MI1
+    # (DA-45) -- su clave anterior (una medida y una constante derivada) no
+    # discriminaba filas.
+    "angulos_entre_lineas_starshot": ("ref", "par_index"),
 }
 
 

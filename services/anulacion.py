@@ -85,6 +85,63 @@ TABLAS_ANULABLES = frozenset({
 })
 
 
+# IV1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV1, DA-40): clasificación explícita
+# de toda tabla del cierre transitivo por FK desde las 7 raíces de QC que HOY
+# no está en `TABLAS_ANULABLES`. IV2 (tests/test_iv2_completitud_inventario.py)
+# exige que `cierre_transitivo == TABLAS_ANULABLES ∪ EXCEPCIONES_INVENTARIO`
+# -- una tabla nueva sin clasificar en ninguno de los dos pone ese test en
+# rojo. Es la garantía que compra DA-40: `analisis_placa_verificaciones` y
+# `analisis_placa_correcciones` (el hallazgo que originó el plan del 19-08)
+# no pueden volver a quedarse fuera sin que algo se note.
+#
+# Tres motivos posibles, cada tabla lleva el suyo:
+#   - "PENDIENTE-LF: ..." -- entra al frozenset en MI1 (Fase 4), una vez LF
+#     (Fase 3) filtre sus lecturas. Ampliar el frozenset ANTES de LF pondría
+#     roja la suite de ES1/RT1 (lecturas sin filtrar, §2.7 del plan) -- no es
+#     un defecto, es la secuencia correcta (§4.4 del plan, verificada con un
+#     subagente tras detectar el riesgo real: `_asegurar_activo_bloque_qc`
+#     puede decapitar el resto del bloque si una tabla no existe en la BD,
+#     ver más abajo).
+#   - "se retira, DA-44" -- la tabla se elimina del esquema (MI5), no se
+#     versiona porque no vale la pena versionar algo que va a desaparecer.
+#   - "huérfana, DP-38" -- existe en las BD reales pero ningún código de
+#     producción la crea, lee ni escribe; decisión pendiente del físico.
+EXCEPCIONES_INVENTARIO = {
+    "CondicionesMedicion": "PENDIENTE-LF: rama braquiterapia (load.py, braq_mensual.py, braquiterapia.py)",
+    "SistemaMedicion": "PENDIENTE-LF: rama braquiterapia",
+    "MaximosCamaras": "PENDIENTE-LF: rama braquiterapia",
+    "LecturasMaximos": "PENDIENTE-LF: rama braquiterapia",
+    "ResultadosActividad": "PENDIENTE-LF: rama braquiterapia (DP-31 la nombraba ya sin filtro)",
+    "analisis_placa_verificaciones": "PENDIENTE-LF: el hallazgo que originó el plan del 19-08 -- mismo botón que analisis_placa_franjas, hoy DELETE+INSERT",
+    "analisis_placa_correcciones": "PENDIENTE-LF: ídem analisis_placa_verificaciones",
+    "indicadores_brazo": "PENDIENTE-LF: mecánica mensual, hoy DELETE+INSERT",
+    "indicadores_angulares_colimador": "PENDIENTE-LF: mecánica mensual, hoy DELETE+INSERT",
+    "pruebas": "PENDIENTE-LF: raíz de la rama TAC/Catphan",
+    "espesor_corte": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "linealidad_ct": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "resolucion_contraste": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "resolucion_contraste_rois": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "resolucion_espacial": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "resolucion_espacial_regiones": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "tamaño_pixel": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "uniformidad_global": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "uniformidad_ruido": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "valores_ct": "PENDIENTE-LF: hija de pruebas (TAC)",
+    "HC_fantomas": "PENDIENTE-LF: vacía hoy, pero tiene CREATE TABLE real (se crea al arrancar)",
+    "configuracion_picketfence": "PENDIENTE-LF: rama MLC, vacía hoy, CREATE TABLE real",
+    "error_picket": "PENDIENTE-LF: rama MLC, vacía hoy, CREATE TABLE real",
+    "leaf_error": "PENDIENTE-LF: rama MLC, vacía hoy, CREATE TABLE real",
+    "highest_leaf_errors": "PENDIENTE-LF: rama MLC, vacía hoy, CREATE TABLE real",
+    "configuracion_starshot": "PENDIENTE-LF: rama starshot, vacía hoy, CREATE TABLE real",
+    "estadisticas_starshot": "PENDIENTE-LF: rama starshot, vacía hoy, CREATE TABLE real",
+    "angulo_starshot": "PENDIENTE-LF: rama starshot, vacía hoy, CREATE TABLE real",
+    "angulos_entre_lineas_starshot": "PENDIENTE-LF: rama starshot, vacía hoy; gana la clave par_index en MI1 (DA-45)",
+    "uniformidad_angular_starshot": "PENDIENTE-LF: rama starshot, vacía hoy, CREATE TABLE real",
+    "equipos_anual": "se retira, DA-44 -- 0 filas en las 3 BD de referencia, ninguna consulta SQL la nombra en el código vivo, se elimina del esquema en MI5",
+    "posicionamiento_reposicionamiento": "huérfana, DP-38 -- existe en las BD reales (FK a controles) pero NINGÚN código de producción la crea, lee ni escribe; ni siquiera tiene CREATE TABLE en conection.py (a diferencia de las otras 11 tablas vacías). Bloqueada hasta que el físico decida si se retira o se implementa la funcionalidad que la usaría",
+}
+
+
 def filtro_activo(tabla):
     """LE0 (PLAN_CONTRATO_GUARDADO_13-08.md §6-LE0): punto único del
     fragmento SQL que distingue una fila vigente de una superada. Antes

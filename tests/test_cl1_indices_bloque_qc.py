@@ -51,16 +51,43 @@ def _indices_reales(ruta):
     return nombres
 
 
-def test_crea_las_22_tablas_incluida_preguntas_desde_pr1(bd_temporal):
+# IV3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV3): CLAVES_INDICE ya declara las
+# claves de las 30 tablas nuevas del bloque de QC, pero TABLAS_ANULABLES
+# (services/anulacion.py) todavía NO se amplía -- eso es MI1 (Fase 4),
+# después de LF. Sobre una BD temporal recién creada, esas 30 tablas
+# EXISTEN (tienen CREATE TABLE real) pero no tienen columna `activo`
+# todavía, así que crear_indices() debe saltarlas con motivo explícito, no
+# fallar ni crear un índice a medias. Solo las 22 originales (ya en
+# TABLAS_ANULABLES) deben crearse de verdad.
+_TABLAS_ORIGINALES_22 = frozenset({
+    "control_cunas", "control_conos", "equipos_medicion",
+    "analisis_placa_franjas", "tamano_campo", "HC_indicadores_camilla",
+    "HC_indicadores_colimador", "HC_indicadores_laser", "dosimetriaMen",
+    "tabla_factor_campo", "tabla_factores_transmision",
+    "tabla_control_camaras_monitoras", "tabla_factores_sobre_eje",
+    "HC_indicadores_brazo", "HC_desplazamiento_isocentro_mensual",
+    "HC_tamanos_campo_radiacion", "HC_dosimetria_anual",
+    "HC_imagen_perfil_mlc_anual", "HC_linealidad_unidades_monitor_anual",
+    "HC_velocidad_multilaminas_anual",
+    "HC_precision_posicion_multilaminas_anual", "preguntas",
+})
+
+
+def test_crea_las_22_originales_y_salta_las_30_nuevas_sin_activo_todavia(bd_temporal):
     resultado = crear_indices(bd_temporal)
 
-    assert all(r == "creado" for r in resultado.values()), (
-        f"algún índice no se creó: "
-        f"{[(t, r) for t, r in resultado.items() if r != 'creado']}")
-    assert len(resultado) == 22
+    assert len(resultado) == 52
+    for tabla in _TABLAS_ORIGINALES_22:
+        assert resultado[tabla] == "creado", f"{tabla}: {resultado[tabla]}"
+    for tabla, r in resultado.items():
+        if tabla in _TABLAS_ORIGINALES_22:
+            continue
+        assert r == "NO CREADO -- la tabla aún no tiene columna activo", (
+            f"{tabla}: se esperaba 'NO CREADO -- ...activo' (todavía no está "
+            f"en TABLAS_ANULABLES, eso es MI1) pero dio: {r}")
 
     nombres_reales = _indices_reales(bd_temporal)
-    for tabla in resultado:
+    for tabla in _TABLAS_ORIGINALES_22:
         assert nombre_indice(tabla) in nombres_reales
 
 
@@ -69,7 +96,11 @@ def test_segunda_corrida_es_idempotente(bd_temporal):
     resultado2 = crear_indices(bd_temporal)
 
     for tabla, r in resultado2.items():
-        assert r == "ya existía", f"{tabla}: {r}"
+        if tabla in _TABLAS_ORIGINALES_22:
+            assert r == "ya existía", f"{tabla}: {r}"
+        else:
+            assert r == "NO CREADO -- la tabla aún no tiene columna activo", (
+                f"{tabla}: {r}")
 
 
 def test_el_indice_bloquea_un_duplicado_activo_nuevo(bd_temporal):
@@ -132,4 +163,8 @@ def test_claves_coinciden_con_las_del_plan_para_las_8_de_h2():
     for tabla, clave in esperadas_h2.items():
         assert CLAVES_INDICE[tabla] == clave
 
-    assert len(CLAVES_INDICE) == 22  # 21 hijas + preguntas
+    # IV3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV3): 22 originales (21 hijas +
+    # preguntas) + 30 nuevas del bloque de QC (§2.8 del plan). Las 4 diarias
+    # (clave por expresión DATE(date)) las añade MI3, no IV3 -- ver docstring
+    # del módulo.
+    assert len(CLAVES_INDICE) == 52

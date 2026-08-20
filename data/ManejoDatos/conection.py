@@ -566,25 +566,37 @@ class Conexion():
 
     def _asegurar_activo_bloque_qc(self):
         """E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): `activo INTEGER
-        DEFAULT 1` en las 26 tablas del inventario cerrado de anulación
+        DEFAULT 1` en las tablas del inventario cerrado de anulación
         (services/anulacion.py::TABLAS_ANULABLES, menos `controles`, que ya
         la tiene desde C2). Con DEFAULT 1, SQLite hace que TODAS las filas
         existentes se comporten como activas sin ningún UPDATE -- migración
         de coste cero, no reescribe ni una fila.
 
+        IV1b (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV1b): el `try/except` es
+        POR TABLA, no alrededor de todo el bucle. Antes, si una tabla del
+        inventario no existía en esa BD (`PRAGMA table_info` vacío ->
+        `_asegurar_columna` intenta `ALTER TABLE` sobre una tabla inexistente
+        -> `OperationalError`), la excepción abortaba el resto del bucle: TODAS
+        las tablas alfabéticamente posteriores a la que faltaba se quedaban
+        sin `activo`, en silencio. Detectado auditando IV1 con un subagente:
+        `posicionamiento_reposicionamiento` (sin `CREATE TABLE` en este
+        archivo) haría exactamente eso en cualquier BD nueva en cuanto
+        `TABLAS_ANULABLES` se ampliara. Una tabla problemática ahora se
+        reporta y se salta; el resto del bloque queda protegido igual.
+
         Import local (mismo motivo que DosisService.crear_tabla() arriba):
         `services.anulacion` importa `services.audit_minimo`, que importa
         este módulo -- un import de nivel de módulo aquí sería circular.
         """
-        try:
-            from services.anulacion import TABLAS_ANULABLES
-            cur = self.con.cursor()
-            for tabla in sorted(TABLAS_ANULABLES - {"controles"}):
+        from services.anulacion import TABLAS_ANULABLES
+        cur = self.con.cursor()
+        for tabla in sorted(TABLAS_ANULABLES - {"controles"}):
+            try:
                 _asegurar_columna(cur, tabla, "activo", "INTEGER DEFAULT 1")
-            self.con.commit()
-            cur.close()
-        except Exception as ex:
-            print("Error asegurando 'activo' en el bloque de QC al arranque:", ex)
+            except Exception as ex:
+                print(f"Error asegurando 'activo' en '{tabla}' al arranque:", ex)
+        self.con.commit()
+        cur.close()
 
     def _asegurar_roles_de_sistema(self):
         """E6 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §10): modelo de roles
