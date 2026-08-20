@@ -34,6 +34,7 @@ from analisisImagenes.ActividadFuente import graficar_linealidad, graficar_resul
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR, ACCION_ELIMINAR
+from services.anulacion import filtro_activo
 from data.ManejoDatos.load import (mostrar_db_linealidad, mostrar_db_mensualBraqui, verificar_eliminar, verificar_editar,
                                                 guardarEdicion, cancelarEdicion, abrir_pelicula)
 import datetime, sqlite3, html, re, traceback
@@ -2234,43 +2235,65 @@ class Linealidad(PruebaBasico):
     
     
     def construir_tablas_reporte_linealidad(self, fecha):
+        # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): hallado auditando
+        # SELECT * -- este método leía por índice POSICIONAL asumiendo un
+        # esquema sin la columna `user`, desfasado en +1 desde antes del
+        # commit inicial (verificado con un subagente Opus, `git log -S`
+        # confirma que `408090b` ya traía el desfase): el PDF mostraba la
+        # FECHA bajo la etiqueta "Modelo cámara", y así en cascada los 34
+        # valores -- ninguno caía en la columna correcta. Corregido a
+        # acceso POR NOMBRE vía `cursor.description`, inmune a que el
+        # esquema gane columnas en el futuro. También le faltaba el filtro
+        # de vigente (regla 5 del contrato) y un desempate: con más de un
+        # registro por fecha, `fetchone()` sin `ORDER BY` podía tomar una
+        # fila anulada.
         conn = Conexion().conectar()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM LinealidadBraquiterapia WHERE DATE(fecha) = ?", (fecha,))
-        row = cur.fetchone()
+        cur.execute(
+            "SELECT * FROM LinealidadBraquiterapia WHERE DATE(fecha) = ?"
+            f"{filtro_activo('LinealidadBraquiterapia')} ORDER BY id DESC",
+            (fecha,))
+        columnas = [d[0] for d in cur.description]
+        fila = cur.fetchone()
         conn.close()
 
-        if not row:
+        if not fila:
             QMessageBox.critical(self, "Error", f"No hay registros para la fecha {fecha}")
             return None
+
+        row = dict(zip(columnas, fila))
 
         # --- sistema_medicion_linealidad ---
         df_sistema = pd.DataFrame({
             "Campo": ["Modelo cámara", "Serie cámara", "Factor cal. cámara",
                     "Modelo electrómetro", "Serie electrómetro", "Factor cal. electrómetro"],
-            "Valor": [row[2], row[3], row[4], row[5], row[6], row[7]]
+            "Valor": [row["modelo"], row["serie_cp"], row["calibracion"],
+                      row["modelo_elec"], row["serie_ele"], row["electrometro"]]
         })
 
         # --- carga_colectada ---
         df_carga = pd.DataFrame({
             "Campo": ["Q estacionaria (nC)", "Tiempo integrado (s)", "Corriente estacionaria (nA)",
                     "M1 (nC)", "M2 (nC)", "M3 (nC)", "M4 (nC)", "M5 (nC)", "Promedio (nC)"],
-            "Valor": [row[8], row[9], row[10], row[14], row[15], row[16], row[17], row[18], row[19]]
+            "Valor": [row["q_est"], row["t_integrado"], row["i_est"],
+                      row["repro_m1"], row["repro_m2"], row["repro_m3"],
+                      row["repro_m4"], row["repro_m5"], row["repro_prom"]]
         })
 
         # --- medidas_linealidad ---
-        # columnas desde índice 20: lin_tp_0, lin_q1_0, lin_q2_0, lin_qprom_0, lin_te_0, ...
+        # lin_tp_N, lin_q1_N, lin_q2_N, lin_qprom_N, lin_te_N para N=0..9
         filas_medidas = []
         for i in range(10):
-            base = 20 + i * 5
-            filas_medidas.append([row[base], row[base+1], row[base+2], row[base+3], row[base+4]])
+            filas_medidas.append([
+                row[f"lin_tp_{i}"], row[f"lin_q1_{i}"], row[f"lin_q2_{i}"],
+                row[f"lin_qprom_{i}"], row[f"lin_te_{i}"]])
         df_medidas = pd.DataFrame(filas_medidas,
             columns=["Tiempo parada (s)", "Q1 (nC)", "Q2 (nC)", "Qprom (nC)", "T. efectivo (s)"])
 
         # --- resultados_linealidad ---
         df_resultados = pd.DataFrame({
             "Campo": ["Reproducibilidad (%)", "Exactitud (R²)", "Tiempo de tránsito (s)"],
-            "Valor": [row[11], row[12], row[13]]
+            "Valor": [row["reproducibilidad"], row["exactitud"], row["tiempo_transito"]]
         })
 
         # --- grafico_linealidad ---

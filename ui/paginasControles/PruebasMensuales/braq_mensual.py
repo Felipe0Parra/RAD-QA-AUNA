@@ -6,7 +6,7 @@ from PyQt5.QtSql import QSqlQuery
 from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 from data.ManejoDatos.load import (mostrar_db_mensualBraqui, verificar_editar, verificar_eliminar, guardarEdicion,
-                                    cancelarEdicion, guardar_resultado_CambioFuente)
+                                    cancelarEdicion, guardar_resultado_CambioFuente, encontrar_columnas)
 from data.ManejoDatos.conection import Conexion
 from services.equipos_service import EquiposService
 from services.etiqueta_equipo import etiqueta_equipo
@@ -1319,11 +1319,14 @@ class PruebaMensualBraq(PruebaBasico):
             query = QSqlQuery(db)
             print("consultando db")
             # Preparar la consulta
+            # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas
+            # -- son las 4 que se leen más abajo (modelo, serie_cp,
+            # modelo_elec, serie_ele), por nombre en los 4 casos.
             query.prepare("""
-                SELECT * FROM SistemaMedicion 
-                WHERE DATE(fecha) = ? 
-                OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ? 
-                
+                SELECT modelo, serie_cp, modelo_elec, serie_ele FROM SistemaMedicion
+                WHERE DATE(fecha) = ?
+                OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?
+
             """)
             query.addBindValue((fecha_str))
             query.addBindValue(str(self.user_id))
@@ -1689,20 +1692,28 @@ class PruebaMensualBraq(PruebaBasico):
                 #print('Entro a traer info')
                 conn = Conexion().conectar()
                 cursor = conn.cursor()
-            
-                cursor.execute(f"SELECT * FROM {nombre_tabla} WHERE {uid} = ?", (ref,))
+
+                # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas
+                # explícitas -- `nombre_tabla` es un parámetro, así que las
+                # columnas se resuelven en tiempo de ejecución con
+                # encontrar_columnas (PRAGMA table_info, quita el id y, si
+                # existe, 'activo'), en vez de `SELECT *` + recorte
+                # posicional fijo. El recorte fijo (`[1:-1]` para todas menos
+                # dosimetriaMen) asumía que la ÚLTIMA columna siempre era
+                # `activo` -- cierto en TipoCalibracion, falso hoy en
+                # SistemaMedicion/CondicionesMedicion (sin esa columna
+                # todavía): descartaba una columna real (`observaciones` en
+                # CondicionesMedicion). encontrar_columnas solo excluye
+                # `activo` cuando de verdad está presente.
+                columnas_str, _ = encontrar_columnas(nombre_tabla, id=True, delete=0)
+                cursor.execute(f"SELECT {columnas_str} FROM {nombre_tabla} WHERE {uid} = ?", (ref,))
                 results = cursor.fetchall()
                 return results
 
         prueba1 = consulta(nombre_tabla, ref)
 
         if prueba1 is not None and prueba1 != []:
-            datos = prueba1
-            if nombre_tabla == 'dosimetriaMen':
-                datos = [t[1:] for t in datos]
-            else:
-                datos = [t[1:-1] for t in datos]
-            datos = list(datos[0])
+            datos = list(prueba1[0])
             #print(f"Datos cargados en {nombre_tabla} desde la prueba: {datos}")
 
             for line_name, valor in zip(df_lines, datos):

@@ -24,11 +24,24 @@ def _serializar_fila_actual(query):
 def load_table(self, boolean_keys=None, dosis=None, maquina=""):
     try:
         db = self.opeenDatabase()
+        # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas,
+        # excluyendo 'activo' directamente en el SELECT -- antes se traía
+        # con SELECT * y se ocultaba la columna después
+        # (setColumnHidden); ahora no hace falta: nunca se selecciona.
+        query_columnas = QSqlQuery(db)
+        query_columnas.exec_(f"PRAGMA table_info({maquina})")
+        columnas = []
+        while query_columnas.next():
+            nombre = query_columnas.value(1)
+            if nombre.lower() != "activo":
+                columnas.append(nombre)
+        columnas_str = ", ".join(columnas)
+
         # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): las 4 diarias son
         # raíces del inventario de anulación -- una fila anulada no debe
         # seguir apareciendo en la tabla visible.
         query = QSqlQuery(
-            f"SELECT * FROM {maquina} "
+            f"SELECT {columnas_str} FROM {maquina} "
             "WHERE (activo IS NULL OR activo = 1) ORDER BY date DESC")
     except Exception as e:
         traceback.print_exc()
@@ -40,11 +53,6 @@ def load_table(self, boolean_keys=None, dosis=None, maquina=""):
     self.table.setColumnCount(column_count)
     self.table.setHorizontalHeaderLabels(headers)
     self.table.setRowCount(0)
-    # `activo` es metadato interno de anulación (E7) -- SELECT * lo trae
-    # como cualquier otra columna, pero no debe verse en la tabla del físico.
-    col_activo = next((c for c, h in enumerate(headers) if h.lower() == "activo"), None)
-    if col_activo is not None:
-        self.table.setColumnHidden(col_activo, True)
 
     # Deshabilitar actualizaciones visuales mientras se carga
     self.table.setUpdatesEnabled(False),
@@ -189,9 +197,20 @@ def eliminarfilas(self, maquina):
 
     # A2-bis (§8.1 H1): capturar la fila ANTES de anularla -- deja constancia
     # de qué contenía ("no parece quedar rastro del registro eliminado",
-    # reporte del físico 22-07).
+    # reporte del físico 22-07). Columnas explícitas (MI0,
+    # PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0) -- a diferencia de
+    # load_table() más arriba, aquí SÍ se incluye 'activo': es evidencia de
+    # auditoría, no una vista para el físico, así que la fila capturada debe
+    # quedar completa.
+    query_columnas = QSqlQuery(db)
+    query_columnas.exec_(f"PRAGMA table_info({maquina})")
+    columnas_fila = []
+    while query_columnas.next():
+        columnas_fila.append(query_columnas.value(1))
+    columnas_fila_str = ", ".join(columnas_fila)
+
     query_fila = QSqlQuery()
-    query_fila.prepare(f'SELECT * FROM {maquina} WHERE id = ?')
+    query_fila.prepare(f'SELECT {columnas_fila_str} FROM {maquina} WHERE id = ?')
     query_fila.addBindValue(pac_id)
     query_fila.exec()
     fila_borrada = _serializar_fila_actual(query_fila) if query_fila.next() else ""

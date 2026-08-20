@@ -277,14 +277,18 @@ class ReporteControlSistemaImagenes:
             dict: Diccionario con información de la prueba
         """
         query = QSqlQuery(db)
+        # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas,
+        # las mismas 7 que devuelve el dict de abajo. Un campo nuevo se
+        # agrega en los DOS sitios -- aquí y en el dict --, no solo en uno.
         query.prepare("""
-            SELECT * FROM pruebas 
+            SELECT id_prueba, id_tipo, kv, ma, espesor_corte, imagen_path, imagen_resultado
+            FROM pruebas
             WHERE id_sesion = ? AND id_tipo = ?
             LIMIT 1
         """)
         query.addBindValue(ref)
         query.addBindValue(id_tipo)
-        
+
         if query.exec() and query.next():
             return {
                 'id_prueba': query.value('id_prueba'),
@@ -294,7 +298,6 @@ class ReporteControlSistemaImagenes:
                 'espesor_corte': query.value('espesor_corte'),
                 'imagen_original': query.value('imagen_path'),
                 'imagen_resultado': query.value('imagen_resultado'),
-                # Agregar más campos según sea necesario
             }
         return {}
     

@@ -386,6 +386,11 @@ class TestListados:
         assert "02/07/2026" not in fechas
 
     def test_diarias_load_table_oculta_columna_activo(self, app, bd_temporal):
+        """MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): antes se traía
+        'activo' con SELECT * y se ocultaba después con setColumnHidden;
+        ahora directamente no se selecciona -- ni siquiera aparece como
+        columna. Mismo resultado observable para el físico (no la ve),
+        conseguido sin traerla nunca de la BD."""
         from data.GraficasyTablas.tablas import load_table
 
         con = _con(bd_temporal)
@@ -406,8 +411,7 @@ class TestListados:
 
         headers = [w.table.horizontalHeaderItem(c).text().lower()
                    for c in range(w.table.columnCount())]
-        idx = headers.index("activo")
-        assert w.table.isColumnHidden(idx)
+        assert "activo" not in headers
 
     def test_tipocalibracion_anual_generico_oculta_fila_anulada(self, bd_temporal):
         from data.ManejoDatos.Tablas_Anuales.tablas_anuales import buscar_datos_db

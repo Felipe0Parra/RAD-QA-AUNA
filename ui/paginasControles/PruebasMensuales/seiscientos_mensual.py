@@ -3569,8 +3569,25 @@ class PruebaMensual600(PruebaBasico):
             # Usar pool de conexiones
             conn = self.db_manager.obtener_conexion()
             cursor = conn.cursor()
+            # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas
+            # explícitas, excluyendo SOLO 'activo' (siempre la última del
+            # esquema -- ALTER TABLE ADD COLUMN de _asegurar_activo_bloque_qc
+            # siempre anexa al final). Se conserva el prefijo identificador
+            # (ref/id/id_energia) en el SELECT: los recortes row[1:]/row[2:]
+            # de más abajo dependen de la INSTANCIA que llama (mensual vs.
+            # anual de Halcyon leen la MISMA tabla con recortes distintos),
+            # no de la tabla -- no se pueden fusionar con el SELECT. No se
+            # usa encontrar_columnas: sus defaults (id=True quita la
+            # primera columna, delete=1 quita una más) romperían ese
+            # prefijo que aquí sí hace falta conservar.
+            cursor.execute(f"PRAGMA table_info({nombre_tabla})")
+            columnas = [c[1] for c in cursor.fetchall()]
+            if (nombre_tabla in TABLAS_ANULABLES and columnas
+                    and columnas[-1] == "activo"):
+                columnas.pop()
+            columnas_str = ", ".join(columnas)
             # Query con parámetros seguros
-            sql = f"SELECT * FROM {nombre_tabla} WHERE ref = ?"
+            sql = f"SELECT {columnas_str} FROM {nombre_tabla} WHERE ref = ?"
             params = [ref]
             if id_energia is not None:
                 sql += " AND id_energia = ?"

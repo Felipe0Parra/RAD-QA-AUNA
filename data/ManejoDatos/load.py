@@ -1011,8 +1011,13 @@ def mostrar_db_CambioFuente(self, tabla_a_mostrar="ResultadosActividad"):
 
         cursor = conn.cursor()
         cursor.execute(f"PRAGMA table_info({tabla_a_mostrar})")
-        columnas = [col[1] for col in cursor.fetchall()]
-        cursor.execute(f"SELECT * FROM {tabla_a_mostrar}")
+        # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas,
+        # y se excluye 'activo' de la vista -- es metadato de anulación, no
+        # un dato clínico que el físico deba ver en esta tabla (mismo
+        # criterio que data/GraficasyTablas/tablas.py ya aplica).
+        columnas = [col[1] for col in cursor.fetchall() if col[1] != "activo"]
+        columnas_str = ", ".join(columnas)
+        cursor.execute(f"SELECT {columnas_str} FROM {tabla_a_mostrar}")
         filas = cursor.fetchall()
 
         self.resultados_table.setRowCount(0)

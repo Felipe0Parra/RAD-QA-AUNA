@@ -93,21 +93,21 @@ EXEC_METHODS = {"execute", "executemany", "prepare"}
 #     mano donde aplica.
 #   - código muerto: sin llamadores en todo el árbol de producción.
 SITIOS_DINAMICOS_PERMITIDOS = {
-    ("data/GraficasyTablas/tablas.py", 194): "identidad (fila antes de anular, diarias)",
+    ("data/GraficasyTablas/tablas.py", 213): "identidad (fila antes de anular, diarias)",
     ("data/GraficasyTablas/unovsuno.py", 4): "raíz (DP-31, gráfico de diarias)",
     ("data/ManejoDatos/conection.py", 535): "migración/censo (E10, copia de tabla completa)",
     ("data/ManejoDatos/load.py", 726): "DO1/PR1 (subirlineasmensuales -- SELECT del bloque vigente, esquema completo para componer el nuevo sin perder columnas fuera de columnas_lista, p.ej. preguntas.imagen; ya filtra activo a mano, tabla dinámica)",
     ("data/ManejoDatos/load.py", 753): "PR1 (subirlineasmensuales, rama else -- ya no aplica a preguntas tras PR1, pero sigue alcanzable para cualquier tabla futura fuera de TABLAS_ANULABLES)",
     ("data/ManejoDatos/load.py", 893): "raíz (DP-31, diarias -- ya filtra activo a mano)",
     ("data/ManejoDatos/load.py", 204): "raíz (DP-31, diarias -- ya filtra activo a mano)",
-    ("data/ManejoDatos/load.py", 1015): "código muerto (mostrar_db_CambioFuente, sin llamadores)",
-    ("data/ManejoDatos/load.py", 4586): "identidad (fila antes de anular/borrar)",
+    ("data/ManejoDatos/load.py", 1020): "código muerto (mostrar_db_CambioFuente, sin llamadores)",
+    ("data/ManejoDatos/load.py", 4591): "identidad (fila antes de anular/borrar)",
     ("models/PDF/reportes.py", 67): "raíz (DP-31, diarias)",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1693): "tablas no anulables (TipoCalibracion es raíz DP-31; SistemaMedicion/CondicionesMedicion no están en TABLAS_ANULABLES)",
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1709): "tablas no anulables (TipoCalibracion es raíz DP-31; SistemaMedicion/CondicionesMedicion no están en TABLAS_ANULABLES)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 271): "DO1 (subirlineasmensuales_ix -- SELECT del bloque vigente para componer el nuevo; ya filtra activo a mano, tabla dinámica)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 310): "DO1 (subirlineasmensuales_ix, rama fuera del bloque de QC)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 361): "DO1 (_cargar_dosimetria_bd_ix -- ya filtra activo a mano, tabla dinámica)",
-    ("data/ManejoDatos/load.py", 2768): "tabla no anulable (_mostrar_tabla_generica -- módulo TAC/Catphan: 'pruebas' y las 7 tablas de CT (valores_ct, uniformidad_ruido, uniformidad_global, resolucion_espacial, linealidad_ct, espesor_corte, tamaño_pixel), ninguna está en TABLAS_ANULABLES)",
+    ("data/ManejoDatos/load.py", 2773): "tabla no anulable (_mostrar_tabla_generica -- módulo TAC/Catphan: 'pruebas' y las 7 tablas de CT (valores_ct, uniformidad_ruido, uniformidad_global, resolucion_espacial, linealidad_ct, espesor_corte, tamaño_pixel), ninguna está en TABLAS_ANULABLES)",
     # scripts/: excepciones censales explícitas (contrato regla 5) --
     # documentadas en cada archivo, no solo aquí.
     ("scripts/migrar_bd_a_estandar.py", 147): "migración/censo (_contar_qc)",
@@ -129,11 +129,11 @@ EXCEPCIONES_LITERALES = {
     ("services/consistencia_dosis.py", 51):
         "dosimetriaMen -- filtro_activo('dosimetriaMen') se califica con "
         "el alias 'd.' del JOIN antes de interpolarse (variable `filtro`)",
-    ("data/ManejoDatos/load.py", 1497):
+    ("data/ManejoDatos/load.py", 1502):
         "preguntas -- RP1: filtro_activo('preguntas') se califica con el "
         "alias 'p.' del LEFT JOIN antes de interpolarse (variable `filtro_p`, "
         "mismo patrón que consistencia_dosis.py)",
-    ("data/ManejoDatos/load.py", 1500):
+    ("data/ManejoDatos/load.py", 1505):
         "preguntas -- RP1, mismo `filtro_p` que la excepción anterior, "
         "usado en la segunda rama (equipo_filtrar no truthy) de "
         "mostrar_controles_mensuales",
@@ -160,9 +160,9 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/conection.py", 1934): "INSERT (users, no está en TABLAS_ANULABLES)",
     ("data/ManejoDatos/load.py", 222): "INSERT (diarias -- tabla dinámica; raíz DP-31 de todos modos)",
     ("data/ManejoDatos/load.py", 384): "INSERT (controles, raíz DP-31)",
-    ("data/ManejoDatos/load.py", 4201): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",
-    ("data/ManejoDatos/load.py", 4281): "UPDATE ResultadosActividad -- no está en TABLAS_ANULABLES (hija de la raíz braquiterapia TipoCalibracion, DP-31)",
-    ("data/ManejoDatos/load.py", 4617): "DELETE por id_where -- rama de eliminarRegistro para tablas FUERA de TABLAS_ANULABLES (las anulables van por anular_fila, no llegan aquí)",
+    ("data/ManejoDatos/load.py", 4206): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",
+    ("data/ManejoDatos/load.py", 4286): "UPDATE ResultadosActividad -- no está en TABLAS_ANULABLES (hija de la raíz braquiterapia TipoCalibracion, DP-31)",
+    ("data/ManejoDatos/load.py", 4622): "DELETE por id_where -- rama de eliminarRegistro para tablas FUERA de TABLAS_ANULABLES (las anulables van por anular_fila, no llegan aquí)",
     ("data/ManejoDatos/obtenerDatosHalcyon.py", 391): "INSERT (halcyon, raíz DP-31)",
     ("services/dosis_service.py", 281): "DDL (CREATE TABLE calculadora_dosimetrica, no está en TABLAS_ANULABLES -- tiene su propia columna `vigente`, mecanismo de versionado independiente de este contrato)",
     ("services/dosis_service.py", 391): "INSERT (calculadora_dosimetrica, no está en TABLAS_ANULABLES)",
@@ -174,7 +174,7 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 296): "INSERT (subirlineasmensuales_ix, dentro del bucle de energías -- reasignación de `sql` en cada vuelta, irresoluble a propósito por AN1; INSERT no necesita filtro de todos modos)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 316): "INSERT (subirlineasmensuales_ix, rama fuera del bloque de QC -- ver comentario en el propio archivo)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 330): "UPDATE por (ref, energia) -- subirlineasmensuales_ix, rama fuera del bloque de QC (nombre_tabla no anulable en esta rama)",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3588): "DO1 (pruebatalas -- `sql += filtro_activo(nombre_tabla)` es una llamada real, no un literal; ya documentado en el propio archivo como filtrado a mano)",
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3605): "DO1 (pruebatalas -- `sql += filtro_activo(nombre_tabla)` es una llamada real, no un literal; ya documentado en el propio archivo como filtrado a mano)",
     ("ui/paginasGuia/SQLtoEXCEL.py", 510): "raíz (DP-31, braqui.pelicula por rango de fechas)",
 }
 
