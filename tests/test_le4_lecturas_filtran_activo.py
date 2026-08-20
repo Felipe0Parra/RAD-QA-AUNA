@@ -106,12 +106,21 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     # NOTA (LF, gap hallado por el subagente que resolvió LF3): hasta aquí
     # decía "TipoCalibracion es raíz DP-31; SistemaMedicion/CondicionesMedicion
     # no están en TABLAS_ANULABLES" -- cierto antes de LF2, falso después
-    # (ambas son PENDIENTE-LF). Corregido: `addsomething::consulta` ahora
-    # llama a `filtro_activo(nombre_tabla)` directamente sobre la MISMA
-    # variable dinámica -- protegido por construcción (ver docstring del
-    # módulo, "Tabla dinámica"), por eso el sitio YA NO aparece en absoluto
-    # en el censo (ni fallo ni dinámico): el propio analizador reconoce la
-    # llamada. No hace falta entrada aquí.
+    # (ambas son PENDIENTE-LF). En LF `addsomething::consulta` pasó a llamar
+    # a `filtro_activo(nombre_tabla)` DENTRO del propio f-string, sobre la
+    # misma variable dinámica -- protegido por construcción, y por eso el
+    # sitio dejó de aparecer en el censo sin necesidad de entrada aquí.
+    #
+    # LF4 (PLAN_CONTRATO_COMPLETO_19-08.md §4.6, DA-47) vuelve a hacer
+    # falta la entrada: el filtro dejó de ser incondicional (`uid="id"`
+    # nombra UNA fila física y NO debe filtrar; `uid="ref"` selecciona un
+    # BLOQUE y sí), y esa condición no cabe dentro del f-string -- vive en
+    # la variable intermedia `filtro`. `_literal_str_ast` solo reconoce
+    # `{FILTRO_ACTIVO}` cuando el hueco es una llamada literal a
+    # `filtro_activo(...)`; un `Name` se marca `{DYN}`. Mismo caso, misma
+    # solución que `load.py:2791` (`filtro_t`/`filtro_p`): el sitio SÍ
+    # filtra, el detector de texto no puede verlo, se documenta a mano.
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1719): "LF4/DA-47 (addsomething::consulta) -- filtra CONDICIONALMENTE por selectividad del WHERE: `filtro = filtro_activo(nombre_tabla) if uid != \"id\" else \"\"`. Con uid='ref' (SistemaMedicion/CondicionesMedicion, clave de BLOQUE) el filtro se aplica; con uid='id' (TipoCalibracion, fila física) se omite a propósito -- filtrar ahí vaciaría el formulario de una calibración anulada abierta a propósito. Invisible para el detector por ir en variable intermedia (igual que load.py:2791). Cubierto por tests/test_lf4_braqui_lectura_identidad.py en las dos direcciones",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 271): "DO1 (subirlineasmensuales_ix -- SELECT del bloque vigente para componer el nuevo; ya filtra activo a mano, tabla dinámica)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 310): "DO1 (subirlineasmensuales_ix, rama fuera del bloque de QC)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 361): "DO1 (_cargar_dosimetria_bd_ix -- ya filtra activo a mano, tabla dinámica)",

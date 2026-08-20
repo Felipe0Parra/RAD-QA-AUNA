@@ -1708,18 +1708,28 @@ class PruebaMensualBraq(PruebaBasico):
                 # CondicionesMedicion). encontrar_columnas solo excluye
                 # `activo` cuando de verdad está presente.
                 columnas_str, _ = encontrar_columnas(nombre_tabla, id=True, delete=0)
-                # LF (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF): `nombre_tabla`
-                # es dinámico -- SistemaMedicion/CondicionesMedicion son
-                # PENDIENTE-LF hoy (no-op); TipoCalibracion es raíz (DP-31,
-                # filtro_activo() es "" siempre, no-op también, sin cambiar
-                # nada para esa rama).
+                # DA-47 (PLAN_CONTRATO_COMPLETO_19-08.md §4.6, LF4): el
+                # filtro depende de la SELECTIVIDAD del WHERE, no de la
+                # tabla. `uid="ref"` selecciona un BLOQUE (N generaciones)
+                # -> debe filtrar. `uid="id"` nombra UNA fila física
+                # (TipoCalibracion, raíz) -> filtrar solo podría vaciar el
+                # formulario de una calibración anulada que el físico abrió
+                # a propósito.
+                filtro = filtro_activo(nombre_tabla) if uid != "id" else ""
                 cursor.execute(
-                    f"SELECT {columnas_str} FROM {nombre_tabla} WHERE {uid} = ?{filtro_activo(nombre_tabla)}",
+                    f"SELECT {columnas_str} FROM {nombre_tabla} WHERE {uid} = ?{filtro}",
                     (ref,))
                 results = cursor.fetchall()
                 return results
 
-        prueba1 = consulta(nombre_tabla, ref)
+        # LF4 (PLAN_CONTRATO_COMPLETO_19-08.md §4.6): `consulta` es
+        # `(nombre_tabla, uid=uid, ref=ref)` -- llamarla
+        # `consulta(nombre_tabla, ref)` metía `ref` POSICIONALMENTE en
+        # el hueco de `uid`, así que dentro nunca llegaba "id"/"ref"
+        # sino el entero, y el SQL salía `WHERE 5 = ?` con 5 atado:
+        # una tautología que casaba TODAS las filas de la tabla, no la
+        # pedida. Además dejaba inerte el `uid != "id"` de arriba.
+        prueba1 = consulta(nombre_tabla, uid, ref)
 
         if prueba1 is not None and prueba1 != []:
             datos = list(prueba1[0])
