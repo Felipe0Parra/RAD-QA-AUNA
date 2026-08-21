@@ -177,6 +177,7 @@ _estadisticas = {
 
 _tablas_cache = None
 _diferidas_cache = None
+_tablas_filtro_posible_cache = None
 
 
 def _tablas():
@@ -184,6 +185,21 @@ def _tablas():
     if _tablas_cache is None:
         _tablas_cache = lv.tablas_hijas_del_bloque_qc()
     return _tablas_cache
+
+
+def _tablas_con_filtro_posible():
+    """LF5 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF5, DA-47): superconjunto de
+    `_tablas()` que SÍ incluye las 7 raíces -- necesario para que el
+    pre-filtro de `_rastrear_sql` no descarte, antes de llamar a
+    `lv.analizar()`, la sentencia real que el motivo "filtro sobre lectura
+    de identidad" vigila (braq_mensual.py, TipoCalibracion). Sin esto,
+    revertir LF4 nunca pondría a RT1 en rojo: TipoCalibracion es raíz,
+    fuera de `_tablas()`, así que el `return` temprano descartaría la
+    sentencia antes de que `analizar()` tuviera oportunidad de mirarla."""
+    global _tablas_filtro_posible_cache
+    if _tablas_filtro_posible_cache is None:
+        _tablas_filtro_posible_cache = lv.tablas_con_filtro_posible()
+    return _tablas_filtro_posible_cache
 
 
 def _diferidas():
@@ -259,9 +275,17 @@ def _rastrear_sql(sql):
     if "from" not in minus and "update" not in minus:
         return
     tablas = _tablas()
-    if not any(t.lower() in minus for t in tablas):
+    tiene_tabla_conocida = any(t.lower() in minus for t in tablas)
+    # LF5: el motivo "filtro sobre lectura de identidad" vigila también las
+    # raíces (tablas_con_filtro_posible), fuera de `tablas`. No cuenta para
+    # las métricas de cobertura de §9.3 (esas siguen siendo el alcance de
+    # "sin filtro", documentado como 56/19 funciones) -- solo evita que esta
+    # sentencia se descarte ANTES de llegar a `lv.analizar()`.
+    if not tiene_tabla_conocida and not any(
+            t.lower() in minus for t in _tablas_con_filtro_posible()):
         return
-    _estadisticas["sentencias_con_tabla_versionada"] += 1
+    if tiene_tabla_conocida:
+        _estadisticas["sentencias_con_tabla_versionada"] += 1
     origen = _origen()
     if not _es_produccion(origen):
         # Verificación de test: lee activas + históricas a propósito. No se
@@ -272,8 +296,9 @@ def _rastrear_sql(sql):
             clave = (origen[0], origen[1]) if origen else ("<desconocido>", "?")
             descartados_por_origen[clave] = descartados_por_origen.get(clave, 0) + 1
         return
-    _estadisticas["sentencias_produccion_con_tabla_versionada"] += 1
-    funciones_produccion_ejercitadas.add((origen[0], origen[1]))
+    if tiene_tabla_conocida:
+        _estadisticas["sentencias_produccion_con_tabla_versionada"] += 1
+        funciones_produccion_ejercitadas.add((origen[0], origen[1]))
     hallazgos = lv.analizar(sql, tablas)
     if not hallazgos:
         return

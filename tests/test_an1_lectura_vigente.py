@@ -358,3 +358,119 @@ def test_argumento_ya_literal_no_pasa_por_el_resolver():
     '''
     func, llamada = _funcion_y_llamada_execute(codigo)
     assert lv.resolver_argumento_execute(func, llamada) is None
+
+
+# ---------------------------------------------------------------------------
+# 5. LF5 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF5, DA-47): tercer motivo de
+#    SinFiltro -- "filtro sobre lectura de identidad". CLAVES_INDICE (IV3,
+#    52 entradas) es la fuente de verdad de qué es clave de bloque; ninguna
+#    usa `id`/`rowid`, así que un WHERE que nombra esa columna es siempre
+#    una lectura por identidad física, nunca por bloque.
+# ---------------------------------------------------------------------------
+
+def test_claves_indice_coincide_con_el_fuente():
+    from scripts.indices_bloque_qc import CLAVES_INDICE as CLAVES_REALES
+    claves = lv.claves_indice()
+    assert len(claves) == 52
+    assert claves == {t: frozenset(c) for t, c in CLAVES_REALES.items()}
+    # LF5: la premisa que hace seguro tratar "id"/"rowid" como identidad
+    # física en cualquier tabla, sin mirar CLAVES_INDICE caso por caso.
+    assert not any(clave & {"id", "rowid"} for clave in claves.values())
+
+
+def test_tablas_con_filtro_posible_incluye_las_raices():
+    """A diferencia de tablas_hijas_del_bloque_qc() (alcance de "sin
+    filtro", raíces fuera mientras DP-31/DA-48 sigan abiertas), este
+    alcance SÍ incluye las raíces -- son precisamente donde vive el
+    defecto que dio origen a DA-47 (TipoCalibracion, LF4)."""
+    assert lv.tablas_con_filtro_posible() == lv.tablas_anulables()
+    for raiz in ("TipoCalibracion", "controles", "LinealidadBraquiterapia"):
+        assert raiz in lv.tablas_con_filtro_posible()
+
+
+def test_identidad_con_filtro_se_marca_incluso_en_una_raiz():
+    """El defecto original de LF4, reproducido: TipoCalibracion es raíz
+    (fuera de tablas_hijas_del_bloque_qc), pero el motivo debe verla --
+    tablas_versionadas=frozenset() simula exactamente eso."""
+    sql = ("SELECT user, fecha FROM TipoCalibracion "
+           "WHERE id = ? AND (activo IS NULL OR activo = 1)")
+    hallazgos = lv.analizar(sql, frozenset())
+    assert len(hallazgos) == 1
+    assert hallazgos[0].tabla == "TipoCalibracion"
+    assert hallazgos[0].motivo == "filtro sobre lectura de identidad"
+
+
+def test_identidad_sin_filtro_no_se_marca():
+    """El caso correcto: uid="id" con el filtro correctamente omitido
+    (LF4, braq_mensual.py::consulta hoy)."""
+    sql = "SELECT user, fecha FROM TipoCalibracion WHERE id = ?"
+    assert lv.analizar(sql, frozenset()) == []
+
+
+def test_bloque_con_filtro_no_se_marca():
+    """El caso correcto opuesto: uid="ref" SÍ debe filtrar -- no es una
+    lectura de identidad, es una lectura de bloque."""
+    sql = ("SELECT user, fecha FROM SistemaMedicion "
+           "WHERE ref = ? AND (activo IS NULL OR activo = 1)")
+    assert lv.analizar(sql, frozenset({"SistemaMedicion"})) == []
+
+
+def test_anular_fila_no_se_marca():
+    """Protocolo de verificación LF5, punto 2: anular_fila() -- WHERE "id"
+    = ?, la fila se localiza por identidad para anularla, SIN filtro de
+    lectura -- es el caso correcto canónico, no debe reportarse. Copiado
+    literal de services/anulacion.py::anular_fila (el SQL que emite tras
+    resolver `id_where`)."""
+    sql = 'UPDATE "TipoCalibracion" SET activo = 0 WHERE "id" = ?'
+    assert lv.analizar(sql, frozenset()) == []
+
+
+def test_set_activo_antes_del_where_no_cuenta_como_filtro():
+    """Aislado del caso anterior: el propio texto_desde_where es lo que
+    evita que un `SET activo = 0` (la anulación) se confunda con un filtro
+    de lectura -- sin ese recorte, cualquier UPDATE de anulación por id
+    daría un falso positivo."""
+    sql = 'UPDATE "TipoCalibracion" SET activo = 0, user = ? WHERE "id" = ? AND 1 = 1'
+    assert lv.analizar(sql, frozenset()) == []
+
+
+def test_clave_de_bloque_con_id_en_el_nombre_no_se_confunde_con_identidad():
+    """`pruebas` (clave ("id_sesion", "id_tipo")) -- ninguna de las dos
+    columnas es literalmente "id"/"rowid", pero ambas lo CONTIENEN como
+    subcadena. El límite de palabra (\\b) en el patrón no debe confundir
+    "id_sesion" con "id"."""
+    sql = ("SELECT * FROM pruebas "
+           "WHERE id_sesion = ? AND id_tipo = ? AND (activo IS NULL OR activo = 1)")
+    assert lv.analizar(sql, frozenset({"pruebas"})) == []
+
+
+def test_rojo_antes_que_verde_reproduce_braq_mensual_si_lf4_se_revierte():
+    """Reproduce EXACTAMENTE la forma que emitiría braq_mensual.py::consulta
+    si LF4 se revirtiera a `filtro_activo(nombre_tabla)` incondicional --
+    la resolución en tiempo de ejecución que vería RT1 para uid="id"."""
+    sql_si_se_revierte = (
+        "SELECT user, fecha, tipo, serie, certificado, fecha_cer, "
+        "intensidad, conversion FROM TipoCalibracion WHERE id = ? "
+        "AND (activo IS NULL OR activo = 1)")
+    hallazgos = lv.analizar(sql_si_se_revierte, frozenset())
+    assert any(h.motivo == "filtro sobre lectura de identidad"
+               and h.tabla == "TipoCalibracion" for h in hallazgos)
+
+
+def test_valor_expandido_en_vez_de_signo_de_interrogacion_se_detecta():
+    """`sqlite3.Connection.set_trace_callback` (RT1) entrega el SQL con los
+    parámetros YA EXPANDIDOS a su valor literal (`sqlite3_expanded_sql`),
+    no el texto preparado -- medido reproduciendo en runtime el defecto de
+    LF4 revertido: `addsomething` emitió literalmente
+    `WHERE id = 5 AND (activo IS NULL OR activo = 1)`, nunca `id = ?`. Un
+    patrón anclado a `= \\?` no habría visto ese texto real y LF5 nunca
+    hubiera puesto a RT1 en rojo -- solo a este test unitario, que usa `?`
+    por comodidad de fixture."""
+    sql_expandido = (
+        "SELECT user, fecha, tipo, serie, certificado, fecha_cer, "
+        "intensidad, conversion FROM TipoCalibracion WHERE id = 5 "
+        "AND (activo IS NULL OR activo = 1)")
+    hallazgos = lv.analizar(sql_expandido, frozenset())
+    assert len(hallazgos) == 1
+    assert hallazgos[0].motivo == "filtro sobre lectura de identidad"
+    assert hallazgos[0].tabla == "TipoCalibracion"

@@ -43,6 +43,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 _ANULACION_PATH = ROOT / "services" / "anulacion.py"
+_INDICES_PATH = ROOT / "scripts" / "indices_bloque_qc.py"
 
 # Las 7 raíces de proceso independientes ([[DP-31]]): tienen soft-delete
 # (E7/C2) pero sus lecturas NO están en el alcance de este analizador -- es
@@ -232,13 +233,71 @@ def tablas_con_filtro_no_op():
     return tablas_pendientes_lf() - tablas_anulables()
 
 
+def claves_indice():
+    """LF5 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF5): lee `CLAVES_INDICE` de
+    `scripts/indices_bloque_qc.py` con el mismo criterio AST-only que
+    `tablas_anulables()` -- nunca importa el módulo (evita una segunda
+    fuente de verdad de "qué columnas forman la clave de bloque de cada
+    tabla"). La usa el tercer motivo de `SinFiltro` para distinguir una
+    lectura por CLAVE (debe filtrar) de una lectura por IDENTIDAD física
+    (no debe): ninguna de las 52 claves declaradas usa `id`/`rowid` como
+    columna -- son siempre `ref`, `id_sesion`, `id_energia`, etc."""
+    arbol = ast.parse(_INDICES_PATH.read_text(encoding="utf-8"))
+    for nodo in ast.walk(arbol):
+        if not (isinstance(nodo, ast.Assign) and len(nodo.targets) == 1
+                and isinstance(nodo.targets[0], ast.Name)
+                and nodo.targets[0].id == "CLAVES_INDICE"):
+            continue
+        if not isinstance(nodo.value, ast.Dict):
+            raise RuntimeError(
+                "CLAVES_INDICE ya no es un dict literal en "
+                f"{_INDICES_PATH} -- actualiza claves_indice().")
+        claves = {}
+        for clave, valor in zip(nodo.value.keys, nodo.value.values):
+            if not (isinstance(clave, ast.Constant) and isinstance(clave.value, str)):
+                raise RuntimeError(
+                    f"Clave no literal en CLAVES_INDICE: {ast.dump(clave)}")
+            if not isinstance(valor, ast.Tuple):
+                raise RuntimeError(
+                    f"Valor no es una tupla literal en CLAVES_INDICE "
+                    f"({clave.value}): {ast.dump(valor)}")
+            columnas = set()
+            for elt in valor.elts:
+                if not (isinstance(elt, ast.Constant) and isinstance(elt.value, str)):
+                    raise RuntimeError(
+                        f"Columna no literal en la clave de {clave.value}: "
+                        f"{ast.dump(elt)}")
+                columnas.add(elt.value)
+            claves[clave.value] = frozenset(columnas)
+        return claves
+    raise RuntimeError(f"No se encontró CLAVES_INDICE en {_INDICES_PATH}")
+
+
+def tablas_con_filtro_posible():
+    """LF5: tablas para las que `filtro_activo()` puede devolver HOY una
+    cláusula real -- `TABLAS_ANULABLES` sin más, a propósito SIN restar
+    `RAICES_FUERA_DE_ALCANCE`.
+
+    Es un alcance distinto al de `tablas_hijas_del_bloque_qc()`: ese
+    responde "¿es exigible el filtro aquí?" (las raíces quedan fuera
+    mientras DP-31/DA-48 sigan abiertas). Este responde la pregunta
+    contraria -- "¿sobra un filtro que SÍ existe?" -- y esa pregunta aplica
+    a cualquier tabla con columna `activo` real, raíz o no: DA-47/LF4
+    corrigió precisamente ese defecto en una raíz (`TipoCalibracion`). Si
+    este motivo se limitara a `tablas_hijas_del_bloque_qc()`, el propio
+    sitio que originó DA-47 sería invisible para él."""
+    return tablas_anulables()
+
+
 @dataclass(frozen=True)
 class SinFiltro:
     """Una referencia a una tabla versionada, en un fragmento SQL, sin el
-    filtro que distingue el bloque vigente del histórico."""
+    filtro que distingue el bloque vigente del histórico -- o, para el
+    tercer motivo, CON un filtro que no debería estar."""
     tabla: str
     alias: str
-    motivo: str  # "sin filtro de activo" | "LIMIT sin ORDER BY"
+    motivo: str  # "sin filtro de activo" | "LIMIT sin ORDER BY" |
+                 # "filtro sobre lectura de identidad"
 
 
 #     `tamaño_pixel` (única tabla del bloque de QC con un carácter no-ASCII en
@@ -257,6 +316,7 @@ _RE_FROM_JOIN = re.compile(
 _RE_UPDATE = re.compile(r'\bUPDATE\s+"?([^\W\d]\w*)"?', re.IGNORECASE)
 _RE_LIMIT = re.compile(r'\bLIMIT\b', re.IGNORECASE)
 _RE_ORDER_BY = re.compile(r'\bORDER\s+BY\b', re.IGNORECASE)
+_RE_WHERE_INICIO = re.compile(r'\bWHERE\b', re.IGNORECASE)
 _RE_SELECT_INICIO = re.compile(r'^\s*SELECT\b', re.IGNORECASE)
 _RE_SUBCONSULTA_INICIO = re.compile(r'\(\s*SELECT\b', re.IGNORECASE)
 
@@ -343,20 +403,74 @@ def _filtro_presente(fragmento, alias, unica_tabla_versionada):
     return False
 
 
+def _texto_desde_where(fragmento):
+    """Recorta `fragmento` a partir de su primer `WHERE` (vacío si no
+    tiene). Las subconsultas ya salieron por `_extraer_subconsultas` antes
+    de llegar aquí, así que el primer `WHERE` que queda es el de este
+    fragmento -- nunca el de un `(SELECT ...)` anidado."""
+    m = _RE_WHERE_INICIO.search(fragmento)
+    return fragmento[m.start():] if m else ""
+
+
+def _es_lectura_de_identidad(texto_where, alias, tabla, claves):
+    """LF5 (DA-47): ¿el `WHERE` nombra la fila FÍSICA (`id`/`rowid`) en vez
+    de la clave de bloque de `tabla`? Si la clave declarada en
+    `CLAVES_INDICE` ya incluye `id`/`rowid` (hoy, ninguna), esta tabla no
+    distingue los dos casos y no se marca -- defensivo, no una situación
+    real todavía. `texto_where` debe ser SOLO la porción desde `WHERE` en
+    adelante (`_texto_desde_where`) -- nunca el fragmento completo: un
+    `UPDATE tabla SET activo = 0 WHERE id = ?` (la anulación misma,
+    `anular_fila`) tiene "activo" ANTES del WHERE, en el SET, no como
+    filtro de lectura -- ver `anular_fila` (services/anulacion.py).
+
+    El valor tras `=` se acepta como `\\S+` (cualquier token sin espacio),
+    NO como un `?` literal: `sqlite3.Connection.set_trace_callback` (RT1)
+    entrega el SQL con los parámetros YA EXPANDIDOS a su valor literal
+    (`sqlite3_expanded_sql`, no el texto preparado) -- `WHERE id = 5`, no
+    `WHERE id = ?`. Medido en runtime al verificar este mismo motivo:
+    revertir LF4 y ejecutar `addsomething` produce exactamente
+    `WHERE id = 5 AND (activo IS NULL OR activo = 1)`. Un patrón anclado a
+    `= \\?` nunca habría visto ese texto real -- solo el de ES1/tests, que
+    sí usan `?` literal."""
+    clave_bloque = claves.get(tabla)
+    if clave_bloque and (clave_bloque & {"id", "rowid"}):
+        return False
+    patron = re.compile(
+        rf'\bWHERE\s+(?:{re.escape(alias)}\s*\.\s*)?"?(id|rowid)"?\s*=\s*\S+',
+        re.IGNORECASE)
+    return bool(patron.search(texto_where))
+
+
 def _analizar_fragmento(fragmento, tablas_versionadas):
     hallazgos = []
     refs = _tablas_referenciadas(fragmento)
     refs_versionadas = {a: t for a, t in refs.items() if t in tablas_versionadas}
-    if not refs_versionadas:
-        return hallazgos
-    unica = len(refs_versionadas) == 1
-    for alias, tabla in refs_versionadas.items():
-        if not _filtro_presente(fragmento, alias, unica):
-            hallazgos.append(SinFiltro(tabla, alias, "sin filtro de activo"))
-    if (_RE_SELECT_INICIO.search(fragmento) and _RE_LIMIT.search(fragmento)
-            and not _RE_ORDER_BY.search(fragmento)):
+    if refs_versionadas:
+        unica = len(refs_versionadas) == 1
         for alias, tabla in refs_versionadas.items():
-            hallazgos.append(SinFiltro(tabla, alias, "LIMIT sin ORDER BY"))
+            if not _filtro_presente(fragmento, alias, unica):
+                hallazgos.append(SinFiltro(tabla, alias, "sin filtro de activo"))
+        if (_RE_SELECT_INICIO.search(fragmento) and _RE_LIMIT.search(fragmento)
+                and not _RE_ORDER_BY.search(fragmento)):
+            for alias, tabla in refs_versionadas.items():
+                hallazgos.append(SinFiltro(tabla, alias, "LIMIT sin ORDER BY"))
+
+    # LF5 (DA-47): alcance PROPIO -- `tablas_con_filtro_posible()` incluye
+    # las raíces (excluidas de `tablas_versionadas` mientras DP-31/DA-48
+    # sigan abiertas), porque "sobra un filtro" es ortogonal a si ese
+    # filtro es EXIGIBLE hoy. Ver docstring de esa función.
+    refs_con_filtro_posible = {a: t for a, t in refs.items()
+                                if t in tablas_con_filtro_posible()}
+    if refs_con_filtro_posible:
+        texto_where = _texto_desde_where(fragmento)
+        if texto_where:
+            claves = claves_indice()
+            unica_identidad = len(refs_con_filtro_posible) == 1
+            for alias, tabla in refs_con_filtro_posible.items():
+                if (_filtro_presente(texto_where, alias, unica_identidad)
+                        and _es_lectura_de_identidad(texto_where, alias, tabla, claves)):
+                    hallazgos.append(
+                        SinFiltro(tabla, alias, "filtro sobre lectura de identidad"))
     return hallazgos
 
 
