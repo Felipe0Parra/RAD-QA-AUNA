@@ -245,9 +245,9 @@ CENSO_RAICES = {
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3079, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3557, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3550, "braqui"):
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3596, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3589, "braqui"):
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
     ("ui/paginasControles/PruebasDiarias/seiscientos.py", 186, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),

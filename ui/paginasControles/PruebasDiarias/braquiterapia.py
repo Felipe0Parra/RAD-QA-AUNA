@@ -3092,37 +3092,30 @@ class PosicionamientoInicial(PruebaBasico):
             return ref_bd
         
         nuevo_ref_bd = consulta_db(fecha)
-      
+
+        # LR5 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR5, BRQ-1): hasta aquí
+        # este bloque intentaba recargar self.category1..category6 vía
+        # self.addsomething(...) -- copiado de PruebaMensualBraq
+        # (braq_mensual.py), pero NUNCA aplicó a esta clase. Confirmado
+        # reproduciendo el crash de verdad (no solo por análisis estático):
+        # `PosicionamientoInicial` no tiene `addsomething`, y su
+        # `self.category1` es el cargador de imágenes de la pestaña
+        # "ANALIZAR IMÁGENES" (initUI), no una pestaña de datos de
+        # calibración -- no existen category2/3/6 en absoluto. La rama
+        # "sin ref_bd" tampoco existía: `limpiar_todos_los_campos` tampoco
+        # está definida aquí. Las DOS ramas fallaban en silencio (PyQt5
+        # atrapa la excepción de un slot conectado a una señal, imprime el
+        # traceback y sigue -- el físico nunca lo veía) cada vez que se
+        # cambiaba la fecha, sin recargar nada real: esta pantalla (el
+        # diario de posicionamiento) no tiene campos de tipo/sistema/
+        # condiciones que recargar -- su tabla de calibraciones
+        # (`self.table`) la refresca por separado `mostrar_db_mensualBraqui`,
+        # nunca atada a la fecha elegida. Retirado -- `self.ref_bd` sigue
+        # actualizándose igual, que es lo único que este método necesita
+        # hacer de verdad (se usa al guardar el reporte diario).
         if nuevo_ref_bd != self.ref_bd:
             self.ref_bd = nuevo_ref_bd
             print(f"ref_bd actualizado a: {self.ref_bd}")
-            
-            # Recargar los datos si hay un nuevo ref_bd
-            if self.ref_bd is not None:
-                print("Nuevo ref_bd encontrado, recargando datos...")
-                # Recargar los datos en los widgets
-                # Buscar el DataFrame correcto para esta clase
-                df_para_recargar = None
-                if hasattr(self, 'df_tac'):  # Para PruebaMensualTAC
-                    df_para_recargar = self.df_tac
-                elif hasattr(self, 'datos_tabla') and hasattr(self, 'diccionario_invertido'):  # Para PruebaMensualBraq
-                    # Necesitamos el df original, vamos a buscarlo
-                    archivo = 'widgets.xlsx'
-                    df_para_recargar, _, _, _ = self.setupBox(archivo, 'preguntas_mensualBraqui', main=False)
-                
-                if df_para_recargar is not None:
-                    # Cargar cada tabla en su categoría correcta
-                    self.addsomething(self.category1, df_para_recargar, "tipo", "TipoCalibracion", "id", self.ref_bd)
-                    self.addsomething(self.category2, df_para_recargar, "sistema", "SistemaMedicion", "ref", self.ref_bd)
-                    self.addsomething(self.category3, df_para_recargar, "condiciones", "CondicionesMedicion", "ref", self.ref_bd)
-                    self.addsomething(self.category6, df_para_recargar, "observaciones", "CondicionesMedicion", "ref", self.ref_bd)
-                    print("Datos recargados exitosamente")
-                else:
-                    print("No se pudo encontrar el DataFrame para recargar")
-            else:
-                print("No se encontró ref_bd para la fecha seleccionada")
-                # Limpiar los campos si no hay datos
-                self.limpiar_todos_los_campos()
 
     def mostrar_submenu(self):
         
