@@ -95,6 +95,7 @@ EXEC_METHODS = {"execute", "executemany", "prepare"}
 #     mano donde aplica.
 #   - código muerto: sin llamadores en todo el árbol de producción.
 SITIOS_DINAMICOS_PERMITIDOS = {
+    ("services/visor_anulados.py", 77): "LR6 (censo/visor, DA-49): lee TODAS las filas de `tabla` (vigentes e históricas) A PROPÓSITO -- es el visor de solo lectura que sustituye a la reactivación. `tabla` recorre TABLAS_ANULABLES completo (derivado, ver `secciones()`), nunca fuera de ese alcance -- `columnas_de` lo rechaza si no",
     ("data/GraficasyTablas/tablas.py", 213): "identidad (fila antes de anular, diarias)",
     ("data/ManejoDatos/conection.py", 535): "migración/censo (E10, copia de tabla completa)",
     ("data/ManejoDatos/load.py", 726): "DO1/PR1 (subirlineasmensuales -- SELECT del bloque vigente, esquema completo para componer el nuevo sin perder columnas fuera de columnas_lista, p.ej. preguntas.imagen; ya filtra activo a mano, tabla dinámica)",

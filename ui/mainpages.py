@@ -428,6 +428,12 @@ class MainWindow(QMainWindow):
             # se decide limitarlo (p.ej. a es_admin_equivalente), este es el
             # punto de entrada.
             ("Registros", lambda: self.Registros()),
+            # LR6 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR6, DA-49): visor de
+            # SOLO LECTURA de los registros anulados -- reemplaza a la
+            # reactivación (DA-34, retirada en LR7) como forma de "llegar" a
+            # un registro anulado. Visible para cualquier usuario logueado,
+            # mismo criterio que la pestaña de auditoría de arriba.
+            ("Visor BD", lambda: self.VisorBD()),
         ]
         self._tab_instancias = {}
 
@@ -482,6 +488,17 @@ class MainWindow(QMainWindow):
             return Console_logs()
         except Exception as e:
             print(f"✗ Error registros auditorias: {e}")
+            return QWidget()  # Widget vacío como fallback
+
+    def VisorBD(self):
+        """Importa y crea el visor de registros anulados (LR6,
+        PLAN_CONTRATO_COMPLETO_19-08.md §6-LR6, DA-49)."""
+        try:
+            modulo = importlib.import_module("ui.paginasGuia.visor_anulados")
+            VisorAnulados = getattr(modulo, "VisorAnulados")
+            return VisorAnulados()
+        except Exception as e:
+            print(f"✗ Error visor de anulados: {e}")
             return QWidget()  # Widget vacío como fallback
 
     def _cargar_pestania_diferida(self, indice):

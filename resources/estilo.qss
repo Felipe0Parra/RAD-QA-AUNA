@@ -567,3 +567,32 @@ QTableWidget#tabla_criticas QTableWidgetItem {
     background-color: #5b9ea8;
     color: white;
 }
+
+/* ------------------------- Visor de anulados: chips de sección ------------------------- */
+#chips_seccion_visor QPushButton {
+    background-color: rgb(234, 244, 167);
+    color: rgb(110, 122, 32);
+    border-radius: 14px;
+    padding: 6px 14px;
+    font-size: 12.5px;
+    font-weight: bold;
+    border: none;
+}
+
+#chips_seccion_visor QPushButton:checked {
+    background-color: #c1df08;
+    color: #ffffff;
+}
+
+/* ------------------------- Visor de anulados: banda de solo lectura ------------------------- */
+#banda_solo_lectura {
+    background-color: #eef7f4;
+    border: 1px solid #9fd6c4;
+    border-radius: 10px;
+}
+
+#banda_solo_lectura QLabel {
+    color: #2f6f5c;
+    font-size: 12.5px;
+    font-weight: normal;
+}
