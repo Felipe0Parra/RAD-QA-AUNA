@@ -202,8 +202,10 @@ class TestListaBlancaCensal:
 
     def test_toda_excepcion_de_rt1_esta_tambien_en_es1(self):
         import test_le4_lecturas_filtran_activo as es1
+        declaradas_en_es1 = (set(es1.SITIOS_DINAMICOS_PERMITIDOS)
+                             | set(es1.SITIOS_CENSALES_LITERALES))
         for sitio, razon in _rt1.SITIOS_CENSALES_PERMITIDOS.items():
-            assert sitio in es1.SITIOS_DINAMICOS_PERMITIDOS, (
+            assert sitio in declaradas_en_es1, (
                 f"{sitio} es excepción en RT1 y no en ES1 -- o la línea "
                 f"cambió, o alguien ensanchó una lista sin la otra. "
                 f"Razón declarada en RT1: {razon}")
@@ -228,19 +230,24 @@ class TestDenominadorDeCobertura:
     este plan persigue."""
 
     def test_coincide_con_la_medicion_del_plan(self):
-        # LF3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF3): el denominador subió
-        # de 19 a 56 al ampliar `tablas_hijas_del_bloque_qc()` (LF2) con las
-        # 30 tablas PENDIENTE-LF -- más tablas vigiladas, mismos tests, así
-        # que la cobertura relativa BAJA. No es un fallo, es la medida
-        # honesta que el plan pidió documentar (§2.7/§6-LF3), no una
-        # regresión de RT1.
+        # El denominador ha subido DOS veces, las dos por ampliar la
+        # superficie vigilada, nunca por perder cobertura:
+        #   19 -> 56  LF2/LF3: entran las 30 tablas PENDIENTE-LF (§6-LF3).
+        #   56 -> 97  LR4/[[DA-48]]: entran las 7 raíces de QC, y con ellas
+        #             las 41 funciones que solo leían `controles`,
+        #             `TipoCalibracion`, `LinealidadBraquiterapia` o alguna
+        #             de las 4 diarias -- todas invisibles hasta ahora
+        #             porque las raíces se restaban del alcance.
+        # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
+        # es una regresión, es la medida honesta que el plan pidió publicar
+        # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 56, (
-            f"LF2 amplió el alcance de RT1/ES1 a las 30 tablas PENDIENTE-LF "
-            f"(56 funciones esperadas tras ampliar); ahora salen "
-            f"{len(lectoras)}. Si el cambio es deliberado, actualiza el plan "
-            f"y este número a la vez; si no, alguien añadió una lectura "
-            f"nueva sin enterarse.\n"
+        assert len(lectoras) == 97, (
+            f"LR4 amplió el alcance de RT1/ES1 al bloque de QC completo, "
+            f"raíces incluidas (97 funciones esperadas tras ampliar); ahora "
+            f"salen {len(lectoras)}. Si el cambio es deliberado, actualiza "
+            f"el plan y este número a la vez; si no, alguien añadió una "
+            f"lectura nueva sin enterarse.\n"
             + "\n".join(f"  {a}::{f}" for a, f in sorted(lectoras)))
 
     def test_las_lectoras_son_de_produccion_y_ninguna_de_tests(self):
@@ -320,7 +327,7 @@ def lector_mixto(con):
             assert filtro_activo(tabla) == "", (
                 f"{tabla} se difiere pero filtro_activo() ya devuelve una "
                 f"cláusula -- RT1 podría exigirla y no lo está haciendo")
-        for tabla in lv.tablas_hijas_del_bloque_qc() - lv.tablas_con_filtro_no_op():
+        for tabla in lv.tablas_del_bloque_qc() - lv.tablas_con_filtro_no_op():
             assert filtro_activo(tabla) != "", (
                 f"{tabla} NO se difiere pero filtro_activo() devuelve '' -- "
                 f"RT1 exigiría una cláusula imposible de producir")
@@ -353,7 +360,7 @@ def lector_mixto(con):
         monkeypatch.setattr(lv, "_ANULACION_PATH", fuente)
 
         assert "pruebas" not in lv.tablas_con_filtro_no_op()
-        assert "pruebas" in lv.tablas_hijas_del_bloque_qc()
+        assert "pruebas" in lv.tablas_del_bloque_qc()
 
     # -- el comportamiento del interceptor -----------------------------------
 

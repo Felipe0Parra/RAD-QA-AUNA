@@ -45,15 +45,30 @@ ROOT = Path(__file__).resolve().parent.parent
 _ANULACION_PATH = ROOT / "services" / "anulacion.py"
 _INDICES_PATH = ROOT / "scripts" / "indices_bloque_qc.py"
 
-# Las 7 raíces de proceso independientes ([[DP-31]]): tienen soft-delete
-# (E7/C2) pero sus lecturas NO están en el alcance de este analizador -- es
-# una decisión del físico todavía abierta (52+ sitios sin filtrar), no un
-# defecto de PLAN_LECTURA_VIGENTE_18-08 (ver ese plan, §1). Lista literal y
-# corta a propósito: que nazca una raíz nueva es un cambio de arquitectura
-# deliberado (ha pasado 4 veces en la historia del proyecto: controles,
-# TipoCalibracion, LinealidadBraquiterapia, y las 4 diarias como grupo), no
-# un evento que este módulo deba inferir solo.
-RAICES_FUERA_DE_ALCANCE = frozenset({
+# Las 7 raíces de proceso independientes del bloque de QC.
+#
+# Hasta LR4 se llamaba `RAICES_FUERA_DE_ALCANCE` y se RESTABA en
+# `tablas_hijas_del_bloque_qc()` para dejar sus lecturas fuera de este
+# analizador. Esa resta era el artefacto de que [[DP-31]] siguiera abierta
+# -- nunca una decisión de arquitectura -- y es exactamente lo que permitió
+# que las raíces llegaran a ~27 lecturas filtrando y ~50 sin filtrar sin
+# que ningún tripwire lo viera. [[DA-48]] cerró DP-31 y LR4 retiró la
+# resta: el alcance de AN1 es ahora el bloque de QC COMPLETO.
+#
+# El frozenset NO se vacía ni se borra, porque tenía DOS papeles y solo uno
+# se retira. El que queda es el ESTRUCTURAL, y es el original: es el punto
+# de partida del cierre transitivo de claves foráneas del bloque de QC
+# (`cierre_transitivo_fk`), que usan `scripts/derivar_inventario_qc.py`
+# (IV1) y el tripwire IV2. Con el conjunto vacío ese cierre sale vacío, y
+# IV2 daría por completo un inventario que no ha mirado nada -- de ahí el
+# nombre nuevo: leer "RAICES_FUERA_DE_ALCANCE se retira" invitaba justo a
+# ese error.
+#
+# Lista literal y corta a propósito: que nazca una raíz nueva es un cambio
+# de arquitectura deliberado (ha pasado 4 veces en la historia del
+# proyecto: controles, TipoCalibracion, LinealidadBraquiterapia, y las 4
+# diarias como grupo), no un evento que este módulo deba inferir solo.
+RAICES_QC = frozenset({
     "controles", "TipoCalibracion", "LinealidadBraquiterapia",
     "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui",
 })
@@ -178,19 +193,29 @@ def tablas_pendientes_lf():
     raise RuntimeError(f"No se encontró EXCEPCIONES_INVENTARIO en {_ANULACION_PATH}")
 
 
-def tablas_hijas_del_bloque_qc():
+def tablas_del_bloque_qc():
     """Alcance de este analizador: `TABLAS_ANULABLES` MÁS las tablas
-    `PENDIENTE-LF` de `EXCEPCIONES_INVENTARIO` ([[LF2]]), menos las raíces
-    ([[DP-31]], fuera de `PLAN_LECTURA_VIGENTE_18-08.md`). La unión con
-    `tablas_pendientes_lf()` es lo que permite exigir el filtro ANTES de
-    que `MI1` amplíe el frozenset de verdad (§4.4 del plan del 19-08): sin
-    esto, ES1/RT1 no verían las 30 tablas nuevas hasta después de MI1, y
-    quedaría exactamente el mismo hueco que originó el plan (una tabla
-    puede tener lecturas sin filtrar durante toda la ventana entre 'ya
-    versiona' y 'alguien se acordó de vigilarla'). Se deriva en cada
-    llamada -- nunca una copia guardada -- para que no pueda quedar
-    desincronizado del contrato real."""
-    return (tablas_anulables() | tablas_pendientes_lf()) - RAICES_FUERA_DE_ALCANCE
+    `PENDIENTE-LF` de `EXCEPCIONES_INVENTARIO` ([[LF2]]). **Sin restar
+    nada**: desde LR4 ([[DA-48]]) cubre el bloque de QC COMPLETO, raíces
+    incluidas -- una lectura nueva sin filtrar sobre `controles` se pone
+    roja igual que una sobre `analisis_placa_franjas`. Es el fin de "las
+    raíces son especiales", que es lo que dejó llegar a 27/50 sin que nadie
+    lo notara.
+
+    Se llamaba `tablas_hijas_del_bloque_qc` mientras las raíces quedaban
+    fuera; el nombre se cambió con la resta, porque una función que
+    devuelve las raíces y se llama "hijas" es la clase de nombre que dentro
+    de seis meses vuelve a hacer creer que hay algo excluido.
+
+    La unión con `tablas_pendientes_lf()` es lo que permite exigir el
+    filtro ANTES de que `MI1` amplíe el frozenset de verdad (§4.4 del plan
+    del 19-08): sin esto, ES1/RT1 no verían las 30 tablas nuevas hasta
+    después de MI1, y quedaría exactamente el mismo hueco que originó el
+    plan (una tabla puede tener lecturas sin filtrar durante toda la
+    ventana entre 'ya versiona' y 'alguien se acordó de vigilarla'). Se
+    deriva en cada llamada -- nunca una copia guardada -- para que no pueda
+    quedar desincronizado del contrato real."""
+    return tablas_anulables() | tablas_pendientes_lf()
 
 
 def tablas_con_filtro_no_op():
@@ -275,17 +300,19 @@ def claves_indice():
 
 def tablas_con_filtro_posible():
     """LF5: tablas para las que `filtro_activo()` puede devolver HOY una
-    cláusula real -- `TABLAS_ANULABLES` sin más, a propósito SIN restar
-    `RAICES_FUERA_DE_ALCANCE`.
+    cláusula real -- `TABLAS_ANULABLES` sin más.
 
-    Es un alcance distinto al de `tablas_hijas_del_bloque_qc()`: ese
-    responde "¿es exigible el filtro aquí?" (las raíces quedan fuera
-    mientras DP-31/DA-48 sigan abiertas). Este responde la pregunta
-    contraria -- "¿sobra un filtro que SÍ existe?" -- y esa pregunta aplica
-    a cualquier tabla con columna `activo` real, raíz o no: DA-47/LF4
-    corrigió precisamente ese defecto en una raíz (`TipoCalibracion`). Si
-    este motivo se limitara a `tablas_hijas_del_bloque_qc()`, el propio
-    sitio que originó DA-47 sería invisible para él."""
+    Sigue siendo un alcance distinto al de `tablas_del_bloque_qc()`, aunque
+    LR4 haya retirado la exclusión de las raíces: aquel es la UNIÓN con las
+    30 tablas `PENDIENTE-LF`, para las que `filtro_activo()` todavía
+    devuelve `""`. Preguntar "¿sobra un filtro?" sobre una tabla cuyo
+    filtro no puede existir aún no tiene sentido; preguntar "¿falta?" sí
+    (ES1 lo ve en el fuente, ver `tablas_con_filtro_no_op`).
+
+    Antes de LR4 la diferencia era además la contraria y más grave: este
+    conjunto incluía las 7 raíces a propósito, porque DA-47/LF4 corrigió el
+    defecto de "filtro de más" precisamente en una raíz
+    (`TipoCalibracion`), invisible entonces para el otro alcance."""
     return tablas_anulables()
 
 
@@ -412,6 +439,70 @@ def _texto_desde_where(fragmento):
     return fragmento[m.start():] if m else ""
 
 
+# LR4: la segunda forma de "el predicado nombra UNA fila física" -- la
+# tabla entra por un JOIN cuyo PROPIO `ON` iguala su clave primaria a una
+# columna de fuera (`JOIN controles c ON c.id = d.ref`). El `ON` se recorta
+# hasta el siguiente JOIN/WHERE/GROUP/ORDER/LIMIT para que la condición de
+# un JOIN no se le atribuya a otro.
+_RE_JOIN_ON = re.compile(
+    r'\bJOIN\s+"?([^\W\d]\w*)"?'
+    r'(?:\s+(?:AS\s+)?([^\W\d]\w*))?'
+    r'\s+ON\s+(.*?)'
+    r'(?=\bJOIN\b|\bWHERE\b|\bGROUP\b|\bORDER\b|\bLIMIT\b|$)',
+    re.IGNORECASE | re.DOTALL)
+
+
+def _es_join_de_identidad(fragmento, alias, tabla, claves):
+    """¿`alias` entra por un JOIN que la trae POR SU CLAVE PRIMARIA?
+
+    `FROM dosimetriaMen d JOIN controles c ON c.id = d.ref` devuelve UNA
+    fila de `controles` por cada fila de `dosimetriaMen`: es una lectura de
+    identidad tanto como un `WHERE id = ?`, y filtrarla no elegiría la
+    generación vigente del control -- haría desaparecer del informe la fila
+    HIJA, que sigue vigente.
+
+    Se exige que el `ON` sea el del JOIN que introduce ESTA tabla, no
+    cualquiera de la sentencia. El distingo no es teórico: en
+    `FROM controles c LEFT JOIN pruebas p ON p.id_sesion = c.id` aparece
+    `c.id` dentro de un `ON`, pero `controles` está en el `FROM` y su
+    `WHERE c.equipo = ?` sí es una lectura de bloque -- confundirlas dejaría
+    de exigir el filtro en los 10 sitios de `mostrar_controles_*` que hoy
+    lo llevan bien.
+
+    Medido al escribirlo: la primera forma existe UNA sola vez en todo el
+    árbol de producción (`services/consistencia_dosis.py`). Se resolvió
+    aquí, y no con una lista blanca, porque una excepción tendría que
+    declararse por separado en ES1 y en RT1 -- dos copias más del mismo
+    criterio, que es el defecto de fondo que este módulo existe para evitar
+    -- y porque RT1 exige además que sus excepciones estén también en la
+    lista de tablas DINÁMICAS de ES1, donde este sitio no encaja.
+    """
+    clave_bloque = claves.get(tabla)
+    if clave_bloque and (clave_bloque & {"id", "rowid"}):
+        return False
+    for m in _RE_JOIN_ON.finditer(fragmento):
+        tabla_join, alias_join, condicion = m.group(1), m.group(2), m.group(3)
+        if alias_join and alias_join.lower() in _PALABRAS_RESERVADAS:
+            alias_join = None
+        if tabla_join != tabla or (alias_join or tabla_join) != alias:
+            continue
+        if re.search(rf'\b{re.escape(alias)}\s*\.\s*"?(id|rowid)"?\s*=\s*\S+',
+                     condicion, re.IGNORECASE):
+            return True
+    return False
+
+
+def _es_referencia_de_identidad(fragmento, texto_where, alias, tabla):
+    """[[DA-47]] en una sola pregunta: ¿el predicado que trae esta fila la
+    nombra por su clave primaria? Las dos formas valen igual -- el `WHERE`
+    (`_es_lectura_de_identidad`) y el `ON` del JOIN que la introduce
+    (`_es_join_de_identidad`)."""
+    claves = claves_indice()
+    if texto_where and _es_lectura_de_identidad(texto_where, alias, tabla, claves):
+        return True
+    return _es_join_de_identidad(fragmento, alias, tabla, claves)
+
+
 def _es_lectura_de_identidad(texto_where, alias, tabla, claves):
     """LF5 (DA-47): ¿el `WHERE` nombra la fila FÍSICA (`id`/`rowid`) en vez
     de la clave de bloque de `tabla`? Si la clave declarada en
@@ -447,18 +538,31 @@ def _analizar_fragmento(fragmento, tablas_versionadas):
     refs_versionadas = {a: t for a, t in refs.items() if t in tablas_versionadas}
     if refs_versionadas:
         unica = len(refs_versionadas) == 1
+        texto_where_frag = _texto_desde_where(fragmento)
         for alias, tabla in refs_versionadas.items():
-            if not _filtro_presente(fragmento, alias, unica):
-                hallazgos.append(SinFiltro(tabla, alias, "sin filtro de activo"))
+            if _filtro_presente(fragmento, alias, unica):
+                continue
+            # LR4 ([[DA-48]]): con las raíces dentro del alcance, este motivo
+            # dejaría en rojo las ~20 lecturas por `id` que NO deben filtrar
+            # -- exigirles el filtro es exigirles el defecto que LF4
+            # corrigió. Es la misma pregunta que el tercer motivo con el
+            # signo cambiado: allí sobra el filtro, aquí no falta. La regla
+            # se comprueba una sola vez, aquí, en vez de repartirse en listas
+            # blancas por ES1 y RT1.
+            if _es_referencia_de_identidad(fragmento, texto_where_frag,
+                                           alias, tabla):
+                continue
+            hallazgos.append(SinFiltro(tabla, alias, "sin filtro de activo"))
         if (_RE_SELECT_INICIO.search(fragmento) and _RE_LIMIT.search(fragmento)
                 and not _RE_ORDER_BY.search(fragmento)):
             for alias, tabla in refs_versionadas.items():
                 hallazgos.append(SinFiltro(tabla, alias, "LIMIT sin ORDER BY"))
 
-    # LF5 (DA-47): alcance PROPIO -- `tablas_con_filtro_posible()` incluye
-    # las raíces (excluidas de `tablas_versionadas` mientras DP-31/DA-48
-    # sigan abiertas), porque "sobra un filtro" es ortogonal a si ese
-    # filtro es EXIGIBLE hoy. Ver docstring de esa función.
+    # LF5 (DA-47): alcance PROPIO -- `tablas_con_filtro_posible()` es
+    # `TABLAS_ANULABLES` a secas, sin las 30 PENDIENTE-LF cuyo
+    # `filtro_activo()` todavía es un no-op: preguntar "¿sobra un filtro?"
+    # sobre una tabla cuyo filtro no puede existir aún no tiene sentido.
+    # Ver docstring de esa función.
     refs_con_filtro_posible = {a: t for a, t in refs.items()
                                 if t in tablas_con_filtro_posible()}
     if refs_con_filtro_posible:
@@ -468,7 +572,8 @@ def _analizar_fragmento(fragmento, tablas_versionadas):
             unica_identidad = len(refs_con_filtro_posible) == 1
             for alias, tabla in refs_con_filtro_posible.items():
                 if (_filtro_presente(texto_where, alias, unica_identidad)
-                        and _es_lectura_de_identidad(texto_where, alias, tabla, claves)):
+                        and (_es_lectura_de_identidad(texto_where, alias, tabla, claves)
+                             or _es_join_de_identidad(fragmento, alias, tabla, claves))):
                     hallazgos.append(
                         SinFiltro(tabla, alias, "filtro sobre lectura de identidad"))
     return hallazgos
@@ -481,7 +586,7 @@ def analizar(sql, tablas_versionadas=None):
     la lista de `SinFiltro` encontrados; vacía si no hay nada que reportar.
     """
     if tablas_versionadas is None:
-        tablas_versionadas = tablas_hijas_del_bloque_qc()
+        tablas_versionadas = tablas_del_bloque_qc()
     exterior, subconsultas = _extraer_subconsultas(sql)
     hallazgos = _analizar_fragmento(exterior, tablas_versionadas)
     for sub in subconsultas:

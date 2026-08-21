@@ -29,7 +29,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
 from services.lectura_vigente import (
-    RAICES_FUERA_DE_ALCANCE, cierre_transitivo_fk, excepciones_inventario,
+    RAICES_QC, cierre_transitivo_fk, excepciones_inventario,
     tablas_anulables,
 )
 
@@ -50,11 +50,11 @@ class TestCompletitudDelInventario:
     def test_toda_tabla_del_cierre_esta_clasificada(self, bd_temporal):
         con = sqlite3.connect(bd_temporal)
         try:
-            cierre = cierre_transitivo_fk(con, RAICES_FUERA_DE_ALCANCE)
+            cierre = cierre_transitivo_fk(con, RAICES_QC)
         finally:
             con.close()
 
-        actuales = tablas_anulables() - RAICES_FUERA_DE_ALCANCE
+        actuales = tablas_anulables() - RAICES_QC
         excepciones = excepciones_inventario()
         clasificadas = actuales | excepciones
 
@@ -83,11 +83,11 @@ class TestCompletitudDelInventario:
         las excepciones."""
         con = sqlite3.connect(bd_temporal)
         try:
-            cierre = cierre_transitivo_fk(con, RAICES_FUERA_DE_ALCANCE)
+            cierre = cierre_transitivo_fk(con, RAICES_QC)
         finally:
             con.close()
 
-        actuales = tablas_anulables() - RAICES_FUERA_DE_ALCANCE
+        actuales = tablas_anulables() - RAICES_QC
         excepciones = excepciones_inventario() - {"analisis_placa_verificaciones"}
         clasificadas = actuales | excepciones
 

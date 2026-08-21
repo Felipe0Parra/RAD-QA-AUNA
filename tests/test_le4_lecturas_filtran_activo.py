@@ -134,6 +134,19 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("scripts/observador_contrato.py", 146): "censo (OB1, censo.activas -- calcula su propio filtro, no importa filtro_activo para no arrastrar PyQt5)",
     ("scripts/observador_contrato.py", 155): "censo (OB1, vigente -- mismo motivo)",
     ("scripts/saneamiento_bloque_qc.py", 42): "SA1/SA2 -- ya filtra 'activo' a mano en el WHERE (visible en el propio texto), no importa filtro_activo() para no arrastrar PyQt5 en un script que solo usa sqlite3",
+    # LR4 (DA-48): los 8 `UPDATE {DYN}` que el detector no miraba hasta
+    # ahora (ver PATRON_UPDATE_DINAMICO). Ninguno es una lectura de lista:
+    # seis ESCRIBEN la anulación (poner `activo = 0` no puede filtrar por
+    # `activo` sin volverse un no-op sobre lo ya anulado), uno edita UNA
+    # celda por su id, y el octavo es una migración de formato de fecha.
+    ("services/anulacion.py", 187): "anular_fila -- el punto ÚNICO de anulación (E7): `UPDATE {tabla} SET activo = 0 WHERE {id_where}`. Es la ESCRITURA que crea lo anulado, no una lectura; filtrar aquí sería no poder anular nada dos veces",
+    ("data/ManejoDatos/load.py", 553): "eliminarfilas/subirlineas -- anula el bloque vigente antes de insertar el nuevo; YA filtra 'activo' a mano en el WHERE compuesto (línea 552)",
+    ("data/ManejoDatos/load.py", 745): "subirlineasmensuales -- anula el bloque vigente de ese `ref`; ya filtra 'activo' a mano en el propio texto",
+    ("data/ManejoDatos/load.py", 774): "subirlineasmensuales, rama FUERA del bloque de QC (`preguntas` antes de PR1 y las tablas sin columna `activo`): UPDATE parcial por `ref`, contrato original",
+    ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 290): "subirlineasmensuales_ix -- anula el bloque vigente de (ref, energia); ya filtra 'activo' a mano en el propio texto",
+    ("scripts/saneamiento_bloque_qc.py", 74): "SA2 -- anula por `rowid` las filas duplicadas que perdieron el desempate: identidad física, una fila nombrada",
+    ("ui/paginasControles/PruebasDiarias/PruebasDiarias.py", 826): "edición directa de UNA celda ya identificada (`WHERE id = ?`) -- identidad, no filtra (DA-47)",
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 54): "censo/migración (normalizar_fechas_db): reescribe el FORMATO de `fecha` (DD-MM-YYYY -> YYYY-MM-DD) en las 6 tablas de braquiterapia. Tiene que alcanzar TAMBIÉN a las filas anuladas: una fila anulada con la fecha en el formato viejo la conserva para siempre, y es justo lo que obliga a `braq_mensual.py:1257` a consultar en los dos formatos (DP-32). Declarado también en la lista censal de RT1, que fue quien lo vio",
 }
 
 # Sitios LITERALES (tabla nombrada a secas tras FROM) donde el filtro SÍ
@@ -190,8 +203,39 @@ EXCEPCIONES_LITERALES = {
     # `filtro_mc` calificada con el alias 'mc.'. Dos hallazgos en la misma
     # línea (el analizador reporta 'sin filtro' y 'LIMIT sin ORDER BY' por
     # separado aunque sea un solo sitio revisado).
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2774): "MaximosCamaras -- filtro_mc calificado con el alias 'mc.' (graficar_maximos_camara)",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1594): "MaximosCamaras -- filtro_mc calificado con el alias 'mc.' (graficar_maximos_camara)",
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2774): "MaximosCamaras (filtro_mc, alias 'mc.') Y TipoCalibracion (filtro_tc, alias 'tc.', añadido en LR3) -- graficar_maximos_camara; las dos calificadas en variables intermedias",
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1594): "MaximosCamaras (filtro_mc) Y TipoCalibracion (filtro_tc, LR3) -- gemelo mensual del anterior",
+    # LR3 (DA-48): sitios de RAÍZ que ganaron su filtro calificado por alias
+    # -- mismo patrón de variable intermedia, ahora visibles para ES1 porque
+    # LR4 metió las raíces en el alcance.
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 605): "TipoCalibracion -- filtro_tc calificado con el alias 'tc.' (_ejecutar_carga_calibracion: última fuente instalada antes de una fecha)",
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2803): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (graficar_linealidad_fuente)",
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1623): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (gemelo mensual de graficar_linealidad_fuente)",
+}
+
+# LR4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR4, [[DA-48]]): sitios de tabla
+# LITERAL que leen las DOS ramas (vigente e histórica) A PROPÓSITO. Antes de
+# LR4 no hacía falta declararlos porque tocaban una raíz y las raíces
+# estaban fuera del alcance; ahora que el alcance es el bloque completo, la
+# excepción tiene que quedar dicha -- que es justamente lo que DA-48 pide
+# (tercera categoría de LR1: "no filtra, con excepción declarada y su
+# razón"). Su clasificación completa vive en
+# `tests/test_lr1_censo_raices_qc.py::CENSO_RAICES`.
+#
+# RT1 comparte estos dos sitios en su propia lista censal
+# (`SITIOS_CENSALES_PERMITIDOS`) y un test cruzado exige que las dos listas
+# sigan de acuerdo.
+SITIOS_CENSALES_LITERALES = {
+    ("scripts/migrar_bd_a_estandar.py", 121):
+        "migración (_contar_centinela): cuenta las filas de `controles` con "
+        "el centinela histórico de 2º físico (' ---- ') para decidir si hay "
+        "que normalizarlas. Tiene que ver TODAS: una fila anulada con el "
+        "dato mal sigue teniendo el dato mal, y filtrar dejaría el histórico "
+        "a medio migrar.",
+    ("scripts/migrar_bd_a_estandar.py", 339):
+        "migración (el UPDATE que normaliza ese centinela a NULL): misma "
+        "razón que la cuenta de arriba -- si la cuenta ve una fila y el "
+        "UPDATE no, la migración se quedaría a medias sin avisar.",
 }
 
 # ES1 (NUEVO, hueco 1): sitios donde el argumento de execute() no es un
@@ -250,6 +294,13 @@ def _archivos_produccion():
 
 
 PATRON_FROM_DINAMICO = re.compile(r'FROM\s+"?\{DYN\}"?', re.IGNORECASE)
+# LR4 (DA-48): hueco de ES1 destapado al meter las raíces en el alcance --
+# el detector de tabla dinámica solo miraba `FROM {DYN}`, así que un
+# `UPDATE {DYN}` sobre una tabla versionada no se contaba NI como sitio
+# dinámico ni como violación: era invisible por completo. Lo encontró RT1
+# (que ve el SQL resuelto) en `braq_mensual.py::normalizar_fechas_db`.
+# Son 8 sitios, todos revisados en `SITIOS_DINAMICOS_PERMITIDOS`.
+PATRON_UPDATE_DINAMICO = re.compile(r'UPDATE\s+"?\{DYN\}"?', re.IGNORECASE)
 
 
 def _censar():
@@ -258,12 +309,14 @@ def _censar():
       dinamicos: sitios de tabla dinámica sin autoprotección
       opacos: sitios donde ni el literal ni el resolver de AN1 alcanzan
       excepciones_encontradas: cuáles de EXCEPCIONES_LITERALES siguen ahí
+      censales_encontrados: cuáles de SITIOS_CENSALES_LITERALES siguen ahí
     """
-    tablas = lv.tablas_hijas_del_bloque_qc()
+    tablas = lv.tablas_del_bloque_qc()
     fallos = []
     dinamicos = set()
     opacos = set()
     excepciones_encontradas = set()
+    censales_encontrados = set()
 
     for rel, path in _archivos_produccion():
         try:
@@ -301,7 +354,8 @@ def _censar():
                     if "select" not in minus and "update" not in minus:
                         continue
 
-                    if PATRON_FROM_DINAMICO.search(texto):
+                    if (PATRON_FROM_DINAMICO.search(texto)
+                            or PATRON_UPDATE_DINAMICO.search(texto)):
                         if "{filtro_activo}" not in texto.lower():
                             dinamicos.add(clave)
                         continue
@@ -311,6 +365,9 @@ def _censar():
                         continue
                     if clave in EXCEPCIONES_LITERALES:
                         excepciones_encontradas.add(clave)
+                        continue
+                    if clave in SITIOS_CENSALES_LITERALES:
+                        censales_encontrados.add(clave)
                         continue
                     for h in hallazgos:
                         fallos.append(
@@ -323,6 +380,7 @@ def _censar():
         "dinamicos": dinamicos,
         "opacos": opacos,
         "excepciones_encontradas": excepciones_encontradas,
+        "censales_encontrados": censales_encontrados,
     }
 
 
@@ -374,3 +432,20 @@ def test_excepciones_literales_siguen_existiendo():
         f"Excepción literal que ya no aparece en el código -- si el sitio "
         f"cambió o se filtró de forma que el censo ya lo reconoce, "
         f"limpiar EXCEPCIONES_LITERALES: {ausentes}")
+
+
+def test_sitios_censales_literales_siguen_existiendo():
+    """LR4: si una excepción censal deja de aparecer (porque el sitio ganó
+    su filtro, cambió de línea o se retiró), la entrada sobra -- una lista
+    de excepciones que nadie limpia deja de ser revisable, que es
+    exactamente cómo las raíces llegaron a 27/50."""
+    resultado = _censar()
+    ausentes = set(SITIOS_CENSALES_LITERALES) - resultado["censales_encontrados"]
+    assert not ausentes, (
+        f"Excepción censal literal que ya no aparece en el censo -- "
+        f"límpiala de SITIOS_CENSALES_LITERALES: {ausentes}")
+
+
+def test_cada_excepcion_censal_literal_declara_su_razon():
+    for sitio, razon in SITIOS_CENSALES_LITERALES.items():
+        assert len(razon) > 40, f"{sitio} sin razón documentada"

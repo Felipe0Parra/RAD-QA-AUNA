@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from services.lectura_vigente import (
-    RAICES_FUERA_DE_ALCANCE, cierre_transitivo_fk, excepciones_inventario,
+    RAICES_QC, cierre_transitivo_fk, excepciones_inventario,
     tablas_anulables,
 )
 
@@ -59,22 +59,22 @@ def main():
 
     con = sqlite3.connect(f"file:{args.ruta_bd}?mode=ro", uri=True)
     try:
-        cierre = cierre_transitivo_fk(con, RAICES_FUERA_DE_ALCANCE)
+        cierre = cierre_transitivo_fk(con, RAICES_QC)
     finally:
         con.close()
 
-    actuales = tablas_anulables() - RAICES_FUERA_DE_ALCANCE
+    actuales = tablas_anulables() - RAICES_QC
     excepciones = set(excepciones_inventario())
 
     huecos = cierre - actuales - excepciones
     sobrantes = actuales - cierre
 
-    print(f"--- Cierre transitivo desde las {len(RAICES_FUERA_DE_ALCANCE)} raíces de QC ---")
+    print(f"--- Cierre transitivo desde las {len(RAICES_QC)} raíces de QC ---")
     print(f"{len(cierre)} tablas descendientes.\n")
 
     print("--- TABLAS_ANULABLES propuesto (pegar en services/anulacion.py) ---")
     print("frozenset({")
-    for raiz in sorted(RAICES_FUERA_DE_ALCANCE):
+    for raiz in sorted(RAICES_QC):
         print(f'    "{raiz}",')
     for tabla in sorted(cierre - excepciones):
         print(f'    "{tabla}",')

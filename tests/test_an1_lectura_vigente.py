@@ -19,32 +19,38 @@ from services import lectura_vigente as lv
 # 1. Derivación del alcance (cierra el hueco 2: la lista ya no se desincroniza)
 # ---------------------------------------------------------------------------
 
-def test_tablas_hijas_del_bloque_qc_excluye_solo_las_7_raices():
-    hijas = lv.tablas_hijas_del_bloque_qc()
+def test_tablas_del_bloque_qc_cubre_el_bloque_entero_raices_incluidas():
+    """LR4 ([[DA-48]]): hasta aquí este test fijaba la EXCLUSIÓN de las 7
+    raíces (`assert raiz not in hijas`). Ahora fija lo contrario, que es el
+    pago estructural de la fase: el alcance es el bloque de QC completo, y
+    ES1/RT1 lo heredan sin tocar ninguno de los dos."""
+    bloque = lv.tablas_del_bloque_qc()
     anulables = lv.tablas_anulables()
     pendientes = lv.tablas_pendientes_lf()
 
     # LF2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF2): el alcance de AN1 es la
     # UNIÓN de TABLAS_ANULABLES con las 30 tablas "PENDIENTE-LF" -- no solo
     # TABLAS_ANULABLES -- para poder exigir el filtro ANTES de que MI1
-    # amplíe el frozenset de verdad (§4.4).
-    assert hijas == (anulables | pendientes) - lv.RAICES_FUERA_DE_ALCANCE
+    # amplíe el frozenset de verdad (§4.4). Desde LR4, sin restarle nada.
+    assert bloque == anulables | pendientes
     assert pendientes, "debería haber tablas PENDIENTE-LF mientras MI1 no se ejecute"
     assert pendientes - anulables, "las PENDIENTE-LF son justamente las que faltan en TABLAS_ANULABLES"
-    for raiz in ("controles", "TipoCalibracion", "LinealidadBraquiterapia",
-                 "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui"):
-        assert raiz not in hijas
+    for raiz in lv.RAICES_QC:
+        assert raiz in bloque, (
+            f"{raiz} debe estar vigilada como cualquier otra tabla del "
+            "bloque de QC -- LR4 retiró la exclusión (DA-48)")
+    assert len(lv.RAICES_QC) == 7
 
     # Las 3 tablas del rebuild del 18-08 -- deliberadamente FUERA del
     # TABLAS_EN_ALCANCE de 18 tablas que tenía LE4, y sin embargo D3
     # (equipos_medicion) es un defecto real de este mismo rebuild.
     for tabla in ("preguntas", "dosimetriaMen", "equipos_medicion",
                   "control_cunas", "control_conos", "tamano_campo"):
-        assert tabla in hijas, f"{tabla} debería estar en el alcance de AN1"
+        assert tabla in bloque, f"{tabla} debería estar en el alcance de AN1"
 
     # LF2: una tabla PENDIENTE-LF real (aún no en TABLAS_ANULABLES) también
     # debe estar en el alcance -- si no, LF1 no tendría nada que vigilar.
-    assert "pruebas" in hijas
+    assert "pruebas" in bloque
     assert "pruebas" not in anulables
 
 
@@ -63,9 +69,9 @@ def test_alcance_crece_solo_si_TABLAS_ANULABLES_crece(tmp_path, monkeypatch):
     """), encoding="utf-8")
     monkeypatch.setattr(lv, "_ANULACION_PATH", fuente_falso)
 
-    hijas = lv.tablas_hijas_del_bloque_qc()
+    hijas = lv.tablas_del_bloque_qc()
     assert "tabla_ficticia_de_prueba" in hijas
-    assert "controles" not in hijas  # raíz, sigue excluida
+    assert "controles" in hijas  # LR4: la raíz ya no se excluye
     assert "preguntas" in hijas
 
 
@@ -86,7 +92,7 @@ def test_alcance_crece_tambien_con_una_tabla_pendiente_lf(tmp_path, monkeypatch)
     '''), encoding="utf-8")
     monkeypatch.setattr(lv, "_ANULACION_PATH", fuente_falso)
 
-    hijas = lv.tablas_hijas_del_bloque_qc()
+    hijas = lv.tablas_del_bloque_qc()
     assert "tabla_pendiente_de_prueba" in hijas
     assert "tabla_retirada_de_prueba" not in hijas  # motivo distinto de PENDIENTE-LF
 
@@ -379,19 +385,21 @@ def test_claves_indice_coincide_con_el_fuente():
 
 
 def test_tablas_con_filtro_posible_incluye_las_raices():
-    """A diferencia de tablas_hijas_del_bloque_qc() (alcance de "sin
-    filtro", raíces fuera mientras DP-31/DA-48 sigan abiertas), este
-    alcance SÍ incluye las raíces -- son precisamente donde vive el
-    defecto que dio origen a DA-47 (TipoCalibracion, LF4)."""
+    """Las raíces están en los dos alcances desde LR4; lo que distingue a
+    este es que NO incluye las 30 PENDIENTE-LF, cuyo `filtro_activo()`
+    todavía devuelve "" (no se puede preguntar si sobra un filtro que aún
+    no puede existir)."""
     assert lv.tablas_con_filtro_posible() == lv.tablas_anulables()
     for raiz in ("TipoCalibracion", "controles", "LinealidadBraquiterapia"):
         assert raiz in lv.tablas_con_filtro_posible()
 
 
 def test_identidad_con_filtro_se_marca_incluso_en_una_raiz():
-    """El defecto original de LF4, reproducido: TipoCalibracion es raíz
-    (fuera de tablas_hijas_del_bloque_qc), pero el motivo debe verla --
-    tablas_versionadas=frozenset() simula exactamente eso."""
+    """El defecto original de LF4, reproducido con
+    `tablas_versionadas=frozenset()`: aunque la tabla no estuviera en el
+    alcance de "sin filtro", el motivo de "filtro de más" debe verla igual
+    -- es lo que hizo visible el defecto de DA-47 cuando TipoCalibracion
+    era una raíz excluida."""
     sql = ("SELECT user, fecha FROM TipoCalibracion "
            "WHERE id = ? AND (activo IS NULL OR activo = 1)")
     hallazgos = lv.analizar(sql, frozenset())
@@ -474,3 +482,83 @@ def test_valor_expandido_en_vez_de_signo_de_interrogacion_se_detecta():
     assert len(hallazgos) == 1
     assert hallazgos[0].motivo == "filtro sobre lectura de identidad"
     assert hallazgos[0].tabla == "TipoCalibracion"
+
+
+# ---------------------------------------------------------------------------
+# 6. LR4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR4, [[DA-48]]): con las 7
+#    raíces DENTRO del alcance, el motivo "sin filtro de activo" tiene que
+#    saber callarse sobre una lectura de IDENTIDAD -- si no, exigiría el
+#    filtro justo donde DA-47 dice que sobra (el defecto de LF4). Es la
+#    misma regla que el tercer motivo, con el signo cambiado, y por eso vive
+#    en el mismo sitio en vez de repartirse en listas blancas de ES1 y RT1.
+# ---------------------------------------------------------------------------
+
+def test_lr4_identidad_sin_filtro_no_se_marca_estando_en_alcance():
+    """El caso que LR4 hace posible: `controles` YA está en el alcance, y
+    aun así una lectura por su clave primaria no debe pedirle filtro."""
+    sql = "SELECT * FROM controles WHERE id = ?"
+    assert lv.analizar(sql, frozenset({"controles"})) == []
+
+
+def test_lr4_bloque_sin_filtro_si_se_marca_en_una_raiz():
+    """La otra mitad, y el pago de la fase: la misma tabla, leída por una
+    clave que puede casar varias generaciones, SÍ se marca. Antes de LR4
+    esto era invisible -- es lo que dejó llegar a 27 filtradas / 50 sin
+    filtrar sin que ningún tripwire lo viera."""
+    sql = "SELECT id FROM controles WHERE fecha = ? AND equipo = ?"
+    hallazgos = lv.analizar(sql, frozenset({"controles"}))
+    assert [h.motivo for h in hallazgos] == ["sin filtro de activo"]
+    assert hallazgos[0].tabla == "controles"
+
+
+def test_lr4_join_al_padre_por_su_pk_es_identidad():
+    """`services/consistencia_dosis.py`: `JOIN controles c ON c.id = d.ref`
+    trae UNA fila de `controles` por cada fila de `dosimetriaMen`. Filtrar
+    ahí no elegiría la generación vigente del control -- borraría del
+    informe la fila HIJA, que sigue vigente."""
+    sql = ("SELECT d.ref, c.equipo FROM dosimetriaMen d "
+           "JOIN controles c ON c.id = d.ref "
+           "WHERE d.energia IS NOT NULL AND (d.activo IS NULL OR d.activo = 1)")
+    assert lv.analizar(sql, frozenset({"controles", "dosimetriaMen"})) == []
+
+
+def test_lr4_join_a_la_hija_no_convierte_al_padre_en_identidad():
+    """La confusión peligrosa: en `mostrar_controles_*`, `c.id` aparece
+    dentro de un `ON`, pero es el ON del JOIN a `pruebas`, no el de
+    `controles` -- que está en el FROM y se selecciona por `equipo`. Si AN1
+    los confundiera dejaría de exigir el filtro en los 10 sitios que hoy lo
+    llevan bien."""
+    # El orden del `ON` es el REAL de load.py::mostrar_controles_mensuales
+    # (`ON cm.id = p.ref`), el peligroso: `c.id =` aparece literalmente.
+    sql = ("SELECT c.id FROM controles c "
+           "LEFT JOIN preguntas p ON c.id = p.ref AND (p.activo IS NULL OR p.activo = 1) "
+           "WHERE c.equipo = ?")
+    hallazgos = lv.analizar(sql, frozenset({"controles", "preguntas"}))
+    assert [(h.tabla, h.motivo) for h in hallazgos] == [
+        ("controles", "sin filtro de activo")]
+
+
+def test_lr4_join_por_clave_de_bloque_no_es_identidad():
+    """`graficar_maximos_camara`: `TipoCalibracion` entra por un JOIN, pero
+    el `WHERE` la selecciona por FECHA -- varias generaciones posibles. Sigue
+    necesitando su propio filtro, y el de `MaximosCamaras` no se lo presta
+    (hueco 4 de LE4)."""
+    sql = ("SELECT mc.posicion FROM MaximosCamaras mc "
+           "JOIN TipoCalibracion tc ON mc.ref = tc.id "
+           "WHERE DATE(tc.fecha) = ? AND (mc.activo IS NULL OR mc.activo = 1) "
+           "ORDER BY mc.posicion ASC")
+    hallazgos = lv.analizar(sql, frozenset({"MaximosCamaras", "TipoCalibracion"}))
+    assert [(h.tabla, h.motivo) for h in hallazgos] == [
+        ("TipoCalibracion", "sin filtro de activo")]
+
+
+def test_lr4_filtro_sobrante_en_un_join_de_identidad_si_se_marca():
+    """La regla es una sola con dos direcciones: si alguien AÑADIERA el
+    filtro al JOIN por clave primaria, el tercer motivo tiene que verlo."""
+    sql = ("SELECT d.ref, c.equipo FROM dosimetriaMen d "
+           "JOIN controles c ON c.id = d.ref "
+           "WHERE (c.activo IS NULL OR c.activo = 1)")
+    hallazgos = lv.analizar(sql, frozenset())
+    assert any(h.tabla == "controles"
+               and h.motivo == "filtro sobre lectura de identidad"
+               for h in hallazgos)

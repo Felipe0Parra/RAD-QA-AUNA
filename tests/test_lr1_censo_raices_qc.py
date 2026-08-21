@@ -5,10 +5,14 @@ proceso del bloque de QC (`controles`, `TipoCalibracion`,
 `halcyon`, `braqui`).
 
 Por qué existe este archivo y no basta con ES1: hasta DA-48 las 7 raíces
-estaban FUERA del alcance de `tablas_hijas_del_bloque_qc()`
-(`RAICES_FUERA_DE_ALCANCE`, artefacto de que [[DP-31]] siguiera abierta), y
-eso es lo que permitió que llegaran a ~27 sitios filtrando y ~50 sin
-filtrar **sin ningún criterio declarado** que distinguiera unos de otros.
+estaban FUERA del alcance del analizador (se restaban en
+`tablas_del_bloque_qc()`, entonces llamada `tablas_hijas_del_bloque_qc()`,
+artefacto de que [[DP-31]] siguiera abierta), y eso es lo que permitió que
+llegaran a ~27 sitios filtrando y ~50 sin filtrar **sin ningún criterio
+declarado** que distinguiera unos de otros. LR4 retiró la exclusión: ES1 y
+RT1 ya vigilan las raíces igual que al resto del bloque, y este archivo
+guarda la CLASIFICACIÓN una a una, que ningún analizador puede derivar
+solo.
 El censo del 20-08 midió 77 filas; este archivo las clasifica **una por
 una** según [[DA-47]] -- el filtro se decide por la SELECTIVIDAD del
 `WHERE`, no por la tabla -- y se queda como tripwire permanente: un sitio
@@ -56,7 +60,7 @@ IDENTIDAD = "identidad"
 LISTA = "lista"
 CENSO = "censo"
 
-RAICES = lv.RAICES_FUERA_DE_ALCANCE
+RAICES = lv.RAICES_QC
 
 
 # ---------------------------------------------------------------------------

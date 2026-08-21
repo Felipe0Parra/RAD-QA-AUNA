@@ -46,7 +46,7 @@ que llama a `.execute()`, cuenta como producción sin importar qué test la
 invocó -- que es exactamente lo que hace falta vigilar.
 
 LF3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF3) -- el alcance de RT1 y el de
-ES1 son el MISMO conjunto de tablas (`tablas_hijas_del_bloque_qc`, fuente
+ES1 son el MISMO conjunto de tablas (`tablas_del_bloque_qc`, fuente
 única), pero el fallo duro de RT1 se DIFIERE sobre las tablas
 `PENDIENTE-LF`, y esto no es una excepción de conveniencia: es la
 consecuencia de que los dos frentes observen objetos distintos. LF1 escribió
@@ -104,11 +104,12 @@ def _es_produccion(origen):
 
 # Excepciones CENSALES de RT1 (clave: (archivo, línea del `.execute()`)).
 #
-# Solo cuatro, y ninguna se acepta "en bloque": cada una se leyó en su
+# Seis, y ninguna se acepta "en bloque": cada una se leyó en su
 # fuente y se comprobó que el censo SIN filtro es justo lo que la función
 # tiene que hacer -- filtrar ahí no arreglaría nada, rompería la función.
-# Es el mismo criterio (y, se verificó, los mismos cuatro sitios) que ES1
-# ya clasificó como "migración/censo" en `SITIOS_DINAMICOS_PERMITIDOS`;
+# Es el mismo criterio (y, se verificó, los mismos sitios) que ES1 ya
+# clasificó como "migración/censo" en `SITIOS_DINAMICOS_PERMITIDOS` o, para
+# los dos que LR4 hizo visibles, en `SITIOS_CENSALES_LITERALES`;
 # `test_rt1_interceptor_sql.py` exige que ambas listas sigan de acuerdo,
 # para que no puedan derivar una de otra en silencio (§3 del plan: dos
 # copias del mismo criterio es exactamente el error que causó todo esto).
@@ -134,6 +135,31 @@ SITIOS_CENSALES_PERMITIDOS = {
         "`INSERT INTO \"{temporal}\" SELECT * FROM \"{nombre}\"` copia la "
         "tabla ENTERA al reconstruirla para cambiar sus FK. Filtrar aquí "
         "no sería una lectura más estricta: BORRARÍA el histórico.",
+    # LR4 (§6-LR4, [[DA-48]]): con las 7 raíces dentro del alcance, estas dos
+    # sentencias sobre `controles` pasan a ser visibles para RT1. Las dos son
+    # de la MISMA migración y tienen que ver las dos ramas o dejarían el
+    # histórico a medio normalizar. Declaradas también en ES1
+    # (`SITIOS_CENSALES_LITERALES`), y el test cruzado exige que sigan
+    # coincidiendo.
+    ("scripts/migrar_bd_a_estandar.py", 121):
+        "migración (_contar_centinela): cuenta las filas de `controles` con "
+        "el centinela histórico de 2º físico. Una fila anulada con el dato "
+        "mal sigue teniendo el dato mal -- filtrar aquí haría que la cuenta "
+        "y el UPDATE de la línea 339 discreparan en silencio.",
+    ("scripts/migrar_bd_a_estandar.py", 339):
+        "migración (el UPDATE que normaliza ese centinela a NULL): misma "
+        "razón que la cuenta de la línea 121, y la otra mitad de la misma "
+        "operación -- filtrar una de las dos deja la migración a medias.",
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 54):
+        "censo/migración (normalizar_fechas_db): reescribe el FORMATO de "
+        "`fecha` (DD-MM-YYYY -> YYYY-MM-DD) en las 6 tablas de "
+        "braquiterapia, TipoCalibracion incluida. Tiene que alcanzar también "
+        "a las filas anuladas -- una fila anulada con la fecha en el formato "
+        "viejo la conserva para siempre, y es justo eso lo que obliga a "
+        "`braq_mensual.py:1257` a consultar en los dos formatos (DP-32). "
+        "Lo encontró ESTE frente y no ES1: era un `UPDATE {tabla}` con "
+        "nombre dinámico, y el detector de ES1 solo miraba `FROM {DYN}` "
+        "(hueco cerrado en LR4 con PATRON_UPDATE_DINAMICO).",
 }
 
 # Acumulador de la sesión completa de pytest -- una lista de
@@ -183,7 +209,7 @@ _tablas_filtro_posible_cache = None
 def _tablas():
     global _tablas_cache
     if _tablas_cache is None:
-        _tablas_cache = lv.tablas_hijas_del_bloque_qc()
+        _tablas_cache = lv.tablas_del_bloque_qc()
     return _tablas_cache
 
 
@@ -242,8 +268,10 @@ def _sql_de_la_funcion(func):
 
 def lectoras_del_bloque_qc():
     """{(archivo, función)} de PRODUCCIÓN que hacen un SELECT nombrando
-    alguna de las 22 tablas hijas. Medido, no listado: coincide con las
-    "19 funciones" de §2.5 del plan."""
+    alguna tabla del bloque de QC. Medido en cada corrida, nunca listado a
+    mano: 19 funciones en §2.5 del plan de lectura vigente, 56 tras LF2
+    (entran las 30 PENDIENTE-LF), 97 tras LR4 (entran las 7 raíces). El
+    número sube porque sube la superficie vigilada."""
     tablas = _tablas()
     encontradas = set()
     for d in _DIRS_PRODUCCION:
@@ -276,11 +304,13 @@ def _rastrear_sql(sql):
         return
     tablas = _tablas()
     tiene_tabla_conocida = any(t.lower() in minus for t in tablas)
-    # LF5: el motivo "filtro sobre lectura de identidad" vigila también las
-    # raíces (tablas_con_filtro_posible), fuera de `tablas`. No cuenta para
-    # las métricas de cobertura de §9.3 (esas siguen siendo el alcance de
-    # "sin filtro", documentado como 56/19 funciones) -- solo evita que esta
-    # sentencia se descarte ANTES de llegar a `lv.analizar()`.
+    # LF5: el motivo "filtro sobre lectura de identidad" tiene su propio
+    # alcance (`tablas_con_filtro_posible`), que NO coincide con `tablas`:
+    # desde LR4 las raíces están en los dos, pero las 30 PENDIENTE-LF solo
+    # están en `tablas`. Este segundo `any` evita que una sentencia se
+    # descarte ANTES de llegar a `lv.analizar()`; no cuenta para las
+    # métricas de cobertura de §9.3, que siguen midiendo el alcance de "sin
+    # filtro" (97 funciones tras LR4).
     if not tiene_tabla_conocida and not any(
             t.lower() in minus for t in _tablas_con_filtro_posible()):
         return
@@ -367,7 +397,8 @@ def informe_cobertura():
         f"  falsos positivos evitados por el filtro de origen: "
         f"{e['sentencias_sin_filtro_descartadas_por_origen']} ejecuciones "
         f"en {e['sitios_de_test_descartados_por_origen']} sitios de test",
-        f"  lecturas censales de producción permitidas (4 sitios revisados): "
+        f"  lecturas censales de producción permitidas "
+        f"({len(SITIOS_CENSALES_PERMITIDOS)} sitios revisados): "
         f"{e['sentencias_censales_permitidas']}",
     ]
     # LF3: la ventana LF→MI1, publicada en vez de silenciada. Estas
