@@ -196,9 +196,9 @@ class ReporteControlSistemaImagenes:
             int: ID de la sesión o None si no se encuentra
         """
         query = QSqlQuery(db)
-        query.prepare("""
+        query.prepare(f"""
             SELECT id FROM controles 
-            WHERE fecha = ? AND equipo = ? AND control = 'Mensual'
+            WHERE fecha = ? AND equipo = ? AND control = 'Mensual'{filtro_activo('controles')}
             ORDER BY id DESC
             LIMIT 1
         """)
@@ -242,11 +242,14 @@ class ReporteControlSistemaImagenes:
             dict: Diccionario con información de la sesión
         """
         query = QSqlQuery(db)
+        # LR3/LR4: lectura de IDENTIDAD (WHERE c.id = ?) -- NO lleva filtro
+        # de `activo` a propósito (DA-47). El `LIMIT 1` sobraba: la clave
+        # primaria ya devuelve como mucho una fila, y un LIMIT sin ORDER BY
+        # sobre una tabla versionada es justo lo que AN1 marca.
         query.prepare("""
             SELECT c.equipo, c.fecha, c.user_id
             FROM controles c
-            WHERE c.id = ?  
-            LIMIT 1
+            WHERE c.id = ?
         """)
         query.addBindValue(ref)
         

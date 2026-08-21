@@ -929,7 +929,13 @@ def guardar_resultado_CambioFuente(
     conn = Conexion().conectar()
     cursor = conn.cursor()
     
-    cursor.execute(""" SELECT id FROM TipoCalibracion WHERE DATE(fecha) = DATE(?) AND tipo = ?""", (fecha, tipo))
+    # LR3 (DA-47/DA-48): lectura de BLOQUE -- (fecha, tipo) puede casar
+    # varias generaciones de la misma calibración. Sin filtro, el UPDATE de
+    # abajo reescribiría una fila ANULADA en vez de crear la nueva.
+    cursor.execute(
+        " SELECT id FROM TipoCalibracion WHERE DATE(fecha) = DATE(?) AND tipo = ?"
+        f"{filtro_activo('TipoCalibracion')} ORDER BY id DESC",
+        (fecha, tipo))
     row = cursor.fetchone()
     print(fecha)
     if row:

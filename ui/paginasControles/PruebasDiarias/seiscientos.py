@@ -6,6 +6,7 @@ from data.GraficasyTablas.unovsuno import graficarvstiempo
 from data.GraficasyTablas.tablas import load_table, asignar_encabezados
 #from data.ManejoDatos.load import add_info
 from models.PDF.reportes import reporte
+from services.anulacion import filtro_activo
 #from PyQt5.QtGui import QColor
 
 #import datetime
@@ -178,9 +179,14 @@ class PruebaDiaria600(PruebaBasico):
             query = QSqlQuery(db)
             print("consultando db")
             # Preparar la consulta
-            query.prepare("""
+            # LR3 (DA-47/DA-48): lectura de BLOQUE por fecha. El ORDER BY
+            # acompaña al filtro: con EB4 (anular+insertar en las diarias)
+            # una fecha puede tener varias generaciones y `LIMIT 1` sin
+            # orden devuelve la más antigua.
+            query.prepare(f"""
                 SELECT * FROM aceleradorlineal_600 
-                WHERE date = ? 
+                WHERE date = ?{filtro_activo('aceleradorlineal_600')}
+                ORDER BY id DESC
                 LIMIT 1
             """)
             query.addBindValue((fecha_str))

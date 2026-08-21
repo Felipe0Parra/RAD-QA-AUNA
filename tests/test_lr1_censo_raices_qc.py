@@ -36,7 +36,7 @@ tres es un sitio que no se entendió. Clasificarlo por descarte es
 justamente cómo se llegó al 27/50 sin criterio.
 
 Nota de conteo: 77 FILAS del analizador sobre 75 sitios físicos --
-`load.py:1502` y `load.py:1505` (`mostrar_controles_mensuales`) arman su
+`load.py:1508` y `load.py:1511` (`mostrar_controles_mensuales`) arman su
 SQL con un `if/else`, así que AN1 resuelve DOS textos posibles para cada
 uno y los cuenta por separado. Es el mismo 77 = 27 con filtro + 50 sin
 filtro que midió el censo del 20-08.
@@ -85,81 +85,81 @@ CENSO_RAICES = {
     ("data/ManejoDatos/load.py", 355, "controles"):
         (IDENTIDAD, "UPDATE de los físicos sobre el control ya localizado, "
                     "WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 932, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 935, "TipoCalibracion"):
         (LISTA, "guardar_resultado_CambioFuente: busca por (fecha, tipo) -- "
                 "sin filtro, una calibración ANULADA de esa fecha se "
                 "reutilizaría como destino del UPDATE de al lado"),
-    ("data/ManejoDatos/load.py", 943, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 949, "TipoCalibracion"):
         (IDENTIDAD, "UPDATE sobre el id que devolvió la consulta anterior"),
-    ("data/ManejoDatos/load.py", 1073, "LinealidadBraquiterapia"):
+    ("data/ManejoDatos/load.py", 1079, "LinealidadBraquiterapia"):
         (LISTA, "catálogo completo de linealidades de braquiterapia"),
-    ("data/ManejoDatos/load.py", 1174, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 1180, "TipoCalibracion"):
         (LISTA, "catálogo completo de calibraciones (el sitio que ya "
                 "filtraba bien y que hizo decidible DP-31)"),
-    ("data/ManejoDatos/load.py", 1502, "controles"):
+    ("data/ManejoDatos/load.py", 1508, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama con equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1505, "controles"):
+    ("data/ManejoDatos/load.py", 1511, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama sin equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1777, "controles"):
+    ("data/ManejoDatos/load.py", 1783, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 1811, "controles"):
+    ("data/ManejoDatos/load.py", 1817, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 1966, "controles"):
+    ("data/ManejoDatos/load.py", 1972, "controles"):
         (LISTA, "mostrar_controles_imgIX: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2014, "controles"):
+    ("data/ManejoDatos/load.py", 2020, "controles"):
         (LISTA, "mostrar_controles_imgIX: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2172, "controles"):
+    ("data/ManejoDatos/load.py", 2178, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2206, "controles"):
+    ("data/ManejoDatos/load.py", 2212, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2363, "controles"):
+    ("data/ManejoDatos/load.py", 2369, "controles"):
         (LISTA, "mostrar_controles_imgHC: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2411, "controles"):
+    ("data/ManejoDatos/load.py", 2417, "controles"):
         (LISTA, "mostrar_controles_imgHC: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2564, "controles"):
+    ("data/ManejoDatos/load.py", 2570, "controles"):
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2612, "controles"):
+    ("data/ManejoDatos/load.py", 2618, "controles"):
         (LISTA, "mostrar_controles_tac: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 4415, "controles"):
+    ("data/ManejoDatos/load.py", 4421, "controles"):
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4429, "controles"):
+    ("data/ManejoDatos/load.py", 4435, "controles"):
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4492, "controles"):
-        (IDENTIDAD, "gemelo anual exacto de load.py:4415 (eliminarRegistro)"),
-    ("data/ManejoDatos/load.py", 4502, "controles"):
-        (IDENTIDAD, "gemelo anual exacto de load.py:4429 (la anulación misma)"),
-    ("data/ManejoDatos/load.py", 4715, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4498, "controles"):
+        (IDENTIDAD, "gemelo anual exacto de load.py:4421 (eliminarRegistro)"),
+    ("data/ManejoDatos/load.py", 4508, "controles"):
+        (IDENTIDAD, "gemelo anual exacto de load.py:4435 (la anulación misma)"),
+    ("data/ManejoDatos/load.py", 4721, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
 
     # -- Halcyon ---------------------------------------------------------
-    ("data/ManejoDatos/obtenerDatosHalcyon.py", 202, "halcyon"):
+    ("data/ManejoDatos/obtenerDatosHalcyon.py", 206, "halcyon"):
         (LISTA, "_fecha_ya_importada: '¿existe reporte de esta fecha?' -- "
                 "gemelo sin filtrar de load.py:204, que sí filtra desde D3"),
 
     # -- models/PDF ------------------------------------------------------
-    ("models/PDF/Anual/reportes_anuales.py", 137, "controles"):
+    ("models/PDF/Anual/reportes_anuales.py", 140, "controles"):
         (LISTA, "referencia del control ANUAL por (fecha, equipo, control)"),
     ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 199, "controles"):
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 245, "controles"):
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 249, "controles"):
         (IDENTIDAD, "_obtener_info_sesion del PDF de imágenes: WHERE c.id = ?"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 410, "controles"):
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 413, "controles"):
         (IDENTIDAD, "_obtener_datos_tabla_principal del PDF: WHERE id = ?"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 164, "controles"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 165, "controles"):
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 176, "LinealidadBraquiterapia"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 179, "LinealidadBraquiterapia"):
         (LISTA, "referencia de linealidad de braquiterapia por fecha"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 184, "TipoCalibracion"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 187, "TipoCalibracion"):
         (LISTA, "referencia de braquiterapia por (fecha, tipo de control)"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 196, "TipoCalibracion"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 199, "TipoCalibracion"):
         (LISTA, "referencia de braquiterapia por fecha, sin mirar el tipo"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 241, "controles"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 244, "controles"):
         (IDENTIDAD, "datos del control ya referenciado, WHERE id = ?"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 258, "TipoCalibracion"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 261, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya referenciada, WHERE id = ?"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 281, "LinealidadBraquiterapia"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 284, "LinealidadBraquiterapia"):
         (IDENTIDAD, "datos de la linealidad ya referenciada, WHERE id = ?"),
 
     # -- scripts ---------------------------------------------------------
@@ -213,68 +213,68 @@ CENSO_RAICES = {
                     "función existe para hacer"),
 
     # -- ui/PruebasAnuales -----------------------------------------------
-    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 51, "controles"):
+    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 59, "controles"):
         (LISTA, "create_control anual: busca el control del año por "
                 "(fecha LIKE, equipo). Gemelo del mensual (load.py:323) sin "
                 "la clasificación de DA-34 -- ver DP-27"),
-    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 65, "controles"):
+    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 74, "controles"):
         (IDENTIDAD, "UPDATE de los físicos sobre el control ya localizado"),
 
     # -- ui/PruebasDiarias -----------------------------------------------
-    ("ui/paginasControles/PruebasDiarias/IX.py", 265, "aceleradorlineal_ix"):
+    ("ui/paginasControles/PruebasDiarias/IX.py", 268, "aceleradorlineal_ix"):
         (LISTA, "reporte diario del Clinac iX por fecha"),
-    ("ui/paginasControles/PruebasDiarias/IX.py", 430, "aceleradorlineal_ix"):
+    ("ui/paginasControles/PruebasDiarias/IX.py", 434, "aceleradorlineal_ix"):
         (LISTA, "serie temporal del Clinac iX por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 340, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 342, "braqui"):
         (LISTA, "reporte diario de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 601, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 605, "TipoCalibracion"):
         (LISTA, "última fuente instalada antes de una fecha dada"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1243, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1247, "braqui"):
         (LISTA, "serie temporal de actividad por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1282, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1286, "braqui"):
         (LISTA, "serie temporal de ciclos de braqui por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1505, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1509, "TipoCalibracion"):
         (LISTA, "última fecha registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1518, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1522, "TipoCalibracion"):
         (LISTA, "datos de la calibración de braquiterapia de esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1574, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1581, "TipoCalibracion"):
         (LISTA, "última fecha con tipo 'Cambio de fuente' (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1952, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1962, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2252, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2263, "LinealidadBraquiterapia"):
         (LISTA, "linealidad por fecha para el PDF -- ya filtraba (el sitio "
                 "que fijó el patrón: filtro + ORDER BY id DESC)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2759, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2774, "TipoCalibracion"):
         (LISTA, "JOIN a la calibración de una fecha para graficar máximos -- "
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2786, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2803, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3062, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3079, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3537, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3557, "braqui"):
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3576, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3596, "braqui"):
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/seiscientos.py", 181, "aceleradorlineal_600"):
+    ("ui/paginasControles/PruebasDiarias/seiscientos.py", 186, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),
 
     # -- ui/PruebasMensuales ---------------------------------------------
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 135, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1035, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1038, "TipoCalibracion"):
         (LISTA, "última calibración registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1049, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1052, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya localizada, WHERE id = ?"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1251, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1257, "TipoCalibracion"):
         (LISTA, "calibración por fecha, admitiendo los dos formatos (DP-32)"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1585, "TipoCalibracion"):
-        (LISTA, "gemelo mensual exacto de braquiterapia.py:2759"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1612, "LinealidadBraquiterapia"):
-        (LISTA, "gemelo mensual exacto de braquiterapia.py:2786"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 238, "controles"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1594, "TipoCalibracion"):
+        (LISTA, "gemelo mensual exacto de braquiterapia.py:2774"),
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1623, "LinealidadBraquiterapia"):
+        (LISTA, "gemelo mensual exacto de braquiterapia.py:2803"),
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 241, "controles"):
         (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "
                 "Python -- un control anulado del mes prestaría sus físicos"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 496, "controles"):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 500, "controles"):
         (IDENTIDAD, "_fecha_real_del_control (F3): WHERE id = ?, fila ya elegida"),
     ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 164, "controles"):
         (IDENTIDAD, "_existe_ref: WHERE id = ? AND equipo = ? -- el id ya "
@@ -287,43 +287,13 @@ CENSO_RAICES = {
 FILAS_ESPERADAS = 77
 SITIOS_FISICOS_ESPERADOS = 75
 
-# LR3 vacía este conjunto: sitios de LISTA que TODAVÍA no llevan el filtro.
-# No es una lista blanca permanente -- es la lista de trabajo de LR3, y el
-# test de abajo exige que sea un subconjunto de LISTA, así que no puede
-# usarse para tapar un sitio mal clasificado.
-PENDIENTES_LR3 = frozenset({
-    ("data/ManejoDatos/load.py", 932, "TipoCalibracion"),
-    ("data/ManejoDatos/obtenerDatosHalcyon.py", 202, "halcyon"),
-    ("models/PDF/Anual/reportes_anuales.py", 137, "controles"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 199, "controles"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 164, "controles"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 176, "LinealidadBraquiterapia"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 184, "TipoCalibracion"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 196, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 51, "controles"),
-    ("ui/paginasControles/PruebasDiarias/IX.py", 265, "aceleradorlineal_ix"),
-    ("ui/paginasControles/PruebasDiarias/IX.py", 430, "aceleradorlineal_ix"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 340, "braqui"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 601, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1243, "braqui"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1282, "braqui"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1505, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1518, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1574, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1952, "LinealidadBraquiterapia"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2759, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2786, "LinealidadBraquiterapia"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3062, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3537, "braqui"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3576, "braqui"),
-    ("ui/paginasControles/PruebasDiarias/seiscientos.py", 181, "aceleradorlineal_600"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 135, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1035, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1251, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1585, "TipoCalibracion"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1612, "LinealidadBraquiterapia"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 238, "controles"),
-})
+# La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
+# llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca
+# permanente -- el test de abajo exige que cada entrada sea de LISTA y que
+# siga sin filtrar, así que no puede usarse para tapar un sitio mal
+# clasificado, y al vaciarse `test_todo_sitio_de_lista_filtra` pasa a
+# exigir el filtro en los 51 sin excepción.
+PENDIENTES_LR3 = frozenset()
 
 
 def _refs_con_activo():
@@ -380,12 +350,57 @@ def censar_raices():
                         continue
                 else:
                     continue
+                indirectos = _filtros_indirectos(func)
                 for texto in textos:
                     if texto is None:
                         continue
                     filas.extend(_filas_del_texto(
-                        str(rel), node.lineno, texto, con_activo, claves))
+                        str(rel), node.lineno, texto, con_activo, claves,
+                        indirectos))
     return filas
+
+
+def _filtros_indirectos(func):
+    """{(tabla, alias)} para los que ESTA función guarda el filtro en una
+    variable intermedia antes de interpolarlo:
+
+        filtro_tc = filtro_activo('TipoCalibracion').replace("activo", "tc.activo")
+
+    Es el patrón que el proyecto ya usa cuando el filtro tiene que quedar
+    CALIFICADO con el alias de un JOIN (`consistencia_dosis.py:51`,
+    `load.py::mostrar_controles_mensuales`, `catphan_db.py`...): el filtro
+    está aplicado de verdad, pero `_literal_str_ast` solo reconoce
+    `{FILTRO_ACTIVO}` cuando el hueco del f-string es una llamada LITERAL a
+    `filtro_activo(...)`, y aquí el hueco es un `Name` -- se marca `{DYN}`.
+    ES1 lo resuelve con `EXCEPCIONES_LITERALES`, una lista escrita a mano;
+    aquí se DERIVA del AST, así que un sitio nuevo con este patrón se
+    reconoce solo y uno que pierda el `.replace()` deja de reconocerse.
+
+    Se exige que el segundo argumento de `.replace()` sea exactamente
+    `"<alias>.activo"`: así el filtro de OTRA tabla del mismo JOIN no puede
+    hacerse pasar por el de esta (hueco 4 de LE4)."""
+    encontrados = set()
+    for nodo in ast.walk(func):
+        if not isinstance(nodo, ast.Call):
+            continue
+        if not (isinstance(nodo.func, ast.Attribute)
+                and nodo.func.attr == "replace" and len(nodo.args) == 2):
+            continue
+        interior = nodo.func.value
+        if not (isinstance(interior, ast.Call)
+                and isinstance(interior.func, ast.Name)
+                and interior.func.id == "filtro_activo"
+                and len(interior.args) == 1
+                and isinstance(interior.args[0], ast.Constant)):
+            continue
+        destino = nodo.args[1]
+        if not (isinstance(destino, ast.Constant)
+                and isinstance(destino.value, str)
+                and destino.value.endswith(".activo")):
+            continue
+        encontrados.add((interior.args[0].value,
+                         destino.value[:-len(".activo")]))
+    return encontrados
 
 
 def _fragmentos(sql):
@@ -396,7 +411,7 @@ def _fragmentos(sql):
     return salida
 
 
-def _filas_del_texto(rel, lineno, texto, con_activo, claves):
+def _filas_del_texto(rel, lineno, texto, con_activo, claves, indirectos=()):
     filas = []
     for frag in _fragmentos(texto):
         refs = lv._tablas_referenciadas(frag)
@@ -409,9 +424,14 @@ def _filas_del_texto(rel, lineno, texto, con_activo, claves):
         unica = len([t for t in refs.values() if t in con_activo]) == 1
         where = lv._texto_desde_where(frag)
         for alias, tabla in refs_raiz.items():
+            directo = bool(where) and lv._filtro_presente(where, alias, unica)
+            # El filtro por variable intermedia solo cuenta si el `{DYN}` que
+            # lo interpola está DESPUÉS del WHERE -- ahí es donde filtra.
+            indirecto = ((tabla, alias) in indirectos
+                         and bool(where) and "{DYN}" in where)
             filas.append((
                 rel, lineno, tabla, alias,
-                bool(where) and lv._filtro_presente(where, alias, unica),
+                directo or indirecto,
                 bool(where) and lv._es_lectura_de_identidad(
                     where, alias, tabla, claves),
                 " ".join(frag.split()),
@@ -477,9 +497,9 @@ def test_ningun_sitio_de_identidad_lleva_filtro():
 
 
 def test_todo_sitio_de_lista_filtra():
-    """[[DA-47]], dirección "falta el filtro". `PENDIENTES_LR3` es la lista
-    de trabajo de LR3, no una lista blanca: cuando LR3 termina queda vacía
-    y este test pasa a exigir el filtro en los 51."""
+    """[[DA-47]], dirección "falta el filtro": los 51 sitios de lista lo
+    llevan, sin excepción. `PENDIENTES_LR3` fue la lista de trabajo de LR3
+    y quedó vacía al terminarlo -- nunca fue una lista blanca."""
     sin_filtrar = [
         (a, l, t) for a, l, t, _alias, filtra, _ident, _sql in censar_raices()
         if CENSO_RAICES[(a, l, t)][0] == LISTA and not filtra

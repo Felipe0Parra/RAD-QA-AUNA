@@ -2,6 +2,7 @@ import traceback, sqlite3
 from PyQt5 import sip
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.load import loadtablacomplex
+from services.anulacion import filtro_activo
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from PyQt5.QtWidgets import (QWidget, QToolBox, QMessageBox, QTableWidgetItem, QVBoxLayout, QHBoxLayout, QPushButton)
 from services.audit_minimo import registrar as _registrar_auditoria
@@ -48,8 +49,16 @@ class PruebaAnual600(PruebaMensual600):
                 _nombre_fisico2 = row[0]  # Obtener el nombre del físico 2
 
             # Verificar si ya existe registro para esa máquina y fecha
+            # LR3 (DA-47/DA-48): lectura de BLOQUE. Gemela de
+            # `load.py::create_control` (N1) pero SIN la clasificación de
+            # DA-34: aquí un control anulado del mismo año se devolvía como
+            # si estuviera vigente y dejaba el año bloqueado (W1). Con el
+            # filtro se crea uno nuevo al lado -- que es lo que DA-49 elige,
+            # y el índice UNIQUE de U2 es parcial sobre las vigentes, así
+            # que los dos conviven. Ver DP-27.
             cursor.execute(
-                f"SELECT id FROM controles WHERE fecha LIKE ? AND equipo = ? AND control = 'Anual'",
+                "SELECT id FROM controles WHERE fecha LIKE ? AND equipo = ? "
+                f"AND control = 'Anual'{filtro_activo('controles')} ORDER BY id DESC",
                 (f"%{fecha_formateada[1]}%", maquina) # Usar solo el año para controles anuales
             )
             old_id = cursor.fetchone()

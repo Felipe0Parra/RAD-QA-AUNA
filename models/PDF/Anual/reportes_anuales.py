@@ -22,6 +22,7 @@ from models.PDF.Mensuales.reportes_mensuales import (_obtener_datos_tabla_relaci
                                                     _obtener_datos_tabla_principal, 
                                                     _crear_tabla_equipos)
 from models.PDF.Imagenes.reportes_control_sistema_imagenes import ReporteControlSistemaImagenes
+from services.anulacion import filtro_activo
 from data.ManejoDatos.catphan_TAC.catphan_db import reconstruir_resultados_desde_bd
 
 
@@ -134,7 +135,11 @@ def reporte_anual(self, fecha, maquina="", id_maquina="",
 def _obtener_referencia_principal(db, fecha, maquina):
     """Obtiene el ID de referencia del control anual"""
     query = QSqlQuery(db)
-    query.prepare("SELECT id FROM controles WHERE fecha = ? AND equipo = ? AND control = 'Anual'")
+    # LR3 (DA-47/DA-48): lectura de BLOQUE -- (fecha, equipo, control) puede
+    # casar un control anulado y otro vigente del mismo mes.
+    query.prepare(
+        "SELECT id FROM controles WHERE fecha = ? AND equipo = ? "
+        f"AND control = 'Anual'{filtro_activo('controles')} ORDER BY id DESC")
     query.addBindValue(fecha)
     query.addBindValue(maquina)
     

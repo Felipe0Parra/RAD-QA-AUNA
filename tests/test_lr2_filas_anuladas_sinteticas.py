@@ -132,11 +132,11 @@ def test_las_7_raices_tienen_el_par_vigente_anulada(bd_raices):
 # ---------------------------------------------------------------------------
 
 SITIOS_IDENTIDAD = {
-    "models/PDF/Mensuales/reportes_mensuales.py:241":
+    "models/PDF/Mensuales/reportes_mensuales.py:244":
         ("controles", "SELECT id, equipo, fecha FROM controles WHERE id = ?"),
-    "models/PDF/Mensuales/reportes_mensuales.py:258":
+    "models/PDF/Mensuales/reportes_mensuales.py:261":
         ("TipoCalibracion", "SELECT id, serie FROM TipoCalibracion WHERE id = ?"),
-    "models/PDF/Mensuales/reportes_mensuales.py:281":
+    "models/PDF/Mensuales/reportes_mensuales.py:284":
         ("LinealidadBraquiterapia",
          "SELECT id, modelo FROM LinealidadBraquiterapia WHERE id = ?"),
     "data/ManejoDatos/load.py:244":
@@ -185,21 +185,21 @@ def test_identidad_con_filtro_devolveria_nada(bd_raices, sitio):
 # ---------------------------------------------------------------------------
 
 SITIOS_LISTA = {
-    "models/PDF/Mensuales/reportes_mensuales.py:164": (
+    "models/PDF/Mensuales/reportes_mensuales.py:165": (
         "controles",
         "SELECT id FROM controles WHERE fecha = ? AND equipo = ? "
         "AND control = 'Mensual'",
         (FECHA_CONTROL, EQUIPO)),
-    "models/PDF/Anual/reportes_anuales.py:137": (
+    "models/PDF/Anual/reportes_anuales.py:140": (
         "controles",
         "SELECT id FROM controles WHERE fecha = ? AND equipo = ? "
         "AND control = 'Mensual'",
         (FECHA_CONTROL, EQUIPO)),
-    "ui/.../seiscientos_mensual.py:238": (
+    "ui/.../seiscientos_mensual.py:241": (
         "controles",
         "SELECT id FROM controles WHERE equipo = ?",
         (EQUIPO,)),
-    "ui/.../seiscientos_anual.py:51": (
+    "ui/.../seiscientos_anual.py:59": (
         "controles",
         "SELECT id FROM controles WHERE fecha LIKE ? AND equipo = ?",
         ("%2026%", EQUIPO)),
@@ -207,36 +207,36 @@ SITIOS_LISTA = {
         "TipoCalibracion",
         "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ?",
         (FECHA_DIARIA,)),
-    "data/ManejoDatos/load.py:932": (
+    "data/ManejoDatos/load.py:935": (
         "TipoCalibracion",
         "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = DATE(?) AND tipo = ?",
         (FECHA_DIARIA, TIPO_FUENTE)),
-    "ui/.../braquiterapia.py:1952": (
+    "ui/.../braquiterapia.py:1962": (
         "LinealidadBraquiterapia",
         "SELECT id FROM LinealidadBraquiterapia WHERE DATE(fecha) = ?",
         (FECHA_DIARIA,)),
-    "ui/.../seiscientos.py:181": (
+    "ui/.../seiscientos.py:186": (
         "aceleradorlineal_600",
         "SELECT id FROM aceleradorlineal_600 WHERE date = ?",
         (FECHA_DIARIA,)),
-    "ui/.../IX.py:265": (
+    "ui/.../IX.py:268": (
         "aceleradorlineal_ix",
         "SELECT id FROM aceleradorlineal_ix WHERE date = ?",
         (FECHA_DIARIA,)),
-    "ui/.../IX.py:430": (
+    "ui/.../IX.py:434": (
         "aceleradorlineal_ix",
         "SELECT id FROM aceleradorlineal_ix "
         "WHERE date BETWEEN :start_date AND :end_date",
         {"start_date": FECHA_DIARIA, "end_date": FECHA_DIARIA}),
-    "data/ManejoDatos/obtenerDatosHalcyon.py:202": (
+    "data/ManejoDatos/obtenerDatosHalcyon.py:206": (
         "halcyon",
         "SELECT id FROM halcyon WHERE date = ?",
         (FECHA_DIARIA,)),
-    "ui/.../braquiterapia.py:340": (
+    "ui/.../braquiterapia.py:342": (
         "braqui",
         "SELECT id FROM braqui WHERE date = ?",
         (FECHA_DIARIA,)),
-    "ui/.../braquiterapia.py:1243": (
+    "ui/.../braquiterapia.py:1247": (
         "braqui",
         "SELECT id FROM braqui WHERE date BETWEEN :start_date AND :end_date",
         {"start_date": FECHA_DIARIA, "end_date": FECHA_DIARIA}),

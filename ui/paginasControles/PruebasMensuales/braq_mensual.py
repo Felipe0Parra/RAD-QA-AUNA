@@ -132,7 +132,10 @@ class PruebaMensualBraq(PruebaBasico):
             cursor = conn.cursor()
             
             # Usar DATE() para extraer solo la parte de fecha del campo en la BD
-            cursor.execute("SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ?", (fecha_consulta,))
+            cursor.execute(
+                "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ?"
+                f"{filtro_activo('TipoCalibracion')} ORDER BY id DESC",
+                (fecha_consulta,))
             result = cursor.fetchone()
             print(f"Consulta para fecha {fecha_consulta}: {result}")
             
@@ -1032,11 +1035,11 @@ class PruebaMensualBraq(PruebaBasico):
             cursor = conn.cursor()
 
             # 1. Buscar última fecha con tipo = "Cambio de fuente"
-            cursor.execute('''
+            cursor.execute(f"""
                 SELECT id, fecha FROM TipoCalibracion
-                WHERE tipo = "Cambio de fuente"
+                WHERE tipo = "Cambio de fuente"{filtro_activo('TipoCalibracion')}
                 ORDER BY fecha DESC LIMIT 1
-            ''')
+            """)
             fila_fecha = cursor.fetchone()
             if not fila_fecha:
                 print("No se encontró calibración previa.")
@@ -1248,10 +1251,13 @@ class PruebaMensualBraq(PruebaBasico):
             query = QSqlQuery(db)
             print("consultando db")
             # Preparar la consulta
-            query.prepare("""
+            # LR3 (DA-47/DA-48): lectura de BLOQUE por fecha (DP-32: la
+            # fecha viene en dos formatos). El OR va entre paréntesis para
+            # que el AND del filtro no se lo coma.
+            query.prepare(f"""
                 SELECT * FROM TipoCalibracion 
-                WHERE DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ? 
-                
+                WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?)
+                {filtro_activo('TipoCalibracion')} ORDER BY id DESC
             """)
             query.addBindValue((fecha_str))
             query.addBindValue((fecha_str))
@@ -1582,11 +1588,14 @@ class PruebaMensualBraq(PruebaBasico):
         def graficar_maximos_camara(canvas, query, fecha):
             """Grafica los datos de máximos de cámara para una fecha específica"""
             filtro_mc = filtro_activo('MaximosCamaras').replace("activo", "mc.activo")
+            # LR3 (DA-47/DA-48): ver el gemelo de braquiterapia.py --
+            # `tc` entra por fecha, necesita su propio filtro.
+            filtro_tc = filtro_activo('TipoCalibracion').replace("activo", "tc.activo")
             query.prepare(f"""
                 SELECT mc.posicion, mc.promedio
                 FROM MaximosCamaras mc
                 JOIN TipoCalibracion tc ON mc.ref = tc.id
-                WHERE DATE(tc.fecha) = ?{filtro_mc}
+                WHERE DATE(tc.fecha) = ?{filtro_tc}{filtro_mc}
                 ORDER BY mc.posicion ASC
             """)
             query.bindValue(0, fecha)
@@ -1609,7 +1618,9 @@ class PruebaMensualBraq(PruebaBasico):
         # Funcion para graficar los datos de linealidad de la fuente
         def graficar_linealidad_fuente(canvas, query, fecha):
             """Grafica los datos de linealidad de la fuente para una fecha específica"""
-            query.prepare("""
+            filtro_lf = filtro_activo(
+                'LinealidadBraquiterapia').replace("activo", "lf.activo")
+            query.prepare(f"""
                 SELECT lf.lin_tp_0,  lf.lin_te_0,
                     lf.lin_tp_1, lf.lin_te_1,
                     lf.lin_tp_2, lf.lin_te_2,
@@ -1621,7 +1632,7 @@ class PruebaMensualBraq(PruebaBasico):
                     lf.lin_tp_8, lf.lin_te_8,
                     lf.lin_tp_9, lf.lin_te_9
                 FROM LinealidadBraquiterapia lf
-                WHERE DATE(lf.fecha) = ?
+                WHERE DATE(lf.fecha) = ?{filtro_lf}
             """)
             query.bindValue(0, fecha)
             query.exec_()

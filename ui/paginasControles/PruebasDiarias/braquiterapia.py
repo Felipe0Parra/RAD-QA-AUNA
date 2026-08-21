@@ -337,9 +337,12 @@ class PruebaDiariaBraq(PruebaBasico):
             query = QSqlQuery(db)
             print("consultando db")
             # Preparar la consulta
-            query.prepare("""
+            # LR3 (DA-47/DA-48): lectura de BLOQUE por fecha, mismo criterio
+            # que seiscientos.py (filtro + ORDER BY, ver allí).
+            query.prepare(f"""
                 SELECT * FROM braqui 
-                WHERE date = ? 
+                WHERE date = ?{filtro_activo('braqui')}
+                ORDER BY id DESC
                 LIMIT 1
             """)
             query.addBindValue((fecha_str))
@@ -598,11 +601,12 @@ class PruebaDiariaBraq(PruebaBasico):
             # else:
             #     current_datetime = fecha
             
-            cursor.execute("""
+            filtro_tc = filtro_activo('TipoCalibracion').replace("activo", "tc.activo")
+            cursor.execute(f"""
                 SELECT tc.fecha, tc.fecha_cer, tc.serie, tc.intensidad
                 FROM TipoCalibracion tc
                 WHERE tc.Tipo = 'Cambio de fuente'
-                AND tc.fecha <= ?
+                AND tc.fecha <= ?{filtro_tc}
                 ORDER BY tc.fecha DESC
                 LIMIT 1
             """, (current_datetime.strftime("%Y-%m-%d %H:%M:%S"),))
@@ -1240,10 +1244,10 @@ class PruebaDiariaBraq(PruebaBasico):
         elif selected_chart == "Actividad vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
             
-            query.prepare("""
+            query.prepare(f"""
                 SELECT date, tol_rep_act_ci, tol_exp_act
                 FROM braqui
-                WHERE date BETWEEN :start_date AND :end_date
+                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)
@@ -1279,11 +1283,11 @@ class PruebaDiariaBraq(PruebaBasico):
         elif selected_chart == "Ciclos vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
             
-            query.prepare("""
+            query.prepare(f"""
                 SELECT date, 
                 tol_cyc_dummy,tol_cyc_rad
                 FROM braqui
-                WHERE date BETWEEN :start_date AND :end_date
+                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)
@@ -1502,11 +1506,11 @@ class CalRedundanteFuente(PruebaMensualBraq):
             cursor = conn.cursor()
 
             # 1. Buscar última fecha con tipo = "Cambio de fuente"
-            cursor.execute('''
+            cursor.execute(f"""
                 SELECT fecha FROM TipoCalibracion
-                WHERE tipo = "Cambio de fuente"
+                WHERE tipo = "Cambio de fuente"{filtro_activo('TipoCalibracion')}
                 ORDER BY fecha DESC LIMIT 1
-            ''')
+            """)
             fila_fecha = cursor.fetchone()
             if not fila_fecha:
                 print("No se encontró calibración previa.")
@@ -1515,7 +1519,10 @@ class CalRedundanteFuente(PruebaMensualBraq):
             fecha = fila_fecha[0]
 
             # 2. Obtener datos de TipoCalibracion
-            cursor.execute('SELECT serie, certificado, fecha_cer, intensidad, conversion FROM TipoCalibracion WHERE fecha = ?', (fecha,))
+            cursor.execute(
+                "SELECT serie, certificado, fecha_cer, intensidad, conversion "
+                f"FROM TipoCalibracion WHERE fecha = ?{filtro_activo('TipoCalibracion')}"
+                " ORDER BY id DESC", (fecha,))
             tipo_data = cursor.fetchone()
             if tipo_data:
                 self.serie.setText(tipo_data[0])
@@ -1571,12 +1578,12 @@ class CalRedundanteFuente(PruebaMensualBraq):
                 self.campos_maximos[i][2].setText(str(m2))
 
             # 6. Obtener lecturas de voltaje asociadas a tipo = "Cambio de fuente"
-            cursor.execute('''
+            cursor.execute(f"""
                 SELECT fecha FROM TipoCalibracion
-                WHERE tipo = "Cambio de fuente"
+                WHERE tipo = "Cambio de fuente"{filtro_activo('TipoCalibracion')}
                 ORDER BY fecha DESC
                 LIMIT 1
-            ''')
+            """)
             fila_fecha_cf = cursor.fetchone()
 
             if not fila_fecha_cf:
@@ -1949,9 +1956,13 @@ class Linealidad(PruebaBasico):
             query = QSqlQuery(db)
             print("consultando db en linealidad")
             # Preparar la consulta
-            query.prepare("""
+            # LR3 (DA-47/DA-48): lectura de BLOQUE por fecha, filtro +
+            # ORDER BY (mismo patrón que la consulta gemela de la línea 2263,
+            # que ya lo tenía desde LF).
+            query.prepare(f"""
                 SELECT * FROM LinealidadBraquiterapia 
-                WHERE DATE(fecha) = ? 
+                WHERE DATE(fecha) = ?{filtro_activo('LinealidadBraquiterapia')}
+                ORDER BY id DESC
                 LIMIT 1
             """)
             query.addBindValue((fecha_str))
@@ -2756,11 +2767,15 @@ class Linealidad(PruebaBasico):
         def graficar_maximos_camara(canvas, query, fecha):
             """Grafica los datos de máximos de cámara para una fecha específica"""
             filtro_mc = filtro_activo('MaximosCamaras').replace("activo", "mc.activo")
+            # LR3 (DA-47/DA-48): `tc` entra por DATE(tc.fecha), no por tc.id
+            # -- es lectura de BLOQUE y necesita SU PROPIO filtro; el de `mc`
+            # no se lo presta (hueco 4 de LE4).
+            filtro_tc = filtro_activo('TipoCalibracion').replace("activo", "tc.activo")
             query.prepare(f"""
                 SELECT mc.posicion, mc.promedio
                 FROM MaximosCamaras mc
                 JOIN TipoCalibracion tc ON mc.ref = tc.id
-                WHERE DATE(tc.fecha) = ?{filtro_mc}
+                WHERE DATE(tc.fecha) = ?{filtro_tc}{filtro_mc}
                 ORDER BY mc.posicion ASC
             """)
             query.bindValue(0, fecha)
@@ -2783,7 +2798,9 @@ class Linealidad(PruebaBasico):
         # Funcion para graficar los datos de linealidad de la fuente
         def graficar_linealidad_fuente(canvas, query, fecha):
             """Grafica los datos de linealidad de la fuente para una fecha específica"""
-            query.prepare("""
+            filtro_lf = filtro_activo(
+                'LinealidadBraquiterapia').replace("activo", "lf.activo")
+            query.prepare(f"""
                 SELECT lf.lin_tp_0,  lf.lin_te_0,
                     lf.lin_tp_1, lf.lin_te_1,
                     lf.lin_tp_2, lf.lin_te_2,
@@ -2795,7 +2812,7 @@ class Linealidad(PruebaBasico):
                     lf.lin_tp_8, lf.lin_te_8,
                     lf.lin_tp_9, lf.lin_te_9
                 FROM LinealidadBraquiterapia lf
-                WHERE DATE(lf.fecha) = ?
+                WHERE DATE(lf.fecha) = ?{filtro_lf}
             """)
             query.bindValue(0, fecha)
             query.exec_()
@@ -3059,7 +3076,10 @@ class PosicionamientoInicial(PruebaBasico):
             cursor = conn.cursor()
             
             # Usar DATE() para extraer solo la parte de fecha del campo en la BD
-            cursor.execute("SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ?", (fecha_consulta,))
+            cursor.execute(
+                "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ?"
+                f"{filtro_activo('TipoCalibracion')} ORDER BY id DESC",
+                (fecha_consulta,))
             result = cursor.fetchone()
             print(f"Consulta para fecha {fecha_consulta}: {result}")
             
@@ -3534,10 +3554,10 @@ class PosicionamientoInicial(PruebaBasico):
         elif selected_chart == "Actividad vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
             
-            query.prepare("""
+            query.prepare(f"""
                 SELECT date, tol_rep_act_ci, tol_exp_act
                 FROM braqui
-                WHERE date BETWEEN :start_date AND :end_date
+                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)
@@ -3573,11 +3593,11 @@ class PosicionamientoInicial(PruebaBasico):
         elif selected_chart == "Ciclos vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
             
-            query.prepare("""
+            query.prepare(f"""
                 SELECT date, 
                 tol_cyc_dummy,tol_cyc_rad
                 FROM braqui
-                WHERE date BETWEEN :start_date AND :end_date
+                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)

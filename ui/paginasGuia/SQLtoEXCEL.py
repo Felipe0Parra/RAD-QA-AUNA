@@ -505,7 +505,14 @@ class ExportarExcel(QWidget):
                         cell.fill = empty_data_fill
                 
                 if table == "braqui":
-                    query = f"SELECT pelicula FROM braqui WHERE pelicula IS NOT NULL and {self.date_column} BETWEEN '{self.start_date}' AND '{self.end_date}'"
+                    # LR3 (DA-47/DA-48): esta consulta acompaña fila a fila a
+                    # la exportación principal (línea 448), que YA filtra con
+                    # filtro_activo(table). Sin el mismo filtro aquí, una fila
+                    # anulada de `braqui` aportaba una imagen de más y todas
+                    # las películas quedaban corridas una fila respecto a su
+                    # fecha en la hoja.
+                    query = (f"SELECT pelicula FROM braqui WHERE pelicula IS NOT NULL and {self.date_column} BETWEEN '{self.start_date}' AND '{self.end_date}'"
+                             f"{filtro_activo('braqui')} ORDER BY id ASC")
                     cursor = connect.cursor()
                     cursor.execute(query)
                     results = cursor.fetchall()

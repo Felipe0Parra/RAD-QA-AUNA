@@ -161,7 +161,10 @@ def reporte_mensual(self, fecha, maquina="", id_maquina="",
 def _obtener_referencia_principal(db, fecha, maquina):
     """Obtiene el ID de referencia del control mensual"""
     query = QSqlQuery(db)
-    query.prepare("SELECT id FROM controles WHERE fecha = ? AND equipo = ? AND control = 'Mensual'")
+    # LR3 (DA-47/DA-48): lectura de BLOQUE, igual que su gemela anual.
+    query.prepare(
+        "SELECT id FROM controles WHERE fecha = ? AND equipo = ? "
+        f"AND control = 'Mensual'{filtro_activo('controles')} ORDER BY id DESC")
     query.addBindValue(fecha)
     query.addBindValue(maquina)
     
@@ -173,17 +176,17 @@ def _obtener_referencia_braquiterapia(db, fecha, tipo_reporte):
     query = QSqlQuery(db)
     
     if tipo_reporte == 'Linealidad Braquiterapia' or 'Linealidad' in tipo_reporte:
-        query.prepare("""
+        query.prepare(f"""
             SELECT id FROM LinealidadBraquiterapia 
-            WHERE DATE(fecha) = ? 
+            WHERE DATE(fecha) = ?{filtro_activo('LinealidadBraquiterapia')}
             ORDER BY id DESC LIMIT 1
         """)
         query.addBindValue(fecha)
     else:
         # Buscar primero por fecha Y tipo exacto
-        query.prepare("""
+        query.prepare(f"""
             SELECT id FROM TipoCalibracion 
-            WHERE DATE(fecha) = ? AND tipo = ?
+            WHERE DATE(fecha) = ? AND tipo = ?{filtro_activo('TipoCalibracion')}
             ORDER BY id DESC LIMIT 1
         """)
         query.addBindValue(fecha)
@@ -193,9 +196,9 @@ def _obtener_referencia_braquiterapia(db, fecha, tipo_reporte):
             return query.value(0)
         
         # Si no encuentra por tipo, buscar solo por fecha (cualquier tipo de braquiterapia)
-        query.prepare("""
+        query.prepare(f"""
             SELECT id FROM TipoCalibracion 
-            WHERE DATE(fecha) = ?
+            WHERE DATE(fecha) = ?{filtro_activo('TipoCalibracion')}
             ORDER BY id DESC LIMIT 1
         """)
         query.addBindValue(fecha)

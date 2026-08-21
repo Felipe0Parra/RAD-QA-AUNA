@@ -19,6 +19,7 @@ except Exception:
         raise
 from models.PDF.pdf import generar_reporte_pdf
 from models.PDF.PDFWindow import PdfViewer
+from services.anulacion import filtro_activo
 
 
 def guardarPDF(self, fecha, maquina = "", id_maquina = "", 
@@ -64,7 +65,11 @@ def reporte(self, fecha, maquina = "", id_maquina = "",
 
     columna_fecha = "fecha" if "fecha" in columnas else "date"
 
-    query.prepare(f"SELECT * FROM {loto} WHERE DATE({columna_fecha}) = ?")
+    # LR3 (DA-47/DA-48): `loto` es siempre una de las 4 diarias, y la
+    # lectura es por FECHA (bloque), no por id -- filtra sobre la MISMA
+    # variable dinámica, así queda protegida por construcción.
+    query.prepare(f"SELECT * FROM {loto} WHERE DATE({columna_fecha}) = ?"
+                  f"{filtro_activo(loto)} ORDER BY id DESC")
     query.addBindValue(fecha)
 
     # Ejecutar la consulta

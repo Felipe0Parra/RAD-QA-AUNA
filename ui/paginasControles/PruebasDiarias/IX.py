@@ -5,6 +5,7 @@ from PyQt5.QtSql import QSqlQuery
 from data.GraficasyTablas.unovsuno import graficarvstiempo
 from data.GraficasyTablas.tablas import load_table, asignar_encabezados
 from models.PDF.reportes import reporte
+from services.anulacion import filtro_activo
 import datetime
 
 class PruebaDiariaIX(PruebaBasico):
@@ -262,9 +263,12 @@ class PruebaDiariaIX(PruebaBasico):
             query = QSqlQuery(db)
             print("consultando db")
             # Preparar la consulta
-            query.prepare("""
+            # LR3 (DA-47/DA-48): lectura de BLOQUE por fecha, mismo criterio
+            # que seiscientos.py (filtro + ORDER BY, ver allí).
+            query.prepare(f"""
                 SELECT * FROM aceleradorlineal_ix 
-                WHERE date = ? 
+                WHERE date = ?{filtro_activo('aceleradorlineal_ix')}
+                ORDER BY id DESC
                 LIMIT 1
             """)
             query.addBindValue((fecha_str))
@@ -427,10 +431,10 @@ class PruebaDiariaIX(PruebaBasico):
         if selected_chart == "Datos dosimétricos vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
             query = QSqlQuery(db)
-            query.prepare("""
+            query.prepare(f"""
                 SELECT date, tol_fot_6mv, tol_fot_15mv, tol_ele_6mev, tol_ele_9mev, tol_ele_12mev, tol_ele_15mev
                 FROM aceleradorlineal_ix
-                WHERE date BETWEEN :start_date AND :end_date
+                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('aceleradorlineal_ix')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)

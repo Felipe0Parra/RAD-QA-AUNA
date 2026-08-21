@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QMessageBox
 import data.ManejoDatos.conection as con
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
+from services.anulacion import filtro_activo
 
 def addSpace(cadena):
     """Agrega un espacio antes de cada letra mayúscula en una cadena, excepto la inicial."""
@@ -199,7 +200,12 @@ def _localizar_y_leer_mpc(self, fecha):
 def _fecha_ya_importada(fecha):
     with con.Conexion().conectar() as db:
         cursor = db.cursor()
-        cursor.execute("SELECT 1 FROM halcyon WHERE date=?", (fecha,))
+        # LR3 (DA-47/DA-48): "¿existe reporte de esta fecha?" es una lectura
+        # de BLOQUE. Gemelo sin filtrar de load.py:204 (D3), que ya filtra:
+        # un reporte ANULADO de esa fecha no cuenta como importado.
+        cursor.execute(
+            f"SELECT 1 FROM halcyon WHERE date=?{filtro_activo('halcyon')}",
+            (fecha,))
         return cursor.fetchone() is not None
 
 
