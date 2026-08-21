@@ -17,9 +17,7 @@ from services.fechas_control import mismo_mes as _mismo_mes
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
-from services.ventana_edicion import motivo_bloqueo as _motivo_bloqueo
 from services.anulacion import TABLAS_ANULABLES, anular_fila, filtro_activo
-from services.reactivacion import reactivar_control as _reactivar_control
 def _dialogo_con_identidad(dlg, parent):
     """Propaga al diálogo la identidad del físico del formulario que lo abre.
 
@@ -79,44 +77,6 @@ def _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha):
         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
     return respuesta == QMessageBox.Yes
 
-
-def _ofrecer_reactivar_control(self, control_id):
-    """N2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, DA-34): ofrece
-    reactivar un control anulado, en la misma ventana que hoy da la
-    advertencia de "no se puede subir sobre un registro anulado".
-
-    Autenticación PERSONAL (DialogAdminPermisoEditar, no
-    DialogAdminPermisoEliminar) -- decisión del físico: reactivar es una
-    operación de edición del propio físico (DA-07), no un cambio fuerte que
-    exija administrador.
-
-    Aislada y mockeable (mismo patrón que _confirmar_reemplazo_reporte_
-    diario, H2.2): los tests sustituyen QMessageBox.question y el diálogo
-    sin disparar nada modal real.
-
-    Returns:
-        True si reactivó de verdad. False en cualquier otro caso (el
-        físico declinó, la reautenticación falló, o reactivar_control
-        rechazó la operación -- p.ej. por la guarda de unicidad de U2).
-    """
-    from ui.paginasGuia.dialogs import DialogAdminPermisoEditar
-
-    respuesta = QMessageBox.question(
-        self, "Control anulado",
-        "Este control fue anulado -- ¿desea reactivarlo?",
-        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-    if respuesta != QMessageBox.Yes:
-        return False
-
-    dialogo = DialogAdminPermisoEditar(self.user_id)
-    if dialogo.exec() != QDialog.DialogCode.Accepted:
-        return False
-
-    ok, motivo = _reactivar_control(control_id, _usuario_actual(self))
-    if not ok:
-        QMessageBox.warning(self, "No se pudo reactivar", motivo)
-        return False
-    return True
 
 "Función que almecena la información en la base de datos de los controles diarios"
 def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
@@ -312,40 +272,27 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
         # vez que el formulario empiece a guardar el dia real (F3), habria
         # creado un control nuevo cada vez que se abriera un dia distinto
         # del mismo mes.
-        # N1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): antes esta
+        # N1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md), retirado por LR7
+        # (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR7, [[DA-49]]): antes esta
         # consulta no filtraba "activo" -- un control ANULADO se devolvía
         # igual que uno activo, y como "Subir" ya bloquea sobre un control
-        # anulado (W1), el mes quedaba inutilizable en silencio (el físico
-        # tuvo que crear el siguiente control en el mes SIGUIENTE). Ahora se
-        # clasifica en dos candidatos independientes del mismo mes: el
-        # activo (comportamiento de siempre) y el anulado (se ofrece
-        # reactivar, DA-34).
+        # anulado (W1), el mes quedaba inutilizable en silencio. N2 lo
+        # resolvió ofreciendo reactivar; DA-49 revierte esa decisión: la
+        # causa real era esta lectura sin filtrar, y con el filtro puesto
+        # (DA-47/LR3) un control anulado deja de "aparecer" como candidato
+        # -- se ignora sin más y más abajo se crea uno nuevo al lado, legal
+        # porque el índice único de U2 es parcial sobre las filas activas.
+        # Lo anulado sigue en la BD y se consulta en el visor de LR6.
         cursor.execute(
-            "SELECT id, fecha, activo FROM controles WHERE equipo = ? AND control = ?",
+            f"SELECT id, fecha FROM controles WHERE equipo = ? AND control = ?{filtro_activo('controles')}",
             (maquina, tipo_control)
         )
         control_activo_id, fecha_activo = None, None
-        control_anulado_id, fecha_anulado = None, None
-        for fila_id, fecha_existente, activo in cursor.fetchall():
+        for fila_id, fecha_existente in cursor.fetchall():
             if not _mismo_mes(fecha_existente, fecha):
                 continue
-            if activo is None or activo == 1:
-                if control_activo_id is None:
-                    control_activo_id, fecha_activo = fila_id, fecha_existente
-            else:
-                if control_anulado_id is None:
-                    control_anulado_id, fecha_anulado = fila_id, fecha_existente
-
-        if control_activo_id is None and control_anulado_id is not None:
-            if _ofrecer_reactivar_control(self, control_anulado_id):
-                control_activo_id, fecha_activo = control_anulado_id, fecha_anulado
-            else:
-                # Fallback seguro: NUNCA devolver None aquí -- con self.ref
-                # nulo, puede_editarse() deja pasar cualquier escritura sin
-                # ancla (incidente H-A, 2026-07-23: dosimetría huérfana tras
-                # borrar el control desde otra vista). Devolver el id
-                # anulado conserva el bloqueo de "Subir" que ya existe.
-                return control_anulado_id
+            if control_activo_id is None:
+                control_activo_id, fecha_activo = fila_id, fecha_existente
 
         if control_activo_id is not None:
             control_id = control_activo_id
@@ -626,18 +573,17 @@ def subirlineasmensuales(self, nombre_tabla, num_delet, ref, usarid, id_energia=
     # desde su creación -- decisión del físico. Anual queda fuera (su
     # create_control es otro, sin ancla de auditoría; el plan no lo cubre).
     if not anual:
-        motivo = _motivo_bloqueo(ref)
-        if motivo is not None:
-            # N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, DA-34): si el
-            # bloqueo es porque el control está ANULADO, ofrecer reactivarlo
-            # aquí mismo -- "la pregunta en la misma ventana que da la
-            # advertencia". Cualquier otro motivo (inexistente, fuera de la
-            # ventana de 2 meses de F4b) mantiene el aviso de siempre --
-            # ofrecer reactivar ahí se tragaría el bloqueo de F4b.
-            reactivado = motivo == "anulado" and _ofrecer_reactivar_control(self, ref)
-            if not reactivado or not _puede_editarse_control(ref):
-                QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(ref))
-                return
+        # N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, DA-34), retirado
+        # por LR7 ([[DA-49]]): ya no se ofrece reactivar un control anulado
+        # aquí -- create_control (N1/LR7) ignora los anulados y crea uno
+        # nuevo al abrir el mes, así que llegar a "Subir" con un `ref`
+        # anulado debería ser excepcional (una anulación concurrente desde
+        # otra vista, el caso real de W1). Cualquier motivo de bloqueo
+        # (inexistente, anulado, fuera de la ventana de F4b) mantiene el
+        # mismo aviso, sin ofrecer nada.
+        if not _puede_editarse_control(ref):
+            QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(ref))
+            return
     conn = Conexion().conectar()
     cursor = conn.cursor()
 

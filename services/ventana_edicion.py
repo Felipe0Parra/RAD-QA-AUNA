@@ -125,10 +125,12 @@ def motivo_bloqueo(control_id, hoy=None):
     """Por qué `control_id` no admite edición ahora mismo, o None si sí la
     admite: "inexistente" | "anulado" | "fuera_de_ventana" | None.
 
-    N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): los dos puntos de
-    "Subir" necesitan DISTINGUIR el motivo -- solo "anulado" ofrece
-    reactivar (DA-34); "fuera_de_ventana" debe seguir bloqueando sin más
-    (F4b/C1).
+    Hasta LR7 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR7, [[DA-49]]) los dos
+    puntos de "Subir" distinguían el motivo para ofrecer reactivar solo
+    sobre "anulado" (N3, PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md,
+    DA-34) -- retirado. La distinción sigue viva porque
+    `mensaje_bloqueo_edicion` todavía redacta un aviso distinto para cada
+    motivo (más informativo para el físico), no porque abra ninguna acción.
     """
     if not control_id:
         return None

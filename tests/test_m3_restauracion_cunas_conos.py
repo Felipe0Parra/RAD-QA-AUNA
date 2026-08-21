@@ -312,16 +312,6 @@ class TestContratoM1M2M3CunasYConos:
             assert getattr(obj_reabierto, f"btn_{medida}_nofun").isChecked() is True
 
 
-class _DialogoAdminFalso:
-    """Reautenticación personal (N2, DA-34) aceptada -- mismo doble que
-    test_n4_ciclo_anular_reactivar.py."""
-    def __init__(self, user):
-        self.user = user
-
-    def exec(self):
-        return QDialog.DialogCode.Accepted
-
-
 class _UsuarioAdminFalso:
     _nombre = "Administrador"
 
@@ -337,12 +327,19 @@ def _formulario_para_create_control():
 
 
 class TestReactivarRestauraCunasYConos:
-    """El tercer camino que nombró el físico: anular un control y
-    reactivarlo. Cuñas/conos son tablas HIJAS de `controles` -- anular la
-    raíz nunca las toca (E7/DA-03), así que tras reactivar deben seguir
-    exactamente donde quedaron antes de anular."""
+    """El tercer camino que nombró el físico -- anular un control y volver
+    a abrir el mes -- **reescrito por LR7** (PLAN_CONTRATO_COMPLETO_19-08.md
+    §6-LR7, [[DA-49]]): ya no se reactiva. `create_control` ignora el
+    anulado y crea uno NUEVO al lado (legal: el índice único de U2 es
+    parcial sobre las filas activas). Cuñas/conos son tablas HIJAS de
+    `controles` -- anular la raíz nunca las toca (E7/DA-03) -- así que el
+    invariante que importa ahora es el mismo de siempre leído al revés:
+    los datos del control anulado NO se pierden (siguen en la BD, visibles
+    desde el visor de LR6), y el control NUEVO empieza sin ellos -- nunca
+    los hereda."""
 
-    def test_reactivar_no_pierde_cunas_ni_conos(self, app, bd_temporal, monkeypatch):
+    def test_anular_y_reabrir_crea_control_nuevo_sin_perder_los_datos_del_anulado(
+            self, app, bd_temporal, monkeypatch):
         monkeypatch.setattr(load_mod.QMessageBox, "information", staticmethod(lambda *a, **k: None))
         monkeypatch.setattr(load_mod.QMessageBox, "critical", staticmethod(lambda *a, **k: None))
         monkeypatch.setattr(load_mod.QMessageBox, "warning", staticmethod(lambda *a, **k: None))
@@ -376,34 +373,57 @@ class TestReactivarRestauraCunasYConos:
         ).fetchone()[0] == 0
         con.close()
 
-        # 3. Reabrir el mismo mes: create_control ofrece reactivar (N1/N2),
-        #    se acepta con reautenticación personal (no admin, DA-34).
-        monkeypatch.setattr(dialogs_mod, "DialogAdminPermisoEditar", _DialogoAdminFalso)
-        control_id_reabierto = create_control(
+        # 3. Reabrir el mismo mes: LR7 retiró la reactivación -- se ignora
+        #    el anulado y se crea un control NUEVO al lado.
+        control_id_nuevo = create_control(
             _formulario_para_create_control(), "Clinac ix", "20/08/2026", "Físico de Prueba")
-        assert control_id_reabierto == control_id
+        assert control_id_nuevo != control_id, (
+            "DA-49: debe crear un control NUEVO, no reactivar el anulado")
 
         con = sqlite3.connect(bd_temporal)
-        assert con.execute(
-            "SELECT activo FROM controles WHERE id = ?", (control_id,)
-        ).fetchone()[0] == 1
+        activo_viejo = con.execute(
+            "SELECT activo FROM controles WHERE id = ?", (control_id,)).fetchone()[0]
+        activo_nuevo = con.execute(
+            "SELECT activo FROM controles WHERE id = ?", (control_id_nuevo,)).fetchone()[0]
         con.close()
+        assert activo_viejo == 0, "el control anulado nunca se toca -- nunca se reactiva"
+        assert activo_nuevo == 1
 
-        # 4. El formulario se reconstruye con self.ref = control_id
-        #    (limpiar_layout fija self.ref antes de iniGUI) -- Traerinfo_*
-        #    debe restaurar exactamente lo que había antes de anular.
-        obj_reactivado = _mensual_pelado(control_id, clase=PruebaMensualIX, esIX=True)
+        # 4. Los datos del control ANULADO siguen intactos en la BD -- E7/
+        #    DA-03, soft-delete de la raíz nunca borra las hijas.
+        con = sqlite3.connect(bd_temporal)
+        n_cunas = con.execute(
+            "SELECT COUNT(*) FROM control_cunas WHERE ref = ?", (control_id,)).fetchone()[0]
+        n_conos = con.execute(
+            "SELECT COUNT(*) FROM control_conos WHERE ref = ?", (control_id,)).fetchone()[0]
+        con.close()
+        assert n_cunas == 4, "las 4 cuñas del control anulado deben seguir ahí"
+        assert n_conos == 5, "los 5 conos del control anulado deben seguir ahí"
+
+        # 5. ... y son visibles desde el visor de LR6, el reemplazo de la
+        #    reactivación como forma de "llegar" a un registro anulado.
+        import services.visor_anulados as visor
+        _, filas_cunas = visor.filas_de("control_cunas")
+        _, filas_conos = visor.filas_de("control_conos")
+        assert all(f["estado"] == "vigente" for f in filas_cunas), (
+            "las cuñas cuelgan del control anulado, pero ellas mismas no "
+            "se anulan -- E7/DA-03 anula la raíz, no sus hijas")
+        assert len(filas_cunas) == 4
+        assert len(filas_conos) == 5
+
+        # 6. El control NUEVO, sin cuñas/conos propios, no hereda nada del
+        #    anulado -- Traerinfo_* debe reportar que no hay nada que
+        #    restaurar para ESTE id.
+        obj_nuevo = _mensual_pelado(control_id_nuevo, clase=PruebaMensualIX, esIX=True)
         from PyQt5.QtWidgets import QComboBox
         for ang in (15, 30, 45, 60):
             for attr in ("in", "out", "ri", "le"):
                 combo = QComboBox()
                 combo.addItems(["Seleccionar...", "Funciona", "No funciona"])
-                setattr(obj_reactivado, f"cuna_{ang}_{attr}", combo)
-        _crear_botones_conos_vacios(obj_reactivado)
+                setattr(obj_nuevo, f"cuna_{ang}_{attr}", combo)
+        _crear_botones_conos_vacios(obj_nuevo)
 
-        assert obj_reactivado.Traerinfo_cunas() is True
-        assert obj_reactivado.Traerinfo_conos() is True
+        assert obj_nuevo.Traerinfo_cunas() is False
+        assert obj_nuevo.Traerinfo_conos() is False
         for ang in (15, 30, 45, 60):
-            assert getattr(obj_reactivado, f"cuna_{ang}_in").currentText() == "Funciona"
-        for medida in ("6", "10", "15", "20", "25"):
-            assert getattr(obj_reactivado, f"btn_{medida}_fun").isChecked() is True
+            assert getattr(obj_nuevo, f"cuna_{ang}_in").currentText() == "Seleccionar..."

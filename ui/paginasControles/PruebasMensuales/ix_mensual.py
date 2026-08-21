@@ -3,7 +3,6 @@ from PyQt5.QtCore import Qt, QDate
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual
 from data.ManejoDatos.load import mostrar_controles_mensuales, encontrar_columnas, widget_a_columna
-from data.ManejoDatos import load as _load_mod
 from data.ManejoDatos.conection import Conexion
 import traceback
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
@@ -13,7 +12,6 @@ from services.audit_minimo import ACCION_GUARDAR
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
-from services.ventana_edicion import motivo_bloqueo as _motivo_bloqueo
 from services.anulacion import TABLAS_ANULABLES
 
 
@@ -196,18 +194,13 @@ class PruebaMensualIX(PruebaMensual600):
         # F4b (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4, tarea C1): mismo
         # guard que subirlineasmensuales (load.py) -- ventana de 2 meses
         # desde la creación del control, decisión del físico.
-        motivo = _motivo_bloqueo(ref)
-        if motivo is not None:
-            # N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, DA-34): mismo
-            # mecanismo que subirlineasmensuales (load.py) -- solo "anulado"
-            # ofrece reactivar; cualquier otro motivo mantiene el aviso de
-            # siempre. _load_mod (el módulo, no el nombre importado por
-            # valor) para que un monkeypatch de test sobre
-            # load_mod._ofrecer_reactivar_control sí tenga efecto aquí.
-            reactivado = motivo == "anulado" and _load_mod._ofrecer_reactivar_control(self, ref)
-            if not reactivado or not _puede_editarse_control(ref):
-                QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(ref))
-                return
+        # N3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md, DA-34), retirado
+        # por LR7 ([[DA-49]]): mismo cambio que subirlineasmensuales
+        # (load.py) -- ya no se ofrece reactivar, cualquier motivo de
+        # bloqueo mantiene el mismo aviso.
+        if not _puede_editarse_control(ref):
+            QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(ref))
+            return
 
         conn = Conexion().conectar()
         cursor = conn.cursor()

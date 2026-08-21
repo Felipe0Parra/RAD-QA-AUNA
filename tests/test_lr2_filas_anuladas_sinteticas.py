@@ -289,21 +289,24 @@ def test_el_filtro_respeta_las_filas_historicas_con_activo_nulo(bd_raices):
 
 
 # ---------------------------------------------------------------------------
-# 3. CENSO: las dos ramas se siguen viendo
+# 3. CENSO: las dos ramas se siguen viendo (excepciones que quedan)
 # ---------------------------------------------------------------------------
 
-def test_censo_de_reactivacion_ve_las_dos_ramas(bd_raices):
-    """`load.py:323` (create_control, DA-34): lee `activo` como DATO y
-    clasifica en Python. Si LR3 lo filtrara, el candidato anulado
-    desaparecería y con él la única forma de desbloquear el mes -- por eso
-    se retira en LR7, después del visor de LR6, y no aquí."""
+def test_create_control_filtrado_ya_no_ve_la_rama_anulada(bd_raices):
+    """`load.py::create_control` (antes CENSO -- N1/DA-34, leía `activo`
+    como dato para ofrecer reactivar) fue reclasificado a LISTA por LR7
+    ([[DA-49]]): la reactivación se retiró, y con ella la única razón para
+    que esta lectura viera la rama anulada. Filtrada, un mes con solo un
+    control anulado queda sin candidato -- exactamente lo que hace que
+    `create_control` cree uno nuevo al lado en vez de reactivar."""
     filas = consultar(
         bd_raices,
-        "SELECT id, fecha, activo FROM controles WHERE equipo = ? AND control = ?",
+        "SELECT id, fecha FROM controles WHERE equipo = ? AND control = ?"
+        + filtro_activo("controles"),
         (EQUIPO, "Mensual"))
-    assert ids(filas) == [ID_ANULADA, ID_VIGENTE]
-    assert {f[2] for f in filas} == {0, 1}, (
-        "el censo tiene que poder distinguir las dos ramas, no solo verlas")
+    assert ids(filas) == [ID_VIGENTE], (
+        "filtrada, la rama anulada ya no debe aparecer -- es justo lo que "
+        "permite retirar la reactivación (LR7)")
 
 
 def test_censo_de_migracion_ve_las_dos_ramas(bd_raices):

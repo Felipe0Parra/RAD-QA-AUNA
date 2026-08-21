@@ -230,22 +230,28 @@ class TestDenominadorDeCobertura:
     este plan persigue."""
 
     def test_coincide_con_la_medicion_del_plan(self):
-        # El denominador ha subido DOS veces, las dos por ampliar la
-        # superficie vigilada, nunca por perder cobertura:
+        # El denominador se ha movido TRES veces:
         #   19 -> 56  LF2/LF3: entran las 30 tablas PENDIENTE-LF (§6-LF3).
         #   56 -> 97  LR4/[[DA-48]]: entran las 7 raíces de QC, y con ellas
         #             las 41 funciones que solo leían `controles`,
         #             `TipoCalibracion`, `LinealidadBraquiterapia` o alguna
         #             de las 4 diarias -- todas invisibles hasta ahora
         #             porque las raíces se restaban del alcance.
+        #   97 -> 96  LR7/[[DA-49]]: retira `_ofrecer_reactivar_control`
+        #             (data/ManejoDatos/load.py) y el módulo entero
+        #             `services/reactivacion.py` -- una función menos que
+        #             leía `controles`, porque el mecanismo que leía dejó
+        #             de existir. Es la ÚNICA vez que este número BAJA, y
+        #             es igual de honesto que cuando sube: menos superficie
+        #             real, no cobertura perdida.
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 97, (
-            f"LR4 amplió el alcance de RT1/ES1 al bloque de QC completo, "
-            f"raíces incluidas (97 funciones esperadas tras ampliar); ahora "
-            f"salen {len(lectoras)}. Si el cambio es deliberado, actualiza "
+        assert len(lectoras) == 96, (
+            f"LR7 retiró la reactivación -- una función menos que leía "
+            f"'controles' (96 funciones esperadas); ahora salen "
+            f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"
             + "\n".join(f"  {a}::{f}" for a, f in sorted(lectoras)))

@@ -7,9 +7,17 @@ Causa raíz: la consulta de "¿ya existe un control este mes?" no filtraba
 inutilizable sin que nadie lo explicara (el físico tuvo que crear el
 siguiente control en el mes SIGUIENTE, 2026-08-05).
 
-Ahora se clasifica en dos candidatos independientes del mismo mes: el
-activo (comportamiento de siempre, sin cambios) y el anulado (se ofrece
-reactivar vía `_ofrecer_reactivar_control`, N2).
+**Reescrito por LR7** (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR7, [[DA-49]]):
+el arreglo original (N2) ofrecía reactivar el control anulado. DA-49
+revierte esa decisión -- la reactivación era el parche de esta MISMA
+lectura sin filtrar; con el filtro puesto (`filtro_activo('controles')`,
+LR3), un control anulado deja de "aparecer" como candidato del mes, y
+`create_control` simplemente crea uno NUEVO al lado (legal: el índice
+único de U2 es parcial sobre las filas activas). El invariante que sigue
+vivo -- lo que hace correcta a DA-49 -- es el mismo de siempre: **nunca
+devolver un control anulado como si fuera usable**. Solo cambia CÓMO se
+cumple: antes ofreciendo reactivar, ahora ignorando el anulado y creando
+uno nuevo.
 """
 import os
 import sqlite3
@@ -65,67 +73,70 @@ def _activo_de(ruta_bd, id_):
     return fila[0] if fila else None
 
 
+def _controles_del_equipo(ruta_bd, equipo):
+    con = sqlite3.connect(ruta_bd)
+    filas = con.execute(
+        "SELECT id, activo FROM controles WHERE equipo = ?", (equipo,)).fetchall()
+    con.close()
+    return filas
+
+
 class TestCreateControlIgnoraAnulados:
 
-    def test_control_activo_del_mes_no_ofrece_reactivar(self, app, bd_temporal, monkeypatch):
-        """Anti-regresión: con un control ACTIVO del mes, ni siquiera debe
-        llamarse a _ofrecer_reactivar_control -- es el 100% del camino
-        normal (F4) y no debe moverse."""
+    def test_control_activo_del_mes_se_reutiliza(self, app, bd_temporal, monkeypatch):
+        """Anti-regresión: con un control ACTIVO del mes, una segunda
+        llamada en el mismo mes debe devolver el MISMO id -- el 100% del
+        camino normal (F4), sin crear uno nuevo de más."""
         monkeypatch.setattr(load_mod.QMessageBox, "information", staticmethod(lambda *a, **k: None))
         id_1 = create_control(_self_falso(), "Clinac iX", "05/08/2026", "Físico de Prueba")
-
-        def reventar(*a, **k):
-            raise AssertionError("no debía ofrecer reactivar -- ya hay un control activo")
-        monkeypatch.setattr(load_mod, "_ofrecer_reactivar_control", reventar)
-
         id_2 = create_control(_self_falso(), "Clinac iX", "20/08/2026", "Físico de Prueba")
 
         assert id_1 == id_2
 
-    def test_solo_anulado_ofrece_reactivar(self, app, bd_temporal, monkeypatch):
+    def test_solo_anulado_crea_uno_nuevo_al_lado(self, app, bd_temporal, monkeypatch):
+        """El núcleo de DA-49: con el único control del mes anulado,
+        create_control lo IGNORA (no lo devuelve, no pregunta nada) y crea
+        un control nuevo -- el anulado sigue en la BD, sin tocar, legible
+        desde el visor de LR6."""
         monkeypatch.setattr(load_mod.QMessageBox, "information", staticmethod(lambda *a, **k: None))
         id_1 = create_control(_self_falso(), "Clinac 600", "05/08/2026", "Físico de Prueba")
         _anular(bd_temporal, id_1)
 
-        llamado = []
-        monkeypatch.setattr(
-            load_mod, "_ofrecer_reactivar_control",
-            lambda self, cid: llamado.append(cid) or False)
+        id_2 = create_control(_self_falso(), "Clinac 600", "20/08/2026", "Físico de Prueba")
 
-        create_control(_self_falso(), "Clinac 600", "20/08/2026", "Físico de Prueba")
+        assert id_2 != id_1, "debe crear un control NUEVO, no reutilizar el anulado"
+        assert _activo_de(bd_temporal, id_1) == 0, "el anulado no se toca -- nunca se reactiva"
+        assert _activo_de(bd_temporal, id_2) == 1
 
-        assert llamado == [id_1]
-
-    def test_reactiva_y_devuelve_ese_id_ya_activo(self, app, bd_temporal, monkeypatch):
+    def test_el_anulado_y_el_nuevo_conviven_sin_violar_el_indice_unico(
+            self, app, bd_temporal, monkeypatch):
+        """Confirma la premisa estructural de DA-49: el índice UNIQUE de U2
+        (`idx_controles_unico_mes`) es PARCIAL sobre las filas activas, así
+        que el control nuevo no choca con el anulado del mismo mes."""
         monkeypatch.setattr(load_mod.QMessageBox, "information", staticmethod(lambda *a, **k: None))
         id_1 = create_control(_self_falso(), "Halcyon", "05/08/2026", "Físico de Prueba")
         _anular(bd_temporal, id_1)
 
-        def reactivar_de_verdad(self, control_id):
-            _con = sqlite3.connect(bd_temporal)
-            _con.execute("UPDATE controles SET activo = 1 WHERE id = ?", (control_id,))
-            _con.commit()
-            _con.close()
-            return True
-        monkeypatch.setattr(load_mod, "_ofrecer_reactivar_control", reactivar_de_verdad)
-
         id_2 = create_control(_self_falso(), "Halcyon", "20/08/2026", "Físico de Prueba")
 
-        assert id_2 == id_1
-        assert _activo_de(bd_temporal, id_1) == 1
+        filas = _controles_del_equipo(bd_temporal, "Halcyon")
+        assert (id_1, 0) in filas
+        assert (id_2, 1) in filas
+        assert len(filas) == 2
 
-    def test_declina_y_devuelve_el_id_anulado(self, app, bd_temporal, monkeypatch):
-        """Fallback seguro: NUNCA None -- puede_editarse() sigue bloqueando
-        sobre ese id (incidente H-A si se dejara pasar sin ancla)."""
+    def test_reabrir_el_mes_del_nuevo_control_lo_reutiliza_no_crea_un_tercero(
+            self, app, bd_temporal, monkeypatch):
+        """Tras DA-49, el control nuevo se comporta como cualquier otro --
+        una tercera llamada en el mismo mes reutiliza el nuevo, no crea
+        otro más."""
         monkeypatch.setattr(load_mod.QMessageBox, "information", staticmethod(lambda *a, **k: None))
-        id_1 = create_control(_self_falso(), "Clinac iX", "05/08/2026", "Físico de Prueba")
+        id_1 = create_control(_self_falso(), "Clinac 600", "05/08/2026", "Físico de Prueba")
         _anular(bd_temporal, id_1)
-        monkeypatch.setattr(load_mod, "_ofrecer_reactivar_control", lambda self, cid: False)
+        id_2 = create_control(_self_falso(), "Clinac 600", "20/08/2026", "Físico de Prueba")
+        id_3 = create_control(_self_falso(), "Clinac 600", "25/08/2026", "Físico de Prueba")
 
-        id_2 = create_control(_self_falso(), "Clinac iX", "20/08/2026", "Físico de Prueba")
-
-        assert id_2 == id_1
-        assert _activo_de(bd_temporal, id_1) == 0  # sigue anulado
+        assert id_3 == id_2
+        assert len(_controles_del_equipo(bd_temporal, "Clinac 600")) == 2
 
     def test_ningun_control_del_mes_crea_uno_nuevo(self, app, bd_temporal, monkeypatch):
         monkeypatch.setattr(load_mod.QMessageBox, "information", staticmethod(lambda *a, **k: None))

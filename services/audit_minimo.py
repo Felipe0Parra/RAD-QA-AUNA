@@ -69,6 +69,10 @@ ACCION_MIGRACION = "migracion"
 # control mensual/anual anulado -- lo inverso de ACCION_ANULAR, no
 # "actualizar" (que ya se usa para el UPDATE de físicos de create_control) ni
 # "editar" (que audita cambios de campo, no de estado activo/inactivo).
+# LR7 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR7, [[DA-49]]) retiró el
+# mecanismo de reactivación -- esta constante ya NO la escribe ningún
+# camino vivo. Se conserva para que las filas históricas de `audit_log`
+# que ya la usaron sigan siendo legibles.
 ACCION_REACTIVAR = "reactivar"
 
 
