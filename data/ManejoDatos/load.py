@@ -874,83 +874,95 @@ def guardar_resultado_CambioFuente(
 
     conn = Conexion().conectar()
     cursor = conn.cursor()
-    
-    # LR3 (DA-47/DA-48): lectura de BLOQUE -- (fecha, tipo) puede casar
-    # varias generaciones de la misma calibración. Sin filtro, el UPDATE de
-    # abajo reescribiría una fila ANULADA en vez de crear la nueva.
-    cursor.execute(
-        " SELECT id FROM TipoCalibracion WHERE DATE(fecha) = DATE(?) AND tipo = ?"
-        f"{filtro_activo('TipoCalibracion')} ORDER BY id DESC",
-        (fecha, tipo))
-    row = cursor.fetchone()
-    print(fecha)
-    if row:
-        ref = row[0]
-       
-        cursor.execute("DELETE FROM SistemaMedicion WHERE ref = ?", (ref,))
-        cursor.execute("DELETE FROM CondicionesMedicion WHERE ref = ?", (ref,))
-        cursor.execute("DELETE FROM MaximosCamaras WHERE ref = ?", (ref,))
-        cursor.execute("DELETE FROM LecturasMaximos WHERE ref = ?", (ref,))
-        cursor.execute("DELETE FROM ResultadosActividad WHERE ref = ?", (ref,))
+
+    try:
+        cursor.execute("BEGIN")
+
+        # LR3 (DA-47/DA-48): lectura de BLOQUE -- (fecha, tipo) puede casar
+        # varias generaciones de la misma calibración. Se necesita el `ref`
+        # anterior (si existe) para anular también sus 5 tablas hijas --
+        # `reemplazar_bloque` (abajo) anula TipoCalibracion por su propia
+        # clave, pero no conoce el id que va a superar.
+        cursor.execute(
+            " SELECT id FROM TipoCalibracion WHERE DATE(fecha) = DATE(?) AND tipo = ?"
+            f"{filtro_activo('TipoCalibracion')} ORDER BY id DESC",
+            (fecha, tipo))
+        row = cursor.fetchone()
+        ref_anterior = row[0] if row else None
+
+        # EB2b (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2b, cierra §2.3): la
+        # calibración anterior (si existía) se ANULA, nunca se muta en
+        # sitio ni se borra -- `reemplazar_bloque` inserta una fila NUEVA
+        # de TipoCalibracion; su `id` (autoincrement) es el `ref` que
+        # heredan las 5 tablas hijas. `accion=ACCION_GUARDAR` conserva el
+        # verbo histórico de esta acción (A6.6) -- la única fila de
+        # auditoría de todo el guardado se escribe aquí, no al final.
+        reemplazar_bloque(
+            cursor, "TipoCalibracion",
+            [("DATE(fecha)", fecha), ("tipo", tipo)],
+            "INSERT INTO TipoCalibracion "
+            "(user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [(user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion)],
+            user, detalle="cambio de fuente (braquiterapia)",
+            accion=ACCION_GUARDAR)
+        ref = cursor.lastrowid
+
+        if ref_anterior is not None:
+            # Las 5 hijas del bloque ANTERIOR quedan atadas al `ref`
+            # viejo -- se anulan explícitamente (nunca se borran) para que
+            # dejen de contarse como vigentes junto con su padre.
+            for tabla_hija in ("SistemaMedicion", "CondicionesMedicion",
+                                "MaximosCamaras", "LecturasMaximos",
+                                "ResultadosActividad"):
+                cursor.execute(
+                    f'UPDATE "{tabla_hija}" SET activo = 0 '
+                    'WHERE ref = ? AND (activo IS NULL OR activo = 1)',
+                    (ref_anterior,))
+
+        # --- SistemaMedicion ---
         cursor.execute("""
-            UPDATE TipoCalibracion
-            SET user=?, serie=?, certificado=?, fecha_cer=?, intensidad=?, conversion=?
-            WHERE id=?
-        """, (user, serie, certificado, fecha_cer, intensidad, conversion, ref))
-    else:
-    # --- Insert principal en TipoCalibracion ---
+            INSERT INTO SistemaMedicion (ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0))
+
+        # --- CondicionesMedicion ---
         cursor.execute("""
-            INSERT INTO TipoCalibracion (user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion)
+            INSERT INTO CondicionesMedicion (ref, user, fecha, t, p, h, desplazamiento_ini, observaciones)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion))
+        """, (ref, user, fecha, t, p, h, desplazamiento_ini, observaciones))
 
-        ref = cursor.lastrowid  # ID generado automáticamente
+        # --- MaximosCamaras ---
+        for pos, m1, m2, prom in zip(posiciones, medida1, medida2, promedios):
+            cursor.execute("""
+                INSERT INTO MaximosCamaras (ref, user, fecha, posicion, medida1, medida2, promedio)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (ref, user, fecha, str(pos), str(m1), str(m2), str(prom)))
 
-    # --- SistemaMedicion ---
-    cursor.execute("""
-        INSERT INTO SistemaMedicion (ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0))
+        # --- LecturasMaximos ---
+        for idx, voltaje_val in enumerate(voltaje):
+            V_300_val = f"{V_300[idx]:.2e}" if idx < len(V_300) else ""
+            V_150_val = f"{V_150[idx]:.2e}" if idx < len(V_150) else ""
+            Vn_300_val = f"{Vn_300[idx]:.2e}" if idx < len(Vn_300) else ""
+            promedio_val = f"{promediosV[idx]:.2e}" if idx < len(promediosV) else ""
 
-    # --- CondicionesMedicion ---
-    cursor.execute("""
-        INSERT INTO CondicionesMedicion (ref, user, fecha, t, p, h, desplazamiento_ini, observaciones)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (ref, user, fecha, t, p, h, desplazamiento_ini, observaciones))
+            cursor.execute("""
+                INSERT INTO LecturasMaximos (ref, user, fecha, voltaje, V_300, V_150, Vn_300, promediosV)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (ref, user, fecha, voltaje_val, V_300_val, V_150_val, Vn_300_val, promedio_val))
 
-    # --- MaximosCamaras ---
-    for pos, m1, m2, prom in zip(posiciones, medida1, medida2, promedios):
+        # --- ResultadosActividad ---
         cursor.execute("""
-            INSERT INTO MaximosCamaras (ref, user, fecha, posicion, medida1, medida2, promedio)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (ref, user, fecha, str(pos), str(m1), str(m2), str(prom)))
+            INSERT INTO ResultadosActividad (ref, user, fecha, Ks, Kp, Ktp, actividad_monitor, actividad_calculada, actividad_decaimiento)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (ref, user, fecha, Ks, Kp, Ktp, actividad_monitor, actividad_calculada, actividad_decaimiento))
 
-    # --- LecturasMaximos ---
-    for idx, voltaje_val in enumerate(voltaje):
-        V_300_val = f"{V_300[idx]:.2e}" if idx < len(V_300) else ""
-        V_150_val = f"{V_150[idx]:.2e}" if idx < len(V_150) else ""
-        Vn_300_val = f"{Vn_300[idx]:.2e}" if idx < len(Vn_300) else ""
-        promedio_val = f"{promediosV[idx]:.2e}" if idx < len(promediosV) else ""
-
-        cursor.execute("""
-            INSERT INTO LecturasMaximos (ref, user, fecha, voltaje, V_300, V_150, Vn_300, promediosV)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ref, user, fecha, voltaje_val, V_300_val, V_150_val, Vn_300_val, promedio_val))
-
-    # --- ResultadosActividad ---
-    cursor.execute("""
-        INSERT INTO ResultadosActividad (ref, user, fecha, Ks, Kp, Ktp, actividad_monitor, actividad_calculada, actividad_decaimiento)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (ref, user, fecha, Ks, Kp, Ktp, actividad_monitor, actividad_calculada, actividad_decaimiento))
-
-    conn.commit()
-    conn.close()
-
-    # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): 11 escrituras (cambio
-    # de fuente completo: TipoCalibracion + 5 tablas hijas) -- 1 sola fila
-    # de auditoría para la acción, no una por INSERT/DELETE/UPDATE.
-    _registrar_auditoria(user, ACCION_GUARDAR, "TipoCalibracion", ref=ref,
-                         detalle="cambio de fuente (braquiterapia)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
     return ref  # devolver la ref generada
 

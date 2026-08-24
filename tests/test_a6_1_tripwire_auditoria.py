@@ -324,11 +324,19 @@ ALLOWLIST = {
     # --- A6.5 (diario) cerrada 2026-08-04: conectarfueradeservicio ya
     # audita directamente -- no queda entrada aquí. ---
 
-    # --- A6.6 (braquiterapia) cerrada 2026-08-04: guardar_resultado_
-    # CambioFuente (11 escrituras -- TipoCalibracion + 5 tablas hijas -- 1
-    # sola fila), actualizar_desplazamiento_en_db, guardar_linealidad y los
-    # dos eliminar_fila_resultado ya auditan directamente -- no quedan
-    # entradas aquí. ---
+    # --- A6.6 (braquiterapia) cerrada 2026-08-04: actualizar_desplazamiento_
+    # en_db, guardar_linealidad y los dos eliminar_fila_resultado auditan
+    # directamente -- no quedan entradas aquí para esos tres.
+    # guardar_resultado_CambioFuente auditaba directamente hasta EB2b
+    # (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2b, 24-08): al convertir el
+    # guardado a anular+insertar (reemplazar_bloque, EB1), la única fila de
+    # auditoría de la acción (A6.6: 1 fila para 11 escrituras) pasó a
+    # escribirse DENTRO de reemplazar_bloque (con accion=ACCION_GUARDAR,
+    # el mismo verbo histórico) -- verificado en
+    # test_eb2b_cambio_fuente_anula_e_inserta.py y
+    # test_a6_6_auditoria_braquiterapia.py, ambos en verde.
+    ("data/ManejoDatos/load.py", "guardar_resultado_CambioFuente"):
+        "delegada-en:services/anulacion.py::reemplazar_bloque",
 
     # --- A6.7 (TAC / Catphan) cerrada 2026-08-04: guardar_prueba_completa_
     # catphan es el ÚNICO punto de entrada real de las 9 (los 2 llamadores
@@ -381,8 +389,9 @@ ALLOWLIST = {
 
 
 def _resolver_llamador(reason):
-    """Para 'audita-el-llamador:<archivo>::<qualname>' o 'detalle-de:...',
-    devuelve la clave (archivo, qualname) del llamador nombrado."""
+    """Para 'audita-el-llamador:<archivo>::<qualname>', 'detalle-de:...' o
+    'delegada-en:...', devuelve la clave (archivo, qualname) del sitio
+    referenciado."""
     _, objetivo = reason.split(":", 1)
     archivo, qualname = objetivo.split("::", 1)
     return (archivo, qualname)
@@ -418,7 +427,9 @@ class TestTripwireAuditoria:
     def test_audita_el_llamador_y_detalle_de_apuntan_a_algo_que_de_verdad_audita(self):
         mal_referenciadas = []
         for clave, reason in ALLOWLIST.items():
-            if not (reason.startswith("audita-el-llamador:") or reason.startswith("detalle-de:")):
+            if not (reason.startswith("audita-el-llamador:")
+                    or reason.startswith("detalle-de:")
+                    or reason.startswith("delegada-en:")):
                 continue
             llamador = _resolver_llamador(reason)
             info = INVENTARIO.get(llamador)
