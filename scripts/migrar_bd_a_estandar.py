@@ -376,11 +376,19 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
         # exitosa es la prueba de que el saneamiento funcionó.
         from scripts.indices_bloque_qc import crear_indices
         resultado_indices = crear_indices(ruta_bd)
+
+        # MI5 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI5, DA-44): al final,
+        # con los índices de MI3 ya creados y verificados -- la única
+        # operación IRREVERSIBLE del plan, detrás del respaldo con fecha
+        # que `migrar()` ya hizo antes de llamar aquí (rama --aplicar).
+        from scripts.retirar_equipos_anual import retirar_equipos_anual
+        resultado_equipos_anual = retirar_equipos_anual(ruta_bd)
     finally:
         conection_mod.ruta_base_datos = ruta_original
         conection_mod.Conexion._instance = instancia_previa
         conection_mod.USUARIO_RESPALDO_MIGRACION = usuario_respaldo_previo
-    return filas_centinela, resultado_equipos, resultado_bloque_qc, resultado_indices
+    return (filas_centinela, resultado_equipos, resultado_bloque_qc,
+            resultado_indices, resultado_equipos_anual)
 
 
 def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas,
@@ -475,6 +483,21 @@ def _reportar_indices_bloque_qc(resultado_indices):
             print(f"    {tabla}: {motivo}")
 
 
+def _reportar_retiro_equipos_anual(resultado):
+    """MI5 (DA-44): la única operación irreversible del plan tiene su
+    propia línea de reporte, siempre -- nunca queda absorbida en el diff
+    genérico de esquema (`_reportar_diff` solo lista tablas NUEVAS, nunca
+    retiradas)."""
+    print("\n--- Retiro de equipos_anual (MI5, DA-44) ---")
+    estado = resultado["estado"]
+    if estado == "no existe":
+        print("  (la tabla no existe en esta BD -- nada que retirar)")
+    elif estado == "retirada":
+        print("  retirada: estaba vacía, DROP TABLE aplicado")
+    else:
+        print(f"  {estado}")
+
+
 def migrar(ruta_bd, aplicar=False, usuario=None):
     """Punto de entrada reutilizable (además de la CLI). Devuelve un dict
     con el resultado -- útil para tests y para invocarlo desde la propia
@@ -506,7 +529,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             # simulación debe verlos igual que los vería la app real.
             _copiar_set_sqlite(ruta_bd, copia)
             _consolidar_wal(copia)
-            sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc = _aplicar_migracion_en(copia, usuario=usuario)
+            (sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc,
+             equipos_anual) = _aplicar_migracion_en(copia, usuario=usuario)
             con_copia = sqlite3.connect(copia)
             try:
                 inventario_despues = _inventario_esquema(con_copia)
@@ -523,6 +547,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         _reportar_equipos(equipos)
         _reportar_saneamiento_bloque_qc(bloque_qc)
         _reportar_indices_bloque_qc(indices_bloque_qc)
+        _reportar_retiro_equipos_anual(equipos_anual)
         _reportar_cambios_estructurales(estructural_antes, estructural_despues,
                                      duplicados_controles_despues)
         _reportar_qc(qc_antes, qc_despues)
@@ -531,6 +556,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         return {"aplicado": False, "integridad_antes": integridad_antes,
                 "sentinelas_antes": sentinelas_antes, "equipos": equipos,
                 "bloque_qc": bloque_qc, "indices_bloque_qc": indices_bloque_qc,
+                "equipos_anual": equipos_anual,
                 "qc_antes": qc_antes, "qc_despues": qc_despues,
                 "censo_antes": censo_antes, "censo_despues": censo_despues,
                 "duplicados_controles": duplicados_controles_despues}
@@ -551,7 +577,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     shutil.copy(ruta_bd, respaldo)
     print(f"Backup creado: {respaldo}")
 
-    sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc = _aplicar_migracion_en(ruta_bd, usuario=usuario)
+    (sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc,
+     equipos_anual) = _aplicar_migracion_en(ruta_bd, usuario=usuario)
 
     con_despues = sqlite3.connect(ruta_bd)
     try:
@@ -572,6 +599,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     _reportar_equipos(equipos)
     _reportar_saneamiento_bloque_qc(bloque_qc)
     _reportar_indices_bloque_qc(indices_bloque_qc)
+    _reportar_retiro_equipos_anual(equipos_anual)
     _reportar_cambios_estructurales(estructural_antes, estructural_despues,
                                      duplicados_controles_despues)
     hubo_perdida_qc = _reportar_qc(qc_antes, qc_despues)
@@ -639,6 +667,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             "sentinelas_normalizadas": sentinelas_normalizadas,
             "equipos": equipos,
             "bloque_qc": bloque_qc, "indices_bloque_qc": indices_bloque_qc,
+            "equipos_anual": equipos_anual,
             "qc_antes": qc_antes, "qc_despues": qc_despues,
             "censo_antes": censo_antes, "censo_despues": censo_despues,
             "duplicados_controles": duplicados_controles_despues}
