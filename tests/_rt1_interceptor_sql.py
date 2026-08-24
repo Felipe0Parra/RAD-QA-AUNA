@@ -130,11 +130,17 @@ SITIOS_CENSALES_PERMITIDOS = {
         "censo (OB1, censo.total): el observador necesita el total SIN "
         "filtrar para poder calcular `anuladas = total - activas`; la "
         "consulta de al lado (línea 146) sí filtra, y es la que compara.",
-    ("data/ManejoDatos/conection.py", 535):
+    ("data/ManejoDatos/conection.py", 540):
         "migración (E10, _asegurar_fk_on_delete_restrict): "
         "`INSERT INTO \"{temporal}\" SELECT * FROM \"{nombre}\"` copia la "
         "tabla ENTERA al reconstruirla para cambiar sus FK. Filtrar aquí "
         "no sería una lectura más estricta: BORRARÍA el histórico.",
+    ("data/ManejoDatos/conection.py", 639):
+        "migración (EB2d, DA-57, _asegurar_angulo_starshot_sin_unique_de_tabla): "
+        "mismo patrón que E10 arriba -- copia la tabla ENTERA al "
+        "reconstruirla para retirar el UNIQUE(ref, spoke_index) de tabla "
+        "(no partial, bloqueaba anular+insertar). Filtrar aquí borraría "
+        "el histórico que la propia migración existe para preservar.",
     # LR4 (§6-LR4, [[DA-48]]): con las 7 raíces dentro del alcance, estas dos
     # sentencias sobre `controles` pasan a ser visibles para RT1. Las dos son
     # de la MISMA migración y tienen que ver las dos ramas o dejarían el

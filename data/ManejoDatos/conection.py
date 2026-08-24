@@ -196,6 +196,11 @@ class Conexion():
             # arranque, tras esta línea).
             self._asegurar_secuencias_sin_duplicados()
             self._asegurar_fk_on_delete_restrict()
+            # EB2d (DA-57): mismo motivo de orden que E10 -- recrea
+            # `angulo_starshot` si todavía trae el UNIQUE de tabla viejo,
+            # así que va ANTES de que E8 reponga triggers (una recreación
+            # los borraría) y DESPUÉS de E7/E10 para no duplicar rebuilds.
+            self._asegurar_angulo_starshot_sin_unique_de_tabla()
             # E8: SIEMPRE después de E10 -- recrear una tabla borra sus
             # triggers, así que si E10 alguna vez recrea algo sobre una BD
             # ya blindada, los triggers deben reponerse justo después.
@@ -563,6 +568,108 @@ class Conexion():
             except Exception:
                 pass
             print(f"Error migrando FK ({_CASCADA} -> RESTRICT) al arranque:", ex)
+
+    def _asegurar_angulo_starshot_sin_unique_de_tabla(self):
+        """EB2d (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2d, DA-57, 24-08):
+        `angulo_starshot` traía un `UNIQUE(ref, spoke_index)` DE TABLA --
+        no `partial` (a diferencia del índice que `crear_indices()` (CL1)
+        crea sobre la misma clave, `WHERE activo IS NULL OR activo=1`).
+        Esa constraint bloquea por completo el modelo de anular+insertar
+        que `starshot_angles_insertion` (EB2d) pasó a usar: una fila
+        ANULADA y una VIGENTE con el mismo (ref, spoke_index) la violan
+        igual, aunque `activo` sea distinto -- reventaría con
+        `IntegrityError` en el segundo análisis starshot de cualquier
+        control. Medido: 0 filas en las 3 BD de referencia (la
+        funcionalidad de starshot es reciente, DA-42) -- el rebuild es
+        seguro sin importar cuántas filas traiga cualquier otra BD real.
+
+        Mismo procedimiento que `_asegurar_fk_on_delete_restrict` (E10):
+        recrear y copiar, preservando filas, índices y el contador de
+        `sqlite_sequence`. Sin la parte de respaldo previo de E10 (F1):
+        esto solo retira UNA constraint de UNA tabla, no cambia el
+        comportamiento de `ON DELETE` de ninguna FK ya existente -- blast
+        radius mucho menor que la migración masiva de 59 tablas que
+        motivó ese respaldo.
+
+        Idempotente: si la tabla no existe (BD nueva, ya sin la
+        constraint desde este mismo cambio) o ya fue migrada, no hace
+        nada.
+        """
+        try:
+            cur = self.con.cursor()
+            fila = cur.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' "
+                "AND name='angulo_starshot'").fetchone()
+            if fila is None or fila[0] is None:
+                cur.close()
+                return
+            sql_original = fila[0]
+            patron = re.compile(r",\s*UNIQUE\s*\(\s*ref\s*,\s*spoke_index\s*\)",
+                                 re.IGNORECASE)
+            sql_sin_unique, n_cambios = patron.subn("", sql_original)
+            if n_cambios == 0:
+                cur.close()
+                return  # ya migrada, o nunca tuvo la constraint
+
+            temporal = "_eb2d_nueva_angulo_starshot"
+            sql_temporal = re.sub(
+                r'CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?["\[]?angulo_starshot["\]]?',
+                f'CREATE TABLE "{temporal}"', sql_sin_unique,
+                count=1, flags=re.IGNORECASE)
+            indices = [r[0] for r in cur.execute(
+                "SELECT sql FROM sqlite_master WHERE type='index' "
+                "AND tbl_name='angulo_starshot' AND sql IS NOT NULL").fetchall()]
+            seq_previa = None
+            try:
+                fila_seq = cur.execute(
+                    "SELECT MAX(seq) FROM sqlite_sequence WHERE name='angulo_starshot'"
+                ).fetchone()
+                seq_previa = fila_seq[0] if fila_seq else None
+            except sqlite3.OperationalError:
+                pass  # la BD no tiene sqlite_sequence
+
+            self.con.commit()
+            aislamiento_previo = self.con.isolation_level
+            self.con.isolation_level = None
+            try:
+                cur.execute("PRAGMA foreign_keys=OFF")
+                cur.execute("BEGIN")
+                try:
+                    cur.execute(sql_temporal)
+                    cur.execute(f'INSERT INTO "{temporal}" SELECT * FROM angulo_starshot')
+                    cur.execute("DROP TABLE angulo_starshot")
+                    cur.execute(f'ALTER TABLE "{temporal}" RENAME TO angulo_starshot')
+                    for sql_indice in indices:
+                        cur.execute(sql_indice)
+                    if seq_previa is not None:
+                        fila_seq = cur.execute(
+                            "SELECT MAX(seq) FROM sqlite_sequence WHERE name='angulo_starshot'"
+                        ).fetchone()
+                        seq_final = max(
+                            seq_previa,
+                            fila_seq[0] if fila_seq and fila_seq[0] is not None else 0)
+                        cur.execute(
+                            "DELETE FROM sqlite_sequence WHERE name='angulo_starshot'")
+                        cur.execute(
+                            "INSERT INTO sqlite_sequence (name, seq) VALUES "
+                            "('angulo_starshot', ?)", (seq_final,))
+                    cur.execute("COMMIT")
+                except Exception:
+                    cur.execute("ROLLBACK")
+                    raise
+                cur.execute("PRAGMA foreign_keys=ON")
+            finally:
+                self.con.isolation_level = aislamiento_previo
+            cur.close()
+            print("EB2d: angulo_starshot migrada -- UNIQUE(ref, spoke_index) de "
+                  "tabla retirado (el índice parcial de CL1 ya cubre lo mismo, "
+                  "respetando 'activo').")
+        except Exception as ex:
+            try:
+                self.con.execute("PRAGMA foreign_keys=ON")
+            except Exception:
+                pass
+            print("Error migrando angulo_starshot (EB2d):", ex)
 
     def _asegurar_activo_bloque_qc(self):
         """E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): `activo INTEGER
@@ -1878,7 +1985,15 @@ class Conexion():
         )
         """
       
-        angulos_starshot = """    
+        # EB2d (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2d, DA-57, 24-08): el
+        # `UNIQUE(ref, spoke_index)` de tabla se retira -- NO es partial
+        # (a diferencia del índice que crea CL1/`crear_indices()` sobre la
+        # misma clave, `WHERE activo IS NULL OR activo=1`), así que
+        # bloqueaba el modelo de anular+insertar: una fila anulada y una
+        # vigente con el mismo (ref, spoke_index) violan esta constraint
+        # aunque `activo` sea distinto. `_asegurar_migrar_angulo_starshot_
+        # sin_unique_de_tabla` (abajo) migra cualquier BD que ya la tenga.
+        angulos_starshot = """
         CREATE TABLE IF NOT EXISTS angulo_starshot (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         ref INTEGER NOT NULL,
@@ -1886,8 +2001,7 @@ class Conexion():
         angulo_nominal_deg REAL NOT NULL,
         angulo_real_deg REAL NOT NULL,
         desviacion_deg REAL NOT NULL,
-        FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE, 
-        UNIQUE(ref, spoke_index)
+        FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
         

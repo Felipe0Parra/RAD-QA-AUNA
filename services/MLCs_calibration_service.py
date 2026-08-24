@@ -889,105 +889,124 @@ def _dibujar_analisis_estadistico(fig, canvas, processed):
 # MODELO DE BASE DE DATOS 
 
 from data.ManejoDatos.conection import Conexion
-from services.anulacion import filtro_activo
+from services.anulacion import reemplazar_bloque
 
 # tabla 1: ref_control / equipo / usuario / usuario 2 / Tolerancia / Action tolerance / 
 
 def pf_db_insertion(ref, fecha, equipo ,action_tolerance, tolerance, fisico_1, fisico_2, imagen):
+    # EB2d (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2d, 24-08): antes,
+    # `DELETE` seguido de un `UPDATE ... WHERE ref=?` sobre la MISMA
+    # tabla que el `DELETE` acababa de vaciar -- el `UPDATE` nunca podía
+    # matchear nada (`cursor.rowcount` siempre 0) y la rama `INSERT OR
+    # REPLACE` corría SIEMPRE. Reemplazado por `reemplazar_bloque` (EB1):
+    # anula la generación anterior, inserta la nueva. `auditar=False`: la
+    # única fila de auditoría de esta acción ya la escribe el llamador
+    # (`_ejecutar_analisis_mlc`, A6.8) después de que las 4 escrituras
+    # (ésta + las 3 de `_mostrar_resultados_mlc`) terminan.
     print("pf_db_insertion called")
-    try:   
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM configuracion_picketfence WHERE ref=?", (ref,))
-        cursor.execute(f""" UPDATE configuracion_picketfence SET fecha=?, equipo=?, fisico_1=?, fisico_2=?, tolerancia=?, action_tolerance=?, imagen_mlc=? WHERE ref=?{filtro_activo('configuracion_picketfence')}""", ( fecha, equipo, fisico_1, fisico_2, tolerance, action_tolerance, imagen, ref))
-        if cursor.rowcount == 0:  
-            cursor.execute(""" 
-                    INSERT OR REPLACE INTO configuracion_picketfence 
-                    (ref, fecha ,equipo, fisico_1, fisico_2, tolerancia, action_tolerance, imagen_mlc) VALUES (?,?,?,?,?,?,?,?)
-                           """, (ref, fecha, equipo, fisico_1, fisico_2, tolerance, action_tolerance, imagen))
-        
-        conn.commit()
-        
-        
-    except Exception as e:
-        print(f"Error en pf_db creando tabla: {e}")
-
-def pf_picket_error_insertion(ref,processed):
+    conn = None
     try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM error_picket WHERE ref=?", (ref,))
-
-        for ps in processed["picket_stats"]:
-            cursor.execute(f"""
-                UPDATE error_picket
-                SET picket_mean_error=?, picket_max_error=?
-                WHERE ref=? AND picket=?{filtro_activo('error_picket')}
-            """, (ps["picket_mean_error"], ps["picket_max_error"], ref, ps["picket"]))
-
-            if cursor.rowcount == 0:
-                cursor.execute("""
-                    INSERT INTO error_picket (ref, picket, picket_mean_error, picket_max_error)
-                    VALUES (?,?,?,?)
-                """, (ref, ps["picket"], ps["picket_mean_error"], ps["picket_max_error"]))
-
+        cursor.execute("BEGIN")
+        reemplazar_bloque(
+            cursor, "configuracion_picketfence", [("ref", ref)],
+            """
+                INSERT INTO configuracion_picketfence
+                (ref, fecha, equipo, fisico_1, fisico_2, tolerancia, action_tolerance, imagen_mlc)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [(ref, fecha, equipo, fisico_1, fisico_2, tolerance, action_tolerance, imagen)],
+            None, auditar=False)
         conn.commit()
     except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error en pf_db creando tabla: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def pf_picket_error_insertion(ref,processed):
+    conn = None
+    try:
+        conn = Conexion().conectar()
+        cursor = conn.cursor()
+        cursor.execute("BEGIN")
+
+        filas = [
+            (ref, ps["picket"], ps["picket_mean_error"], ps["picket_max_error"])
+            for ps in processed["picket_stats"]
+        ]
+        reemplazar_bloque(
+            cursor, "error_picket", [("ref", ref)],
+            """
+                INSERT INTO error_picket (ref, picket, picket_mean_error, picket_max_error)
+                VALUES (?,?,?,?)
+            """,
+            filas, None, auditar=False)
+        conn.commit()
+    except Exception as e:
+        if conn:
+            conn.rollback()
         print(f"Error en pf_picket_error_insertion: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 
 def pf_leaf_error_insertion(ref, processed):
+    conn = None
     try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
+        cursor.execute("BEGIN")
 
-        cursor.execute("DELETE FROM leaf_error WHERE ref=?", (ref,))
-        
-        for hoja in processed["leafs"]:
-            cursor.execute(f"""
-                UPDATE leaf_error SET error=?
-                WHERE ref=? AND leaf=?{filtro_activo('leaf_error')}
-            """, (hoja["leaf_error"], ref, hoja["leaf"]))
-
-            if cursor.rowcount == 0:
-                cursor.execute("""
-                    INSERT INTO leaf_error (ref, leaf, error)
-                    VALUES (?,?,?)
-                """, (ref, hoja["leaf"], hoja["leaf_error"]))
-
+        filas = [(ref, hoja["leaf"], hoja["leaf_error"]) for hoja in processed["leafs"]]
+        reemplazar_bloque(
+            cursor, "leaf_error", [("ref", ref)],
+            "INSERT INTO leaf_error (ref, leaf, error) VALUES (?,?,?)",
+            filas, None, auditar=False)
         conn.commit()
     except Exception as e:
+        if conn:
+            conn.rollback()
         print(f"Error en pf_leaf_error_insertion: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 def pf_highest_leaf_errors_insertion(ref, processed, top_n=10):
     peores = sorted(processed["leafs"], key=lambda h: h["max_error"], reverse=True)[:top_n]
 
-    
+    conn = None
     try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM highest_leaf_errors WHERE ref=?", (ref,))
+        cursor.execute("BEGIN")
 
+        filas = []
         for hoja in peores:
             picket_asociado = int(hoja["errors"].index(max(hoja["errors"], key=abs)))
+            filas.append((ref, hoja["leaf"], picket_asociado, hoja["max_error"]))
 
-            cursor.execute(f"""
-                UPDATE highest_leaf_errors
-                SET leaf_out=?, picket_asociado=?, desviacion=?
-                WHERE ref=? AND leaf_out=?{filtro_activo('highest_leaf_errors')}
-            """, (hoja["leaf"], picket_asociado, hoja["max_error"], ref, hoja["leaf"]))
-
-            if cursor.rowcount == 0:
-                cursor.execute("""
-                    INSERT INTO highest_leaf_errors (ref, leaf_out, picket_asociado, desviacion)
-                    VALUES (?,?,?,?)
-                """, (ref, hoja["leaf"], picket_asociado, hoja["max_error"]))
-
+        reemplazar_bloque(
+            cursor, "highest_leaf_errors", [("ref", ref)],
+            """
+                INSERT INTO highest_leaf_errors (ref, leaf_out, picket_asociado, desviacion)
+                VALUES (?,?,?,?)
+            """,
+            filas, None, auditar=False)
         conn.commit()
     except Exception as e:
+        if conn:
+            conn.rollback()
         print(f"Error en pf_highest_leaf_errors_insertion: {e}")
-    
+    finally:
+        if conn:
+            conn.close()
+
+
     
     
     
@@ -1864,96 +1883,105 @@ def conectar_interactividad_starshot(fig, canvas, ss_obj, processed: dict) -> di
 
 
 def starshot_insert(ref, fecha, equipo ,sid, tolerance, fisico_1, fisico_2, imagen):
+    # EB2d (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2d, 24-08): mismo defecto
+    # y misma corrección que `pf_db_insertion` -- ver su comentario.
     print("pf_db_insertion called")
-    try:   
+    conn = None
+    try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM configuracion_starshot WHERE ref=?", (ref,))
-        
-        cursor.execute(f""" UPDATE configuracion_starshot SET fecha=?, equipo=?, fisico_1=?, fisico_2=?, tolerancia=?, sid=?, imagen_mlc_spoke=? WHERE ref=?{filtro_activo('configuracion_starshot')}""", ( fecha, equipo, fisico_1, fisico_2, tolerance, sid, imagen, ref))
-        if cursor.rowcount == 0:  
-            cursor.execute(""" 
-                    INSERT OR REPLACE INTO configuracion_starshot 
-                    (ref, fecha ,equipo, fisico_1, fisico_2, tolerancia, sid, imagen_mlc_spoke) VALUES (?,?,?,?,?,?,?,?)
-                           """, (ref, fecha, equipo, fisico_1, fisico_2, tolerance, sid, imagen))
-        
+        cursor.execute("BEGIN")
+        reemplazar_bloque(
+            cursor, "configuracion_starshot", [("ref", ref)],
+            """
+                INSERT INTO configuracion_starshot
+                (ref, fecha, equipo, fisico_1, fisico_2, tolerancia, sid, imagen_mlc_spoke)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [(ref, fecha, equipo, fisico_1, fisico_2, tolerance, sid, imagen)],
+            None, auditar=False)
         conn.commit()
-        
-        
     except Exception as e:
+        if conn:
+            conn.rollback()
         print(f"Error en pf_db creando tabla: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 
 
 def starshot_residual_statistics_insert(ref, estadisticas):
-    
+
     processed = {
                 'error_medio_mm': estadisticas['residuos_interseccion']['mean_mm'],
                 'std_mm': estadisticas['residuos_interseccion']['std_mm'],
                 'rms_mm': estadisticas['residuos_interseccion']['rms_mm'],
                 'p95_mm': estadisticas['residuos_interseccion']['p95_mm'],
                 'separacion_angular' : estadisticas['uniformidad_angular']['separaciones_deg']
-                
+
             }
+    conn = None
     try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM estadisticas_starshot WHERE ref = ?", (ref,))
-        
-        
-        
-        cursor.execute("""
-            INSERT INTO estadisticas_starshot
-            (ref, std_mm, rms_mm, pm_95)
-            VALUES (?, ?, ?, ?)
-        """, (
-            ref,
-            processed['std_mm'],
-            processed['rms_mm'],
-            processed['p95_mm']
-        ))
+        cursor.execute("BEGIN")
+
+        reemplazar_bloque(
+            cursor, "estadisticas_starshot", [("ref", ref)],
+            """
+                INSERT INTO estadisticas_starshot
+                (ref, std_mm, rms_mm, pm_95)
+                VALUES (?, ?, ?, ?)
+            """,
+            [(ref, processed['std_mm'], processed['rms_mm'], processed['p95_mm'])],
+            None, auditar=False)
         conn.commit()
     except Exception as e:
+        if conn:
+            conn.rollback()
         print(f"Error en la funcion starshot_residual_statistics_insert {e}")
-    
-    
-    
-    
+    finally:
+        if conn:
+            conn.close()
+
+
+
 def starshot_angles_insertion(ref,processed):
     processed = {
             'angulo': [s['angle_deg'] for s in processed['spokes']],
             'angulo_calculado': [s['angle_real_deg'] for s in processed['spokes']],
             'desvacion': [s['deviation_deg'] for s in processed['spokes']]
         }
+    conn = None
     try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM angulo_starshot WHERE ref=?", (ref,))
+        cursor.execute("BEGIN")
 
-        for i in range(len(processed['angulo'])):
-            cursor.execute("""
+        filas = [
+            (ref, i, processed['angulo'][i], processed['angulo_calculado'][i], processed['desvacion'][i])
+            for i in range(len(processed['angulo']))
+        ]
+        reemplazar_bloque(
+            cursor, "angulo_starshot", [("ref", ref)],
+            """
                 INSERT INTO angulo_starshot (
-                    ref,
-                    spoke_index,
-                    angulo_nominal_deg,
-                    angulo_real_deg,
-                    desviacion_deg
+                    ref, spoke_index, angulo_nominal_deg, angulo_real_deg, desviacion_deg
                 )
                 VALUES (?, ?, ?, ?, ?)
-            """, (
-                ref,
-                i,
-                processed['angulo'][i],
-                processed['angulo_calculado'][i],
-                processed['desvacion'][i]
-            ))
+            """,
+            filas, None, auditar=False)
         conn.commit()
     except Exception as e:
-        print(f"Error en pf_picket_error_insertion: {e}")
-        
-        
+        if conn:
+            conn.rollback()
+        print(f"Error en starshot_angles_insertion: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+
 def starshot_angular_uniformity_insert(ref, estadisticas):
 
     processed = {
@@ -1962,45 +1990,34 @@ def starshot_angular_uniformity_insert(ref, estadisticas):
         'errores_sep_deg': estadisticas['uniformidad_angular']['errores_sep_deg']
     }
 
+    conn = None
     try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
+        cursor.execute("BEGIN")
 
-        cursor.execute(
-            "DELETE FROM uniformidad_angular_starshot WHERE ref=?",
-            (ref,)
-        )
-
-        for i, (sep, err) in enumerate(zip(
-            processed['separaciones_deg'],
-            processed['errores_sep_deg']
-        )):
-
-            cursor.execute("""
+        filas = [
+            (ref, i, i, i + 1, sep, processed['ideal_sep_deg'], err)
+            for i, (sep, err) in enumerate(zip(
+                processed['separaciones_deg'], processed['errores_sep_deg']))
+        ]
+        reemplazar_bloque(
+            cursor, "uniformidad_angular_starshot", [("ref", ref)],
+            """
                 INSERT INTO uniformidad_angular_starshot (
-                    ref,
-                    gap_index,
-                    spoke_inicial,
-                    spoke_final,
-                    separacion_deg,
-                    separacion_ideal_deg,
-                    error_deg
+                    ref, gap_index, spoke_inicial, spoke_final,
+                    separacion_deg, separacion_ideal_deg, error_deg
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                ref,
-                i,
-                i,
-                i + 1,
-                sep,
-                processed['ideal_sep_deg'],
-                err
-            ))
-
+            """,
+            filas, None, auditar=False)
         conn.commit()
 
     except Exception as e:
+        if conn:
+            conn.rollback()
         print(f"Error en starshot_angular_uniformity_insert: {e}")
 
     finally:
-        conn.close()
+        if conn:
+            conn.close()

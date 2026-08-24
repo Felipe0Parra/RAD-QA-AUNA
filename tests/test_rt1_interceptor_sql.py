@@ -230,7 +230,7 @@ class TestDenominadorDeCobertura:
     este plan persigue."""
 
     def test_coincide_con_la_medicion_del_plan(self):
-        # El denominador se ha movido TRES veces:
+        # El denominador se ha movido CUATRO veces:
         #   19 -> 56  LF2/LF3: entran las 30 tablas PENDIENTE-LF (§6-LF3).
         #   56 -> 97  LR4/[[DA-48]]: entran las 7 raíces de QC, y con ellas
         #             las 41 funciones que solo leían `controles`,
@@ -244,13 +244,20 @@ class TestDenominadorDeCobertura:
         #             de existir. Es la ÚNICA vez que este número BAJA, y
         #             es igual de honesto que cuando sube: menos superficie
         #             real, no cobertura perdida.
+        #   96 -> 97  EB2d/[[DA-57]] (24-08): `_asegurar_angulo_starshot_
+        #             sin_unique_de_tabla` (conection.py) copia la tabla
+        #             ENTERA al migrar -- una función más que lee
+        #             `angulo_starshot` (dentro del bloque de QC desde
+        #             MI1). Migración de arranque, no acción de usuario,
+        #             pero el denominador cuenta TODA lectura real, igual
+        #             que ya hace con las otras migraciones ad-hoc.
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 96, (
-            f"LR7 retiró la reactivación -- una función menos que leía "
-            f"'controles' (96 funciones esperadas); ahora salen "
+        assert len(lectoras) == 97, (
+            f"EB2d (DA-57) sumó una lectora nueva -- 97 funciones "
+            f"esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"
