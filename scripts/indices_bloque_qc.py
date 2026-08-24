@@ -151,6 +151,21 @@ def _columna_referenciada(elemento_clave):
     return m.group(2) if m else None
 
 
+def _funcion_de_expresion(elemento_clave):
+    """Complemento de `_columna_referenciada`: si `elemento_clave` es una
+    expresión `FUNC(columna)`, devuelve el nombre de la FUNCIÓN (`"DATE"`
+    en `"DATE(date)"`). `None` si es un nombre de columna literal.
+
+    EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB1, DA-52) lo usa para
+    construir `sql_anular_bloque` con el placeholder envuelto en la MISMA
+    función que envuelve la columna (`DATE(fecha)=DATE(?)`, no
+    `DATE(fecha)=?`) -- así el llamador puede pasar el valor con o sin
+    componente de hora (`'2026-06-01'` o `'2026-06-01 10:00:00'`) sin
+    tener que darle el formato exacto que la expresión produce."""
+    m = _RE_EXPRESION_CLAVE.match(elemento_clave)
+    return m.group(1) if m else None
+
+
 def nombre_indice(tabla):
     return f"idx_{tabla}_bloque_activo"
 

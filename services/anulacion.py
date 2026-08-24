@@ -46,7 +46,7 @@ commitea: participa en la transacción que abre el llamador.
 
 from PyQt5.QtSql import QSqlQuery
 
-from scripts.indices_bloque_qc import _columna_referenciada
+from scripts.indices_bloque_qc import _columna_referenciada, _funcion_de_expresion
 from services.audit_minimo import ACCION_ANULAR, ACCION_REEMPLAZO
 from services.audit_minimo import registrar as _registrar_auditoria
 
@@ -250,10 +250,14 @@ def sql_anular_bloque(tabla, columnas_clave):
     mismo orden que `columnas_clave`.
 
     `columnas_clave` acepta tanto nombres de columna simples como
-    expresiones tipo "DATE(date)" (mismo formato que `CLAVES_INDICE`/
+    expresiones tipo "DATE(fecha)" (mismo formato que `CLAVES_INDICE`/
     `CLAVES_NATURALES`) -- usa `_columna_referenciada` para decidir si el
     elemento se cita como identificador o se deja tal cual (una expresión
-    ya es SQL válido, citarla la rompería).
+    ya es SQL válido, citarla la rompería). Para una expresión, el
+    placeholder se envuelve en la MISMA función (`DATE(fecha)=DATE(?)`, no
+    `DATE(fecha)=?`) -- así el llamador puede pasar el valor con o sin la
+    parte de hora (`'2026-06-01'` o `'2026-06-01 10:00:00'`) sin tener que
+    conocer el formato exacto que produce la expresión del lado izquierdo.
 
     Lanza `ValueError` si `tabla` no está en la lista blanca -- mismo
     criterio que `anular_fila`.
@@ -263,9 +267,16 @@ def sql_anular_bloque(tabla, columnas_clave):
             f"'{tabla}' no está en la lista blanca de anulación "
             "(services/anulacion.py::TABLAS_ANULABLES) -- fuera del bloque "
             "de control de calidad, no se reemplaza por este camino.")
-    condiciones = " AND ".join(
-        f"{c}=?" if _columna_referenciada(c) else f'"{c}"=?'
-        for c in columnas_clave)
+
+    def _condicion(c):
+        funcion = _funcion_de_expresion(c)
+        if funcion:
+            return f"{c}={funcion}(?)"
+        if _columna_referenciada(c):
+            return f"{c}=?"
+        return f'"{c}"=?'
+
+    condiciones = " AND ".join(_condicion(c) for c in columnas_clave)
     where = f"{condiciones} AND (activo IS NULL OR activo = 1)"
     return _SQL_ANULAR.format(tabla=tabla, where=where)
 

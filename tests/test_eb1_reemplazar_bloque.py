@@ -50,7 +50,7 @@ class TestSqlAnularBloque:
     def test_clave_por_expresion(self):
         sql = sql_anular_bloque("aceleradorlineal_ix", ("DATE(date)",))
         assert sql == (
-            'UPDATE "aceleradorlineal_ix" SET activo = 0 WHERE DATE(date)=? '
+            'UPDATE "aceleradorlineal_ix" SET activo = 0 WHERE DATE(date)=DATE(?) '
             'AND (activo IS NULL OR activo = 1)')
         assert '"DATE(date)"' not in sql, (
             "una expresión no debe quedar citada como si fuera un "
@@ -134,6 +134,30 @@ class TestReemplazarBloque:
             "reemplazar_bloque NO debe commitear -- si lo hiciera, un "
             "guardado de varias tablas no podría revertirse entero ante "
             "un fallo a mitad de camino (G2)")
+
+    def test_expresion_acepta_valor_con_hora(self, con):
+        """`DATE(?)` en el WHERE (no un `?` desnudo) es lo que permite
+        pasar un datetime completo (el caso real de TipoCalibracion,
+        EB2b) y que aun así compare bien contra `DATE(columna)`."""
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO aceleradorlineal_ix (date, user_id, observaciones) "
+            "VALUES ('2026-08-20', 'u1', 'antes')")
+        con.commit()
+
+        cur.execute("BEGIN")
+        reemplazar_bloque(
+            cur, "aceleradorlineal_ix",
+            [("DATE(date)", "2026-08-20 14:30:00")],
+            "INSERT INTO aceleradorlineal_ix (date, user_id, observaciones) "
+            "VALUES (?, ?, ?)",
+            [("2026-08-20", "u1", "despues")], "fisico1", ref="2026-08-20")
+        con.commit()
+
+        filas = con.execute(
+            "SELECT observaciones, activo FROM aceleradorlineal_ix "
+            "ORDER BY id").fetchall()
+        assert filas == [("antes", 0), ("despues", 1)]
 
     def test_expresion_como_clave_de_las_diarias(self, con):
         cur = con.cursor()

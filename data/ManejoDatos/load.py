@@ -17,7 +17,7 @@ from services.fechas_control import mismo_mes as _mismo_mes
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
-from services.anulacion import TABLAS_ANULABLES, anular_fila, filtro_activo
+from services.anulacion import TABLAS_ANULABLES, anular_fila, filtro_activo, reemplazar_bloque
 def _dialogo_con_identidad(dlg, parent):
     """Propaga al diálogo la identidad del físico del formulario que lo abre.
 
