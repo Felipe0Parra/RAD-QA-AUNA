@@ -253,6 +253,43 @@ class TestRefYAccionPorDefecto:
         con.commit()
 
 
+class TestAuditarFalse:
+    """A6.3 ("una acción, una fila"): cuando `reemplazar_bloque` es solo
+    UNA pieza de una acción más grande auditada en otro punto (p.ej.
+    guardar_analisis_placa600, EB2a, con sus 3 tablas)."""
+
+    def test_no_escribe_fila_de_auditoria(self, con):
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        reemplazar_bloque(
+            cur, "control_cunas", [("ref", 1), ("angulo", "90")],
+            "INSERT INTO control_cunas (ref, angulo, valor) VALUES (?, ?, ?)",
+            [(1, "90", 3.5)], "fisico1", auditar=False)
+        con.commit()
+        try:
+            total = con.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        except sqlite3.OperationalError:
+            total = 0  # ni siquiera se creó la tabla -- registrar() nunca corrió
+        assert total == 0
+
+    def test_el_update_y_el_insert_si_ocurren(self, con):
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO control_cunas (ref, angulo, valor) VALUES (1, '90', 3.5)")
+        con.commit()
+
+        cur.execute("BEGIN")
+        reemplazar_bloque(
+            cur, "control_cunas", [("ref", 1), ("angulo", "90")],
+            "INSERT INTO control_cunas (ref, angulo, valor) VALUES (?, ?, ?)",
+            [(1, "90", 3.9)], "fisico1", auditar=False)
+        con.commit()
+
+        filas = con.execute(
+            "SELECT valor, activo FROM control_cunas ORDER BY id").fetchall()
+        assert filas == [(3.5, 0), (3.9, 1)]
+
+
 class TestLastrowid:
     """Hallazgo real (24-08, al preparar EB2b): `sqlite3.Cursor.executemany`
     NO actualiza `cursor.lastrowid` (queda en `None` incluso con una sola

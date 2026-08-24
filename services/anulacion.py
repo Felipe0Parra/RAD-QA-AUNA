@@ -282,7 +282,7 @@ def sql_anular_bloque(tabla, columnas_clave):
 
 
 def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
-                       ref=None, detalle="", accion=None):
+                       ref=None, detalle="", accion=None, auditar=True):
     """EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB1, DA-52): punto único de
     reemplazo de bloque para la pila `sqlite3` (EB2/EB4/EB6) -- sustituye
     a los `DELETE FROM ...; INSERT INTO ...` de las ramas de guardado del
@@ -322,6 +322,14 @@ def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
             CambioFuente` sigue auditando como `ACCION_GUARDAR`
             ("cambio de fuente"), no como un "reemplazo" genérico, para no
             romper el vocabulario que ya leen sus propios reportes/tests.
+        auditar: `False` cuando esta llamada es solo UNA pieza de una
+            acción real más grande que otro punto del código ya audita una
+            vez por todas sus piezas (A6.3: "una acción, una fila", el
+            mismo criterio que ya usan `guardar_analisis_e_imagen` o
+            `guardar_prueba_completa_catphan`). P.ej. `guardar_analisis_
+            placa600` (EB2a) llama a `reemplazar_bloque` tres veces
+            (franjas/verificaciones/correcciones) para UN solo clic --
+            auditar las tres sería 3 filas por 1 acción.
 
     Rechaza cualquier tabla fuera de la lista blanca, igual que
     `anular_fila`.
@@ -347,6 +355,8 @@ def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
     # `executemany` haría si funcionara, sin perder esa capacidad.
     for fila in filas:
         cursor.execute(sql_insert, fila)
+    if not auditar:
+        return
     ref_auditoria = ref if ref is not None else cursor.lastrowid
     _registrar_auditoria(usuario, accion or ACCION_REEMPLAZO, tabla,
                          ref=ref_auditoria, detalle=detalle,
