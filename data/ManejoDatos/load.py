@@ -1214,59 +1214,38 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
     y el diccionario 'datos' que devuelve la función principal.
     """
 
+    conn = None
     try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
+        cursor.execute("BEGIN")
 
         mm_por_pixel = datos["cm_por_pixel"] * 10
-
-        # =========================
-        # ELIMINAR DATOS DUPLICADOS
-        # =========================
-
-        # CT2 (PLAN_CONTRATO_GUARDADO_13-08.md §6-CT2): analisis_placa_franjas
-        # es del grupo C -- se anula, no se borra (mismo criterio que
-        # loadtablacomplex). analisis_placa_verificaciones/_correcciones NO
-        # están en TABLAS_ANULABLES (sin columna activo): siguen con DELETE
-        # físico, fuera de alcance de este plan. Invariante 3: solo se anula
-        # si hay franjas nuevas que insertar -- si `datos["franjas"]` viniera
-        # vacío, el bloque anterior queda intacto en vez de desaparecer.
-        if datos["franjas"]:
-            cursor.execute(
-                "UPDATE analisis_placa_franjas SET activo = 0 "
-                "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
-                (ref,)
-            )
-
-        cursor.execute(
-            "DELETE FROM analisis_placa_verificaciones WHERE ref = ?",
-            (ref,)
-        )
-
-        cursor.execute(
-            "DELETE FROM analisis_placa_correcciones WHERE ref = ?",
-            (ref,)
-        )
 
         # Función auxiliar para redondear
         def rd(v):
             return round(v, 3) if isinstance(v, (int, float)) else None
 
-        # =========================
-        # GUARDAR FRANJAS
-        # =========================
+        # EB2a (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2a, 24-08, cierra
+        # G5): las 3 tablas de este análisis (`analisis_placa_franjas`,
+        # `analisis_placa_verificaciones`, `analisis_placa_correcciones`)
+        # entraron a `TABLAS_ANULABLES` con MI1 -- el comentario que decía
+        # que las dos últimas "NO están en TABLAS_ANULABLES, siguen con
+        # DELETE físico" quedó factualmente falso desde entonces. Las tres
+        # se reemplazan igual: `reemplazar_bloque` (EB1) anula el bloque
+        # anterior de ese `ref` y solo si hay filas nuevas que insertar
+        # (invariante 4, T3) -- antes solo `franjas` tenía esa guarda a
+        # mano; `verificaciones`/`correcciones` hacían `DELETE`
+        # incondicional. `auditar=False` en las tres: es UN solo clic de
+        # "Guardar análisis" (A6.3), auditado una vez por el llamador
+        # (`guardar_analisis_e_imagen`, seiscientos_mensual.py).
 
+        # =========================
+        # FRANJAS
+        # =========================
+        filas_franjas = []
         for franja_idx, franja in enumerate(datos["franjas"], start=1):
-
-            cursor.execute("""
-                INSERT INTO analisis_placa_franjas (
-                    ref, franja, ancho_media_h, ancho_media_v,
-                    penumbra_izq_h, penumbra_izq_v,
-                    penumbra_der_h, penumbra_der_v,
-                    diferencia_arriba_izq, diferencia_arriba_der,
-                    diferencia_abajo_izq, diferencia_abajo_der
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
+            filas_franjas.append((
                 ref,
                 f"Franja {franja_idx}",
 
@@ -1301,24 +1280,26 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
                 if franja["excesos"] else None
             ))
 
-        # =========================
-        # GUARDAR VERIFICACIONES
-        # =========================
+        reemplazar_bloque(
+            cursor, "analisis_placa_franjas", [("ref", ref)],
+            """
+                INSERT INTO analisis_placa_franjas (
+                    ref, franja, ancho_media_h, ancho_media_v,
+                    penumbra_izq_h, penumbra_izq_v,
+                    penumbra_der_h, penumbra_der_v,
+                    diferencia_arriba_izq, diferencia_arriba_der,
+                    diferencia_abajo_izq, diferencia_abajo_der
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            filas_franjas, _usuario_actual(parent), ref=ref, auditar=False)
 
+        # =========================
+        # VERIFICACIONES
+        # =========================
+        filas_verificaciones = []
         for tipo in ["verificacion_inicial", "verificacion_ideal"]:
-
             ver = datos["verificacion"][tipo]
-
-            cursor.execute("""
-                INSERT INTO analisis_placa_verificaciones (
-                    ref, tipo, angulo1, angulo2, angulo3, angulo4,
-                    lado_arriba, lado_abajo, lado_izquierda, lado_derecha,
-                    desv_vert_izq, desv_vert_der,
-                    desv_horiz_arriba, desv_horiz_abajo,
-                    ortogonal, simetrico,
-                    alineado_horizontal, alineado_vertical, torcido
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
+            filas_verificaciones.append((
                 ref,
                 tipo,
 
@@ -1345,21 +1326,27 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
                 int(ver["estado"]["torcido"])
             ))
 
-        # =========================
-        # GUARDAR CORRECCIONES
-        # =========================
+        reemplazar_bloque(
+            cursor, "analisis_placa_verificaciones", [("ref", ref)],
+            """
+                INSERT INTO analisis_placa_verificaciones (
+                    ref, tipo, angulo1, angulo2, angulo3, angulo4,
+                    lado_arriba, lado_abajo, lado_izquierda, lado_derecha,
+                    desv_vert_izq, desv_vert_der,
+                    desv_horiz_arriba, desv_horiz_abajo,
+                    ortogonal, simetrico,
+                    alineado_horizontal, alineado_vertical, torcido
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            filas_verificaciones, _usuario_actual(parent), ref=ref, auditar=False)
 
+        # =========================
+        # CORRECCIONES
+        # =========================
+        filas_correcciones = []
         for vertice, valores in datos["verificacion"]["correcciones"].items():
-
             dif = datos["verificacion"]["excesos_ideal"]
-
-            cursor.execute("""
-                INSERT INTO analisis_placa_correcciones (
-                    ref, vertice, delta_x, delta_y,
-                    diferencia_arriba, diferencia_abajo,
-                    diferencia_izquierda, diferencia_derecha
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
+            filas_correcciones.append((
                 ref,
                 vertice,
 
@@ -1372,8 +1359,18 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
                 rd(dif["abajo_der"])
             ))
 
+        reemplazar_bloque(
+            cursor, "analisis_placa_correcciones", [("ref", ref)],
+            """
+                INSERT INTO analisis_placa_correcciones (
+                    ref, vertice, delta_x, delta_y,
+                    diferencia_arriba, diferencia_abajo,
+                    diferencia_izquierda, diferencia_derecha
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            filas_correcciones, _usuario_actual(parent), ref=ref, auditar=False)
+
         conn.commit()
-        conn.close()
 
         QMessageBox.information(
             parent,
@@ -1383,6 +1380,9 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
 
     except Exception as e:
 
+        if conn is not None:
+            conn.rollback()
+
         print("\nError en guardar_analisis_placa600:")
         print(traceback.format_exc())
 
@@ -1391,6 +1391,10 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
             "Error",
             f"No se pudo guardar el análisis:\n{str(e)}"
         )
+
+    finally:
+        if conn is not None:
+            conn.close()
 # ..................................... Funciones_controles_mensuales ............................................
 
 " ---------------------------------------- MOSTRAR CONTROLES MENSUALES HALCYON ----------------------"

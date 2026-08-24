@@ -40,7 +40,7 @@ tres es un sitio que no se entendió. Clasificarlo por descarte es
 justamente cómo se llegó al 27/50 sin criterio.
 
 Nota de conteo: 77 FILAS del analizador sobre 75 sitios físicos --
-`load.py:1508` y `load.py:1511` (`mostrar_controles_mensuales`) arman su
+`load.py:1470` y `load.py:1473` (`mostrar_controles_mensuales`) arman su
 SQL con un `if/else`, así que AN1 resuelve DOS textos posibles para cada
 uno y los cuenta por separado. Es el mismo 77 = 27 con filtro + 50 sin
 filtro que midió el censo del 20-08.
@@ -104,41 +104,41 @@ CENSO_RAICES = {
     ("data/ManejoDatos/load.py", 1138, "TipoCalibracion"):
         (LISTA, "catálogo completo de calibraciones (el sitio que ya "
                 "filtraba bien y que hizo decidible DP-31)"),
-    ("data/ManejoDatos/load.py", 1466, "controles"):
+    ("data/ManejoDatos/load.py", 1470, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama con equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1469, "controles"):
+    ("data/ManejoDatos/load.py", 1473, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama sin equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1741, "controles"):
+    ("data/ManejoDatos/load.py", 1745, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 1775, "controles"):
+    ("data/ManejoDatos/load.py", 1779, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 1930, "controles"):
+    ("data/ManejoDatos/load.py", 1934, "controles"):
         (LISTA, "mostrar_controles_imgIX: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 1978, "controles"):
+    ("data/ManejoDatos/load.py", 1982, "controles"):
         (LISTA, "mostrar_controles_imgIX: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2136, "controles"):
+    ("data/ManejoDatos/load.py", 2140, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2170, "controles"):
+    ("data/ManejoDatos/load.py", 2174, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2327, "controles"):
+    ("data/ManejoDatos/load.py", 2331, "controles"):
         (LISTA, "mostrar_controles_imgHC: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2375, "controles"):
+    ("data/ManejoDatos/load.py", 2379, "controles"):
         (LISTA, "mostrar_controles_imgHC: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2528, "controles"):
+    ("data/ManejoDatos/load.py", 2532, "controles"):
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2576, "controles"):
+    ("data/ManejoDatos/load.py", 2580, "controles"):
         (LISTA, "mostrar_controles_tac: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 4379, "controles"):
+    ("data/ManejoDatos/load.py", 4383, "controles"):
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4393, "controles"):
+    ("data/ManejoDatos/load.py", 4397, "controles"):
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4456, "controles"):
+    ("data/ManejoDatos/load.py", 4460, "controles"):
         (IDENTIDAD, "gemelo anual exacto de load.py:4421 (eliminarRegistro)"),
-    ("data/ManejoDatos/load.py", 4466, "controles"):
+    ("data/ManejoDatos/load.py", 4470, "controles"):
         (IDENTIDAD, "gemelo anual exacto de load.py:4435 (la anulación misma)"),
-    ("data/ManejoDatos/load.py", 4679, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4683, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
 
     # -- Halcyon ---------------------------------------------------------
