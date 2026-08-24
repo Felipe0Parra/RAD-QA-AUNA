@@ -1,11 +1,19 @@
 """D2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): `conectarfueradeservicio`
-cumple el mismo contrato de reemplazo por fecha que `add_info` (H2.2).
+cumple el mismo contrato de reemplazo por fecha que `add_info` (H2.2):
+**una fila VIGENTE por fecha**, no necesariamente una fila total.
 
 Causa raíz: antes de este fix, `conectarfueradeservicio` hacía un INSERT sin
 DELETE previo -- a diferencia de `add_info`, que desde H2.2 borra la fila
 existente de esa fecha (con confirmación). Evidencia real del 2026-08-05:
 7 filas vacías el mismo día en `aceleradorlineal_ix` porque el físico pulsó
 "Fuera de servicio" y "Subir" varias veces.
+
+EB4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB4, 24-08): el `DELETE` de H2.2/D2
+pasó a `reemplazar_bloque` (EB1) -- el reemplazo ya NO borra la fila
+anterior, la ANULA (`activo=0`). `_filas_tabla` cuenta solo las VIGENTES
+por defecto (el invariante que este archivo siempre quiso probar); un
+parámetro aparte permite contar el total cuando hace falta verificar que
+la anterior sigue en la BD, recuperable.
 """
 import os
 import sqlite3
@@ -63,11 +71,12 @@ class _SelfFalso(QWidget):
         self.observaciones = QLineEdit("mantenimiento")
 
 
-def _filas_tabla(ruta_bd, fecha_iso="2026-08-05"):
+def _filas_tabla(ruta_bd, fecha_iso="2026-08-05", solo_vigentes=True):
     con = sqlite3.connect(ruta_bd)
-    n = con.execute(
-        "SELECT COUNT(*) FROM aceleradorlineal_ix WHERE DATE(date) = ?",
-        (fecha_iso,)).fetchone()[0]
+    query = "SELECT COUNT(*) FROM aceleradorlineal_ix WHERE DATE(date) = ?"
+    if solo_vigentes:
+        query += " AND (activo IS NULL OR activo = 1)"
+    n = con.execute(query, (fecha_iso,)).fetchone()[0]
     con.close()
     return n
 
@@ -82,13 +91,15 @@ def _audit_log(ruta_bd):
 
 class TestD2UnaFilaPorFecha:
 
-    def test_dos_declaraciones_seguidas_dejan_una_sola_fila(self, app, bd_temporal, monkeypatch):
+    def test_dos_declaraciones_seguidas_dejan_una_sola_fila_vigente(self, app, bd_temporal, monkeypatch):
         monkeypatch.setattr(load_mod.QMessageBox, "question",
                             staticmethod(lambda *a, **k: load_mod.QMessageBox.Yes))
         conectarfueradeservicio(_SelfFalso(), "aceleradorlineal_ix")
         conectarfueradeservicio(_SelfFalso(), "aceleradorlineal_ix")
 
-        assert _filas_tabla(bd_temporal) == 1
+        assert _filas_tabla(bd_temporal) == 1, "una sola fila VIGENTE por fecha"
+        assert _filas_tabla(bd_temporal, solo_vigentes=False) == 2, (
+            "EB4: la primera no se borró -- quedó anulada, recuperable")
 
     def test_reemplazo_pide_confirmacion_y_no_escribe_nada(self, app, bd_temporal, monkeypatch):
         conectarfueradeservicio(_SelfFalso(), "aceleradorlineal_ix")  # primera, sin preguntar

@@ -173,13 +173,19 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             # H2.4: el reemplazo confirmado en H2.2 queda en audit_log.
             _registrar_auditoria(user_id, ACCION_REEMPLAZO, nombre_tabla, ref=fecha_actual)
 
-        cursor.execute(
-            f"DELETE FROM {nombre_tabla} WHERE DATE(date) = ? "
-            "AND (activo IS NULL OR activo = 1)",
-            (fecha_actual,))
-        # Ejecutar la inserción
+        # EB4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB4, 24-08): el reporte
+        # anterior de esta fecha se ANULA (activo=0), nunca se borra --
+        # `reemplazar_bloque` (EB1) con clave por expresión (`DATE(date)`,
+        # mismo mecanismo que MI3 ya construyó para estas 4 tablas).
+        # `auditar=False`: el `ACCION_GUARDAR` de abajo ya cubre esta
+        # escritura -- las DOS filas de auditoría (ACCION_REEMPLAZO arriba,
+        # cuando hubo confirmación + ACCION_GUARDAR aquí) siguen siendo el
+        # contrato correcto de H2.4/H2.4, no una regresión de A6.3.
         sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
-        cursor.execute(sql, lista)
+        cursor.execute("BEGIN")
+        reemplazar_bloque(
+            cursor, nombre_tabla, [("DATE(date)", fecha_actual)],
+            sql, [tuple(lista)], user_id, ref=fecha_actual, auditar=False)
         conn.commit()
         _registrar_auditoria(user_id, ACCION_GUARDAR, nombre_tabla, ref=fecha_actual)
         QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
@@ -190,6 +196,7 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             load_table(self, boolean_columns, nombre_tabla)
 
     except sqlite3.Error as e:
+        conn.rollback()
         import traceback
         traceback.print_exc()
         QMessageBox.critical(self, "Error", f"Error en la consulta: {e}")
@@ -847,12 +854,13 @@ def conectarfueradeservicio(self, nombre_tabla):
             return
         _registrar_auditoria(user_id, ACCION_REEMPLAZO, nombre_tabla, ref=fecha_actual)
 
-    cursor.execute(
-        f"DELETE FROM {nombre_tabla} WHERE DATE(date) = ? "
-        "AND (activo IS NULL OR activo = 1)",
-        (fecha_actual,))
+    # EB4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB4, 24-08): mismo cambio
+    # que `add_info` -- anula el reporte anterior en vez de borrarlo.
     sql = f"INSERT INTO {nombre_tabla} (date, user_id, observaciones) VALUES (?, ?, ?)"
-    cursor.execute(sql, lista)
+    cursor.execute("BEGIN")
+    reemplazar_bloque(
+        cursor, nombre_tabla, [("DATE(date)", fecha_actual)],
+        sql, [tuple(lista)], user_id, ref=fecha_actual, auditar=False)
     conn.commit()
 
     # A6.5 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): declarar un equipo

@@ -4,8 +4,10 @@ silencio.
 Antes: `add_info` (load.py) hacía `DELETE FROM {tabla} WHERE DATE(date)=?`
 seguido de INSERT, sin verificar si ya existía un reporte para esa fecha --
 reemplazo silencioso, sin rastro ni confirmación (hallazgo PLAN_FASE_H
-sección 1.6.2). El DELETE+INSERT se mantiene (decisión de producto
-existente), pero ahora pregunta explícitamente si ya hay un registro.
+sección 1.6.2). El reemplazo (con confirmación) se mantiene como decisión
+de producto; EB4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB4, 24-08) cambió el
+mecanismo de `DELETE+INSERT` a `reemplazar_bloque` (anula, nunca borra) --
+el reporte anterior sigue en la BD, recuperable.
 
 `Conexion` (data/ManejoDatos/conection.py) es un SINGLETON de proceso
 (`__new__` cachea `_instance`) que en su primera creación corre TODO el
@@ -123,10 +125,12 @@ class TestAddInfoConfirmaAntesDeReemplazar:
         add_info(_self_falso(), "aceleradorlineal_600", ["a", "b"])
         return llamado
 
-    def _contar_registros(self, ruta_db):
+    def _contar_registros(self, ruta_db, solo_vigentes=True):
         conn = sqlite3.connect(ruta_db)
-        n = conn.execute(
-            "SELECT COUNT(*) FROM aceleradorlineal_600 WHERE DATE(date)='2026-07-14'").fetchone()[0]
+        query = "SELECT COUNT(*) FROM aceleradorlineal_600 WHERE DATE(date)='2026-07-14'"
+        if solo_vigentes:
+            query += " AND (activo IS NULL OR activo = 1)"
+        n = conn.execute(query).fetchone()[0]
         conn.close()
         return n
 
@@ -150,4 +154,8 @@ class TestAddInfoConfirmaAntesDeReemplazar:
         llamado = self._guardar(monkeypatch, confirmar_devuelve=True)
 
         assert llamado
-        assert self._contar_registros(bd_temporal) == 1  # reemplazado, no acumulado
+        # EB4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB4, 24-08): el reemplazo
+        # ya no BORRA el registro anterior, lo ANULA -- una sola VIGENTE,
+        # pero el anterior sigue en la BD, recuperable.
+        assert self._contar_registros(bd_temporal) == 1  # una sola VIGENTE
+        assert self._contar_registros(bd_temporal, solo_vigentes=False) == 2

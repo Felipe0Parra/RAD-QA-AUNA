@@ -137,7 +137,11 @@ class TestD3AddInfoRespetaAnulados:
 
         assert preguntado, "debía preguntar -- ya había una fila ACTIVA para esa fecha"
         filas = _filas(bd_temporal, "aceleradorlineal_600", "2026-08-05")
-        assert len(filas) == 1  # reemplazada, no acumulada
+        # EB4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB4, 24-08): el reemplazo
+        # ya no BORRA la fila anterior, la ANULA -- 1 sola VIGENTE, pero 2
+        # en total (la primera sobrevive, recuperable).
+        assert len([f for f in filas if f[2] == 1]) == 1, "una sola VIGENTE"
+        assert len(filas) == 2, "la primera no se borró -- quedó anulada"
 
 
 class TestD3ConectarFueraDeServicioRespetaAnulados:
