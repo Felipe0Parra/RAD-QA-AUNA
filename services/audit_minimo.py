@@ -90,7 +90,8 @@ def usuario_actual(obj):
     return getattr(getattr(obj, "user_id", None), "_nombre", None)
 
 
-def registrar(usuario, accion, tabla=None, ref=None, detalle="", ruta_db=None):
+def registrar(usuario, accion, tabla=None, ref=None, detalle="", ruta_db=None,
+              con=None):
     """Inserta una fila en audit_log. Nunca lanza (ver docstring del módulo).
 
     Args:
@@ -112,25 +113,60 @@ def registrar(usuario, accion, tabla=None, ref=None, detalle="", ruta_db=None):
             ruta que YA resuelve ese camino, para que la auditoría caiga en
             la MISMA base que el guardado que la originó (y para que los
             tests que aíslan esa ruta con monkeypatch aíslen también esto).
+        con: EB0 (PLAN_CONTRATO_COMPLETO_19-08.md §4.10, DA-52). Conexión
+            `sqlite3` YA ABIERTA por el llamador, con su propia transacción
+            en curso (p.ej. `reemplazar_bloque`, EB1). Si se pasa, la fila
+            se escribe en ESA MISMA conexión/transacción, envuelta en un
+            `SAVEPOINT` -- así "todo en una transacción" es real: la
+            auditoría vive o muere con el guardado que la originó, sin
+            abrir una segunda conexión que compita por el lock de escritor
+            de la primera. Medido empíricamente (DA-52): con el
+            `busy_timeout=30000` real de `aplicar_pragmas_conexion`, una
+            conexión NUEVA que intente escribir mientras la del llamador
+            tiene la transacción abierta espera el timeout completo y
+            falla con "database is locked" -- 30 s de congelación por
+            guardado y la fila perdida en silencio. Si `con` es None se
+            mantiene el comportamiento histórico (conexión propia) --
+            correcto para los llamadores QtSql (`anular_fila`) que auditan
+            FUERA de su propia transacción (autocommit de QtSql).
     """
     try:
         # Timestamp en ISO 8601 (no dd/MM/yyyy): ordena correctamente como
         # texto y evita la ambigüedad de fechas mixtas ya detectada en el
         # catálogo de equipos (H2.6, "5/02/2024" vs "05/02/2024").
         marca = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if con is not None:
+            try:
+                con.execute("SAVEPOINT audit_minimo")
+                con.execute(_DDL_AUDIT_LOG)
+                con.execute(
+                    "INSERT INTO audit_log (timestamp, usuario, accion, tabla, ref, detalle) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (marca, usuario, accion, tabla,
+                     str(ref) if ref is not None else None, detalle))
+                con.execute("RELEASE SAVEPOINT audit_minimo")
+            except Exception:
+                # Un fallo al auditar NUNCA debe arrastrar el guardado que
+                # la originó (mismo principio best-effort de arriba) --
+                # deshacer solo la fila de auditoría, no la transacción
+                # entera del llamador.
+                con.execute("ROLLBACK TO SAVEPOINT audit_minimo")
+                con.execute("RELEASE SAVEPOINT audit_minimo")
+                raise
+            return
         ruta = ruta_db if ruta_db is not None else _conection.ruta_base_datos()
-        con = sqlite3.connect(ruta)
+        con_propia = sqlite3.connect(ruta)
         try:
-            cur = con.cursor()
+            cur = con_propia.cursor()
             cur.execute(_DDL_AUDIT_LOG)
             cur.execute(
                 "INSERT INTO audit_log (timestamp, usuario, accion, tabla, ref, detalle) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (marca, usuario, accion, tabla,
                  str(ref) if ref is not None else None, detalle))
-            con.commit()
+            con_propia.commit()
         finally:
-            con.close()
+            con_propia.close()
     except Exception as e:
         print(f"[audit_minimo] no se pudo registrar auditoría ({accion}/{tabla}): {e}")
         traceback.print_exc()

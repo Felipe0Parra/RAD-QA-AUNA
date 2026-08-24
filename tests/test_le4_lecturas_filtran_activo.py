@@ -140,7 +140,15 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     # seis ESCRIBEN la anulación (poner `activo = 0` no puede filtrar por
     # `activo` sin volverse un no-op sobre lo ya anulado), uno edita UNA
     # celda por su id, y el octavo es una migración de formato de fecha.
-    ("services/anulacion.py", 216): "anular_fila -- el punto ÚNICO de anulación (E7): `UPDATE {tabla} SET activo = 0 WHERE {id_where}`. Es la ESCRITURA que crea lo anulado, no una lectura; filtrar aquí sería no poder anular nada dos veces",
+    #
+    # EB0/EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB0/EB1, DA-52, 24-08):
+    # `anular_fila` dejó de escribir su `UPDATE` como un f-string inline
+    # (JoinedStr, lo que la hacía "dinámica" para este detector) -- ahora
+    # delega en `_SQL_ANULAR.format(...)`, un `ast.Call`. El texto y la
+    # semántica NO cambiaron (sigue sin filtrar por vigencia: anular por
+    # identidad ya selecciona una sola fila); lo que cambió es que el
+    # detector ya no puede verlo -- pasa a `SITIOS_OPACOS_PERMITIDOS`, más
+    # abajo, cubierto en tiempo de ejecución por RT1 (ve el SQL resuelto).
     ("data/ManejoDatos/load.py", 500): "eliminarfilas/subirlineas -- anula el bloque vigente antes de insertar el nuevo; YA filtra 'activo' a mano en el WHERE compuesto (línea 552)",
     ("data/ManejoDatos/load.py", 691): "subirlineasmensuales -- anula el bloque vigente de ese `ref`; ya filtra 'activo' a mano en el propio texto",
     ("data/ManejoDatos/load.py", 720): "subirlineasmensuales, rama FUERA del bloque de QC (`preguntas` antes de PR1 y las tablas sin columna `activo`): UPDATE parcial por `ref`, contrato original",
@@ -256,6 +264,18 @@ SITIOS_CENSALES_LITERALES = {
 #     (`sql += filtro_activo(nombre_tabla)`, una llamada real, no un
 #     literal -- por eso es opaca para el resolver aunque esté bien).
 SITIOS_OPACOS_PERMITIDOS = {
+    # EB0/EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB0/EB1, DA-52, 24-08):
+    # tres sitios de `services/anulacion.py` cuyo SQL se arma detrás de un
+    # `ast.Call` (función auxiliar), invisible para este detector estático
+    # -- verificados a mano, y cubiertos en tiempo de ejecución por RT1
+    # (ve el SQL ya resuelto sobre la conexión real).
+    ("services/anulacion.py", 236): "anular_fila -- `_SQL_ANULAR.format(tabla=tabla, where=id_where)`. Mismo UPDATE de siempre (identidad física, sin filtro de vigencia -- ver el docstring de la función), ahora detrás de un helper compartido con sql_anular_bloque en vez de un f-string inline",
+    ("services/anulacion.py", 316): "reemplazar_bloque (EB1) -- `sql_anular_bloque(tabla, columnas_clave)` compone el UPDATE con el AND de vigencia ya incluido (ver su propio docstring); es la ESCRITURA que anula el bloque anterior, no una lectura",
+    # No hace falta entrada para `cursor.executemany(sql_insert, filas)`
+    # (línea siguiente): `sql_insert` es un parámetro sin asignación en el
+    # cuerpo de la función, el resolver de AN1 lo trata como texto vacío --
+    # no aparece en el censo de opacos (verificado, no es un hueco: el
+    # INSERT lo arma cada llamador con columnas explícitas, MI0).
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 875): "INSERT (linealidad_ct)",
     ("data/ManejoDatos/conection.py", 534): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",
     ("data/ManejoDatos/conection.py", 1954): "INSERT (users, no está en TABLAS_ANULABLES)",

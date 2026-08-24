@@ -36,11 +36,18 @@ los dos sin que algo se ponga rojo.
 `anular_fila()` RECHAZA cualquier tabla fuera de la lista: nunca se anula
 por error algo ajeno al bloque de QC (p.ej. un catálogo con DELETE físico
 legítimo, ya auditado desde A2).
+
+EB1 (§6-EB1 del mismo plan, DA-52) añade el punto único de REEMPLAZO de
+bloque para la pila `sqlite3` (`reemplazar_bloque`, apoyado en
+`sql_anular_bloque`) -- lo que hasta la Fase 5 hacían a mano, con `DELETE`
+físico, los sitios de braquiterapia/TAC/MLC/diarias/placa. `EB1` no
+commitea: participa en la transacción que abre el llamador.
 """
 
 from PyQt5.QtSql import QSqlQuery
 
-from services.audit_minimo import ACCION_ANULAR
+from scripts.indices_bloque_qc import _columna_referenciada
+from services.audit_minimo import ACCION_ANULAR, ACCION_REEMPLAZO
 from services.audit_minimo import registrar as _registrar_auditoria
 
 TABLAS_ANULABLES = frozenset({
@@ -187,6 +194,13 @@ def filtro_activo(tabla):
     return " AND (activo IS NULL OR activo = 1)" if tabla in TABLAS_ANULABLES else ""
 
 
+# EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB1, DA-52): esqueleto de texto
+# compartido por `anular_fila` (identidad física, pila QtSql) y
+# `sql_anular_bloque` (clave de bloque + vigencia, pila sqlite3) -- un solo
+# origen para "así se escribe SET activo = 0 sobre esta tabla".
+_SQL_ANULAR = 'UPDATE "{tabla}" SET activo = 0 WHERE {where}'
+
+
 def anular_fila(db, tabla, id_valor, usuario, detalle="", id_where=None,
                 valor_where=None, ref=None):
     """`UPDATE {tabla} SET activo = 0 WHERE ...`, auditado con
@@ -203,6 +217,12 @@ def anular_fila(db, tabla, id_valor, usuario, detalle="", id_where=None,
     llamadores `eliminarRegistro`/`eliminarfilas`, que reusan su propia
     conexión/transacción). Lanza `ValueError` si `tabla` no está en la lista
     blanca -- ver el docstring del módulo.
+
+    Nótese que aquí `id_where` identifica UNA fila física -- no lleva el
+    `AND (activo IS NULL OR activo = 1)` que sí lleva `sql_anular_bloque`
+    (EB1): anular por identidad ya selecciona una sola fila, filtrarla
+    además por vigencia solo la convertiría en no-op silencioso si esa fila
+    ya estuviera anulada.
     """
     if tabla not in TABLAS_ANULABLES:
         raise ValueError(
@@ -213,10 +233,87 @@ def anular_fila(db, tabla, id_valor, usuario, detalle="", id_where=None,
         id_where = '"id" = ?'
         valor_where = [id_valor]
     query = QSqlQuery(db)
-    query.prepare(f'UPDATE "{tabla}" SET activo = 0 WHERE {id_where}')
+    query.prepare(_SQL_ANULAR.format(tabla=tabla, where=id_where))
     for v in valor_where:
         query.addBindValue(v)
     if not query.exec_():
         raise Exception(query.lastError().text())
     _registrar_auditoria(usuario, ACCION_ANULAR, tabla,
                          ref=ref if ref is not None else str(id_valor), detalle=detalle)
+
+
+def sql_anular_bloque(tabla, columnas_clave):
+    """EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB1, DA-52): punto único del
+    texto SQL "anular el bloque vigente que matchea esta clave" -- mismo
+    papel que `filtro_activo()` cumple del lado de lectura (LE0). Ni PyQt
+    ni sqlite3: solo compone texto, con placeholders posicionales en el
+    mismo orden que `columnas_clave`.
+
+    `columnas_clave` acepta tanto nombres de columna simples como
+    expresiones tipo "DATE(date)" (mismo formato que `CLAVES_INDICE`/
+    `CLAVES_NATURALES`) -- usa `_columna_referenciada` para decidir si el
+    elemento se cita como identificador o se deja tal cual (una expresión
+    ya es SQL válido, citarla la rompería).
+
+    Lanza `ValueError` si `tabla` no está en la lista blanca -- mismo
+    criterio que `anular_fila`.
+    """
+    if tabla not in TABLAS_ANULABLES:
+        raise ValueError(
+            f"'{tabla}' no está en la lista blanca de anulación "
+            "(services/anulacion.py::TABLAS_ANULABLES) -- fuera del bloque "
+            "de control de calidad, no se reemplaza por este camino.")
+    condiciones = " AND ".join(
+        f"{c}=?" if _columna_referenciada(c) else f'"{c}"=?'
+        for c in columnas_clave)
+    where = f"{condiciones} AND (activo IS NULL OR activo = 1)"
+    return _SQL_ANULAR.format(tabla=tabla, where=where)
+
+
+def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
+                       ref=None, detalle=""):
+    """EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB1, DA-52): punto único de
+    reemplazo de bloque para la pila `sqlite3` (EB2/EB4/EB6) -- sustituye
+    a los `DELETE FROM ...; INSERT INTO ...` de las ramas de guardado del
+    bloque de QC. El bloque anterior se ANULA (activo=0), nunca se borra.
+
+    Args:
+        cursor: cursor `sqlite3` de una conexión con transacción abierta
+            (`Conexion().conectar()` + `BEGIN`). NO hace commit: lo decide
+            el llamador -- un guardado lógico puede tocar varias tablas
+            (`guardar_resultado_CambioFuente` toca 6, `guardar_prueba_
+            completa_catphan` hasta 11); un commit por tabla partiría el
+            bloque a mitad si algo falla a mitad de camino (G2, hallazgo
+            de la auditoría del 24-08).
+        tabla: debe estar en `TABLAS_ANULABLES` -- `ValueError` si no.
+        clave: lista de tuplas `(columna_o_expresion, valor)` que
+            identifican el bloque vigente a anular -- mismo formato de
+            columna que `CLAVES_INDICE`/`CLAVES_NATURALES` (acepta
+            expresiones como `"DATE(date)"`).
+        sql_insert: sentencia INSERT completa, con columnas explícitas
+            (MI0) -- se ejecuta con `cursor.executemany(sql_insert, filas)`.
+        filas: lista de tuplas de parámetros para el INSERT. Si está
+            **vacía**, NO se anula el bloque vigente (invariante 4 del
+            contrato, T3): sin bloque nuevo válido que insertar, el
+            anterior se conserva intacto en vez de desaparecer.
+        usuario, ref, detalle: se pasan a `registrar()` (EB0, `con=
+            cursor.connection`) -- la fila de auditoría se escribe en la
+            MISMA transacción que el reemplazo, nunca en una conexión
+            aparte (ver `services/audit_minimo.py::registrar`, DA-52).
+
+    Rechaza cualquier tabla fuera de la lista blanca, igual que
+    `anular_fila`.
+    """
+    if tabla not in TABLAS_ANULABLES:
+        raise ValueError(
+            f"'{tabla}' no está en la lista blanca de anulación "
+            "(services/anulacion.py::TABLAS_ANULABLES) -- fuera del bloque "
+            "de control de calidad, no se reemplaza por este camino.")
+    if not filas:
+        return
+    columnas_clave = [c for c, _ in clave]
+    valores_clave = [v for _, v in clave]
+    cursor.execute(sql_anular_bloque(tabla, columnas_clave), valores_clave)
+    cursor.executemany(sql_insert, filas)
+    _registrar_auditoria(usuario, ACCION_REEMPLAZO, tabla, ref=ref,
+                         detalle=detalle, con=cursor.connection)
