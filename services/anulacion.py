@@ -282,7 +282,7 @@ def sql_anular_bloque(tabla, columnas_clave):
 
 
 def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
-                       ref=None, detalle=""):
+                       ref=None, detalle="", accion=None):
     """EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB1, DA-52): punto único de
     reemplazo de bloque para la pila `sqlite3` (EB2/EB4/EB6) -- sustituye
     a los `DELETE FROM ...; INSERT INTO ...` de las ramas de guardado del
@@ -302,15 +302,26 @@ def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
             columna que `CLAVES_INDICE`/`CLAVES_NATURALES` (acepta
             expresiones como `"DATE(date)"`).
         sql_insert: sentencia INSERT completa, con columnas explícitas
-            (MI0) -- se ejecuta con `cursor.executemany(sql_insert, filas)`.
+            (MI0) -- se ejecuta con un `execute()` por fila (ver más abajo).
         filas: lista de tuplas de parámetros para el INSERT. Si está
             **vacía**, NO se anula el bloque vigente (invariante 4 del
             contrato, T3): sin bloque nuevo válido que insertar, el
             anterior se conserva intacto en vez de desaparecer.
-        usuario, ref, detalle: se pasan a `registrar()` (EB0, `con=
+        usuario, detalle: se pasan a `registrar()` (EB0, `con=
             cursor.connection`) -- la fila de auditoría se escribe en la
             MISMA transacción que el reemplazo, nunca en una conexión
             aparte (ver `services/audit_minimo.py::registrar`, DA-52).
+        ref: identificador para la auditoría. Si es `None` (el caso común
+            para una RAÍZ con autoincrement, p.ej. `TipoCalibracion`), se
+            usa `cursor.lastrowid` -- el id de la fila recién insertada.
+            Pásalo explícito cuando la identidad natural NO es ese id
+            (p.ej. las diarias, cuyo `ref` legible es la fecha).
+        accion: verbo de `services/audit_minimo.py` (por defecto
+            `ACCION_REEMPLAZO`). Algunos llamadores prefieren conservar su
+            propio verbo histórico -- p.ej. `guardar_resultado_
+            CambioFuente` sigue auditando como `ACCION_GUARDAR`
+            ("cambio de fuente"), no como un "reemplazo" genérico, para no
+            romper el vocabulario que ya leen sus propios reportes/tests.
 
     Rechaza cualquier tabla fuera de la lista blanca, igual que
     `anular_fila`.
@@ -336,5 +347,7 @@ def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
     # `executemany` haría si funcionara, sin perder esa capacidad.
     for fila in filas:
         cursor.execute(sql_insert, fila)
-    _registrar_auditoria(usuario, ACCION_REEMPLAZO, tabla, ref=ref,
-                         detalle=detalle, con=cursor.connection)
+    ref_auditoria = ref if ref is not None else cursor.lastrowid
+    _registrar_auditoria(usuario, accion or ACCION_REEMPLAZO, tabla,
+                         ref=ref_auditoria, detalle=detalle,
+                         con=cursor.connection)

@@ -208,6 +208,51 @@ class TestReemplazarBloque:
         assert con.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0] == 1
 
 
+class TestRefYAccionPorDefecto:
+
+    def test_ref_por_defecto_es_el_lastrowid(self, con):
+        """Sin `ref` explícito, la auditoría usa el id recién insertado --
+        el caso natural de una RAÍZ con autoincrement (TipoCalibracion,
+        EB2b), cuyo `ref` de negocio ES ese id, no algo conocido antes de
+        insertar."""
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        reemplazar_bloque(
+            cur, "control_cunas", [("ref", 1), ("angulo", "90")],
+            "INSERT INTO control_cunas (ref, angulo, valor) VALUES (?, ?, ?)",
+            [(1, "90", 3.5)], "fisico1")
+        nuevo_id = cur.lastrowid
+        fila = con.execute(
+            "SELECT ref FROM audit_log").fetchone()
+        assert fila == (str(nuevo_id),)
+        con.commit()
+
+    def test_accion_por_defecto_es_reemplazo(self, con):
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        reemplazar_bloque(
+            cur, "control_cunas", [("ref", 1), ("angulo", "90")],
+            "INSERT INTO control_cunas (ref, angulo, valor) VALUES (?, ?, ?)",
+            [(1, "90", 3.5)], "fisico1", ref="1/90")
+        accion = con.execute("SELECT accion FROM audit_log").fetchone()
+        assert accion == ("reemplazo",)
+        con.commit()
+
+    def test_accion_override(self, con):
+        """guardar_resultado_CambioFuente (EB2b) conserva su propio verbo
+        histórico ('guardar') en vez de 'reemplazo' -- no rompe el
+        vocabulario que sus propios tests/reportes ya leen."""
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        reemplazar_bloque(
+            cur, "control_cunas", [("ref", 1), ("angulo", "90")],
+            "INSERT INTO control_cunas (ref, angulo, valor) VALUES (?, ?, ?)",
+            [(1, "90", 3.5)], "fisico1", ref="1/90", accion="guardar")
+        accion = con.execute("SELECT accion FROM audit_log").fetchone()
+        assert accion == ("guardar",)
+        con.commit()
+
+
 class TestLastrowid:
     """Hallazgo real (24-08, al preparar EB2b): `sqlite3.Cursor.executemany`
     NO actualiza `cursor.lastrowid` (queda en `None` incluso con una sola
