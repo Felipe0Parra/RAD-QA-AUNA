@@ -726,6 +726,83 @@ def _contiene_linea_en_lista(cuerpo, lineno):
     return any(_contiene_linea(s, lineno) for s in cuerpo)
 
 
+@dataclass(frozen=True)
+class EscrituraPeligrosa:
+    """EB5 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB5): contraparte de
+    `SinFiltro` para el lado de ESCRITURA -- un `DELETE FROM` o un `UPDATE
+    ... SET <columna de datos>` (no solo `activo`) sobre una tabla del
+    bloque de QC. Es el patrón G1/G2 (mutar/borrar el bloque vigente en vez
+    de anular e insertar) que toda la Fase 5 existe para eliminar."""
+    tabla: str
+    motivo: str  # "DELETE" | "UPDATE de columnas de datos"
+
+
+_RE_TABLA_O_DYN = r'"?(\{DYN\}|[^\W\d]\w*)"?'
+_RE_DELETE_TABLA = re.compile(
+    r'\bDELETE\s+FROM\s+' + _RE_TABLA_O_DYN, re.IGNORECASE)
+_RE_UPDATE_TABLA_SET = re.compile(
+    r'\bUPDATE\s+' + _RE_TABLA_O_DYN + r'\s+SET\s+(.*?)(?:\bWHERE\b|$)',
+    re.IGNORECASE | re.DOTALL)
+_RE_SOLO_ACTIVO = re.compile(r'^"?activo"?\s*=\s*[01]$', re.IGNORECASE)
+
+
+def _dividir_nivel_superior(texto, separador=","):
+    """Divide `texto` por `separador` SOLO fuera de paréntesis -- una
+    columna calculada con una función (`strftime('%Y-%m', created_at)`)
+    tiene una coma que no separa dos columnas del SET."""
+    partes = []
+    profundidad = 0
+    actual = []
+    for ch in texto:
+        if ch == "(":
+            profundidad += 1
+        elif ch == ")":
+            profundidad -= 1
+        if ch == separador and profundidad == 0:
+            partes.append("".join(actual))
+            actual = []
+        else:
+            actual.append(ch)
+    partes.append("".join(actual))
+    return partes
+
+
+def analizar_escritura(sql, tablas_versionadas=None):
+    """Punto de entrada para EB5, hermano de `analizar()` (lectura). `sql`:
+    texto ya formado, igual que `analizar()` -- un literal reconstruido del
+    AST (con el marcador `{DYN}` donde el nombre de tabla no se pudo
+    resolver estáticamente) o una cadena ya resuelta en runtime.
+
+    No intenta clasificar "legítimo" vs "no" -- ninguna heurística sobre el
+    WHERE distingue con garantías la edición directa de una celda (A3,
+    DA-05/DA-07/DA-08: mecanismo de corrección deliberado, permanente,
+    auditado) del patrón G1/G2 (mutar el bloque vigente en cada guardado).
+    Igual que ES1 del lado de lectura: se limita a CENSAR todo sitio que
+    escriba una columna de datos (cualquiera que no sea `activo`) o borre
+    físicamente una tabla del bloque de QC, y el llamador (el test) exige
+    que el censo entero encaje con una lista revisada a mano -- un sitio
+    nuevo, no revisado, pone el test en rojo."""
+    if tablas_versionadas is None:
+        tablas_versionadas = tablas_del_bloque_qc()
+    hallazgos = []
+
+    for m in _RE_DELETE_TABLA.finditer(sql):
+        tabla = m.group(1)
+        if tabla == "{DYN}" or tabla in tablas_versionadas:
+            hallazgos.append(EscrituraPeligrosa(tabla, "DELETE"))
+
+    for m in _RE_UPDATE_TABLA_SET.finditer(sql):
+        tabla, set_clause = m.group(1), m.group(2)
+        if not (tabla == "{DYN}" or tabla in tablas_versionadas):
+            continue
+        columnas = [c.strip() for c in _dividir_nivel_superior(set_clause)]
+        if len(columnas) == 1 and _RE_SOLO_ACTIVO.match(columnas[0]):
+            continue  # anulación legítima -- UPDATE ... SET activo = 0/1
+        hallazgos.append(EscrituraPeligrosa(tabla, "UPDATE de columnas de datos"))
+
+    return hallazgos
+
+
 def resolver_argumento_execute(func_node, call_node):
     """Para `call_node` = una llamada `algo.execute(arg0, ...)` cuyo `arg0`
     es un `ast.Name` (no un literal directo), intenta resolver el/los
