@@ -190,13 +190,13 @@ EXCEPCIONES_LITERALES = {
     # LF1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF1): mismo patrón, aplicado a
     # las 30 tablas nuevas -- variable intermedia califica filtro_activo()
     # con el alias del JOIN antes de interpolarse.
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1010):
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1021):
         "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
         "del LEFT JOIN (variable `filtro_p`) en consultar_pruebas_disponibles",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1373):
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1384):
         "valores_ct -- filtro_activo('valores_ct') se califica con el alias "
         "'vc.' del JOIN (variable `filtro_vc`) en reconstruir_valores_ct",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1464):
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1475):
         "uniformidad_ruido -- filtro_activo('uniformidad_ruido') se califica "
         "con el alias 'ur.' del JOIN (variable `filtro_ur`) en "
         "reconstruir_uniformidad",
@@ -289,7 +289,8 @@ SITIOS_OPACOS_PERMITIDOS = {
     # el cuerpo de la función, el resolver de AN1 lo trata como texto vacío
     # -- no aparece en el censo de opacos (verificado, no es un hueco: el
     # INSERT lo arma cada llamador con columnas explícitas, MI0).
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 875): "INSERT (linealidad_ct)",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 665): "anular_datos_especificos (EB2c) -- `sql_anular_bloque(tabla, [\"id_prueba\"])` compone el UPDATE con el AND de vigencia ya incluido; es la ESCRITURA que anula las hijas del `id_prueba` ANTERIOR, no una lectura",
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 886): "INSERT (linealidad_ct)",
     ("data/ManejoDatos/conection.py", 534): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",
     ("data/ManejoDatos/conection.py", 1954): "INSERT (users, no está en TABLAS_ANULABLES)",
     ("data/ManejoDatos/load.py", 182): "INSERT (diarias -- tabla dinámica; un INSERT nunca elige entre filas existentes)",

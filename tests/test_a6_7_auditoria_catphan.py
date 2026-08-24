@@ -2,7 +2,7 @@
 `audit_log`. De las 9 funciones de `catphan_db.py`,
 `guardar_prueba_completa_catphan` es el ÚNICO punto de entrada real (los 2
 llamadores de `tac_mensual.py` no escriben directo, solo la llaman); las
-otras 8 (`eliminar_datos_especificos` + 7 `guardar_<categoria>`) se llaman
+otras 8 (`anular_datos_especificos` + 7 `guardar_<categoria>`) se llaman
 EXCLUSIVAMENTE desde dentro de ella -- 1 fila de auditoría para toda la
 acción, sin importar cuántas categorías se guarden en el mismo click.
 """

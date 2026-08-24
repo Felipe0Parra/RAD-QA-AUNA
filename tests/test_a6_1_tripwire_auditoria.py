@@ -341,11 +341,12 @@ ALLOWLIST = {
     # --- A6.7 (TAC / Catphan) cerrada 2026-08-04: guardar_prueba_completa_
     # catphan es el ÚNICO punto de entrada real de las 9 (los 2 llamadores
     # de tac_mensual.py no escriben directo -- solo llaman a esta función),
-    # y ahora audita directamente. Las otras 8 -- eliminar_datos_
-    # especificos y los 7 guardar_<categoria> -- se llaman EXCLUSIVAMENTE
-    # desde dentro de ella (verificado, cero otros call-sites), así que son
-    # detalle de la misma acción.
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "eliminar_datos_especificos"):
+    # y ahora audita directamente. Las otras 8 -- anular_datos_
+    # especificos (EB2c, 24-08: renombrada de eliminar_datos_especificos --
+    # anula en vez de borrar) y los 7 guardar_<categoria> -- se llaman
+    # EXCLUSIVAMENTE desde dentro de ella (verificado, cero otros
+    # call-sites), así que son detalle de la misma acción.
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", "anular_datos_especificos"):
         "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", "guardar_espesor_corte"):
         "detalle-de:data/ManejoDatos/catphan_TAC/catphan_db.py::guardar_prueba_completa_catphan",

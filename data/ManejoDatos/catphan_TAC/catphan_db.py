@@ -13,7 +13,7 @@ from data.ManejoDatos.conection import Conexion
 from .leer_dicom import DicomVolume
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
-from services.anulacion import filtro_activo
+from services.anulacion import filtro_activo, reemplazar_bloque, sql_anular_bloque
 
 # ------------------------------------ FUNCIONES PARA MOSTRAR IMÁGENES ------------------------------------
 
@@ -538,51 +538,57 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             ww = info_dicom.get('ww')
             imagen_blob = convertir_corte_dicom_a_blob(ruta_carpeta, indice_corte, wl, ww)
 
+        # A6.7: se calcula aquí (antes vivía junto al registrar() de más
+        # abajo) porque EB2c ya lo necesita dentro del bucle, para pasarlo
+        # a reemplazar_bloque con auditar=False.
+        _nombre_usuario = getattr(user_id, "_nombre", user_id)
+
         for categoria, resultados in resultados_por_categoria.items():
             id_tipo = mapeo_tipos.get(categoria)
             if not id_tipo:
                 continue
-            
+
+            # EB2c (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2c, 24-08): antes,
+            # un `id_prueba` existente se MUTABA en sitio (UPDATE) y sus
+            # hijas se borraban físicamente (`eliminar_datos_especificos`)
+            # -- mismo patrón de EB2b/G1, sobre otra raíz. Ahora `pruebas`
+            # se reemplaza como bloque: la fila anterior (si existía) se
+            # ANULA, la nueva entra con un `id_prueba` NUEVO, y las hijas
+            # del `id_prueba` ANTERIOR se anulan explícitamente (nunca se
+            # borran) antes de insertar las hijas nuevas bajo el id nuevo.
             cursor.execute(f"""
-                SELECT id_prueba FROM pruebas
+                SELECT id_prueba, imagen_path, imagen_resultado FROM pruebas
                 WHERE id_sesion = ? AND id_tipo = ?{filtro_activo('pruebas')}
             """, (id_sesion, id_tipo))
-
             entrada_existente = cursor.fetchone()
 
             if entrada_existente:
-                id_prueba = entrada_existente[0]
-                if imagen_blob:
-                    cursor.execute(f"""
-                        UPDATE pruebas
-                        SET kv = ?, ma = ?, espesor_corte = ?, imagen_path = ?, equipo = ?
-                        WHERE id_prueba = ?{filtro_activo('pruebas')}
-                    """, (kv, ma, espesor_corte, imagen_blob, equipo, id_prueba))
-                else:
-                    cursor.execute(f"""
-                        UPDATE pruebas
-                        SET kv = ?, ma = ?, espesor_corte = ?, equipo = ?
-                        WHERE id_prueba = ?{filtro_activo('pruebas')}
-                    """, (kv, ma, espesor_corte, equipo, id_prueba))
-                
-                eliminar_datos_especificos(cursor, categoria, id_prueba)
-                
+                id_prueba_anterior, imagen_path_anterior, imagen_resultado_anterior = entrada_existente
             else:
-                if imagen_blob:
-                    cursor.execute("""
-                        INSERT INTO pruebas
-                        (id_sesion, id_tipo, kv, ma, espesor_corte, created_at, imagen_path, imagen_resultado, equipo)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (id_sesion, id_tipo, kv, ma, espesor_corte, fecha, imagen_blob, output_blob, equipo))
-                else:
-                    cursor.execute("""
-                        INSERT INTO pruebas
-                        (id_sesion, id_tipo, kv, ma, espesor_corte, created_at, equipo)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (id_sesion, id_tipo, kv, ma, espesor_corte, fecha, equipo))
-                
-                id_prueba = cursor.lastrowid
-            
+                id_prueba_anterior = imagen_path_anterior = imagen_resultado_anterior = None
+
+            # Mismo criterio que el UPDATE/INSERT original: una imagen
+            # nueva reemplaza a la anterior; sin imagen nueva, se conserva
+            # la que ya hubiera (si la había).
+            imagen_path_usar = imagen_blob if imagen_blob else imagen_path_anterior
+            imagen_resultado_usar = output_blob if imagen_blob else imagen_resultado_anterior
+
+            reemplazar_bloque(
+                cursor, "pruebas", [("id_sesion", id_sesion), ("id_tipo", id_tipo)],
+                """
+                    INSERT INTO pruebas
+                    (id_sesion, id_tipo, kv, ma, espesor_corte, created_at,
+                     imagen_path, imagen_resultado, equipo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [(id_sesion, id_tipo, kv, ma, espesor_corte, fecha,
+                  imagen_path_usar, imagen_resultado_usar, equipo)],
+                _nombre_usuario, auditar=False)
+            id_prueba = cursor.lastrowid
+
+            if id_prueba_anterior is not None:
+                anular_datos_especificos(cursor, categoria, id_prueba_anterior)
+
             if categoria == "espesor":
                 guardar_espesor_corte(cursor, id_prueba, resultados, espesor_corte)
             elif categoria == "tamano_pixel":
@@ -606,11 +612,13 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
         # llamadores de tac_mensual.py no escriben directo) -- un solo
         # guardado puede tocar varias categorías (espesor, tamaño de
         # píxel, resolución...) en un bucle; 1 fila de auditoría para la
-        # acción completa, no una por categoría ni por tabla. `user_id`
-        # llega como el objeto de identidad (self.user_id), no como
-        # string -- mismo patrón que _usuario_actual, resuelto en línea
-        # porque esta función no recibe `self`.
-        _nombre_usuario = getattr(user_id, "_nombre", user_id)
+        # acción completa, no una por categoría ni por tabla (las llamadas
+        # a `reemplazar_bloque` de dentro del bucle usan `auditar=False`
+        # por eso). `_nombre_usuario` ya se calculó arriba, antes del
+        # bucle. Corre DESPUÉS de `conn.commit()`: la transacción ya cerró,
+        # así que abrir su propia conexión aquí (sin `con=`) no compite por
+        # ningún lock (EB0 no aplica -- no hay transacción abierta que
+        # compartir).
         _registrar_auditoria(_nombre_usuario, ACCION_GUARDAR, "pruebas", ref=id_sesion,
                              detalle=f"CatPhan: {', '.join(resultados_por_categoria)}")
 
@@ -627,31 +635,34 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
         if conn:
             conn.close()
 
-def eliminar_datos_especificos(cursor, categoria, id_prueba):
+_TABLAS_HIJAS_POR_CATEGORIA = {
+    "espesor": ("espesor_corte",),
+    "tamano_pixel": ("tamaño_pixel",),
+    "resolucion_contraste": ("resolucion_contraste", "resolucion_contraste_rois"),
+    "resolucion_espacial": ("resolucion_espacial", "resolucion_espacial_regiones"),
+    "valores_ct": ("valores_ct",),
+    "linealidad_ct": ("linealidad_ct",),
+    "uniformidad": ("uniformidad_ruido", "uniformidad_global"),
+}
+
+
+def anular_datos_especificos(cursor, categoria, id_prueba):
+    """EB2c (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2c, 24-08, cierra G6):
+    anula (activo=0) las filas hijas del `id_prueba` ANTERIOR -- nunca las
+    borra. Reemplaza a la antigua `eliminar_datos_especificos` (`DELETE`
+    físico) ahora que `pruebas` reemplaza su bloque con un `id_prueba`
+    NUEVO en cada reguardado (EB1): las hijas del id viejo quedarían
+    huérfanas-pero-activas para siempre si no se anulan explícitamente.
+
+    Sin `try/except`, a propósito: la versión anterior se tragaba
+    cualquier fallo con un `print` -- G6 (auditoría del 24-08) señaló que
+    eso convertía un fallo real en una duplicación SILENCIOSA. Un fallo
+    aquí debe propagar hasta el `except`/`rollback` de
+    `guardar_prueba_completa_catphan`, que ya revierte la transacción
+    entera.
     """
-    Elimina datos específicos antes de actualizar para evitar duplicados.
-    """
-    try:
-        if categoria == "espesor":
-            cursor.execute("DELETE FROM espesor_corte WHERE id_prueba = ?", (id_prueba,))
-        elif categoria == "tamano_pixel":
-            cursor.execute("DELETE FROM tamaño_pixel WHERE id_prueba = ?", (id_prueba,))
-        elif categoria == "resolucion_contraste":
-            cursor.execute("DELETE FROM resolucion_contraste WHERE id_prueba = ?", (id_prueba,))
-            cursor.execute("DELETE FROM resolucion_contraste_rois WHERE id_prueba = ?", (id_prueba,))
-        elif categoria == "resolucion_espacial":
-            cursor.execute("DELETE FROM resolucion_espacial WHERE id_prueba = ?", (id_prueba,))
-            cursor.execute("DELETE FROM resolucion_espacial_regiones WHERE id_prueba = ?", (id_prueba,))
-        elif categoria == "valores_ct":
-            cursor.execute("DELETE FROM valores_ct WHERE id_prueba = ?", (id_prueba,))
-        elif categoria == "linealidad_ct":
-            cursor.execute("DELETE FROM linealidad_ct WHERE id_prueba = ?", (id_prueba,))
-        elif categoria == "uniformidad":
-            cursor.execute("DELETE FROM uniformidad_ruido WHERE id_prueba = ?", (id_prueba,))
-            cursor.execute("DELETE FROM uniformidad_global WHERE id_prueba = ?", (id_prueba,))
-        #print(f"  🗑️  Datos anteriores de {categoria} eliminados para actualización")
-    except Exception as e:
-        print(f"⚠️  Error al eliminar datos anteriores de {categoria}: {e}")
+    for tabla in _TABLAS_HIJAS_POR_CATEGORIA.get(categoria, ()):
+        cursor.execute(sql_anular_bloque(tabla, ["id_prueba"]), (id_prueba,))
 
 # Funciones específicas de guardado (solo campos existentes):
 
