@@ -34,8 +34,20 @@ plan: `analisis_placa_verificaciones` (4 filas a anular),
 el índice UNIQUE de `MI3` no podría crearse si quedara un duplicado sin
 sanear, así que su creación exitosa vuelve a ser la prueba de que este
 saneamiento funcionó (mismo criterio que ya vale para las 8 originales).
+
+MI3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI3) añade las 4 diarias, con **33
+fechas duplicadas reales** medidas en §2.8 del plan (`aceleradorlineal_ix`
+30, `aceleradorlineal_600` 2, `braqui` 1 -- residuo anterior a la guarda de
+reemplazo, mismo ID de usuario con dos IDs distintos). Su clave es la
+EXPRESIÓN `DATE(date)` (normaliza la columna `date` TEXT), no una columna
+-- `_columna_referenciada()` (scripts/indices_bloque_qc.py, la misma
+función que usa `crear_indices()` para no duplicar el criterio) reconoce
+la forma `FUNC(columna)` y evita entrecomillarla como identificador al
+construir el `SELECT`.
 """
 import sqlite3
+
+from scripts.indices_bloque_qc import _columna_referenciada
 
 CLAVES_NATURALES = {
     "control_cunas": ("ref", "angulo"),
@@ -52,13 +64,19 @@ CLAVES_NATURALES = {
     "analisis_placa_correcciones": ("ref", "vertice"),
     "indicadores_brazo": ("ref", "nivel"),
     "indicadores_angulares_colimador": ("ref", "nivel"),
+    # MI3: las 4 diarias, clave por expresión (ver docstring del módulo).
+    "aceleradorlineal_600": ("DATE(date)",),
+    "aceleradorlineal_ix": ("DATE(date)",),
+    "halcyon": ("DATE(date)",),
+    "braqui": ("DATE(date)",),
 }
 
 
 def _grupos_duplicados(con, tabla, clave):
     """Grupos de filas ACTIVAS que comparten la misma clave natural, con
     más de una fila -- devuelve [(valores_clave, [rowids ordenados asc])]."""
-    columnas = ", ".join(f'"{c}"' for c in clave)
+    columnas = ", ".join(
+        c if _columna_referenciada(c) else f'"{c}"' for c in clave)
     filas = con.execute(f"""
         SELECT rowid, {columnas} FROM "{tabla}"
         WHERE activo IS NULL OR activo = 1
@@ -82,7 +100,11 @@ def sanear_tabla(con, tabla, usuario=None, ruta_db=None, dry_run=False):
     for valores_clave, rowids in _grupos_duplicados(con, tabla, clave):
         rowid_ganador = max(rowids)
         clave_legible = dict(zip(clave, valores_clave))
+        # MI3: las diarias no tienen "ref" -- su única columna de clave
+        # (la fecha normalizada) es igual de trazable para la auditoría.
         ref = clave_legible.get("ref")
+        if ref is None and len(clave_legible) == 1:
+            ref = str(next(iter(clave_legible.values())))
         for rowid in rowids:
             if rowid == rowid_ganador:
                 continue

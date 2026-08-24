@@ -92,9 +92,9 @@ def test_sanear_bloque_qc_deja_la_verificacion_limpia(bd_temporal):
 
 def test_cubre_las_8_tablas_de_h2():
     """No una muestra -- las 8 tablas originales donde el hallazgo H2 (§2.3
-    del plan del 13-08) encontró claves duplicadas, más las 4 que MI2
-    (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI2) añadió con los duplicados
-    reales medidos en §2.8 de ese plan."""
+    del plan del 13-08) encontró claves duplicadas, más las 4 que MI2 y las
+    4 diarias que MI3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI2/§6-MI3)
+    añadieron con los duplicados reales medidos en §2.8 de ese plan."""
     assert set(CLAVES_NATURALES) == {
         "control_cunas", "control_conos", "equipos_medicion",
         "analisis_placa_franjas", "tamano_campo",
@@ -102,4 +102,5 @@ def test_cubre_las_8_tablas_de_h2():
         "HC_indicadores_laser",
         "analisis_placa_verificaciones", "analisis_placa_correcciones",
         "indicadores_brazo", "indicadores_angulares_colimador",
+        "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui",
     }

@@ -52,21 +52,21 @@ def _indices_reales(ruta):
 
 
 # MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1) movió las 30 tablas
-# PENDIENTE-LF a TABLAS_ANULABLES y les dio `activo` -- las 52 tablas de
-# CLAVES_INDICE (IV3) ya tienen columna `activo` desde el arranque. Sobre
-# una BD temporal recién creada (sin datos, sin duplicados) las 52 deben
-# crearse de verdad; MI2 (saneamiento de duplicados reales) es lo que hace
-# falta antes de crear estos índices sobre una BD CON datos históricos.
+# PENDIENTE-LF a TABLAS_ANULABLES y les dio `activo` -- 52 de las 56 tablas
+# de CLAVES_INDICE (IV3+MI3) ya tienen columna `activo` desde el arranque.
+# Sobre una BD temporal recién creada (sin datos, sin duplicados) las 56
+# deben crearse de verdad; MI2 (saneamiento de duplicados reales) es lo que
+# hace falta antes de crear estos índices sobre una BD CON datos históricos.
 
 
-def test_crea_los_52_tras_mi1(bd_temporal):
+def test_crea_los_56_tras_mi1_mi3(bd_temporal):
     resultado = crear_indices(bd_temporal)
 
-    assert len(resultado) == 52
+    assert len(resultado) == 56
     for tabla, r in resultado.items():
         assert r == "creado", (
-            f"{tabla}: se esperaba 'creado' -- tras MI1 las 52 tablas de "
-            f"CLAVES_INDICE ya tienen 'activo' y no hay datos en esta BD "
+            f"{tabla}: se esperaba 'creado' -- tras MI1/MI3 las 56 tablas "
+            f"de CLAVES_INDICE ya tienen 'activo' y no hay datos en esta BD "
             f"que produzcan duplicados; dio: {r}")
 
     nombres_reales = _indices_reales(bd_temporal)
@@ -168,7 +168,6 @@ def test_claves_coinciden_con_las_del_plan_para_las_8_de_h2():
         assert CLAVES_INDICE[tabla] == clave
 
     # IV3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV3): 22 originales (21 hijas +
-    # preguntas) + 30 nuevas del bloque de QC (§2.8 del plan). Las 4 diarias
-    # (clave por expresión DATE(date)) las añade MI3, no IV3 -- ver docstring
-    # del módulo.
-    assert len(CLAVES_INDICE) == 52
+    # preguntas) + 30 nuevas del bloque de QC (§2.8 del plan) = 52. MI3
+    # (§6-MI3) añadió las 4 diarias (clave por expresión DATE(date)) = 56.
+    assert len(CLAVES_INDICE) == 56

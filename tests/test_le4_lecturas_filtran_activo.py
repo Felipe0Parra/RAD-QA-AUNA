@@ -134,7 +134,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("scripts/observador_contrato.py", 154): "censo (OB1, censo.total -- cuenta TODAS las filas a propósito)",
     ("scripts/observador_contrato.py", 158): "censo (OB1, censo.activas -- calcula su propio filtro, no importa filtro_activo para no arrastrar PyQt5)",
     ("scripts/observador_contrato.py", 167): "censo (OB1, vigente -- mismo motivo)",
-    ("scripts/saneamiento_bloque_qc.py", 62): "SA1/SA2 -- ya filtra 'activo' a mano en el WHERE (visible en el propio texto), no importa filtro_activo() para no arrastrar PyQt5 en un script que solo usa sqlite3",
+    ("scripts/saneamiento_bloque_qc.py", 80): "SA1/SA2 -- ya filtra 'activo' a mano en el WHERE (visible en el propio texto), no importa filtro_activo() para no arrastrar PyQt5 en un script que solo usa sqlite3",
     # LR4 (DA-48): los 8 `UPDATE {DYN}` que el detector no miraba hasta
     # ahora (ver PATRON_UPDATE_DINAMICO). Ninguno es una lectura de lista:
     # seis ESCRIBEN la anulación (poner `activo = 0` no puede filtrar por
@@ -145,7 +145,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("data/ManejoDatos/load.py", 691): "subirlineasmensuales -- anula el bloque vigente de ese `ref`; ya filtra 'activo' a mano en el propio texto",
     ("data/ManejoDatos/load.py", 720): "subirlineasmensuales, rama FUERA del bloque de QC (`preguntas` antes de PR1 y las tablas sin columna `activo`): UPDATE parcial por `ref`, contrato original",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 283): "subirlineasmensuales_ix -- anula el bloque vigente de (ref, energia); ya filtra 'activo' a mano en el propio texto",
-    ("scripts/saneamiento_bloque_qc.py", 94): "SA2 -- anula por `rowid` las filas duplicadas que perdieron el desempate: identidad física, una fila nombrada",
+    ("scripts/saneamiento_bloque_qc.py", 116): "SA2 -- anula por `rowid` las filas duplicadas que perdieron el desempate: identidad física, una fila nombrada",
     ("ui/paginasControles/PruebasDiarias/PruebasDiarias.py", 826): "edición directa de UNA celda ya identificada (`WHERE id = ?`) -- identidad, no filtra (DA-47)",
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 54): "censo/migración (normalizar_fechas_db): reescribe el FORMATO de `fecha` (DD-MM-YYYY -> YYYY-MM-DD) en las 6 tablas de braquiterapia. Tiene que alcanzar TAMBIÉN a las filas anuladas: una fila anulada con la fecha en el formato viejo la conserva para siempre, y es justo lo que obliga a `braq_mensual.py:1257` a consultar en los dos formatos (DP-32). Declarado también en la lista censal de RT1, que fue quien lo vio",
 }

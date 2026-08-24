@@ -7,13 +7,15 @@ prueba el mecanismo de creación): esto es el guardián de que una migración
 futura no los pierda ni los recree con otra clave en silencio.
 
 IV3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV3, 19-08): `CLAVES_INDICE` amplió
-de 22 a 52 entradas -- las 30 nuevas están DECLARADAS (para que IV2 no tenga
-huecos) pero sus tablas todavía no están en `TABLAS_ANULABLES` (eso es MI1,
-Fase 4, después de LF -- ver §4.4 del plan). Sobre una BD nueva esas 30
-tienen `CREATE TABLE` real pero SIN columna `activo` todavía, así que
-`crear_indices()` las salta con motivo explícito (mismo comportamiento que
-`test_cl1` ya verifica). Este archivo distingue "las 22 originales, con
-índice real" de "las 30 nuevas, declaradas y pendientes" en cada test.
+de 22 a 52 entradas -- las 30 nuevas quedaron DECLARADAS (para que IV2 no
+tuviera huecos) antes de que sus tablas entraran a `TABLAS_ANULABLES`
+(MI1, Fase 4, 24-08). MI3 (misma fase) añadió las 4 diarias (56 en total),
+con clave por EXPRESIÓN (`DATE(date)`) en vez de columna.
+
+MI1/MI3 ya ocurrieron: `_ORIGINALES_CON_INDICE_REAL`/`_NUEVAS_PENDIENTES_DE_MI1`
+(más abajo) se siguen calculando en vivo contra `TABLAS_ANULABLES` -- hoy
+la segunda da vacía (las 56 tienen índice real), pero el cálculo en vivo
+es lo que hace que este archivo no necesite reescribirse si algo cambiara.
 """
 import os
 import re
@@ -108,6 +110,12 @@ CLAVES_ESPERADAS_DEL_PLAN = {
     "angulo_starshot": ("ref", "spoke_index"),
     "uniformidad_angular_starshot": ("ref", "gap_index"),
     "angulos_entre_lineas_starshot": ("ref", "par_index"),
+    # MI3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI3): las 4 diarias, clave
+    # por expresión (normaliza la columna `date` TEXT).
+    "aceleradorlineal_600": ("DATE(date)",),
+    "aceleradorlineal_ix": ("DATE(date)",),
+    "halcyon": ("DATE(date)",),
+    "braqui": ("DATE(date)",),
 }
 
 # Tablas del bloque de QC que YA estaban en TABLAS_ANULABLES antes de IV1
@@ -130,6 +138,26 @@ def _sql_de(ruta, indice):
     return fila[0] if fila else None
 
 
+def _columnas_del_indice(sql):
+    """Extrae el contenido entre paréntesis EQUILIBRADOS que sigue al
+    nombre de tabla en `ON "tabla" (...)`. Una regex ingenua
+    (`\\(([^)]*)\\)`) se detiene en el primer paréntesis de CIERRE que
+    encuentra -- correcto mientras la clave sea una lista de columnas
+    simples, pero se rompe con la clave de expresión de las 4 diarias
+    (MI3, `DATE(date)`): el primer `)` que aparece es el que cierra la
+    llamada a `DATE(...)`, no el de la lista de columnas del índice."""
+    inicio = sql.index("(")
+    profundidad = 0
+    for i in range(inicio, len(sql)):
+        if sql[i] == "(":
+            profundidad += 1
+        elif sql[i] == ")":
+            profundidad -= 1
+            if profundidad == 0:
+                return sql[inicio + 1:i]
+    raise ValueError(f"paréntesis sin cerrar en: {sql}")
+
+
 def test_las_22_tablas_tienen_su_indice_con_las_columnas_declaradas(bd_con_indices):
     faltantes = []
     con_columnas_distintas = []
@@ -139,8 +167,7 @@ def test_las_22_tablas_tienen_su_indice_con_las_columnas_declaradas(bd_con_indic
         if sql is None:
             faltantes.append(tabla)
             continue
-        # Columnas dentro del primer paréntesis: `ON "tabla" (a, b, c) WHERE ...`
-        columnas_sql = re.search(r"\(([^)]*)\)", sql).group(1)
+        columnas_sql = _columnas_del_indice(sql)
         columnas_reales = tuple(c.strip().strip('"') for c in columnas_sql.split(","))
         if columnas_reales != clave:
             con_columnas_distintas.append((tabla, clave, columnas_reales))

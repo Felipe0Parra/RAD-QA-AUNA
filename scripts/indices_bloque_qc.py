@@ -28,6 +28,7 @@ Claves (§2.3 del plan) -- las 8 primeras coinciden con
 `saneamiento_bloque_qc.py::CLAVES_NATURALES` (mismo concepto de clave
 natural; dos módulos con responsabilidad distinta -- uno resuelve
 duplicados, este los declara en el esquema)."""
+import re
 import sqlite3
 
 CLAVES_INDICE = {
@@ -100,7 +101,32 @@ CLAVES_INDICE = {
     # (DA-45) -- su clave anterior (una medida y una constante derivada) no
     # discriminaba filas.
     "angulos_entre_lineas_starshot": ("ref", "par_index"),
+
+    # MI3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI3): las 4 diarias. Su clave
+    # es una EXPRESIÓN (`DATE(date)`, normaliza la columna `date` TEXT antes
+    # de comparar), no una columna -- por eso IV3 las dejó fuera y quedaron
+    # para aquí. `crear_indices()` reconoce la forma `FUNC(columna)` con
+    # `_columna_referenciada()`: valida la columna real que hay dentro, y
+    # NO la entrecomilla como identificador al construir el índice (SQLite
+    # soporta índices sobre expresiones desde 3.9.0).
+    "aceleradorlineal_600": ("DATE(date)",),
+    "aceleradorlineal_ix": ("DATE(date)",),
+    "halcyon": ("DATE(date)",),
+    "braqui": ("DATE(date)",),
 }
+
+_RE_EXPRESION_CLAVE = re.compile(r'^(\w+)\((\w+)\)$')
+
+
+def _columna_referenciada(elemento_clave):
+    """Si `elemento_clave` es una expresión `FUNC(columna)` (p.ej.
+    `DATE(date)`, la clave de las 4 diarias -- MI3), devuelve el nombre de
+    la columna real que referencia -- lo que hay que buscar en
+    `PRAGMA table_info`, no el texto de la expresión. `None` si
+    `elemento_clave` ya es un nombre de columna literal (el caso común,
+    las otras 52 tablas de CLAVES_INDICE)."""
+    m = _RE_EXPRESION_CLAVE.match(elemento_clave)
+    return m.group(2) if m else None
 
 
 def nombre_indice(tabla):
@@ -128,7 +154,15 @@ def crear_indices(ruta_db):
     capturar `OperationalError` dejaba que la excepción real se propagara
     sin capturar y abortara la migración entera. Descubierto al ejecutar
     MI1 sobre una copia de BD real con los duplicados que §2.8 del plan
-    documentó."""
+    documentó.
+
+    MI3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI3): la clave de las 4 diarias
+    es una expresión (`DATE(date)`), no una columna -- `_columna_referenciada()`
+    la reconoce y valida la columna REAL que hay dentro (`date`), y el SQL
+    del índice usa la expresión tal cual, sin entrecomillarla como
+    identificador (`CREATE UNIQUE INDEX ... ON tabla (DATE(date))` es un
+    índice de expresión válido en SQLite, no una columna llamada
+    "DATE(date)")."""
     con = sqlite3.connect(ruta_db)
     resultado = {}
     try:
@@ -140,8 +174,9 @@ def crear_indices(ruta_db):
             if "activo" not in columnas_reales:
                 resultado[tabla] = "NO CREADO -- la tabla aún no tiene columna activo"
                 continue
-            if not all(c in columnas_reales for c in clave):
-                faltantes = [c for c in clave if c not in columnas_reales]
+            columnas_necesarias = [_columna_referenciada(c) or c for c in clave]
+            if not all(c in columnas_reales for c in columnas_necesarias):
+                faltantes = [c for c in columnas_necesarias if c not in columnas_reales]
                 resultado[tabla] = f"NO CREADO -- faltan columnas de la clave: {faltantes}"
                 continue
 
@@ -149,7 +184,8 @@ def crear_indices(ruta_db):
             ya_existia = bool(con.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?",
                 (nombre,)).fetchone())
-            columnas_sql = ", ".join(f'"{c}"' for c in clave)
+            columnas_sql = ", ".join(
+                c if _columna_referenciada(c) else f'"{c}"' for c in clave)
             try:
                 con.execute(
                     f'CREATE UNIQUE INDEX IF NOT EXISTS "{nombre}" '

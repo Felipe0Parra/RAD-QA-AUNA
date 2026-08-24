@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import QApplication
 
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
+from scripts.indices_bloque_qc import _columna_referenciada
 from scripts.saneamiento_bloque_qc import sanear_bloque_qc, sanear_tabla, CLAVES_NATURALES
 
 
@@ -86,12 +87,16 @@ def _audit_log(ruta):
 
 
 def test_todas_las_claves_naturales_tienen_su_tabla_real(bd_temporal):
+    """MI3: las 4 diarias tienen clave por expresión (`DATE(date)`) --
+    `_columna_referenciada` extrae la columna real (`date`) para validarla,
+    en vez de buscar una columna llamada literalmente "DATE(date)"."""
     con = sqlite3.connect(bd_temporal)
     for tabla, clave in CLAVES_NATURALES.items():
         columnas = {f[1] for f in con.execute(f'PRAGMA table_info("{tabla}")')}
         assert "activo" in columnas, f"{tabla} sin columna activo"
         for col in clave:
-            assert col in columnas, f"{tabla}.{col} no existe"
+            col_real = _columna_referenciada(col) or col
+            assert col_real in columnas, f"{tabla}.{col_real} no existe"
     con.close()
 
 
