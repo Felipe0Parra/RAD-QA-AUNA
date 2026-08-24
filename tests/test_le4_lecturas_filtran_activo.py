@@ -309,7 +309,7 @@ SITIOS_OPACOS_PERMITIDOS = {
     # reasigna en varias ramas de `guardarEdicion` (misma función que la
     # entrada anterior), irresoluble a propósito por diseño de AN1.
     ("data/ManejoDatos/load.py", 4281): "UPDATE ResultadosActividad -- ya filtra con filtro_activo('ResultadosActividad'); opaca a AN1 por reasignación de `sql` en varias ramas de guardarEdicion, no por falta de filtro",
-    ("data/ManejoDatos/load.py", 4617): "DELETE por id_where -- rama de eliminarRegistro para tablas FUERA de TABLAS_ANULABLES (las anulables van por anular_fila, no llegan aquí)",
+    ("data/ManejoDatos/load.py", 4617): "DELETE por id_where -- rama else de eliminarRegistro, alcanzable SOLO para tablas fuera del cierre transitivo de QC (catálogos genéricos: equipos, tipos_prueba...). EB3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB3, 24-08): la rama `if` (anular_fila) ya cubre las 59 tablas de TABLAS_ANULABLES desde MI1 -- IV2 garantiza que ninguna descendiente de QC queda fuera de esa lista o de EXCEPCIONES_INVENTARIO, y TestTripwireDeAlcance (test_e7_soft_delete_bloque_qc.py) verifica que ningún llamador real nombra una tabla de QC que no esté en la lista blanca. Ver test_eb3_eliminarregistro_delete_inalcanzable.py",
     ("data/ManejoDatos/obtenerDatosHalcyon.py", 397): "INSERT (halcyon -- un INSERT nunca necesita filtro)",
     ("services/dosis_service.py", 281): "DDL (CREATE TABLE calculadora_dosimetrica, no está en TABLAS_ANULABLES -- tiene su propia columna `vigente`, mecanismo de versionado independiente de este contrato)",
     ("services/dosis_service.py", 391): "INSERT (calculadora_dosimetrica, no está en TABLAS_ANULABLES)",
