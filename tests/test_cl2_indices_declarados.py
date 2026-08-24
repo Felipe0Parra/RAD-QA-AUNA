@@ -10,11 +10,12 @@ IV3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV3, 19-08): `CLAVES_INDICE` amplió
 de 22 a 52 entradas -- las 30 nuevas quedaron DECLARADAS (para que IV2 no
 tuviera huecos) antes de que sus tablas entraran a `TABLAS_ANULABLES`
 (MI1, Fase 4, 24-08). MI3 (misma fase) añadió las 4 diarias (56 en total),
-con clave por EXPRESIÓN (`DATE(date)`) en vez de columna.
+con clave por EXPRESIÓN (`DATE(date)`) en vez de columna. EB6 (Fase 5,
+24-08, hallazgo G3) añadió TipoCalibracion = 57.
 
-MI1/MI3 ya ocurrieron: `_ORIGINALES_CON_INDICE_REAL`/`_NUEVAS_PENDIENTES_DE_MI1`
+MI1/MI3/EB6 ya ocurrieron: `_ORIGINALES_CON_INDICE_REAL`/`_NUEVAS_PENDIENTES_DE_MI1`
 (más abajo) se siguen calculando en vivo contra `TABLAS_ANULABLES` -- hoy
-la segunda da vacía (las 56 tienen índice real), pero el cálculo en vivo
+la segunda da vacía (las 57 tienen índice real), pero el cálculo en vivo
 es lo que hace que este archivo no necesite reescribirse si algo cambiara.
 """
 import os
@@ -77,6 +78,9 @@ CLAVES_ESPERADAS_DEL_PLAN = {
     "HC_velocidad_multilaminas_anual": ("ref", "id_energia", "banco"),
     "HC_precision_posicion_multilaminas_anual": ("ref", "id_energia", "medida"),
     "preguntas": ("ref",),
+    # EB6 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB6, hallazgo G3, 24-08):
+    # TipoCalibracion, raíz de QC sin índice hasta hoy.
+    "TipoCalibracion": ("DATE(fecha)", "tipo"),
     # IV3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV3): las 30 tablas nuevas del
     # bloque de QC, § 2.8 del plan. Copiado a mano igual que las 22 de
     # arriba -- es el ancla externa, no debe derivarse de CLAVES_INDICE.

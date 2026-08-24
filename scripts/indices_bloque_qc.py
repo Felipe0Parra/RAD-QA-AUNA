@@ -62,6 +62,28 @@ CLAVES_INDICE = {
     # sabe validar claves por expresión; eso y su ampliación van juntos en
     # MI3 (Fase 4), no aquí (IV3 solo "declara").
     #
+    # EB6 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB6, hallazgo G3 del 24-08):
+    # TipoCalibracion es una de las 7 raíces de QC y hasta aquí no tenía
+    # NINGÚN índice -- daba igual mientras `guardar_resultado_CambioFuente`
+    # la mutaba en sitio (UPDATE ... WHERE id=?), pero EB2b la convierte a
+    # anular+insertar, y sin índice nada impediría dos generaciones
+    # vigentes de la misma calibración. Clave = el propio WHERE con el que
+    # ese guardado ya la busca (load.py:880-884): "la misma calibración" es
+    # la del mismo día y tipo. Ensayada contra las 3 BD de referencia
+    # (24-08): 13-14 filas cada una, CERO grupos con más de una fila por
+    # (DATE(fecha), tipo) -- el índice se crea sin saneamiento previo.
+    "TipoCalibracion": ("DATE(fecha)", "tipo"),
+    # LinealidadBraquiterapia (la otra raíz sin índice, G3) queda FUERA
+    # deliberadamente: medida contra las 3 BD de referencia (24-08) --
+    # solo 3 filas en total, cero duplicados en (user, DATE(fecha)), pero
+    # la muestra es demasiado chica para afirmar que nunca habrá más de
+    # una legítima el mismo día. Más importante: HOY no existe ningún
+    # mecanismo de reemplazo para esta tabla (braquiterapia.py:2669 es un
+    # INSERT liso, sin DELETE ni UPDATE que EB2 deba convertir) -- forzar
+    # un UNIQUE sin un reemplazo real detrás no protege nada observable y
+    # sí podría bloquear en silencio un guardado futuro legítimo. Se
+    # declara aquí como deuda, no como tarea de esta fase.
+    #
     # Rama braquiterapia:
     "CondicionesMedicion": ("ref",),
     "SistemaMedicion": ("ref",),
