@@ -314,6 +314,16 @@ def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
     columnas_clave = [c for c, _ in clave]
     valores_clave = [v for _, v in clave]
     cursor.execute(sql_anular_bloque(tabla, columnas_clave), valores_clave)
-    cursor.executemany(sql_insert, filas)
+    # NO `cursor.executemany(...)`: el módulo `sqlite3` de la librería
+    # estándar NO actualiza `cursor.lastrowid` tras un `executemany` (queda
+    # en `None` incluso con una sola fila -- verificado empíricamente,
+    # 24-08) mientras que un `execute()` normal sí. Varios llamadores
+    # (p.ej. `guardar_resultado_CambioFuente`, EB2b) necesitan el
+    # `lastrowid` de la fila insertada -- el nuevo `id` de la raíz se
+    # vuelve el `ref` de sus tablas hijas. Un bucle de `execute()` deja
+    # `cursor.lastrowid` en el id de la ÚLTIMA fila insertada, igual que un
+    # `executemany` haría si funcionara, sin perder esa capacidad.
+    for fila in filas:
+        cursor.execute(sql_insert, fila)
     _registrar_auditoria(usuario, ACCION_REEMPLAZO, tabla, ref=ref,
                          detalle=detalle, con=cursor.connection)

@@ -184,6 +184,44 @@ class TestReemplazarBloque:
         assert con.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0] == 1
 
 
+class TestLastrowid:
+    """Hallazgo real (24-08, al preparar EB2b): `sqlite3.Cursor.executemany`
+    NO actualiza `cursor.lastrowid` (queda en `None` incluso con una sola
+    fila) -- `reemplazar_bloque` usa un bucle de `execute()` en su lugar
+    precisamente para que esto funcione. Varios llamadores de EB2
+    necesitan el id recién insertado (p.ej. el nuevo `id` de
+    `TipoCalibracion` se vuelve el `ref` de sus 5 tablas hijas)."""
+
+    def test_lastrowid_disponible_tras_una_sola_fila(self, con):
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        reemplazar_bloque(
+            cur, "control_cunas", [("ref", 1), ("angulo", "90")],
+            "INSERT INTO control_cunas (ref, angulo, valor) VALUES (?, ?, ?)",
+            [(1, "90", 3.5)], "fisico1", ref="1/90")
+        assert cur.lastrowid is not None
+        nuevo_id = cur.lastrowid
+        con.commit()
+
+        fila = con.execute(
+            "SELECT id FROM control_cunas WHERE ref=1 AND angulo='90'").fetchone()
+        assert fila == (nuevo_id,)
+
+    def test_lastrowid_es_la_ultima_fila_con_varias(self, con):
+        cur = con.cursor()
+        cur.execute("BEGIN")
+        reemplazar_bloque(
+            cur, "control_cunas", [("ref", 2)],
+            "INSERT INTO control_cunas (ref, angulo, valor) VALUES (?, ?, ?)",
+            [(2, "90", 1.0), (2, "270", 2.0)], "fisico1", ref="2")
+        ultimo_id = cur.lastrowid
+        con.commit()
+
+        fila = con.execute(
+            "SELECT id FROM control_cunas WHERE ref=2 AND angulo='270'").fetchone()
+        assert fila == (ultimo_id,)
+
+
 def test_ambas_tablas_de_prueba_estan_en_el_inventario():
     """Guarda contra un fixture que deje de reflejar el inventario real."""
     assert {"control_cunas", "aceleradorlineal_ix"} <= TABLAS_ANULABLES

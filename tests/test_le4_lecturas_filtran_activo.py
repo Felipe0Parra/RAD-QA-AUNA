@@ -271,10 +271,12 @@ SITIOS_OPACOS_PERMITIDOS = {
     # (ve el SQL ya resuelto sobre la conexión real).
     ("services/anulacion.py", 236): "anular_fila -- `_SQL_ANULAR.format(tabla=tabla, where=id_where)`. Mismo UPDATE de siempre (identidad física, sin filtro de vigencia -- ver el docstring de la función), ahora detrás de un helper compartido con sql_anular_bloque en vez de un f-string inline",
     ("services/anulacion.py", 316): "reemplazar_bloque (EB1) -- `sql_anular_bloque(tabla, columnas_clave)` compone el UPDATE con el AND de vigencia ya incluido (ver su propio docstring); es la ESCRITURA que anula el bloque anterior, no una lectura",
-    # No hace falta entrada para `cursor.executemany(sql_insert, filas)`
-    # (línea siguiente): `sql_insert` es un parámetro sin asignación en el
-    # cuerpo de la función, el resolver de AN1 lo trata como texto vacío --
-    # no aparece en el censo de opacos (verificado, no es un hueco: el
+    # No hace falta entrada para `cursor.execute(sql_insert, fila)` (dentro
+    # del bucle `for fila in filas`, dos líneas más abajo -- reemplaza al
+    # `executemany` original, ver el docstring de `reemplazar_bloque` sobre
+    # `cursor.lastrowid`): `sql_insert` es un parámetro sin asignación en
+    # el cuerpo de la función, el resolver de AN1 lo trata como texto vacío
+    # -- no aparece en el censo de opacos (verificado, no es un hueco: el
     # INSERT lo arma cada llamador con columnas explícitas, MI0).
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 875): "INSERT (linealidad_ct)",
     ("data/ManejoDatos/conection.py", 534): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",
