@@ -20,6 +20,20 @@ sin fallos sobre el resultado -- la prueba de que la resolución es correcta.
 Claves naturales (§2.3 del plan) -- no se derivan del esquema porque la
 clave del bloque no es "toda la fila", es la combinación de columnas que
 identifica el mismo bloque lógico dentro de un control:
+
+MI2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI2, movido aquí desde IV3 por la
+corrección de ejecución de §4.4: antes de que `MI1` exista, `activo` no
+existe en estas tablas y `_grupos_duplicados` rompería con
+`OperationalError: no such column: activo`, sin ningún `try/except` que lo
+contenga -- a diferencia de `crear_indices`, que sí valida la columna antes
+de usarla) añade las 4 tablas con duplicados reales medidos en §2.8 del
+plan: `analisis_placa_verificaciones` (4 filas a anular),
+`analisis_placa_correcciones` (8), `indicadores_brazo` (12),
+`indicadores_angulares_colimador` (6). Mismas claves que
+`scripts/indices_bloque_qc.py::CLAVES_INDICE` declara para estas tablas --
+el índice UNIQUE de `MI3` no podría crearse si quedara un duplicado sin
+sanear, así que su creación exitosa vuelve a ser la prueba de que este
+saneamiento funcionó (mismo criterio que ya vale para las 8 originales).
 """
 import sqlite3
 
@@ -32,6 +46,12 @@ CLAVES_NATURALES = {
     "HC_indicadores_camilla": ("ref", "id_energia", "ubicacion", "desplazamiento"),
     "HC_indicadores_colimador": ("ref", "id_energia", "nivel"),
     "HC_indicadores_laser": ("ref", "id_energia", "ubicacion"),
+    # MI2: las 4 tablas con duplicados reales medidos en §2.8 del plan --
+    # mismas claves que CLAVES_INDICE (scripts/indices_bloque_qc.py).
+    "analisis_placa_verificaciones": ("ref", "tipo"),
+    "analisis_placa_correcciones": ("ref", "vertice"),
+    "indicadores_brazo": ("ref", "nivel"),
+    "indicadores_angulares_colimador": ("ref", "nivel"),
 }
 
 

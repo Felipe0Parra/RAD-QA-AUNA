@@ -168,25 +168,31 @@ class TestEliminarRegistroSoloAnulaControles:
         para esa tabla en concreto). M1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_
         11-08.md) hizo que "control_conos" TAMBIÉN entrara a
         `services.anulacion.TABLAS_ANULABLES` (junto a su vecina
-        "control_cunas") -- este test pasa a usar "HC_fantomas" (hija del
-        mensual de Halcyon, sin botón de borrado propio en la interfaz y
-        deliberadamente fuera de la lista) como el ejemplo de que
-        `eliminarRegistro` conserva el DELETE físico para tablas de detalle
-        que no están en la lista blanca."""
+        "control_cunas"), y MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1)
+        movió "HC_fantomas" (el ejemplo que usaba esta prueba hasta aquí) al
+        frozenset con las otras 29 tablas PENDIENTE-LF -- ya no sirve como
+        ejemplo de "fuera de la lista". Este test pasa a usar
+        "calculadora_dosimetrica": NUNCA fue parte del bloque de QC (no
+        cuelga de ninguna de las 7 raíces por clave foránea, versiona con su
+        propia columna `vigente`, no `activo` -- ver
+        `services/dosis_service.py`), así que es un ejemplo permanente de
+        tabla fuera de la lista blanca, no uno que MI1 pueda volver a
+        mover."""
         con = sqlite3.connect(bd_temporal)
         con.execute(
-            "INSERT INTO HC_fantomas (id, ref, id_energia, modelo1, serie1) "
-            "VALUES (99, 1, 1, 'modelo', 'serie')")
+            "INSERT INTO calculadora_dosimetrica (id, Fecha, Acelerador) "
+            "VALUES (99, '2026-01-01', 'equipo')")
         con.commit()
         con.close()
 
         _no_confirmar_qmessagebox(monkeypatch)
         tabla = _tabla_con_fila(99)
 
-        eliminarRegistro(_DlgFalso(), tabla, "HC_fantomas")
+        eliminarRegistro(_DlgFalso(), tabla, "calculadora_dosimetrica")
 
         con = sqlite3.connect(bd_temporal)
-        n = con.execute("SELECT COUNT(*) FROM HC_fantomas WHERE id = 99").fetchone()[0]
+        n = con.execute(
+            "SELECT COUNT(*) FROM calculadora_dosimetrica WHERE id = 99").fetchone()[0]
         con.close()
         assert n == 0, "las tablas fuera de la lista blanca siguen con DELETE físico"
 

@@ -725,6 +725,16 @@ class Conexion():
             cur = self.con.cursor()
             _asegurar_columna(cur, "pruebas", "mes_control", "TEXT")
             _asegurar_columna(cur, "pruebas", "equipo", "TEXT")
+            # MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1): descubierto al
+            # ejecutar MI1 sobre una BD anterior al módulo TAC/Catphan --
+            # sin `id_tipo`, el índice UNIQUE de CL1 sobre `pruebas`
+            # (clave `id_sesion, id_tipo`) no puede crearse
+            # ("faltan columnas de la clave"), y antes de MI1 ese hueco
+            # quedaba enmascarado porque `pruebas` se saltaba entera por
+            # falta de `activo`. Mismo patrón que `mes_control`/`equipo`
+            # arriba -- una columna añadida en una fase posterior del
+            # proyecto que nunca se sumó al arranque para BD ya desplegadas.
+            _asegurar_columna(cur, "pruebas", "id_tipo", "INTEGER")
             _asegurar_columna(cur, "CondicionesMedicion", "observaciones", "TEXT")
             _asegurar_columna(cur, "equipos", "imagen_certificado", "BLOB")
             _asegurar_columna(cur, "equipos", "h_cal", "REAL")
@@ -745,6 +755,16 @@ class Conexion():
             # `equipo_id = NULL` -- no se rellenan retroactivamente (46 de
             # 55 no son determinables sin ambigüedad, ver §8.7 del plan).
             _asegurar_columna(cur, "equipos_medicion", "equipo_id", "INTEGER")
+            # MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1, DA-45):
+            # `angulos_entre_lineas_starshot` no tenía con qué distinguir
+            # una fila de otra -- sus dos columnas de datos son una MEDIDA
+            # (`error_separacion`, cambia con cada corrección) y una
+            # constante derivada (`separacion_ideal`, igual para todas las
+            # filas de un control). El ordinal `par_index` es la misma
+            # convención que ya usan sus hermanas (`angulo_starshot.spoke_index`,
+            # `uniformidad_angular_starshot.gap_index`). Se añade sobre una
+            # tabla vacía en las 3 BD de referencia -- sin retrollenado.
+            _asegurar_columna(cur, "angulos_entre_lineas_starshot", "par_index", "INTEGER")
             self.con.commit()
             cur.close()
         except Exception as ex:

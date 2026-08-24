@@ -372,7 +372,14 @@ def lector_mixto(con):
 
     def test_no_falla_la_sesion_pero_queda_contado_y_publicado(
             self, con_pendiente, rt1_aislado, monkeypatch):
-        monkeypatch.setattr(_rt1, "_diferidas_cache", None)
+        # MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1) ya movió las 30
+        # tablas PENDIENTE-LF a TABLAS_ANULABLES -- `lv.tablas_con_filtro_no_op()`
+        # real da hoy el conjunto vacío, así que ya no hay ninguna tabla
+        # real que reproduzca "diferida" sin simularlo. Se fija el caché
+        # a mano con `TABLA_PENDIENTE` para seguir probando el MECANISMO
+        # (RT1 no revienta sobre una tabla diferida, la cuenta y la
+        # publica) aunque la ventana real que lo motivó ya se cerró.
+        monkeypatch.setattr(_rt1, "_diferidas_cache", frozenset({self.TABLA_PENDIENTE}))
         ns = _compilar_como_produccion(self.FUENTE_PENDIENTE)
         antes = len(rt1_aislado.hallazgos_sesion)
 
@@ -417,8 +424,13 @@ def lector_mixto(con):
         """El reparto es por HALLAZGO, no por sentencia: la tabla diferida no
         le presta cobertura a la que ya versiona. Agrupar por sentencia sería
         repetir el hueco 4 de LE4 (filtro comprobado por sentencia y no por
-        tabla), que es justo el defecto que AN1 nació para cerrar."""
-        monkeypatch.setattr(_rt1, "_diferidas_cache", None)
+        tabla), que es justo el defecto que AN1 nació para cerrar.
+
+        MI1 ya vació `lv.tablas_con_filtro_no_op()` de verdad -- se fija el
+        caché a mano (mismo motivo que el test anterior) para poder seguir
+        probando que una tabla diferida no le presta cobertura a una que sí
+        versiona."""
+        monkeypatch.setattr(_rt1, "_diferidas_cache", frozenset({self.TABLA_PENDIENTE}))
         ns = _compilar_como_produccion(self.FUENTE_MIXTA)
         antes = len(rt1_aislado.hallazgos_sesion)
 

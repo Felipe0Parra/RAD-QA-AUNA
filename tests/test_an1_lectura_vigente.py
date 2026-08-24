@@ -29,12 +29,20 @@ def test_tablas_del_bloque_qc_cubre_el_bloque_entero_raices_incluidas():
     pendientes = lv.tablas_pendientes_lf()
 
     # LF2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF2): el alcance de AN1 es la
-    # UNIÓN de TABLAS_ANULABLES con las 30 tablas "PENDIENTE-LF" -- no solo
+    # UNIÓN de TABLAS_ANULABLES con las tablas "PENDIENTE-LF" -- no solo
     # TABLAS_ANULABLES -- para poder exigir el filtro ANTES de que MI1
     # amplíe el frozenset de verdad (§4.4). Desde LR4, sin restarle nada.
     assert bloque == anulables | pendientes
-    assert pendientes, "debería haber tablas PENDIENTE-LF mientras MI1 no se ejecute"
-    assert pendientes - anulables, "las PENDIENTE-LF son justamente las que faltan en TABLAS_ANULABLES"
+    # MI1 (§6-MI1, DA-40): movió las 30 PENDIENTE-LF al frozenset -- hasta
+    # aquí este assert exigía que la resta NO estuviera vacía ("debería
+    # haber tablas PENDIENTE-LF mientras MI1 no se ejecute"); ahora exige
+    # justo lo contrario, que es el pago de la fase: ya no queda ninguna
+    # tabla esperando a que sus lecturas filtren, así que la unión colapsa
+    # a `anulables` a secas.
+    assert not pendientes, (
+        "tras MI1 no debería quedar ninguna tabla PENDIENTE-LF -- si "
+        f"aparece alguna, MI1 se revirtió parcialmente: {sorted(pendientes)}")
+    assert bloque == anulables
     for raiz in lv.RAICES_QC:
         assert raiz in bloque, (
             f"{raiz} debe estar vigilada como cualquier otra tabla del "
@@ -48,10 +56,12 @@ def test_tablas_del_bloque_qc_cubre_el_bloque_entero_raices_incluidas():
                   "control_cunas", "control_conos", "tamano_campo"):
         assert tabla in bloque, f"{tabla} debería estar en el alcance de AN1"
 
-    # LF2: una tabla PENDIENTE-LF real (aún no en TABLAS_ANULABLES) también
-    # debe estar en el alcance -- si no, LF1 no tendría nada que vigilar.
+    # LF2 en su día: "pruebas" fue el ejemplo de tabla PENDIENTE-LF real
+    # (vigilada por AN1 antes de estar en TABLAS_ANULABLES). MI1 la movió
+    # al frozenset -- sigue en el alcance, ahora por la otra mitad de la
+    # unión.
     assert "pruebas" in bloque
-    assert "pruebas" not in anulables
+    assert "pruebas" in anulables
 
 
 def test_alcance_crece_solo_si_TABLAS_ANULABLES_crece(tmp_path, monkeypatch):

@@ -37,8 +37,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtWidgets import QApplication, QLineEdit, QWidget
 
 import data.ManejoDatos.conection as conection_mod
-import data.ManejoDatos.load as load_mod
-import services.anulacion as anulacion_mod
 from data.ManejoDatos.conection import Conexion
 from services.anulacion import filtro_activo
 from ui.paginasControles.PruebasMensuales.braq_mensual import PruebaMensualBraq
@@ -61,38 +59,21 @@ def bd_temporal(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def sistema_medicion_anulable(monkeypatch, bd_temporal):
-    """Adelanta el estado que dejará MI1 sobre `SistemaMedicion`.
+def sistema_medicion_anulable(bd_temporal):
+    """Hasta MI1: adelantaba a mano el estado que MI1 iba a dejar sobre
+    `SistemaMedicion` (columna `activo` + entrada en `TABLAS_ANULABLES`),
+    porque la tabla todavía vivía en `EXCEPCIONES_INVENTARIO` como
+    "PENDIENTE-LF" y `filtro_activo('SistemaMedicion')` devolvía `""` --
+    sin eso, la rama `uid != "id"` habría sido indistinguible de no tener
+    filtro y estos tests habrían pasado en verde sin probar nada.
 
-    Hoy `SistemaMedicion` está en `EXCEPCIONES_INVENTARIO` como
-    "PENDIENTE-LF: rama braquiterapia" -- NO está en `TABLAS_ANULABLES`,
-    así que `_asegurar_activo_bloque_qc()` no le añade la columna `activo`
-    y `filtro_activo('SistemaMedicion')` devuelve `""`. Con el filtro
-    evaluando a cadena vacía, la rama `uid != "id"` sería indistinguible
-    de no tener filtro y estos tests pasarían en verde sin probar nada.
-
-    Por eso se simula la activación de MI1 en vez de esperarla: se añade la
-    columna a mano (la migración real solo corre al construir `Conexion()`,
-    antes de que este monkeypatch pudiera aplicarse) y se amplía la lista
-    blanca. Así se verifica HOY el punto 3 del protocolo de LF4 -- "que MI1
-    no encuentre este sitio desprotegido" -- y queda demostrado que el sitio
-    no necesita ningún cambio de código el día que MI1 llegue.
-
-    Se parchean DOS nombres porque los dos módulos leen la lista de forma
-    distinta: `services.anulacion` la lee dinámicamente desde
-    `filtro_activo` (basta con el módulo), mientras que `load.py` hizo
-    `from services.anulacion import TABLAS_ANULABLES` y quedó con una
-    referencia propia al frozenset -- `encontrar_columnas` la consulta para
-    decidir si excluye `activo` de la lista de columnas del SELECT.
-    """
-    con = sqlite3.connect(bd_temporal)
-    con.execute("ALTER TABLE SistemaMedicion ADD COLUMN activo INTEGER DEFAULT 1")
-    con.commit()
-    con.close()
-
-    ampliado = anulacion_mod.TABLAS_ANULABLES | {"SistemaMedicion"}
-    monkeypatch.setattr(anulacion_mod, "TABLAS_ANULABLES", ampliado)
-    monkeypatch.setattr(load_mod, "TABLAS_ANULABLES", ampliado)
+    MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1) ya ocurrió: `SistemaMedicion`
+    está genuinamente en `TABLAS_ANULABLES`, y `bd_temporal` (vía
+    `Conexion()`) ya le agregó `activo` de verdad -- exactamente lo que el
+    punto 3 del protocolo de LF4 pedía verificar ("que MI1 no encuentre
+    este sitio desprotegido"). El fixture queda como passthrough, sin
+    monkeypatch: el nombre se conserva porque documenta la intención
+    original de las pruebas que lo usan."""
     return bd_temporal
 
 
@@ -191,9 +172,10 @@ class TestClaveDeBloqueAnuladaNoPuebla:
     """uid="ref": selecciona un bloque (N generaciones) -- si la única
     generación disponible está anulada, el filtro debe excluirla.
 
-    Corren sobre `sistema_medicion_anulable`, que adelanta MI1 (ver el
-    docstring de la fixture): sin él `filtro_activo('SistemaMedicion')` es
-    `""` hoy y estos tests no distinguirían nada."""
+    Corren sobre `sistema_medicion_anulable` (ver su docstring): MI1 ya
+    hizo real lo que antes había que adelantar a mano -- sin `SistemaMedicion`
+    en `TABLAS_ANULABLES`, `filtro_activo('SistemaMedicion')` habría sido
+    `""` y estos tests no distinguirían nada."""
 
     def test_clave_de_bloque_anulada_no_puebla_el_formulario(
             self, app, sistema_medicion_anulable):

@@ -249,12 +249,18 @@ class TestVisorAnuladosWidget:
         assert w._panel_detalle.isHidden() is True
 
     def test_cambiar_de_seccion_repuebla_el_combo_de_tabla(self, app, bd_temporal):
+        """MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1) movió las 5 hijas
+        reales de TipoCalibracion (CondicionesMedicion, SistemaMedicion,
+        MaximosCamaras, LecturasMaximos, ResultadosActividad) a
+        TABLAS_ANULABLES -- `secciones()` se rebalancea sola (por diseño,
+        ver su docstring) y la sección pasa de 1 tabla (solo la raíz,
+        mientras sus hijas eran PENDIENTE-LF) a 6."""
         from ui.paginasGuia.visor_anulados import VisorAnulados
         w = VisorAnulados()
         w._on_cambiar_seccion("TipoCalibracion")
         assert w._seccion_actual == "TipoCalibracion"
         assert w._tabla_actual == "TipoCalibracion"
-        assert w._combo_tabla.count() == 1
+        assert w._combo_tabla.count() == 6
         assert w._combo_tabla.currentText() == "TipoCalibracion"
 
     def test_buscar_filtra_la_tabla_mostrada(self, app, bd_temporal):

@@ -114,7 +114,21 @@ def crear_indices(ruta_db):
     segunda corrida no repite ni falla). Si alguna tabla de CLAVES_INDICE
     todavía no tuviera columna `activo` (como le pasó a `preguntas` hasta
     PR1) se salta con motivo explícito -- nunca falla en silencio, dice por
-    qué no se creó."""
+    qué no se creó.
+
+    MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1): un `CREATE UNIQUE INDEX`
+    contra una tabla con duplicados activos (el caso real de
+    `analisis_placa_verificaciones`/`_correcciones`/`indicadores_brazo`/
+    `indicadores_angulares_colimador` antes de que `MI2` los saneé) lanza
+    `sqlite3.IntegrityError` ("UNIQUE constraint failed"), NO
+    `OperationalError` -- son ramas hermanas de `sqlite3.DatabaseError`, no
+    una subclase de la otra. `_reportar_indices_bloque_qc`/`migrar()`
+    (scripts/migrar_bd_a_estandar.py) ya esperaban ver este motivo como un
+    "NO CREADO" legible (`fallos_indices` lo busca explícitamente); solo
+    capturar `OperationalError` dejaba que la excepción real se propagara
+    sin capturar y abortara la migración entera. Descubierto al ejecutar
+    MI1 sobre una copia de BD real con los duplicados que §2.8 del plan
+    documentó."""
     con = sqlite3.connect(ruta_db)
     resultado = {}
     try:
@@ -143,7 +157,7 @@ def crear_indices(ruta_db):
                     f'WHERE (activo IS NULL OR activo = 1)')
                 con.commit()
                 resultado[tabla] = "ya existía" if ya_existia else "creado"
-            except sqlite3.OperationalError as e:
+            except (sqlite3.OperationalError, sqlite3.IntegrityError) as e:
                 resultado[tabla] = f"NO CREADO -- {e}"
         return resultado
     finally:

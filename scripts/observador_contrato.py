@@ -113,14 +113,26 @@ def _clave_bloque(columnas):
     """La columna que identifica "el mismo bloque lógico" dentro de una
     tabla: `ref` para las hijas (apunta al control padre); `id` para las
     raíces, donde cada fila ES su propio bloque -- no hay reemplazo por
-    reinserción, el soft-delete activa/desactiva la misma fila (DA-34)."""
+    reinserción, el soft-delete activa/desactiva la misma fila (DA-34).
+
+    MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1): la rama TAC/Catphan no
+    usa `ref` -- `pruebas` (raíz de esa rama, aunque no una de las 7 raíces
+    de QC) no tiene ninguna columna `ref` ni `id` (su PK es `id_prueba`,
+    AUTOINCREMENT), y sus 10 hijas (`espesor_corte`, `linealidad_ct`, etc.)
+    usan `id_prueba` como PK Y como FK 1:1 al mismo tiempo -- exactamente el
+    papel que `ref` cumple en el resto del bloque. Descubierto al ejecutar
+    MI1: estas 11 tablas pasaron de PENDIENTE-LF (fuera del alcance de este
+    observador) a TABLAS_ANULABLES, y `capturar()` reventaba con
+    `RuntimeError` en la primera de ellas."""
     if "ref" in columnas:
         return "ref"
     if "id" in columnas:
         return "id"
+    if "id_prueba" in columnas:
+        return "id_prueba"
     raise RuntimeError(
-        f"Tabla sin columna 'ref' ni 'id' -- no se puede determinar la "
-        f"clave de bloque. Columnas: {columnas}")
+        f"Tabla sin columna 'ref', 'id' ni 'id_prueba' -- no se puede "
+        f"determinar la clave de bloque. Columnas: {columnas}")
 
 
 def _valor_serializable(valor):

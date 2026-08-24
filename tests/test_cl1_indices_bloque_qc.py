@@ -51,43 +51,26 @@ def _indices_reales(ruta):
     return nombres
 
 
-# IV3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IV3): CLAVES_INDICE ya declara las
-# claves de las 30 tablas nuevas del bloque de QC, pero TABLAS_ANULABLES
-# (services/anulacion.py) todavía NO se amplía -- eso es MI1 (Fase 4),
-# después de LF. Sobre una BD temporal recién creada, esas 30 tablas
-# EXISTEN (tienen CREATE TABLE real) pero no tienen columna `activo`
-# todavía, así que crear_indices() debe saltarlas con motivo explícito, no
-# fallar ni crear un índice a medias. Solo las 22 originales (ya en
-# TABLAS_ANULABLES) deben crearse de verdad.
-_TABLAS_ORIGINALES_22 = frozenset({
-    "control_cunas", "control_conos", "equipos_medicion",
-    "analisis_placa_franjas", "tamano_campo", "HC_indicadores_camilla",
-    "HC_indicadores_colimador", "HC_indicadores_laser", "dosimetriaMen",
-    "tabla_factor_campo", "tabla_factores_transmision",
-    "tabla_control_camaras_monitoras", "tabla_factores_sobre_eje",
-    "HC_indicadores_brazo", "HC_desplazamiento_isocentro_mensual",
-    "HC_tamanos_campo_radiacion", "HC_dosimetria_anual",
-    "HC_imagen_perfil_mlc_anual", "HC_linealidad_unidades_monitor_anual",
-    "HC_velocidad_multilaminas_anual",
-    "HC_precision_posicion_multilaminas_anual", "preguntas",
-})
+# MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1) movió las 30 tablas
+# PENDIENTE-LF a TABLAS_ANULABLES y les dio `activo` -- las 52 tablas de
+# CLAVES_INDICE (IV3) ya tienen columna `activo` desde el arranque. Sobre
+# una BD temporal recién creada (sin datos, sin duplicados) las 52 deben
+# crearse de verdad; MI2 (saneamiento de duplicados reales) es lo que hace
+# falta antes de crear estos índices sobre una BD CON datos históricos.
 
 
-def test_crea_las_22_originales_y_salta_las_30_nuevas_sin_activo_todavia(bd_temporal):
+def test_crea_los_52_tras_mi1(bd_temporal):
     resultado = crear_indices(bd_temporal)
 
     assert len(resultado) == 52
-    for tabla in _TABLAS_ORIGINALES_22:
-        assert resultado[tabla] == "creado", f"{tabla}: {resultado[tabla]}"
     for tabla, r in resultado.items():
-        if tabla in _TABLAS_ORIGINALES_22:
-            continue
-        assert r == "NO CREADO -- la tabla aún no tiene columna activo", (
-            f"{tabla}: se esperaba 'NO CREADO -- ...activo' (todavía no está "
-            f"en TABLAS_ANULABLES, eso es MI1) pero dio: {r}")
+        assert r == "creado", (
+            f"{tabla}: se esperaba 'creado' -- tras MI1 las 52 tablas de "
+            f"CLAVES_INDICE ya tienen 'activo' y no hay datos en esta BD "
+            f"que produzcan duplicados; dio: {r}")
 
     nombres_reales = _indices_reales(bd_temporal)
-    for tabla in _TABLAS_ORIGINALES_22:
+    for tabla in CLAVES_INDICE:
         assert nombre_indice(tabla) in nombres_reales
 
 
@@ -96,11 +79,7 @@ def test_segunda_corrida_es_idempotente(bd_temporal):
     resultado2 = crear_indices(bd_temporal)
 
     for tabla, r in resultado2.items():
-        if tabla in _TABLAS_ORIGINALES_22:
-            assert r == "ya existía", f"{tabla}: {r}"
-        else:
-            assert r == "NO CREADO -- la tabla aún no tiene columna activo", (
-                f"{tabla}: {r}")
+        assert r == "ya existía", f"{tabla}: {r}"
 
 
 def test_el_indice_bloquea_un_duplicado_activo_nuevo(bd_temporal):
@@ -147,6 +126,31 @@ def test_el_indice_no_bloquea_una_fila_superada_ni_entre_superadas(bd_temporal):
     con.close()
     assert total == 3
     assert activas == 1
+
+
+def test_duplicado_activo_reporta_no_creado_en_vez_de_reventar(bd_temporal):
+    """MI1: `CREATE UNIQUE INDEX` sobre una tabla con un duplicado activo
+    lanza `sqlite3.IntegrityError`, no `OperationalError` -- son ramas
+    hermanas de `DatabaseError`. `crear_indices()` solo capturaba la
+    segunda; la primera se propagaba sin capturar y abortaba `migrar()`
+    entero en vez de reportar "NO CREADO" (que es justo lo que
+    `migrar_bd_a_estandar.py::fallos_indices` espera poder leer). Se
+    reproduce con un duplicado real en `control_cunas`, sin pasar por
+    `sanear_bloque_qc` (MI2) -- exactamente el estado de una BD real antes
+    de sanear."""
+    con = sqlite3.connect(bd_temporal)
+    con.execute(
+        "INSERT INTO control_cunas (ref, angulo, activo) VALUES (30, 45, 1)")
+    con.execute(
+        "INSERT INTO control_cunas (ref, angulo, activo) VALUES (30, 45, 1)")
+    con.commit()
+    con.close()
+
+    resultado = crear_indices(bd_temporal)  # no debe lanzar
+
+    assert resultado["control_cunas"].startswith("NO CREADO"), (
+        f"se esperaba un 'NO CREADO' legible, dio: {resultado['control_cunas']}")
+    assert "UNIQUE constraint failed" in resultado["control_cunas"]
 
 
 def test_claves_coinciden_con_las_del_plan_para_las_8_de_h2():

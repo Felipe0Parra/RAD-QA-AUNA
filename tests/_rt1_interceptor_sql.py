@@ -126,7 +126,7 @@ SITIOS_CENSALES_PERMITIDOS = {
     ("scripts/migrar_bd_a_estandar.py", 179):
         "censo (_contar_todas_las_tablas): igual que el anterior, extendido "
         "a las ~69 tablas que E10 puede recrear en una corrida.",
-    ("scripts/observador_contrato.py", 142):
+    ("scripts/observador_contrato.py", 154):
         "censo (OB1, censo.total): el observador necesita el total SIN "
         "filtrar para poder calcular `anuladas = total - activas`; la "
         "consulta de al lado (línea 146) sí filtra, y es la que compara.",

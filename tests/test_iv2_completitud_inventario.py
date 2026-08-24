@@ -79,20 +79,34 @@ class TestCompletitudDelInventario:
     def test_una_tabla_del_cierre_sin_clasificar_pone_esto_en_rojo(self, bd_temporal):
         """Rojo-antes-que-verde, reproducible sin editar `anulacion.py`:
         simula exactamente el defecto de origen -- una tabla real del cierre
-        (`analisis_placa_verificaciones`) que NO está ni en el frozenset ni en
-        las excepciones."""
+        (`control_cunas`) que deja de estar clasificada ni en el frozenset
+        ni en las excepciones.
+
+        MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1) movió las 30 tablas
+        PENDIENTE-LF al frozenset -- `analisis_placa_verificaciones` (la
+        tabla que esta prueba usaba hasta aquí) ya está genuinamente en
+        `TABLAS_ANULABLES`, así que "des-clasificarla" quitándola solo de
+        `excepciones_inventario()` ya no reproduce el defecto (sigue
+        clasificada por el otro lado). Las dos únicas tablas que hoy viven
+        exclusivamente en `EXCEPCIONES_INVENTARIO` (`equipos_anual`,
+        `posicionamiento_reposicionamiento`) tampoco sirven de reemplazo:
+        ninguna tiene `CREATE TABLE` en `conection.py`, así que jamás
+        aparecen en el cierre transitivo calculado sobre esta BD temporal
+        -- simular su "des-clasificación" no reproduciría nada. Se quita en
+        cambio una tabla real del frozenset (`control_cunas`) del lado de
+        `actuales`, que es la otra forma en que un hueco puede aparecer."""
         con = sqlite3.connect(bd_temporal)
         try:
             cierre = cierre_transitivo_fk(con, RAICES_QC)
         finally:
             con.close()
 
-        actuales = tablas_anulables() - RAICES_QC
-        excepciones = excepciones_inventario() - {"analisis_placa_verificaciones"}
+        actuales = (tablas_anulables() - RAICES_QC) - {"control_cunas"}
+        excepciones = excepciones_inventario()
         clasificadas = actuales | excepciones
 
         huecos = cierre - clasificadas
-        assert "analisis_placa_verificaciones" in huecos, (
+        assert "control_cunas" in huecos, (
             "el test de completitud debería haber detectado la tabla "
             "deliberadamente 'des-clasificada' en esta prueba -- si no "
             "aparece aquí, IV2 no detectaría el defecto real"

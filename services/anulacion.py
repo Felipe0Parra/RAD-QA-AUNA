@@ -11,14 +11,27 @@ botones de braquiterapia que apuntan a `TipoCalibracion`
 `TipoCalibracion` arrastraba en cascada `ResultadosActividad` (la actividad
 calculada de la fuente de braquiterapia) sin dejar nada recuperable.
 
-`TABLAS_ANULABLES` es la lista blanca cerrada del inventario del plan
-(§11.3): toda tabla del bloque de QC con una ruta de borrado alcanzable
-desde la interfaz. Deliberadamente NO son las ~45 tablas del bloque
-completo -- las demás no tienen forma de perder filas individualmente
-(desaparecen de la vista cuando su raíz se anula) y añadirles `activo`
-solo triplicaría el riesgo sin ganar nada (§11.5). Si una tabla nueva gana
-un botón de borrado, entra a esta lista en ese momento -- el tripwire de
-`tests/test_e7_soft_delete_bloque_qc.py` obliga a ello.
+`TABLAS_ANULABLES` nació (E7, §11.3) como la lista blanca de "toda tabla
+del bloque de QC con una ruta de borrado alcanzable desde la interfaz" --
+deliberadamente NO las ~45 del bloque completo. Ese criterio quedó
+OBSOLETO: `PLAN_CONTRATO_GUARDADO_13-08.md` cambió el propósito real a
+"¿qué tabla participa en el reemplazo de bloque?", y la lista se parchó a
+mano dos veces (`control_conos`, `dosimetriaMen`) sin recalcularse contra
+el propósito nuevo -- hasta que `analisis_placa_verificaciones`/
+`_correcciones` se quedaron fuera sin que nadie lo notara (el hallazgo que
+originó `PLAN_CONTRATO_COMPLETO_19-08.md`).
+
+MI1 (§6-MI1 de ese plan, DA-40) cierra el defecto de raíz: el frozenset
+pasó de 29 a **59** entradas -- las 30 tablas del cierre transitivo por
+clave foránea desde las 7 raíces de QC que hasta entonces vivían en
+`EXCEPCIONES_INVENTARIO` con motivo `"PENDIENTE-LF"` (esperaban a que sus
+lecturas filtraran, Fase 3 del plan). Solo quedan dos excepciones
+declaradas (`EXCEPCIONES_INVENTARIO`, más abajo): `equipos_anual` (se
+retira del esquema, MI5) y `posicionamiento_reposicionamiento` (huérfana,
+bloqueada en DP-38). Si una tabla nueva entra al cierre transitivo, el
+tripwire de IV2 (`tests/test_iv2_completitud_inventario.py`) exige que se
+clasifique en uno de los dos sitios -- no puede volver a colarse fuera de
+los dos sin que algo se ponga rojo.
 
 `anular_fila()` RECHAZA cualquier tabla fuera de la lista: nunca se anula
 por error algo ajeno al bloque de QC (p.ej. un catálogo con DELETE físico
@@ -82,6 +95,55 @@ TABLAS_ANULABLES = frozenset({
     # (subirlineasmensuales, mismo camino que dosimetriaMen desde DO1)
     # empiece a anular en vez de pisar el bloque anterior.
     "preguntas",
+
+    # MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1, DA-40): las 30 tablas del
+    # cierre transitivo por FK que hasta aquí esperaban en
+    # `EXCEPCIONES_INVENTARIO` con motivo "PENDIENTE-LF" -- entran una vez
+    # LF (Fase 3) ya filtra sus lecturas (74 sitios, LF1-LF5) y AN1/RT1
+    # cubren el bloque completo (LR4). `_asegurar_activo_bloque_qc` les
+    # agrega `activo INTEGER DEFAULT 1` sola en el siguiente arranque --
+    # migración de coste cero, ninguna fila se reescribe.
+    #
+    # Rama braquiterapia:
+    "CondicionesMedicion",
+    "SistemaMedicion",
+    "MaximosCamaras",
+    "LecturasMaximos",
+    "ResultadosActividad",
+    # Rama placa (el hallazgo que originó el plan del 19-08):
+    "analisis_placa_verificaciones",
+    "analisis_placa_correcciones",
+    # Mecánica mensual:
+    "indicadores_brazo",
+    "indicadores_angulares_colimador",
+    # Rama TAC/Catphan (pruebas es la raíz de esta rama):
+    "pruebas",
+    "espesor_corte",
+    "linealidad_ct",
+    "resolucion_contraste",
+    "resolucion_contraste_rois",
+    "resolucion_espacial",
+    "resolucion_espacial_regiones",
+    "tamaño_pixel",
+    "uniformidad_global",
+    "uniformidad_ruido",
+    "valores_ct",
+    # Vacías hoy, con CREATE TABLE real (DA-42) -- MLC (picketfence/starshot)
+    # y HC_fantomas:
+    "HC_fantomas",
+    "configuracion_picketfence",
+    "error_picket",
+    "leaf_error",
+    "highest_leaf_errors",
+    "configuracion_starshot",
+    "estadisticas_starshot",
+    "angulo_starshot",
+    # angulos_entre_lineas_starshot gana la columna ordinal `par_index` en
+    # este mismo MI1 (DA-45, §4.3 del plan): su clave anterior (una medida
+    # y una constante derivada) no discriminaba filas -- ver
+    # `_asegurar_migraciones_ad_hoc` (data/ManejoDatos/conection.py).
+    "angulos_entre_lineas_starshot",
+    "uniformidad_angular_starshot",
 })
 
 
@@ -94,49 +156,16 @@ TABLAS_ANULABLES = frozenset({
 # `analisis_placa_correcciones` (el hallazgo que originó el plan del 19-08)
 # no pueden volver a quedarse fuera sin que algo se note.
 #
-# Tres motivos posibles, cada tabla lleva el suyo:
-#   - "PENDIENTE-LF: ..." -- entra al frozenset en MI1 (Fase 4), una vez LF
-#     (Fase 3) filtre sus lecturas. Ampliar el frozenset ANTES de LF pondría
-#     roja la suite de ES1/RT1 (lecturas sin filtrar, §2.7 del plan) -- no es
-#     un defecto, es la secuencia correcta (§4.4 del plan, verificada con un
-#     subagente tras detectar el riesgo real: `_asegurar_activo_bloque_qc`
-#     puede decapitar el resto del bloque si una tabla no existe en la BD,
-#     ver más abajo).
+# Dos motivos posibles, cada tabla lleva el suyo -- un tercero
+# ("PENDIENTE-LF: ...") existió entre LF (Fase 3) y MI1 (Fase 4, éste
+# archivo): las 30 tablas que esperaban a que sus lecturas filtraran antes
+# de entrar al frozenset. MI1 las movió todas -- ver el bloque de
+# `TABLAS_ANULABLES` arriba. Solo quedan las dos que NUNCA van a versionar:
 #   - "se retira, DA-44" -- la tabla se elimina del esquema (MI5), no se
 #     versiona porque no vale la pena versionar algo que va a desaparecer.
 #   - "huérfana, DP-38" -- existe en las BD reales pero ningún código de
 #     producción la crea, lee ni escribe; decisión pendiente del físico.
 EXCEPCIONES_INVENTARIO = {
-    "CondicionesMedicion": "PENDIENTE-LF: rama braquiterapia (load.py, braq_mensual.py, braquiterapia.py)",
-    "SistemaMedicion": "PENDIENTE-LF: rama braquiterapia",
-    "MaximosCamaras": "PENDIENTE-LF: rama braquiterapia",
-    "LecturasMaximos": "PENDIENTE-LF: rama braquiterapia",
-    "ResultadosActividad": "PENDIENTE-LF: rama braquiterapia (DP-31 la nombraba ya sin filtro)",
-    "analisis_placa_verificaciones": "PENDIENTE-LF: el hallazgo que originó el plan del 19-08 -- mismo botón que analisis_placa_franjas, hoy DELETE+INSERT",
-    "analisis_placa_correcciones": "PENDIENTE-LF: ídem analisis_placa_verificaciones",
-    "indicadores_brazo": "PENDIENTE-LF: mecánica mensual, hoy DELETE+INSERT",
-    "indicadores_angulares_colimador": "PENDIENTE-LF: mecánica mensual, hoy DELETE+INSERT",
-    "pruebas": "PENDIENTE-LF: raíz de la rama TAC/Catphan",
-    "espesor_corte": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "linealidad_ct": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "resolucion_contraste": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "resolucion_contraste_rois": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "resolucion_espacial": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "resolucion_espacial_regiones": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "tamaño_pixel": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "uniformidad_global": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "uniformidad_ruido": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "valores_ct": "PENDIENTE-LF: hija de pruebas (TAC)",
-    "HC_fantomas": "PENDIENTE-LF: vacía hoy, pero tiene CREATE TABLE real (se crea al arrancar)",
-    "configuracion_picketfence": "PENDIENTE-LF: rama MLC, vacía hoy, CREATE TABLE real",
-    "error_picket": "PENDIENTE-LF: rama MLC, vacía hoy, CREATE TABLE real",
-    "leaf_error": "PENDIENTE-LF: rama MLC, vacía hoy, CREATE TABLE real",
-    "highest_leaf_errors": "PENDIENTE-LF: rama MLC, vacía hoy, CREATE TABLE real",
-    "configuracion_starshot": "PENDIENTE-LF: rama starshot, vacía hoy, CREATE TABLE real",
-    "estadisticas_starshot": "PENDIENTE-LF: rama starshot, vacía hoy, CREATE TABLE real",
-    "angulo_starshot": "PENDIENTE-LF: rama starshot, vacía hoy, CREATE TABLE real",
-    "angulos_entre_lineas_starshot": "PENDIENTE-LF: rama starshot, vacía hoy; gana la clave par_index en MI1 (DA-45)",
-    "uniformidad_angular_starshot": "PENDIENTE-LF: rama starshot, vacía hoy, CREATE TABLE real",
     "equipos_anual": "se retira, DA-44 -- 0 filas en las 3 BD de referencia, ninguna consulta SQL la nombra en el código vivo, se elimina del esquema en MI5",
     "posicionamiento_reposicionamiento": "huérfana, DP-38 -- existe en las BD reales (FK a controles) pero NINGÚN código de producción la crea, lee ni escribe; ni siquiera tiene CREATE TABLE en conection.py (a diferencia de las otras 11 tablas vacías). Bloqueada hasta que el físico decida si se retira o se implementa la funcionalidad que la usaría",
 }

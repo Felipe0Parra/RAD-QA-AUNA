@@ -15,8 +15,18 @@ CT2 añade de nuevo:
        dato válido (la tabla del widget quedó vacía), el bloque vigente
        NO se anula -- se queda como estaba.
     3. Contraparte de alcance: una tabla que NO está en TABLAS_ANULABLES
-       (indicadores_brazo, mensual 600/iX) sigue con DELETE físico sin
-       cambios -- este plan no la toca.
+       sigue con DELETE físico sin cambios -- este plan no la toca.
+
+MI1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI1) movió `indicadores_brazo`/
+`indicadores_angulares_colimador` (mecánica mensual 600/iX) a
+`TABLAS_ANULABLES` -- hasta entonces eran justo el ejemplo #3 de arriba. La
+rama `elif acotacion:` (DELETE físico) de `loadtablacomplex` ya estaba
+condicionada dinámicamente a `nombre_tabla in TABLAS_ANULABLES`, así que
+las dos tablas caen SOLAS en la rama de anulación -- exactamente lo que
+`§6-EB2e` del plan anticipa (*"desaparece: al entrar las dos tablas al
+inventario, cae sola en la rama de anulación que ya existe"*), sin que
+haga falta escribir ningún código de la Fase 5 (`EB`) para lograrlo. Se
+verifica aquí, dentro de MI1, en vez de esperar a `EB2e`.
 """
 import os
 import sqlite3
@@ -177,34 +187,75 @@ def test_invariante_3_datos_vacios_no_anula_el_vigente(bd_temporal, tabla):
         f"-- {filas_antes} -> {filas_despues}")
 
 
-def test_tabla_fuera_del_bloque_qc_sigue_con_delete_fisico(bd_temporal):
-    """indicadores_brazo (mensual 600/iX) no está en TABLAS_ANULABLES --
-    fuera de alcance de CT2, debe seguir borrando de verdad."""
+@pytest.mark.parametrize("tabla", ["indicadores_brazo", "indicadores_angulares_colimador"])
+def test_mecanica_mensual_ya_anula_tras_mi1_eb2e_gratis(bd_temporal, tabla):
+    """EB2e (§6-EB2e del plan): estas dos tablas eran el ejemplo #3 del
+    docstring del módulo -- "fuera de TABLAS_ANULABLES, sigue con DELETE
+    físico". MI1 las movió al frozenset y les dio `activo`; la rama
+    `elif acotacion:` de `loadtablacomplex` (DELETE) queda inalcanzable
+    para ellas porque `es_bloque_qc` ya evalúa a `True`. Dos "Subir"
+    seguidos deben dejar un bloque histórico y uno vigente, igual que
+    cualquier tabla de TABLAS_GRUPO_C -- sin que EB2e tenga que escribir
+    una sola línea."""
     ref = 702
+    params = _parametros_bloque(bd_temporal, tabla)
     _insertar_controles(bd_temporal, ref)
 
-    columnas_str, _ = encontrar_columnas("indicadores_brazo", delete=0, id=False)
-    columnas_widget = [c.strip() for c in columnas_str.split(",") if c.strip() != "ref"]
+    ok1 = _subir_bloque(tabla, ref, params, "primero")
+    filas1 = _filas_de(bd_temporal, tabla, ref)
+    assert ok1 is True
+    assert len(filas1) == 1
+    rowid_viejo = filas1[0][0]
+    assert filas1[0][1] == 1
+
+    ok2 = _subir_bloque(tabla, ref, params, "segundo")
+    filas2 = dict(_filas_de(bd_temporal, tabla, ref))
+
+    assert ok2 is True
+    assert rowid_viejo in filas2, f"{tabla}: el bloque viejo desapareció (se borró)"
+    assert filas2[rowid_viejo] == 0, (
+        f"{tabla}: el bloque viejo debía quedar histórico (activo=0), "
+        f"sigue en {filas2[rowid_viejo]}")
+    activos = [rowid for rowid, activo in filas2.items() if activo == 1]
+    assert len(activos) == 1, (
+        f"{tabla}: debía quedar UN solo bloque vigente, hay {len(activos)}")
+
+
+def test_tabla_fuera_del_bloque_qc_sigue_con_delete_fisico(bd_temporal):
+    """Contraparte permanente del punto #3: una tabla GENUINAMENTE fuera de
+    TABLAS_ANULABLES (sintética -- no queda ninguna real que llame a
+    `loadtablacomplex` sin versionar, desde que MI1 absorbió las dos de
+    mecánica mensual) debe seguir con DELETE físico. Sin esto, la rama
+    `elif acotacion:` de `loadtablacomplex` quedaría sin ninguna prueba que
+    la ejerza -- código muerto sin tripwire."""
+    con = sqlite3.connect(bd_temporal)
+    con.execute(
+        "CREATE TABLE tabla_fuera_del_bloque_qc_de_prueba (ref INTEGER, valor TEXT)")
+    con.commit()
+    con.close()
+
+    ref = 703
     widget1 = QTableWidget()
     widget1.setRowCount(1)
-    widget1.setColumnCount(len(columnas_widget))
-    for col in range(len(columnas_widget)):
-        widget1.setItem(0, col, QTableWidgetItem("primero"))
-    loadtablacomplex("indicadores_brazo", widget1, [], reference=ref,
-                      from_range=0, id_energia=None, anual=False, id=False)
+    widget1.setColumnCount(1)
+    widget1.setItem(0, 0, QTableWidgetItem("primero"))
+    loadtablacomplex("tabla_fuera_del_bloque_qc_de_prueba", widget1, [],
+                      reference=ref, from_range=0, id_energia=None,
+                      anual=False, id=False)
 
     widget2 = QTableWidget()
     widget2.setRowCount(1)
-    widget2.setColumnCount(len(columnas_widget))
-    for col in range(len(columnas_widget)):
-        widget2.setItem(0, col, QTableWidgetItem("segundo"))
-    loadtablacomplex("indicadores_brazo", widget2, [], reference=ref,
-                      from_range=0, id_energia=None, anual=False, id=False)
+    widget2.setColumnCount(1)
+    widget2.setItem(0, 0, QTableWidgetItem("segundo"))
+    loadtablacomplex("tabla_fuera_del_bloque_qc_de_prueba", widget2, [],
+                      reference=ref, from_range=0, id_energia=None,
+                      anual=False, id=False)
 
     con = sqlite3.connect(bd_temporal)
     total = con.execute(
-        "SELECT COUNT(*) FROM indicadores_brazo WHERE ref=?", (ref,)).fetchone()[0]
+        "SELECT COUNT(*) FROM tabla_fuera_del_bloque_qc_de_prueba WHERE ref=?",
+        (ref,)).fetchone()[0]
     con.close()
     assert total == 1, (
-        "indicadores_brazo no está en el bloque de QC -- debía seguir "
-        f"reemplazando físicamente (1 fila), hay {total}")
+        "una tabla fuera del bloque de QC debía seguir reemplazando "
+        f"físicamente (1 fila), hay {total}")
