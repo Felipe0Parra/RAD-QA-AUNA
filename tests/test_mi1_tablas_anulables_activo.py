@@ -89,11 +89,14 @@ class TestInventarioTrasMI1:
             f"{len(TABLAS_ANULABLES)}. Si el cambio es deliberado, "
             f"actualiza este número a la vez que TABLAS_ANULABLES.")
 
-    def test_solo_quedan_las_dos_excepciones_definitivas(self):
-        assert set(EXCEPCIONES_INVENTARIO) == {
-            "equipos_anual", "posicionamiento_reposicionamiento"}, (
-            f"tras MI1 solo deben quedar en EXCEPCIONES_INVENTARIO las dos "
-            f"tablas que NUNCA van a versionar -- hay: "
+    def test_excepciones_inventario_queda_vacio_tras_eb7(self):
+        """Tras MI1 quedaban dos excepciones (equipos_anual,
+        posicionamiento_reposicionamiento) que NUNCA iban a versionar --
+        MI5 retiró la primera del esquema, EB7 (DA-50, 24-08) retiró la
+        segunda. El cierre transitivo por FK es hoy exactamente
+        TABLAS_ANULABLES, sin excepciones."""
+        assert EXCEPCIONES_INVENTARIO == {}, (
+            f"EXCEPCIONES_INVENTARIO debería estar vacío tras EB7 -- hay: "
             f"{sorted(EXCEPCIONES_INVENTARIO)}")
 
     def test_ninguna_tabla_sigue_pendiente_lf(self):

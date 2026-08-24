@@ -2,9 +2,14 @@
 mano el 2026-07-29 (§1.2/§1.3 del plan) -- que CUALQUIER BD vieja del linaje
 de producción, corrida por `scripts/migrar_bd_a_estandar.py`, llega
 EXACTAMENTE al mismo estándar estructural que la BD de producción migrada:
-0 CASCADE, 59 RESTRICT, los 4 triggers anti-borrado, roles asignados,
+0 CASCADE, 57 RESTRICT, los 4 triggers anti-borrado, roles asignados,
 `activo` en el bloque de QC, cero `sqlite_sequence` duplicados, y ni una
 fila perdida en ninguna tabla.
+
+El número de RESTRICT bajó de 59 (original) a 57: `equipos_anual` (MI5,
+DA-44) y `posicionamiento_reposicionamiento` (EB7, DA-50) se retiran del
+esquema ANTES de que `_asegurar_fk_on_delete_restrict` convierta nada -- sus
+FK con `ON DELETE CASCADE` desaparecen con la tabla, en vez de convertirse.
 
 Corre sobre una COPIA de `AUNA_2026_2/BaseDatosQA(A_Ajustar).db` (nunca el
 original -- `skipif` honesto si el archivo no está presente en este
@@ -90,7 +95,7 @@ class TestConvergenciaEstructural:
         finally:
             con.close()
         assert "CASCADE" not in acciones
-        assert len(acciones.get("RESTRICT", [])) >= 58
+        assert len(acciones.get("RESTRICT", [])) >= 57
 
     def test_crea_los_4_triggers_anti_borrado(self, copia_bd_vieja):
         migrar(copia_bd_vieja, aplicar=True)

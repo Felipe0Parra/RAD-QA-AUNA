@@ -163,12 +163,16 @@ def cierre_transitivo_fk(con, raices):
 def tablas_pendientes_lf():
     """LF2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF2): las tablas de
     `EXCEPCIONES_INVENTARIO` cuyo motivo empieza con `"PENDIENTE-LF"` --
-    las 30 que entran a `TABLAS_ANULABLES` en MI1, una vez sus lecturas ya
-    filtren. NO incluye `equipos_anual` (se retira, DA-44) ni
-    `posicionamiento_reposicionamiento` (huérfana, DP-38): ninguna de las
-    dos va a versionar nunca, así que exigirles filtro no tendría sentido.
-    Lee el motivo, no solo la clave (a diferencia de `excepciones_inventario()`,
-    que IV2 usa para completitud del inventario, no para alcance de lectura)."""
+    las 30 que entraron a `TABLAS_ANULABLES` en MI1, una vez sus lecturas
+    ya filtraron. Históricamente NO incluía `equipos_anual` (se retiró en
+    MI5, DA-44) ni `posicionamiento_reposicionamiento` (se retiró en EB7,
+    DA-50): ninguna de las dos iba a versionar nunca, así que exigirles
+    filtro no tenía sentido. Con las dos ya retiradas del esquema,
+    `EXCEPCIONES_INVENTARIO` quedó vacío (EB7) -- esta función sigue
+    devolviendo `frozenset()` sin cambios, ahora por ausencia total de
+    motivos, no por exclusión selectiva. Lee el motivo, no solo la clave
+    (a diferencia de `excepciones_inventario()`, que IV2 usa para
+    completitud del inventario, no para alcance de lectura)."""
     arbol = ast.parse(_ANULACION_PATH.read_text(encoding="utf-8"))
     for nodo in ast.walk(arbol):
         if not (isinstance(nodo, ast.Assign) and len(nodo.targets) == 1

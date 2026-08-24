@@ -25,13 +25,15 @@ MI1 (§6-MI1 de ese plan, DA-40) cierra el defecto de raíz: el frozenset
 pasó de 29 a **59** entradas -- las 30 tablas del cierre transitivo por
 clave foránea desde las 7 raíces de QC que hasta entonces vivían en
 `EXCEPCIONES_INVENTARIO` con motivo `"PENDIENTE-LF"` (esperaban a que sus
-lecturas filtraran, Fase 3 del plan). Solo quedan dos excepciones
-declaradas (`EXCEPCIONES_INVENTARIO`, más abajo): `equipos_anual` (se
-retira del esquema, MI5) y `posicionamiento_reposicionamiento` (huérfana,
-bloqueada en DP-38). Si una tabla nueva entra al cierre transitivo, el
-tripwire de IV2 (`tests/test_iv2_completitud_inventario.py`) exige que se
-clasifique en uno de los dos sitios -- no puede volver a colarse fuera de
-los dos sin que algo se ponga rojo.
+lecturas filtraran, Fase 3 del plan). `EXCEPCIONES_INVENTARIO` llegó a
+tener dos entradas (`equipos_anual`, `posicionamiento_reposicionamiento`)
+y hoy queda **vacío**: EB7 (§6-EB7, DA-50, 24-08) retiró la segunda del
+esquema -- MI5 (DA-44) ya había retirado la primera. El cierre transitivo
+por FK es, desde entonces, exactamente `TABLAS_ANULABLES`, sin
+excepciones. Si una tabla nueva entrara al cierre transitivo sin
+clasificar, el tripwire de IV2 (`tests/test_iv2_completitud_inventario.py`)
+lo detecta igual -- `EXCEPCIONES_INVENTARIO` vacío no relaja esa garantía,
+solo confirma que hoy no hace falta ninguna excepción.
 
 `anular_fila()` RECHAZA cualquier tabla fuera de la lista: nunca se anula
 por error algo ajeno al bloque de QC (p.ej. un catálogo con DELETE físico
@@ -163,19 +165,19 @@ TABLAS_ANULABLES = frozenset({
 # `analisis_placa_correcciones` (el hallazgo que originó el plan del 19-08)
 # no pueden volver a quedarse fuera sin que algo se note.
 #
-# Dos motivos posibles, cada tabla lleva el suyo -- un tercero
-# ("PENDIENTE-LF: ...") existió entre LF (Fase 3) y MI1 (Fase 4, éste
-# archivo): las 30 tablas que esperaban a que sus lecturas filtraran antes
-# de entrar al frozenset. MI1 las movió todas -- ver el bloque de
-# `TABLAS_ANULABLES` arriba. Solo quedan las dos que NUNCA van a versionar:
-#   - "se retira, DA-44" -- la tabla se elimina del esquema (MI5), no se
-#     versiona porque no vale la pena versionar algo que va a desaparecer.
-#   - "huérfana, DP-38" -- existe en las BD reales pero ningún código de
-#     producción la crea, lee ni escribe; decisión pendiente del físico.
-EXCEPCIONES_INVENTARIO = {
-    "equipos_anual": "se retira, DA-44 -- 0 filas en las 3 BD de referencia, ninguna consulta SQL la nombra en el código vivo, se elimina del esquema en MI5",
-    "posicionamiento_reposicionamiento": "huérfana, DP-38 -- existe en las BD reales (FK a controles) pero NINGÚN código de producción la crea, lee ni escribe; ni siquiera tiene CREATE TABLE en conection.py (a diferencia de las otras 11 tablas vacías). Bloqueada hasta que el físico decida si se retira o se implementa la funcionalidad que la usaría",
-}
+# Llegó a tener dos entradas -- las dos tablas que NUNCA iban a versionar,
+# porque ambas se retiraban del esquema en vez de eso:
+#   - "equipos_anual" (DA-44): retirada en MI5, Fase 4.
+#   - "posicionamiento_reposicionamiento" (DA-50): retirada en EB7, Fase 5
+#     -- huérfana (ningún código de producción la creaba, leía ni
+#     escribía), y el dato que guardaría ya lo recibe correctamente
+#     `CondicionesMedicion.desplazamiento_ini` (§4.8 del plan).
+# Queda VACÍO desde EB7: el cierre transitivo por FK es hoy exactamente
+# `TABLAS_ANULABLES`. Si una tabla nueva entrara al cierre sin clasificar
+# (nuevo `CREATE TABLE` con FK a una de las 7 raíces), IV2 la detecta igual
+# -- este diccionario vacío no es un relajamiento de la garantía, solo
+# constancia de que hoy no hace falta ninguna excepción.
+EXCEPCIONES_INVENTARIO = {}
 
 
 def filtro_activo(tabla):

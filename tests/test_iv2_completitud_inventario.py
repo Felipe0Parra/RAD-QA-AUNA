@@ -87,13 +87,15 @@ class TestCompletitudDelInventario:
         tabla que esta prueba usaba hasta aquí) ya está genuinamente en
         `TABLAS_ANULABLES`, así que "des-clasificarla" quitándola solo de
         `excepciones_inventario()` ya no reproduce el defecto (sigue
-        clasificada por el otro lado). Las dos únicas tablas que hoy viven
+        clasificada por el otro lado). Las dos únicas tablas que vivían
         exclusivamente en `EXCEPCIONES_INVENTARIO` (`equipos_anual`,
-        `posicionamiento_reposicionamiento`) tampoco sirven de reemplazo:
-        ninguna tiene `CREATE TABLE` en `conection.py`, así que jamás
-        aparecen en el cierre transitivo calculado sobre esta BD temporal
-        -- simular su "des-clasificación" no reproduciría nada. Se quita en
-        cambio una tabla real del frozenset (`control_cunas`) del lado de
+        `posicionamiento_reposicionamiento`, ambas retiradas del esquema --
+        MI5 y EB7 respectivamente -- así que `EXCEPCIONES_INVENTARIO` quedó
+        vacío) tampoco habrían servido de reemplazo: ninguna tenía
+        `CREATE TABLE` en `conection.py`, así que jamás aparecían en el
+        cierre transitivo calculado sobre esta BD temporal -- simular su
+        "des-clasificación" no habría reproducido nada. Se quita en cambio
+        una tabla real del frozenset (`control_cunas`) del lado de
         `actuales`, que es la otra forma en que un hueco puede aparecer."""
         con = sqlite3.connect(bd_temporal)
         try:
