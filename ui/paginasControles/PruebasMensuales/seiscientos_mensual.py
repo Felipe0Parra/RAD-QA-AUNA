@@ -1,7 +1,7 @@
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
-from PyQt5.QtWidgets import (QAbstractItemView, QComboBox, QLineEdit,  QPushButton, QTabWidget, QSizePolicy, QWidget, QVBoxLayout, 
+from PyQt5.QtWidgets import (QAbstractItemView, QComboBox, QLineEdit,  QPushButton, QTabWidget, QSizePolicy, QWidget, QVBoxLayout,
                             QHBoxLayout, QSplitter, QLabel, QTableWidget,QTableWidgetItem, QHeaderView, QToolBox, QGroupBox, QMessageBox,
-                            QScrollArea, QFileDialog)
+                            QScrollArea, QFileDialog, QApplication)
 import pydicom
 from PyQt5.QtCore import QDate, Qt, QTimer
 # IM4: QPixmap se usa en `_mostrar_imagen_guardada`. Se importa explícito y
@@ -2620,12 +2620,47 @@ class PruebaMensual600(PruebaBasico):
                 self.guardar_analisis.setEnabled(False)
                 self.botones_layout.addWidget(self.guardar_analisis)
 
-            self.res = analizar_cuadrado2(
-                imagen_path=self.imagen_path,
-                filtro=None,
-                mostrar=True,
-                canvas=self.canvas
-            )
+            # UX1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-UX1, [[DA-51]]/[[DA-70]]):
+            # indicador estático + cursor de espera mientras corre
+            # `analizar_cuadrado2` -- es síncrono y bloquea el hilo de la GUI,
+            # así que sin esto la app parece congelada durante el análisis.
+            # Puesto DESPUÉS de la guarda de `imagen_path` de arriba (V8): ese
+            # camino no corre ningún cómputo, no necesita cursor de espera.
+            #
+            # V6: el indicador va en `self.botones_layout` (el mismo de
+            # `imagenUpLoader`, PruebasDiarias.py), NO en `self.col2` --
+            # `mostrar_resultados_AnalisisImagen` hace `deleteLater()` sobre
+            # todo widget de `col2` que no sea canvas/toolbar/graficar, en
+            # CADA análisis; puesto ahí, el segundo análisis reventaría con
+            # `RuntimeError: wrapped C/C++ object of type QLabel has been
+            # deleted` sobre esta misma referencia.
+            if not hasattr(self, 'indicador_analizando') or self.indicador_analizando is None:
+                self.indicador_analizando = QLabel("Analizando la imagen...")
+                self.botones_layout.addWidget(self.indicador_analizando)
+            self.indicador_analizando.show()
+            # V7: Qt ENCOLA el repintado -- sin forzarlo aquí, el indicador no
+            # se pintaría hasta que el bucle de eventos vuelva a girar, que es
+            # justo lo que `analizar_cuadrado2` bloquea (aparecería después
+            # del análisis, o nunca). `repaint()` y no `processEvents()`: este
+            # último reentraría en el bucle y dejaría procesar OTROS clics a
+            # mitad del análisis -- justo lo que UX1 existe para impedir.
+            self.indicador_analizando.repaint()
+
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            try:
+                self.res = analizar_cuadrado2(
+                    imagen_path=self.imagen_path,
+                    filtro=None,
+                    mostrar=True,
+                    canvas=self.canvas
+                )
+            finally:
+                # V8: SIEMPRE se restaura, incluso si `analizar_cuadrado2`
+                # lanza -- IMG-1 (DPI fuera de 200/300/600) lo dispara de
+                # verdad hoy. Sin este `finally` el cursor de espera quedaría
+                # PERMANENTE, un síntoma peor que el que UX1 viene a resolver.
+                QApplication.restoreOverrideCursor()
+                self.indicador_analizando.hide()
 
             # IM3: solo aquí, con el análisis ya devuelto, hay algo que
             # guardar. Si `analizar_cuadrado2` lanzó, esta línea no se alcanza
