@@ -4,7 +4,11 @@ from PyQt5.QtWidgets import (QAbstractItemView, QComboBox, QLineEdit,  QPushButt
                             QScrollArea, QFileDialog)
 import pydicom
 from PyQt5.QtCore import QDate, Qt, QTimer
-from PyQt5.QtGui import QColor
+# IM4: QPixmap se usa en `_mostrar_imagen_guardada`. Se importa explícito y
+# no se deja al `import *` de load.py: ahí llega por casualidad (load.py lo
+# importa para su propio uso), y el día que load.py deje de necesitarlo esto
+# se rompería en tiempo de ejecución, dentro de un `except` que lo tragaría.
+from PyQt5.QtGui import QColor, QPixmap
 from models.PDF.pdf import generar_reporte_mlc_pdf, generar_reporte_starshot_pdf
 from data.ManejoDatos.load import *
 from data.ManejoDatos.conection import Conexion
@@ -903,10 +907,61 @@ class PruebaMensual600(PruebaBasico):
             self.imagen_campo = self.imagenUpLoader()
             self.boton_aceptar.clicked.connect(self.subirlisto)
             self.subtool.addItem(self.imagen_campo, 'Imagen del campo')
-            
+
+            # IM4: mostrar la imagen ya guardada de este control, si la hay.
+            self._mostrar_imagen_guardada()
+
         except Exception as e:
-           
+
             print(f"Error configurando elementos adicionales: {e}")
+
+    def _mostrar_imagen_guardada(self):
+        """IM4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM4): al reabrir un
+        control, pinta en el visor la imagen del bloque VIGENTE de
+        `preguntas` en vez del texto "Subir imagen".
+
+        Hasta ahora la imagen se guardaba y no se volvía a ver nunca desde el
+        formulario (solo salía en el PDF): funcionalidad ausente, no
+        regresión. Es además lo que hace verificable a IM1 -- sin un lector,
+        que el reemplazo de bloque conserve la imagen correcta solo se podía
+        comprobar mirando la BD a mano.
+
+        Un fallo aquí NO puede impedir que el formulario se abra: es un
+        añadido de visualización sobre un control que ya funcionaba sin él.
+        Por eso el `try/except` propio y no dejarlo al del llamador, que
+        abortaría el resto de `_configurar_elementos_adicionales`.
+        """
+        try:
+            blob = imagen_vigente(self.ref)
+            if not blob:
+                return
+
+            pixmap = QPixmap()
+            if not pixmap.loadFromData(bytes(blob)):
+                # Mismo caso que C1 en `subir_imagen`: lo guardado puede ser
+                # un PDF, que QPixmap no sabe rasterizar -- se dice, en vez
+                # de dejar el visor en blanco sin explicación (DA-18, sin
+                # símbolos).
+                self.label_imagen.setText(
+                    "Hay un archivo guardado para este control que no se "
+                    "puede previsualizar aquí (por ejemplo un PDF).\n"
+                    "Sigue guardado y sale en el reporte."
+                )
+                self.label_imagen.setStyleSheet("color: black; font-size: 14px;")
+                return
+
+            self.pixmap_original = pixmap
+            self.zoom_factor = 0.5
+            self.actualizar_imagen()
+            self.boton_zoom_mas.setEnabled(True)
+            self.boton_zoom_menos.setEnabled(True)
+            self.boton_zoom_mas.show()
+            self.boton_zoom_menos.show()
+            if not hasattr(self, "zoomConnected") or not self.zoomConnected:
+                self.label_imagen.ruedaScroll.connect(self.zoom_rueda)
+                self.zoomConnected = True
+        except Exception as e:
+            print(f"IM4: no se pudo mostrar la imagen guardada: {e}")
 
     def _configurar_toolbox_principal(self, toolbox):
         """Configura el toolbox principal con todas las categorías"""
@@ -2544,9 +2599,25 @@ class PruebaMensual600(PruebaBasico):
                 QMessageBox.warning(self, "Advertencia", "Primero selecciona una imagen.")
                 return
 
-            if not hasattr(self, 'guardar_analisis') or self.guardar_analisis is None: 
+            # IM3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM3, [[DA-65]]): el
+            # resultado anterior se DESCARTA antes de intentar el análisis
+            # nuevo. Sin esto, un análisis que falla (el `except` de abajo lo
+            # atrapa con un `print`, sin diálogo -- patrón H3, y IMG-1/DPI lo
+            # dispara de verdad) dejaba vivo el `self.res` del análisis
+            # ANTERIOR: el botón "Guardar" seguía habilitado y persistía el
+            # análisis de OTRA imagen contra la imagen nueva. Corrupción
+            # silenciosa, no una molestia de interfaz.
+            self.res = None
+            if hasattr(self, 'guardar_analisis') and self.guardar_analisis is not None:
+                self.guardar_analisis.setEnabled(False)
+
+            if not hasattr(self, 'guardar_analisis') or self.guardar_analisis is None:
                 self.guardar_analisis = QPushButton("Guardar")
                 self.guardar_analisis.setFixedSize(80, 35)
+                # IM3: nace deshabilitado -- se crea ANTES de que
+                # `analizar_cuadrado2` corra, así que en este punto todavía no
+                # se sabe si habrá algo que guardar.
+                self.guardar_analisis.setEnabled(False)
                 self.botones_layout.addWidget(self.guardar_analisis)
 
             self.res = analizar_cuadrado2(
@@ -2555,6 +2626,11 @@ class PruebaMensual600(PruebaBasico):
                 mostrar=True,
                 canvas=self.canvas
             )
+
+            # IM3: solo aquí, con el análisis ya devuelto, hay algo que
+            # guardar. Si `analizar_cuadrado2` lanzó, esta línea no se alcanza
+            # y el botón queda deshabilitado con `self.res` en None.
+            self.guardar_analisis.setEnabled(True)
 
             self.lista_graficas = self.res.get("graficas", [])
             self.grafica_actual = 0
@@ -2577,7 +2653,19 @@ class PruebaMensual600(PruebaBasico):
                     self.col2.addWidget(self.toolbar)
         except Exception as e:
             print("Error al subir o al analizar imagen: ",e)
-            
+            # IM3: el aviso es parte de la misma corrección, no un extra. Sin
+            # él, `self.res = None` + botón deshabilitado dejarían al físico
+            # ante una pantalla que no hace nada y un "Guardar" que no
+            # responde, sin decirle por qué -- se cambiaría un fallo
+            # silencioso por otro. Con el aviso, el análisis fallido es
+            # visible y la imposibilidad de guardar queda explicada.
+            # NO arregla la causa (IMG-1/DPI sigue viva, va al plan de
+            # imágenes): hace que se note en vez de guardar datos de otra
+            # imagen.
+            QMessageBox.warning(
+                self, "No se pudo analizar la imagen",
+                f"El análisis de la placa no se completó, así que no hay "
+                f"resultados que guardar.\n\nDetalle: {e}")
 
     def mostrar_resultados_AnalisisImagen(self, texto_lines):
         toolbar = getattr(self, 'toolbar', None)
@@ -2642,17 +2730,77 @@ class PruebaMensual600(PruebaBasico):
             conectar_unico(self.guardar_analisis.clicked, self.guardar_analisis_e_imagen)
 
     def guardar_analsis(self):
-            guardar_analisis_placa600(self.ref, self.res)
+            """IM5: propaga si el guardado de los valores calculados salió
+            bien, para que el llamador no guarde la imagen sin ellos."""
+            return guardar_analisis_placa600(self.ref, self.res)
 
     def guardar_analisis_e_imagen(self):
         """A6.3: acción real del botón "Guardar análisis" -- análisis de
         placa (`guardar_analisis_placa600`) e imagen (`crear_algo`, vía
-        `dbImagen`), 1 fila de auditoría para las dos."""
-        self.guardar_analsis()
-        self.dbImagen(self.ref, self.imagen_path)
+        `dbImagen`), 1 fila de auditoría para las dos.
+
+        IM2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM2): el detalle dice ahora
+        QUÉ imagen se guardó (nombre y tamaño), no solo que se guardó --
+        `dbImagen` devuelve esa metadata desde `crear_algo`. Si la imagen no
+        se guardó (ruta ilegible, o ninguna seleccionada) el detalle lo dice
+        explícitamente en vez de afirmar "+ imagen" en falso: una fila de
+        auditoría que miente sobre lo que pasó es peor que una que no
+        existe.
+
+        La fila sigue escribiéndose en su propia transacción, aparte de las
+        de la placa y la imagen ([[DP-43]], [[DA-64]]) -- unificarlas exige
+        reestructurar la frontera UI/servicio, que [[DA-58]] ya declinó.
+
+        IM5 (Fase 6): **la imagen NO se guarda si sus valores calculados no
+        se guardaron**. Antes, `guardar_analisis_placa600` se tragaba su
+        propia excepción (rollback + aviso) y devolvía `None` sin
+        distinguirse de un guardado bueno, así que esta función seguía
+        adelante y guardaba la imagen igual -- dejando una imagen huérfana,
+        sin los valores que la explican. Es lo que se ve en `ref=1` y `ref=5`
+        de producción: imagen presente, **0 filas** en `analisis_placa_*`.
+        La imagen y sus valores son un solo dato: o entran los dos, o
+        ninguno.
+
+        Y **un solo aviso al final**, que dice QUÉ se guardó. Antes eran dos
+        popups vagos ("Datos guardados correctamente" + "Se guardó la
+        imagen"), ninguno de los cuales decía qué. Sin símbolos ([[DA-18]]).
+        """
+        valores_guardados = self.guardar_analsis()
+
+        if not valores_guardados:
+            # `guardar_analisis_placa600` ya mostró el motivo del fallo. Aquí
+            # solo se explica la CONSECUENCIA, que es lo que el físico
+            # necesita saber para decidir qué hacer.
+            QMessageBox.warning(
+                self, "No se guardó nada",
+                "No se pudieron guardar los resultados del análisis, así que "
+                "la imagen tampoco se guardó: las dos cosas se guardan "
+                "juntas o no se guarda ninguna.\n\n"
+                "El registro anterior de este control quedó intacto.")
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                 "analisis_placa600", ref=self.ref,
+                                 detalle="intento fallido -- no se guardó "
+                                         "el análisis ni la imagen")
+            return
+
+        imagen_guardada = self.dbImagen(self.ref, self.imagen_path)
+        if imagen_guardada:
+            nombre, tam = imagen_guardada
+            detalle = f"análisis de placa + imagen ({nombre}, {tam} bytes)"
+            aviso = (f"Se guardaron los resultados del análisis y la imagen "
+                     f"'{nombre}' ({tam} bytes).\n\n"
+                     f"La versión anterior de este control queda guardada y "
+                     f"se puede consultar.")
+        else:
+            detalle = "análisis de placa (sin imagen)"
+            aviso = ("Se guardaron los resultados del análisis, pero la "
+                     "imagen no se guardó.\n\n"
+                     "Los resultados quedaron registrados; si necesita la "
+                     "imagen, vuelva a seleccionarla y guarde otra vez.")
         _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
                              "analisis_placa600", ref=self.ref,
-                             detalle="análisis de placa + imagen")
+                             detalle=detalle)
+        QMessageBox.information(self, "Guardado", aviso)
 
     def mostrar_grafica_actual(self):
         if self.lista_graficas:
@@ -2831,10 +2979,13 @@ class PruebaMensual600(PruebaBasico):
         self.search_bar.textChanged.connect(self.filtrarTabla)
 
     def dbImagen(self, ref, imagen):
+        """IM2: propaga el retorno de `crear_algo` -- `(nombre, bytes)` de la
+        imagen guardada, o `None` si no se guardó -- para que
+        `guardar_analisis_e_imagen` pueda decirlo en su fila de auditoría."""
         self.boton_aceptar.hide()
         self.boton_cancel.hide()
         #print(ref)
-        crear_algo(self, ref, imagen)
+        return crear_algo(self, ref, imagen)
     
     def createTab(self, text):
         print(f'\nEntro a createTab con {text} en la clase {self.__class__.__name__}')

@@ -49,6 +49,13 @@ Censo hecho a mano el 24-08 sobre el árbol de producción completo (0
 literales, 0 dinámicos, 0 opacos sin revisar al cerrar esta tarea) --
 verificado con un script de censo aparte antes de escribir las listas de
 abajo, no adivinado.
+
+**Actualizado el 25-08 (Fase 6)**: IM1 retiró el `UPDATE` en sitio de
+`crear_algo` sobre `preguntas.imagen` -- la entrada de IMG-2, que EB5 dejaba
+deliberadamente VISIBLE en la lista de literales, desapareció del censo y se
+retiró con su explicación. Es el primer caso en que este tripwire cumple su
+segunda función: no solo avisar de una escritura NUEVA, sino obligar a
+limpiar la excepción cuando el defecto que la justificaba se cierra de raíz.
 """
 import ast
 import sys
@@ -89,25 +96,26 @@ SITIOS_LITERALES_PERMITIDOS = {
         "por su propio id físico. Edición directa de UNA celda (DA-08), no "
         "un reemplazo de bloque -- las hijas de QC de ese control llegan "
         "después, por su propio camino de guardado.",
-    ("data/ManejoDatos/load.py", 395):
-        "IMG-2 (HANDOFF 19-08, PLAN_CONTRATO_COMPLETO_19-08.md Fase 6, "
-        "IM1-IM4, NO ejecutada aún): crear_algo muta preguntas.imagen EN "
-        "SITIO sobre el ref vigente -- exactamente el patrón G1/G2 que esta "
-        "fase existe para eliminar, pero en OTRA raíz de proceso (la imagen "
-        "de aspectos mecánicos), fuera del alcance autorizado de la Fase 5. "
-        "Defecto conocido, documentado, medido (9 imágenes destruidas en el "
-        "rebuild del 19-08) -- no se corrige aquí ni se oculta: EB5 lo deja "
-        "visible en esta lista hasta que IM1 lo cierre de raíz.",
-    ("data/ManejoDatos/load.py", 1962):
+    # RETIRADA el 25-08 por IM1 (Fase 6): aquí vivía `crear_algo`
+    # (`load.py:395`), el `UPDATE preguntas SET imagen = ?` en sitio -- IMG-2,
+    # el defecto que destruyó 9 imágenes en el rebuild del 19-08. EB5 lo dejó
+    # VISIBLE en esta lista en vez de ocultarlo, precisamente para que su
+    # desaparición se notara: `crear_algo` compone ahora el bloque y lo
+    # reemplaza con `reemplazar_bloque` (EB1), así que ya no hay ningún
+    # `UPDATE` que censar. La entrada se retira porque el sitio dejó de
+    # existir, no porque se haya relajado el criterio -- y el test
+    # `test_sitios_literales_coinciden_con_la_lista_revisada` es lo que
+    # obligó a hacerlo explícito en vez de dejar una excepción muerta.
+    ("data/ManejoDatos/load.py", 2064):
         "mostrar_controles_imgIX_anual -- backfill de UNA sola vez de "
         "pruebas.mes_control (columna derivada de created_at), con guarda "
         "de idempotencia (solo corre si la columna no existía) y filtrado a "
         "'activo' -- migración, no reemplazo de bloque en cada guardado. "
         "Primero de tres sitios gemelos.",
-    ("data/ManejoDatos/load.py", 2359):
+    ("data/ManejoDatos/load.py", 2461):
         "mostrar_controles_imgHC_anual -- gemelo del backfill de "
         "mes_control anterior, misma guarda de idempotencia y mismo filtro.",
-    ("data/ManejoDatos/load.py", 2560):
+    ("data/ManejoDatos/load.py", 2662):
         "mostrar_controles_tac -- tercer gemelo del backfill de "
         "mes_control, misma guarda de idempotencia y mismo filtro.",
     ("scripts/migrar_bd_a_estandar.py", 339):
@@ -130,7 +138,7 @@ SITIOS_LITERALES_PERMITIDOS = {
         "abierto EXPLÍCITAMENTE como 'nada del contrato de guardado -- es "
         "del formulario de braquiterapia': fuera de alcance de EB1-EB7 por "
         "decisión ya registrada, no un descuido de esta tarea.",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3258):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3409):
         "subir_control_cunas -- UPDATE de 'observaciones' restringido a "
         "'activo = 1', pero DENTRO de la misma transacción y DESPUÉS de "
         "anular el bloque anterior (activo=0) e insertar las filas nuevas: "
@@ -146,14 +154,14 @@ SITIOS_LITERALES_PERMITIDOS = {
 # marcador {DYN}.
 # ---------------------------------------------------------------------------
 SITIOS_DINAMICOS_PERMITIDOS = {
-    ("data/ManejoDatos/load.py", 517):
+    ("data/ManejoDatos/load.py", 609):
         "rama DELETE físico de la función compartida MI3 -- SOLO se toma "
         "cuando la tabla NO tiene columna 'activo' (fuera del bloque de "
         "QC): 'indicadores_brazo'/'indicadores_angulares_colimador' del "
         "mensual 600/iX. La rama hermana (UPDATE SET activo=0) es la que "
         "corre para cualquier tabla del bloque de QC -- ver el propio "
         "comentario del archivo, 'fuera de alcance de este plan'.",
-    ("data/ManejoDatos/load.py", 727):
+    ("data/ManejoDatos/load.py", 819):
         "subirlineasmensuales, rama 'fuera del bloque de QC' -- mismo "
         "criterio que la entrada anterior: solo corre para tablas sin "
         "'activo' (p.ej. 'preguntas' antes de PR1). Contrato original, sin "
@@ -203,14 +211,14 @@ SITIOS_OPACOS_PERMITIDOS = {
         "INSERT (users, admin de arranque) -- no aplica a EB5.",
     ("data/ManejoDatos/load.py", 338):
         "INSERT (controles, alta de un control nuevo) -- no aplica a EB5.",
-    ("data/ManejoDatos/load.py", 4201):
+    ("data/ManejoDatos/load.py", 4303):
         "guardarEdicion (A3, DA-05/DA-07/DA-08) -- mecanismo GENÉRICO de "
         "edición directa de una celda: tabla y columna dinámicas (elegidas "
         "en la UI), WHERE por id físico O por (ref, energia) según la "
         "tabla. Mecanismo de corrección PERMANENTE, decidido, auditado -- "
         "no el patrón G1/G2 que este plan elimina (que mutaba TODO el "
         "bloque en cada guardado, no un campo puntual con rastro).",
-    ("data/ManejoDatos/load.py", 4281):
+    ("data/ManejoDatos/load.py", 4383):
         "guardarEdicion -- recálculo en cascada de ResultadosActividad "
         "(Ks/Kp/Ktp/actividad_calculada/actividad_decaimiento) al editar un "
         "campo de TipoCalibracion. Filtra 'activo' (filtro_activo), opaco "
@@ -218,7 +226,7 @@ SITIOS_OPACOS_PERMITIDOS = {
         "misma función. Parte del mismo mecanismo A3/DA-05 que la entrada "
         "anterior: una corrección dispara su recálculo derivado, ambos con "
         "el mismo rastro de auditoría.",
-    ("data/ManejoDatos/load.py", 4617):
+    ("data/ManejoDatos/load.py", 4719):
         "eliminarRegistro, rama else -- DELETE físico, alcanzable SOLO "
         "para tablas fuera del cierre transitivo de QC (catálogos "
         "genéricos). La rama if (anular_fila) cubre las 59 tablas de "
@@ -252,7 +260,7 @@ SITIOS_OPACOS_PERMITIDOS = {
         "subirlineasmensuales_ix, rama UPDATE fuera del bloque de QC -- "
         "mismo criterio que load.py:727: nombre_tabla nunca es una tabla "
         "de TABLAS_ANULABLES en esta rama (ya verificado por ES1).",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3609):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3760):
         "SELECT (DO1, pruebatalas -- lectura genérica, ya filtra con "
         "filtro_activo) -- no aplica a EB5, no escribe.",
     ("ui/paginasGuia/SQLtoEXCEL.py", 517):

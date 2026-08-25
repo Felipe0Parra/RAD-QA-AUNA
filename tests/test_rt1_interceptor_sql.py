@@ -251,12 +251,19 @@ class TestDenominadorDeCobertura:
         #             MI1). Migración de arranque, no acción de usuario,
         #             pero el denominador cuenta TODA lectura real, igual
         #             que ya hace con las otras migraciones ad-hoc.
+        #   97 -> 98  IM4 (Fase 6, [[DA-66]], 25-08): `imagen_vigente`
+        #             (load.py) -- el lector de `preguntas.imagen` que NO
+        #             existía. Es la primera vez que este número sube por
+        #             añadir funcionalidad ausente en vez de por descubrir
+        #             superficie ya escrita: hasta ahora la imagen se
+        #             guardaba y no se volvía a ver nunca desde el
+        #             formulario, solo en el PDF.
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 97, (
-            f"EB2d (DA-57) sumó una lectora nueva -- 97 funciones "
+        assert len(lectoras) == 98, (
+            f"IM4 (DA-66) sumó una lectora nueva -- 98 funciones "
             f"esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "

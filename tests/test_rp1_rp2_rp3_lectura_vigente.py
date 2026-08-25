@@ -198,10 +198,19 @@ class TestRP2EquiposAnualSoloMuestraLoVigente:
 
 
 class TestRP3ImagenNoSeReescribeEnFilasAnuladas:
-    """crear_algo: SELECT de existencia y UPDATE de la imagen deben tocar
-    solo la fila vigente -- antes del fix, el UPDATE sin filtro escribía la
-    imagen nueva en TODAS las filas del ref, incluidas las anuladas,
-    reescribiendo un snapshot histórico que debía quedar fijo."""
+    """crear_algo: la imagen nueva debe tocar SOLO el bloque vigente -- antes
+    de RP3, el UPDATE sin filtro escribía la imagen nueva en TODAS las filas
+    del ref, incluidas las anuladas, reescribiendo un snapshot histórico que
+    debía quedar fijo.
+
+    IM1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM1, Fase 6, 25-08) cambió el
+    MECANISMO sin tocar esa garantía: `crear_algo` ya no hace `UPDATE` en
+    sitio, compone un bloque nuevo y lo reemplaza con `reemplazar_bloque`
+    (EB1). Lo que cambia aquí es el CONTEO de filas -- cada guardado de
+    imagen deja ahora su propia generación anulada en vez de pisar la
+    vigente, así que tras dos imágenes hay 3 filas donde antes había 2. La
+    afirmación de fondo es la misma y sigue siendo la que importa: **ninguna
+    fila anulada lleva jamás la imagen nueva**."""
 
     def _pelado(self):
         obj = QWidget.__new__(QWidget)
@@ -234,9 +243,9 @@ class TestRP3ImagenNoSeReescribeEnFilasAnuladas:
         con.commit()
         con.close()
 
-        # 3. Sube una SEGUNDA imagen -- debe actualizar SOLO la fila
-        # vigente. Antes del fix (UPDATE sin filtro de activo) habría
-        # escrito imagen2 en las DOS filas.
+        # 3. Sube una SEGUNDA imagen -- debe quedar SOLO en el bloque
+        # vigente nuevo. Antes de RP3 (UPDATE sin filtro de activo) habría
+        # escrito imagen2 en TODAS las filas del ref.
         obj2 = self._pelado()
         obj2.imagen_path = str(imagen2)
         crear_algo(obj2, 952, None)
@@ -246,14 +255,19 @@ class TestRP3ImagenNoSeReescribeEnFilasAnuladas:
             "SELECT activo, imagen FROM preguntas WHERE ref = 952 ORDER BY rowid").fetchall()
         con.close()
 
-        assert len(filas) == 2, filas
-        historica = [f for f in filas if f[0] == 0]
+        # IM1: 3 filas, no 2 -- la primera anulada en el paso 2, la segunda
+        # anulada por el propio `crear_algo` de este paso, y la vigente
+        # nueva. Antes de IM1 el guardado de la imagen pisaba la vigente en
+        # sitio y no dejaba generación.
+        assert len(filas) == 3, filas
+        historicas = [f for f in filas if f[0] == 0]
         vigente = [f for f in filas if f[0] == 1]
-        assert len(historica) == 1 and len(vigente) == 1, filas
+        assert len(historicas) == 2 and len(vigente) == 1, filas
 
-        assert bytes(historica[0][1]) == b"contenido de la PRIMERA imagen", (
-            "la fila histórica (superada) debía conservar SU imagen "
-            "original -- si esto falla, el UPDATE de crear_algo sigue "
-            "reescribiendo filas anuladas")
+        for h in historicas:
+            assert bytes(h[1]) == b"contenido de la PRIMERA imagen", (
+                "cada fila histórica (superada) debía conservar SU propia "
+                "imagen -- si esto falla, el guardado de la imagen volvió a "
+                "escribir sobre filas anuladas")
         assert bytes(vigente[0][1]) == b"contenido de la SEGUNDA imagen, distinta", (
-            "la fila vigente sí debe llevar la imagen nueva")
+            "el bloque vigente sí debe llevar la imagen nueva")

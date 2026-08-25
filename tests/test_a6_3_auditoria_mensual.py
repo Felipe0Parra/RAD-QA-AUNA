@@ -235,20 +235,41 @@ class TestGuardarAnalisisEImagenAuditaUnaSolaVez:
     conexiones .clicked independientes (placa + imagen) -- ahora es 1
     handler, 1 fila."""
 
-    def _instancia(self, bd_temporal):
+    def _instancia(self, bd_temporal, monkeypatch, valores_ok=True):
+        """IM5 (Fase 6): los dobles devuelven ahora un valor con significado
+        -- `guardar_analsis` dice si los valores calculados se guardaron, y
+        `dbImagen` devuelve `(nombre, bytes)` de la imagen. Antes eran
+        `lambda: llamadas.append(...)`, que devuelve `None`: con el contrato
+        nuevo eso significa "falló", y el test entraba en la rama de fallo
+        (y se colgaba en un QMessageBox sin mockear -- trampa 2)."""
         ref = _insertar_control(bd_temporal)
         obj = _mensual_pelado()
         obj.ref = ref
         obj.res = {}
         obj.imagen_path = "no-importa.jpg"
 
+        monkeypatch.setattr(mensual_mod.QMessageBox, "information",
+                            lambda *a, **k: None)
+        monkeypatch.setattr(mensual_mod.QMessageBox, "warning",
+                            lambda *a, **k: None)
+
         llamadas = []
-        obj.guardar_analsis = lambda: llamadas.append("guardar_analsis")
-        obj.dbImagen = lambda ref, imagen: llamadas.append(("dbImagen", ref, imagen))
+
+        def _guardar_analsis():
+            llamadas.append("guardar_analsis")
+            return valores_ok
+
+        def _db_imagen(ref_, imagen):
+            llamadas.append(("dbImagen", ref_, imagen))
+            return ("no-importa.jpg", 123)
+
+        obj.guardar_analsis = _guardar_analsis
+        obj.dbImagen = _db_imagen
         return obj, ref, llamadas
 
-    def test_ambas_acciones_se_disparan_con_una_sola_fila(self, app, bd_temporal):
-        obj, ref, llamadas = self._instancia(bd_temporal)
+    def test_ambas_acciones_se_disparan_con_una_sola_fila(
+            self, app, bd_temporal, monkeypatch):
+        obj, ref, llamadas = self._instancia(bd_temporal, monkeypatch)
         obj.guardar_analisis_e_imagen()
 
         assert "guardar_analsis" in llamadas
@@ -257,6 +278,26 @@ class TestGuardarAnalisisEImagenAuditaUnaSolaVez:
         assert len(filas) == 1
         assert filas[0][:4] == ("Físico de Prueba", "guardar",
                                 "analisis_placa600", str(ref))
+
+    def test_si_los_valores_no_se_guardan_la_imagen_tampoco(
+            self, app, bd_temporal, monkeypatch):
+        """IM5: la imagen y sus valores calculados son un solo dato -- o
+        entran los dos o ninguno. Antes, `guardar_analisis_placa600` se
+        tragaba su excepción y esta función seguía adelante guardando la
+        imagen igual, dejándola huérfana (`ref=1` y `ref=5` de producción:
+        imagen presente, 0 filas en `analisis_placa_*`)."""
+        obj, ref, llamadas = self._instancia(
+            bd_temporal, monkeypatch, valores_ok=False)
+        obj.guardar_analisis_e_imagen()
+
+        assert "guardar_analsis" in llamadas
+        assert not any(c[0] == "dbImagen" for c in llamadas if isinstance(c, tuple)), (
+            "la imagen NO debe guardarse si sus valores calculados fallaron")
+
+        filas = _audit_log(bd_temporal)
+        assert len(filas) == 1, "el intento fallido también deja rastro"
+        assert "fallido" in filas[0][4], (
+            f"la auditoría debe decir que no se guardó nada: {filas[0]}")
 
 
 class TestSubirTablaOptimizadaAudita:

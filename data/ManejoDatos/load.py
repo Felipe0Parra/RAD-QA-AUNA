@@ -363,38 +363,130 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
         QMessageBox.critical(self, "Error", f"Error en la consulta: {e}")
 
 def crear_algo(self, ref, imagen):
+    """IM1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM1, Fase 6): guarda la imagen
+    del análisis de placa COMPONIENDO un bloque nuevo de `preguntas` (texto
+    vigente + imagen nueva) y reemplazándolo con `reemplazar_bloque` (EB1),
+    en vez de mutar el bloque vigente con un `UPDATE ... SET imagen = ?`.
+
+    Por qué cambió (IMG-2, medido en el rebuild del 19-08): el `UPDATE` en
+    sitio es el mismo patrón G1/G2 que toda la Fase 5 eliminó del resto del
+    bloque de QC -- destruía la imagen anterior sin dejar rastro. Subir
+    `placa_ref6` tres veces y luego otra imagen distinta dejaba solo la
+    última: **9 imágenes se perdieron así**. Ahora cada guardado deja una
+    generación recuperable (la anterior queda `activo=0`, nunca se borra).
+
+    Composición con el esquema COMPLETO, igual que `subirlineasmensuales`
+    hace en la dirección contraria (PR1, más abajo en este archivo): allí el
+    texto se recompone conservando `imagen`; aquí la imagen se recompone
+    conservando el texto. Sin esto, el bloque nuevo nacería con las 14
+    columnas de texto en NULL y el reemplazo perdería los aspectos mecánicos
+    ya guardados.
+
+    Sin fila vigente inserta igual, con el texto en NULL ([[DA-63]]): es la
+    capacidad de guardar la imagen ANTES de llenar los aspectos mecánicos,
+    que hoy existe y se usa (`ref=6` y `ref=10` en producción son
+    exactamente eso). Lo que desaparece no es la capacidad, es que fuera una
+    rama divergente.
+
+    IM2: devuelve `(nombre_archivo, tamaño_bytes)` de la imagen guardada, o
+    `None` si no guardó nada. `reemplazar_bloque` va con `auditar=False`
+    porque la fila de auditoría de esta acción la escribe su ÚNICO llamador
+    (`guardar_analisis_e_imagen`, criterio A6.3 -- "una acción, una fila"),
+    que usa este retorno para decir QUÉ imagen se guardó. La atomicidad
+    entre esa fila y la imagen queda fuera de alcance ([[DP-43]], [[DA-64]]).
+    """
     print(f"\nEntra a la función crear_algo en load.py con ref: {ref} y imagen: {imagen}")
-    conn = Conexion().conectar()
-    cursor = conn.cursor()
 
     if hasattr(self, "imagen_path") and self.imagen_path:
         imagen = self.imagen_path
     else:
         QMessageBox.critical(self, "Error", "No se ha seleccionado ninguna imagen.")
-        return
-    
-    with open(imagen, 'rb') as file:
-        imagen_blob = file.read()
-    
-    lista = [imagen_blob, ref]
-    lista2 = [ref, imagen_blob]
-    # RP3 (PLAN_LECTURA_VIGENTE_18-08.md §6-RP3): sin filtro de activo, el
-    # SELECT de existencia podía encontrar una fila HISTÓRICA (activo=0) y
-    # dar "no existía" con una fila vigente ya presente, y el UPDATE
-    # escribía la imagen en TODAS las filas del ref -- incluidas las
-    # anuladas, reescribiendo un snapshot que debía quedar fijo.
-    cursor.execute(f"SELECT ref FROM preguntas WHERE ref = ?{filtro_activo('preguntas')}", (ref,))
-    if cursor.fetchone() is None:
-        QMessageBox.information(self, "Éxito", f"No existía")
-        sql = f"INSERT INTO preguntas (ref, imagen) VALUES (?,?)"
-        cursor.execute(sql, lista2)
+        return None
+
+    # El fichero se lee ANTES de abrir la transacción: si la ruta ya no es
+    # legible (la imagen se movió o se borró entre el análisis y el clic en
+    # "Guardar"), se avisa y no se toca la BD. Antes de IM1 esta excepción
+    # se propagaba hasta el slot de Qt, que la atrapa y sigue -- el físico
+    # veía "no pasó nada" sin ningún mensaje (la misma clase de fallo
+    # silencioso que LR5 documentó en braquiterapia).
+    try:
+        with open(imagen, 'rb') as file:
+            imagen_blob = file.read()
+    except OSError as ex:
+        QMessageBox.critical(self, "Error",
+                             f"No se pudo leer la imagen:\n{imagen}\n\n{ex}")
+        return None
+
+    conn = Conexion().conectar()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("BEGIN")
+
+        # Esquema completo menos `activo` (la gobierna `reemplazar_bloque`),
+        # leído de la BD y no escrito a mano: `preguntas` ha ganado columnas
+        # por migración (`activo` misma) y una lista literal aquí volvería a
+        # quedar desincronizada como le pasó a `columnas_lista` antes de PR1.
+        columnas = [c[1] for c in cursor.execute("PRAGMA table_info(preguntas)")
+                    if c[1] != "activo"]
+
+        # RP3 (PLAN_LECTURA_VIGENTE_18-08.md §6-RP3): la lectura del bloque a
+        # heredar FILTRA por vigencia -- sin el filtro podía componer sobre
+        # una fila histórica (`activo=0`) y resucitar texto ya reemplazado.
+        cursor.execute(
+            f"SELECT {', '.join(columnas)} FROM preguntas "
+            f"WHERE ref = ?{filtro_activo('preguntas')}", (ref,))
+        fila_vigente = cursor.fetchone()
+
+        compuesto = dict(zip(columnas, fila_vigente)) if fila_vigente else {}
+        compuesto["ref"] = ref
+        compuesto["imagen"] = imagen_blob
+
+        reemplazar_bloque(
+            cursor, "preguntas", [("ref", ref)],
+            f"INSERT INTO preguntas ({', '.join(columnas)}) "
+            f"VALUES ({', '.join(['?'] * len(columnas))})",
+            [tuple(compuesto.get(col) for col in columnas)],
+            _usuario_actual(self), ref=str(ref), auditar=False)
+
         conn.commit()
-        QMessageBox.information(self, "Éxito", "Se guardó la imagen.")
-    else:
-        sql = f"UPDATE preguntas SET imagen = ? WHERE ref = ?{filtro_activo('preguntas')}"
-        cursor.execute(sql, lista)
-        conn.commit()
-        QMessageBox.information(self, "Éxito", "Se guardó la imagen.")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    # IM5 (Fase 6): sin popup propio -- el aviso lo da el llamador, UNA vez,
+    # diciendo qué se guardó (valores calculados + imagen). Ver el
+    # comentario en `guardar_analisis_placa600`.
+    return (Path(imagen).name, len(imagen_blob))
+
+
+def imagen_vigente(ref):
+    """IM4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM4): devuelve el BLOB de
+    `preguntas.imagen` del bloque VIGENTE de `ref`, o `None` si ese control
+    no tiene imagen guardada.
+
+    Es funcionalidad AUSENTE, no una regresión: el censo (reverificado el
+    25-08) confirma que hasta ahora los únicos lectores de esa columna en
+    todo el árbol de producción eran el PDF
+    (`models/PDF/Mensuales/reportes_mensuales.py`) y el `SELECT` de
+    composición de `subirlineasmensuales` -- ninguno devolvía la imagen al
+    formulario, así que al reabrir un control el físico no veía la imagen
+    que él mismo había guardado.
+
+    Filtra por vigencia (`filtro_activo`): tras IM1 cada guardado deja
+    generaciones anuladas del mismo `ref`, y sin el filtro esta lectura
+    podría devolver una imagen histórica ya reemplazada -- exactamente el
+    defecto que RP3 corrigió del lado de la escritura.
+    """
+    conn = Conexion().conectar()
+    try:
+        fila = conn.execute(
+            f"SELECT imagen FROM preguntas "
+            f"WHERE ref = ?{filtro_activo('preguntas')}", (ref,)).fetchone()
+    finally:
+        conn.close()
+    return fila[0] if fila and fila[0] is not None else None
 
 def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_energia = 0, anual = False, pdd = None, id=False):
     # Obtener la conexión desde la clase Conexion
@@ -1380,11 +1472,14 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
 
         conn.commit()
 
-        QMessageBox.information(
-            parent,
-            "Éxito",
-            "Datos guardados correctamente en la base de datos."
-        )
+        # IM5 (Fase 6): NO muestra su propio "Éxito" aquí. Un clic en
+        # "Guardar análisis" guarda DOS cosas -- los valores calculados
+        # (estas 3 tablas) y la imagen (`crear_algo`) -- y antes cada mitad
+        # sacaba su propio popup vago ("Datos guardados correctamente" +
+        # "Se guardó la imagen"), sin decir QUÉ se guardó. El aviso ahora es
+        # UNO solo y lo da `guardar_analisis_e_imagen`, que es quien sabe si
+        # las dos mitades salieron bien.
+        return True
 
     except Exception as e:
 
@@ -1399,6 +1494,13 @@ def guardar_analisis_placa600(ref, datos, parent=None, cm_por_pixel=None):
             "Error",
             f"No se pudo guardar el análisis:\n{str(e)}"
         )
+        # IM5: antes esta función se tragaba el fallo y devolvía None sin
+        # distinguirse de un guardado bueno -- el llamador seguía adelante y
+        # guardaba LA IMAGEN IGUAL, dejando una imagen sin sus valores
+        # calculados (es lo que se ve en `ref=1` y `ref=5` de producción:
+        # imagen presente, 0 filas en analisis_placa_*). Devolver False deja
+        # que el llamador lo trate como lo que es: el guardado no ocurrió.
+        return False
 
     finally:
         if conn is not None:
