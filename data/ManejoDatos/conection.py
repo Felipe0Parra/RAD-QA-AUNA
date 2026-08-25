@@ -158,7 +158,6 @@ class Conexion():
             self.con = sqlite3.connect(ruta_base_datos(), check_same_thread=False)  # Evita errores de hilos
             aplicar_pragmas_conexion(self.con)
             self.createTable()
-            #self.eliminar_tablas_cambio_fuente()
             self.crearTablasCambioFuente()
             self.crearTablaLinealidad()
             self.crearTablaAnalisis600()
@@ -196,11 +195,28 @@ class Conexion():
             # arranque, tras esta línea).
             self._asegurar_secuencias_sin_duplicados()
             self._asegurar_fk_on_delete_restrict()
-            # EB2d (DA-57): mismo motivo de orden que E10 -- recrea
-            # `angulo_starshot` si todavía trae el UNIQUE de tabla viejo,
-            # así que va ANTES de que E8 reponga triggers (una recreación
-            # los borraría) y DESPUÉS de E7/E10 para no duplicar rebuilds.
-            self._asegurar_angulo_starshot_sin_unique_de_tabla()
+            # EB2d (DA-57) YA NO CORRE AQUÍ ([[DA-69]], decisión del físico
+            # 2026-08-25): `_asegurar_angulo_starshot_sin_unique_de_tabla`
+            # RECONSTRUYE una tabla (crear temporal, copiar, DROP, renombrar)
+            # y, a diferencia de E10, lo hace SIN respaldo previo. Que una
+            # reconstrucción se dispare sola al abrir la app es justo lo que
+            # el físico pidió acotar: las correcciones de estructura se
+            # aplican UNA vez, desde la herramienta de migración, con
+            # respaldo y reporte.
+            #
+            # Se movió SOLO esta, no las demás: E10 lleva desde el 29-07 con
+            # su respaldo propio (F1) y `_asegurar_activo_bloque_qc` es
+            # aditivo (`ALTER TABLE ADD COLUMN`, no puede perder una fila).
+            # Mover lo que ya funciona era el riesgo mayor.
+            #
+            # La llama ahora `scripts/migrar_bd_a_estandar.py`, DESPUÉS de
+            # este `Conexion()`. La restricción de orden que tenía aquí
+            # ("antes de E8, porque recrear una tabla borra sus triggers")
+            # NO aplica en el sitio nuevo: los 4 triggers de E8 viven en
+            # `controles`/`TipoCalibracion`/`LinealidadBraquiterapia`/`users`
+            # (`TABLAS_CON_TRIGGER_ANTI_DELETE`), y `angulo_starshot` no es
+            # ninguna de ellas -- reconstruirla no borra ningún trigger.
+            # Verificado antes de moverla, no supuesto.
             # E8: SIEMPRE después de E10 -- recrear una tabla borra sus
             # triggers, así que si E10 alguna vez recrea algo sobre una BD
             # ya blindada, los triggers deben reponerse justo después.
@@ -602,14 +618,15 @@ class Conexion():
                 "AND name='angulo_starshot'").fetchone()
             if fila is None or fila[0] is None:
                 cur.close()
-                return
+                return {"estado": "no aplica -- la tabla no existe en esta BD"}
             sql_original = fila[0]
             patron = re.compile(r",\s*UNIQUE\s*\(\s*ref\s*,\s*spoke_index\s*\)",
                                  re.IGNORECASE)
             sql_sin_unique, n_cambios = patron.subn("", sql_original)
             if n_cambios == 0:
                 cur.close()
-                return  # ya migrada, o nunca tuvo la constraint
+                # ya migrada, o nunca tuvo la constraint
+                return {"estado": "ya estaba sin el UNIQUE de tabla"}
 
             temporal = "_eb2d_nueva_angulo_starshot"
             sql_temporal = re.sub(
@@ -664,12 +681,14 @@ class Conexion():
             print("EB2d: angulo_starshot migrada -- UNIQUE(ref, spoke_index) de "
                   "tabla retirado (el índice parcial de CL1 ya cubre lo mismo, "
                   "respetando 'activo').")
+            return {"estado": "migrada -- UNIQUE(ref, spoke_index) de tabla retirado"}
         except Exception as ex:
             try:
                 self.con.execute("PRAGMA foreign_keys=ON")
             except Exception:
                 pass
             print("Error migrando angulo_starshot (EB2d):", ex)
+            return {"estado": f"NO MIGRADA -- {ex}"}
 
     def _asegurar_activo_bloque_qc(self):
         """E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): `activo INTEGER
@@ -1227,20 +1246,24 @@ class Conexion():
         cur.close()
         self.createAdmin()
 
-    def eliminar_tablas_cambio_fuente(self):
-        nombres_tablas = [
-            "TipoCalibracion",
-            "SistemaMedicion",
-            "CondicionesMedicion",
-            "MaximosCamaras",
-            "LecturasMaximos",
-            "ResultadosActividad"
-        ]
-        
-        cursor = self.con.cursor()
-        for nombre in nombres_tablas:
-            cursor.execute(f"DROP TABLE IF EXISTS {nombre}")
-        self.con.commit()
+    # RETIRADA el 2026-08-25 ([[DA-68]], decisión del físico): aquí vivía
+    # `eliminar_tablas_cambio_fuente()`, que hacía `DROP TABLE IF EXISTS`
+    # sobre las 6 tablas de braquiterapia (`TipoCalibracion` y sus 5 hijas,
+    # incluida `ResultadosActividad`) SIN NINGUNA GUARDA: no miraba si
+    # tenían datos, no confirmaba, no auditaba, no respaldaba. Era el
+    # borrado más destructivo que existía en el código -- más que el DELETE
+    # en cascada que E7/E8/E10 blindaron, porque se llevaba el esquema
+    # entero.
+    #
+    # Nunca estuvo conectada (su única llamada estaba comentada en
+    # `__init_connection`, y `git log -S` la encuentra ya comentada en el
+    # commit inicial `408090b`), pero nada impedía que alguien
+    # descomentara esa línea: habría destruido braquiterapia completa en el
+    # siguiente arranque. Se retira en vez de dejarla vigilada por un
+    # tripwire -- lo que no existe no se puede reconectar por descuido.
+    #
+    # Hallada al responder una pregunta del físico sobre qué borra
+    # automáticamente la aplicación (DP-44).
 
     def crearTablasCambioFuente(self):
         tablas_sql = [

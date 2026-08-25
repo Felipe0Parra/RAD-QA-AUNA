@@ -130,12 +130,12 @@ SITIOS_CENSALES_PERMITIDOS = {
         "censo (OB1, censo.total): el observador necesita el total SIN "
         "filtrar para poder calcular `anuladas = total - activas`; la "
         "consulta de al lado (línea 146) sí filtra, y es la que compara.",
-    ("data/ManejoDatos/conection.py", 540):
+    ("data/ManejoDatos/conection.py", 556):
         "migración (E10, _asegurar_fk_on_delete_restrict): "
         "`INSERT INTO \"{temporal}\" SELECT * FROM \"{nombre}\"` copia la "
         "tabla ENTERA al reconstruirla para cambiar sus FK. Filtrar aquí "
         "no sería una lectura más estricta: BORRARÍA el histórico.",
-    ("data/ManejoDatos/conection.py", 639):
+    ("data/ManejoDatos/conection.py", 656):
         "migración (EB2d, DA-57, _asegurar_angulo_starshot_sin_unique_de_tabla): "
         "mismo patrón que E10 arriba -- copia la tabla ENTERA al "
         "reconstruirla para retirar el UNIQUE(ref, spoke_index) de tabla "
@@ -152,7 +152,7 @@ SITIOS_CENSALES_PERMITIDOS = {
         "el centinela histórico de 2º físico. Una fila anulada con el dato "
         "mal sigue teniendo el dato mal -- filtrar aquí haría que la cuenta "
         "y el UPDATE de la línea 339 discreparan en silencio.",
-    ("scripts/migrar_bd_a_estandar.py", 339):
+    ("scripts/migrar_bd_a_estandar.py", 355):
         "migración (el UPDATE que normaliza ese centinela a NULL): misma "
         "razón que la cuenta de la línea 121, y la otra mitad de la misma "
         "operación -- filtrar una de las dos deja la migración a medias.",

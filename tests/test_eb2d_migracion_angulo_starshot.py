@@ -12,6 +12,22 @@ copiar, preservando filas, índices propios y el contador de
 `sqlite_sequence`. Medido: 0 filas en las 3 BD de referencia -- pero el
 test de conservación de datos usa una BD legada con filas reales para
 probarlo de verdad, no solo confiar en la medición.
+
+**DA-69 (25-08, decisión del físico): esta migración YA NO CORRE AL
+ABRIR LA APP.** Reconstruye una tabla (crear temporal, copiar, DROP,
+renombrar) y, a diferencia de E10, sin respaldo previo propio -- que eso se
+dispare solo en cada arranque es lo que el físico pidió acotar: *"que las
+correcciones que se hagan sean de una sola vez... la solución siempre
+apuntando a corregir la estructura de la BD"*. Su único disparador es ahora
+`scripts/migrar_bd_a_estandar.py`, que respalda antes y reporta lo que hizo.
+
+Se movió SOLO esta, a propósito: E10 lleva desde el 29-07 con su respaldo
+propio (F1) y `_asegurar_activo_bloque_qc` es aditivo (`ALTER TABLE ADD
+COLUMN`, no puede perder una fila). Mover lo que ya funcionaba era el
+riesgo mayor.
+
+Los tests de BD legada invocan la migración EXPLÍCITAMENTE, igual que hace
+la herramienta -- ya no basta con abrir `Conexion()`.
 """
 import sqlite3
 
@@ -111,7 +127,11 @@ class TestMigracionDeBdLegada:
 
     def test_migra_conservando_los_datos(self, tmp_path, monkeypatch):
         ruta = self._bd_legada(tmp_path, monkeypatch)
-        conexion = Conexion()  # arranque real: corre la migración
+        conexion = Conexion()
+        # DA-69 (25-08): el arranque ya NO dispara esta migración -- se
+        # invoca explícitamente, igual que hace la herramienta de
+        # migración, que es su único disparador desde entonces.
+        conexion._asegurar_angulo_starshot_sin_unique_de_tabla()
         try:
             con = sqlite3.connect(ruta)
             try:
@@ -132,6 +152,7 @@ class TestMigracionDeBdLegada:
     def test_es_idempotente(self, tmp_path, monkeypatch):
         ruta = self._bd_legada(tmp_path, monkeypatch)
         conexion = Conexion()
+        conexion._asegurar_angulo_starshot_sin_unique_de_tabla()
         conexion.con.close()
         Conexion._instance = None
 
@@ -140,7 +161,8 @@ class TestMigracionDeBdLegada:
             "SELECT name, sql FROM sqlite_master"))
         con.close()
 
-        conexion = Conexion()  # segunda corrida
+        conexion = Conexion()
+        conexion._asegurar_angulo_starshot_sin_unique_de_tabla()  # 2a corrida
         try:
             con = sqlite3.connect(ruta)
             esquema_2 = sorted((r[0], r[1] or "") for r in con.execute(
@@ -167,6 +189,7 @@ class TestMigracionDeBdLegada:
         con.close()
 
         conexion = Conexion()
+        conexion._asegurar_angulo_starshot_sin_unique_de_tabla()
         try:
             con = sqlite3.connect(ruta)
             con.execute(
@@ -187,6 +210,7 @@ class TestMigracionDeBdLegada:
     def test_permite_anular_e_insertar_mismo_spoke_tras_migrar(self, tmp_path, monkeypatch):
         ruta = self._bd_legada(tmp_path, monkeypatch)
         conexion = Conexion()
+        conexion._asegurar_angulo_starshot_sin_unique_de_tabla()
         try:
             con = sqlite3.connect(ruta)
             con.execute(
@@ -204,3 +228,95 @@ class TestMigracionDeBdLegada:
         finally:
             conexion.con.close()
             Conexion._instance = None
+
+
+class TestNoCorreSolaAlAbrirLaApp:
+    """DA-69 (25-08): la garantía que el físico pidió -- abrir la aplicación
+    NO puede disparar una reconstrucción de tabla. Es la contraparte
+    verificable de haber sacado la llamada de `__init_connection`: sin este
+    test, alguien podría reponerla y nadie se enteraría."""
+
+    def _bd_legada_con_unique(self, tmp_path, monkeypatch):
+        ruta = str(tmp_path / "legada.db")
+        con = sqlite3.connect(ruta)
+        con.execute("""
+            CREATE TABLE angulo_starshot (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER NOT NULL,
+                spoke_index INTEGER NOT NULL,
+                angulo_nominal_deg REAL, angulo_real_deg REAL,
+                desviacion_deg REAL,
+                UNIQUE(ref, spoke_index)
+            )""")
+        con.commit()
+        con.close()
+        monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
+        Conexion._instance = None
+        return ruta
+
+    def test_abrir_la_app_no_reconstruye_la_tabla(self, tmp_path, monkeypatch):
+        ruta = self._bd_legada_con_unique(tmp_path, monkeypatch)
+        conexion = Conexion()          # arranque real y completo
+        try:
+            con = sqlite3.connect(ruta)
+            sql = con.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' "
+                "AND name='angulo_starshot'").fetchone()[0]
+            con.close()
+            assert "UNIQUE(ref, spoke_index)" in sql, (
+                "abrir la app NO debe reconstruir angulo_starshot -- si esta "
+                "constraint desapareció, la llamada volvió a "
+                "__init_connection y la reconstrucción se dispara sola otra "
+                "vez (DA-69)")
+        finally:
+            conexion.con.close()
+            Conexion._instance = None
+
+    def test_la_herramienta_de_migracion_si_la_aplica(self, tmp_path, monkeypatch):
+        """El otro lado: sacarla del arranque no puede dejarla huérfana."""
+        from scripts.migrar_bd_a_estandar import migrar
+        ruta = self._bd_legada_con_unique(tmp_path, monkeypatch)
+        Conexion._instance = None
+        resultado = migrar(ruta, aplicar=True)
+        Conexion._instance = None
+
+        assert resultado["angulo_starshot_sin_unique"]["estado"].startswith("migrada")
+        con = sqlite3.connect(ruta)
+        sql = con.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' "
+            "AND name='angulo_starshot'").fetchone()[0]
+        con.close()
+        assert "UNIQUE(ref, spoke_index)" not in sql
+
+
+class TestLaFuncionDestructivaYaNoExiste:
+    """DP-44 -> [[DA-68]] (25-08, decisión del físico): se retiró
+    `eliminar_tablas_cambio_fuente()`, que hacía `DROP TABLE IF EXISTS` sobre
+    las 6 tablas de braquiterapia sin ninguna guarda. Nunca estuvo conectada,
+    pero descomentar su llamada habría destruido braquiterapia entera al
+    siguiente arranque. Se eligió retirarla en vez de vigilarla: lo que no
+    existe no se puede reconectar por descuido -- y este test es lo que
+    impide que vuelva."""
+
+    def test_no_existe_el_metodo(self):
+        assert not hasattr(Conexion, "eliminar_tablas_cambio_fuente"), (
+            "eliminar_tablas_cambio_fuente() volvió al código -- hacía DROP "
+            "TABLE sobre las 6 tablas de braquiterapia sin mirar si tenían "
+            "datos, sin confirmar, sin auditar y sin respaldar (DA-68)")
+
+    def test_ningun_drop_table_de_braquiterapia_en_el_arranque(self):
+        """Más fuerte que comprobar el nombre: que no aparezca NINGÚN `DROP
+        TABLE` sobre esas 6 tablas en todo `conection.py`, se llame como se
+        llame la función que lo hiciera."""
+        import re
+        from pathlib import Path
+        fuente = (Path(conection_mod.__file__)).read_text(encoding="utf-8")
+        # se ignoran los comentarios: el que documenta la retirada las nombra
+        codigo = "\n".join(l for l in fuente.split("\n")
+                           if not l.lstrip().startswith("#"))
+        for tabla in ("TipoCalibracion", "SistemaMedicion", "CondicionesMedicion",
+                      "MaximosCamaras", "LecturasMaximos", "ResultadosActividad"):
+            assert not re.search(rf'DROP\s+TABLE\s+(IF\s+EXISTS\s+)?["\[]?{tabla}\b',
+                                 codigo, re.IGNORECASE), (
+                f"apareció un DROP TABLE sobre {tabla} en conection.py -- "
+                f"esas 6 tablas cargan todo el histórico de braquiterapia")

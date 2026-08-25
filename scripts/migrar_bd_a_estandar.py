@@ -334,6 +334,22 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
     try:
         instancia = conection_mod.Conexion()
         con = instancia.con
+
+        # EB2d ([[DA-69]], 25-08): esta migración RECONSTRUYE `angulo_starshot`
+        # (crear temporal, copiar, DROP, renombrar) y, a diferencia de E10, lo
+        # hace sin respaldo propio. Corría sola en CADA arranque de la app; a
+        # petición del físico pasó a correr SOLO desde aquí -- una vez, dentro
+        # de la herramienta que sí respalda antes (`migrar()`, más abajo) y
+        # que reporta lo que hizo.
+        #
+        # Va DESPUÉS de `Conexion()` a propósito: necesita el esquema ya
+        # asegurado (`activo` incluida, E7/MI1) para copiar la tabla completa.
+        # El orden respecto a E8 que tenía en el arranque no aplica aquí --
+        # `angulo_starshot` no lleva ninguno de los 4 triggers anti-borrado
+        # (viven en controles/TipoCalibracion/LinealidadBraquiterapia/users),
+        # así que reconstruirla no borra ninguno. Verificado, no supuesto.
+        resultado_starshot = instancia._asegurar_angulo_starshot_sin_unique_de_tabla()
+
         filas_centinela = _contar_centinela(con)
         if filas_centinela:
             con.execute(
@@ -391,7 +407,8 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
         conection_mod.Conexion._instance = instancia_previa
         conection_mod.USUARIO_RESPALDO_MIGRACION = usuario_respaldo_previo
     return (filas_centinela, resultado_equipos, resultado_bloque_qc,
-            resultado_indices, resultado_equipos_anual, resultado_posicionamiento)
+            resultado_indices, resultado_equipos_anual, resultado_posicionamiento,
+            resultado_starshot)
 
 
 def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas,
@@ -486,6 +503,26 @@ def _reportar_indices_bloque_qc(resultado_indices):
             print(f"    {tabla}: {motivo}")
 
 
+def _reportar_starshot(resultado):
+    """EB2d ([[DA-69]]): esta migración RECONSTRUYE una tabla. Corría sola en
+    cada arranque de la app; desde el 25-08 solo corre desde aquí, y por eso
+    tiene su propia línea de reporte -- una reconstrucción de tabla nunca
+    debe quedar absorbida en el diff genérico de esquema, que solo lista
+    columnas y tablas NUEVAS."""
+    print("\n--- angulo_starshot: retiro del UNIQUE de tabla (EB2d, DA-57) ---")
+    if not resultado:
+        print("  (sin resultado -- la migración no llegó a ejecutarse)")
+        return
+    print(f"  {resultado['estado']}")
+    if resultado["estado"].startswith("migrada"):
+        print("  Sin esto, el SEGUNDO análisis starshot de un mismo control "
+              "fallaría al guardar:\n"
+              "  una fila anulada y una vigente con el mismo (ref, spoke_index) "
+              "violan el UNIQUE\n"
+              "  aunque `activo` sea distinto. El índice parcial de CL1 cubre "
+              "lo mismo respetando\n  la vigencia.")
+
+
 def _reportar_retiro_tabla(titulo, resultado):
     """MI5/EB7 (DA-44/DA-50): cada retiro irreversible tiene su propia
     línea de reporte, siempre -- nunca queda absorbida en el diff genérico
@@ -533,7 +570,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             _copiar_set_sqlite(ruta_bd, copia)
             _consolidar_wal(copia)
             (sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc,
-             equipos_anual, posicionamiento) = _aplicar_migracion_en(copia, usuario=usuario)
+             equipos_anual, posicionamiento,
+             starshot) = _aplicar_migracion_en(copia, usuario=usuario)
             con_copia = sqlite3.connect(copia)
             try:
                 inventario_despues = _inventario_esquema(con_copia)
@@ -550,6 +588,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         _reportar_equipos(equipos)
         _reportar_saneamiento_bloque_qc(bloque_qc)
         _reportar_indices_bloque_qc(indices_bloque_qc)
+        _reportar_starshot(starshot)
         _reportar_retiro_tabla("Retiro de equipos_anual (MI5, DA-44)", equipos_anual)
         _reportar_retiro_tabla(
             "Retiro de posicionamiento_reposicionamiento (EB7, DA-50)",
@@ -564,6 +603,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                 "bloque_qc": bloque_qc, "indices_bloque_qc": indices_bloque_qc,
                 "equipos_anual": equipos_anual,
                 "posicionamiento_reposicionamiento": posicionamiento,
+                "angulo_starshot_sin_unique": starshot,
                 "qc_antes": qc_antes, "qc_despues": qc_despues,
                 "censo_antes": censo_antes, "censo_despues": censo_despues,
                 "duplicados_controles": duplicados_controles_despues}
@@ -585,7 +625,8 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     print(f"Backup creado: {respaldo}")
 
     (sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc,
-     equipos_anual, posicionamiento) = _aplicar_migracion_en(ruta_bd, usuario=usuario)
+     equipos_anual, posicionamiento,
+     starshot) = _aplicar_migracion_en(ruta_bd, usuario=usuario)
 
     con_despues = sqlite3.connect(ruta_bd)
     try:
@@ -606,6 +647,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     _reportar_equipos(equipos)
     _reportar_saneamiento_bloque_qc(bloque_qc)
     _reportar_indices_bloque_qc(indices_bloque_qc)
+    _reportar_starshot(starshot)
     _reportar_retiro_tabla("Retiro de equipos_anual (MI5, DA-44)", equipos_anual)
     _reportar_retiro_tabla(
         "Retiro de posicionamiento_reposicionamiento (EB7, DA-50)",
@@ -679,6 +721,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             "bloque_qc": bloque_qc, "indices_bloque_qc": indices_bloque_qc,
             "equipos_anual": equipos_anual,
             "posicionamiento_reposicionamiento": posicionamiento,
+            "angulo_starshot_sin_unique": starshot,
             "qc_antes": qc_antes, "qc_despues": qc_despues,
             "censo_antes": censo_antes, "censo_despues": censo_despues,
             "duplicados_controles": duplicados_controles_despues}

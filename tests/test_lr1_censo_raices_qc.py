@@ -179,7 +179,7 @@ CENSO_RAICES = {
                 "normalizarlas. Tiene que ver TODAS -- una fila anulada con "
                 "el centinela sigue teniendo el dato mal y hay que "
                 "arreglarlo igual"),
-    ("scripts/migrar_bd_a_estandar.py", 339, "controles"):
+    ("scripts/migrar_bd_a_estandar.py", 355, "controles"):
         (CENSO, "migración (UPDATE que normaliza el centinela a NULL): "
                 "misma razón que la cuenta de arriba -- filtrar dejaría el "
                 "histórico a medio migrar, que es peor que no migrarlo"),

@@ -118,7 +118,7 @@ SITIOS_LITERALES_PERMITIDOS = {
     ("data/ManejoDatos/load.py", 2662):
         "mostrar_controles_tac -- tercer gemelo del backfill de "
         "mes_control, misma guarda de idempotencia y mismo filtro.",
-    ("scripts/migrar_bd_a_estandar.py", 339):
+    ("scripts/migrar_bd_a_estandar.py", 355):
         "migración H5 (centinela de segundo físico): normaliza "
         "controles.user_id_f2 a NULL para el centinela histórico ' ---- ' "
         "-- censal a propósito (tiene que alcanzar TAMBIÉN las filas "
@@ -201,13 +201,13 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 886):
         "INSERT (linealidad_ct) -- no aplica a EB5, un INSERT nunca muta el "
         "bloque vigente.",
-    ("data/ManejoDatos/conection.py", 539):
+    ("data/ManejoDatos/conection.py", 555):
         "DDL (E10 -- CREATE TABLE de la tabla temporal de la migración "
         "CASCADE->RESTRICT) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 638):
+    ("data/ManejoDatos/conection.py", 655):
         "DDL (EB2d, DA-57 -- CREATE TABLE de la tabla temporal que retira "
         "el UNIQUE de angulo_starshot) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 2068):
+    ("data/ManejoDatos/conection.py", 2091):
         "INSERT (users, admin de arranque) -- no aplica a EB5.",
     ("data/ManejoDatos/load.py", 338):
         "INSERT (controles, alta de un control nuevo) -- no aplica a EB5.",
