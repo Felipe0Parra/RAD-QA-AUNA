@@ -138,7 +138,7 @@ SITIOS_LITERALES_PERMITIDOS = {
         "abierto EXPLÍCITAMENTE como 'nada del contrato de guardado -- es "
         "del formulario de braquiterapia': fuera de alcance de EB1-EB7 por "
         "decisión ya registrada, no un descuido de esta tarea.",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3522):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3521):
         "subir_control_cunas -- UPDATE de 'observaciones' restringido a "
         "'activo = 1', pero DENTRO de la misma transacción y DESPUÉS de "
         "anular el bloque anterior (activo=0) e insertar las filas nuevas: "
@@ -278,7 +278,7 @@ SITIOS_OPACOS_PERMITIDOS = {
         "subirlineasmensuales_ix, rama UPDATE fuera del bloque de QC -- "
         "mismo criterio que load.py:727: nombre_tabla nunca es una tabla "
         "de TABLAS_ANULABLES en esta rama (ya verificado por ES1).",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3887):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3886):
         "SELECT (DO1, pruebatalas -- lectura genérica, ya filtra con "
         "filtro_activo) -- no aplica a EB5, no escribe.",
     ("ui/paginasGuia/SQLtoEXCEL.py", 529):

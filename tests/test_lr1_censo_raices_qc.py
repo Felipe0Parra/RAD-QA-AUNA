@@ -274,7 +274,7 @@ CENSO_RAICES = {
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 245, "controles"):
         (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "
                 "Python -- un control anulado del mes prestaría sus físicos"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 517, "controles"):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 516, "controles"):
         (IDENTIDAD, "_fecha_real_del_control (F3): WHERE id = ?, fila ya elegida"),
     ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 164, "controles"):
         (IDENTIDAD, "_existe_ref: WHERE id = ? AND equipo = ? -- el id ya "
