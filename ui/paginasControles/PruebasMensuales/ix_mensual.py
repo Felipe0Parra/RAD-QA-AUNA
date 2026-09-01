@@ -349,31 +349,31 @@ class PruebaMensualIX(PruebaMensual600):
         el físico reportó el 14-07. Mapear por nombre con la misma
         `widget_a_columna` del guardado hace imposible que vuelvan a
         divergir."""
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
-        encontrado = False
-        for energia in self.ENERGIAS:
-            # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): desde que un
-            # reguardado anula la fila vieja en vez de pisarla, esta lectura
-            # necesita distinguir vigente de superada -- antes solo había
-            # UNA fila por (ref, energia) y el filtro era inerte.
-            cursor.execute(
-                f"SELECT * FROM {nombre_tabla} WHERE ref = ? AND energia = ? "
-                f"AND (activo IS NULL OR activo = 1)",
-                (ref, energia))
-            row = cursor.fetchone()
-            if row is None:
-                continue
-            encontrado = True
-            fila = dict(zip([d[0] for d in cursor.description], row))
-            for line_name in self._campos_de_energia(df_lines, energia):
-                col = widget_a_columna(line_name)
-                if col in fila and hasattr(self, line_name):
-                    valor = fila[col]
-                    getattr(self, line_name).setText(
-                        str(valor) if valor is not None else "")
-        cursor.close()
-        return encontrado
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
+            encontrado = False
+            for energia in self.ENERGIAS:
+                # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): desde que un
+                # reguardado anula la fila vieja en vez de pisarla, esta lectura
+                # necesita distinguir vigente de superada -- antes solo había
+                # UNA fila por (ref, energia) y el filtro era inerte.
+                cursor.execute(
+                    f"SELECT * FROM {nombre_tabla} WHERE ref = ? AND energia = ? "
+                    f"AND (activo IS NULL OR activo = 1)",
+                    (ref, energia))
+                row = cursor.fetchone()
+                if row is None:
+                    continue
+                encontrado = True
+                fila = dict(zip([d[0] for d in cursor.description], row))
+                for line_name in self._campos_de_energia(df_lines, energia):
+                    col = widget_a_columna(line_name)
+                    if col in fila and hasattr(self, line_name):
+                        valor = fila[col]
+                        getattr(self, line_name).setText(
+                            str(valor) if valor is not None else "")
+            cursor.close()
+            return encontrado
 
     def addsomething_ix(self, layout, df, typee, nombre_tabla, datos_eliminar, ref, usarid=False):
         print("\nEntra a addsomething_ix de la clase PruebaMensualIX")
