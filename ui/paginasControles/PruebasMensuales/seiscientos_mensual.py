@@ -3334,90 +3334,90 @@ class PruebaMensual600(PruebaBasico):
             return
         
         try:
-            conn = self.db_manager.obtener_conexion()
-            cursor = conn.cursor()
+            with self.db_manager.obtener_conexion() as conn:
+                cursor = conn.cursor()
             
-            # Usar transacción para mejor rendimiento
-            cursor.execute("BEGIN TRANSACTION")
+                # Usar transacción para mejor rendimiento
+                cursor.execute("BEGIN TRANSACTION")
             
-            filas_a_insertar = []
+                filas_a_insertar = []
             
-            # Procesar grupos de 3 elementos
-            tipos_camara = self._tipos_camara()
-            grupos = [0, 3, 6, 9] if hasattr(self, "esIX") and self.esIX else [0, 3, 6]
-            for base in grupos:
-                tipo_camara = tipos_camara[base // 3]
-                try:
-                    model = datos[base] if base < len(datos) else ""
-                    calibr_fact = datos[base + 2] if (base + 2) < len(datos) else ""
+                # Procesar grupos de 3 elementos
+                tipos_camara = self._tipos_camara()
+                grupos = [0, 3, 6, 9] if hasattr(self, "esIX") and self.esIX else [0, 3, 6]
+                for base in grupos:
+                    tipo_camara = tipos_camara[base // 3]
+                    try:
+                        model = datos[base] if base < len(datos) else ""
+                        calibr_fact = datos[base + 2] if (base + 2) < len(datos) else ""
 
-                    # F9: el id del equipo elegido, no su texto -- el mismo
-                    # widget que puso el texto en `datos[base+1]` (commenu
-                    # ES combo_menu, ver controlTestWindow).
-                    serie_widget = (self.commenu[base + 1]
-                                   if (base + 1) < len(self.commenu) else None)
-                    equipo_id = (serie_widget.currentData()
-                                if serie_widget is not None else None)
+                        # F9: el id del equipo elegido, no su texto -- el mismo
+                        # widget que puso el texto en `datos[base+1]` (commenu
+                        # ES combo_menu, ver controlTestWindow).
+                        serie_widget = (self.commenu[base + 1]
+                                       if (base + 1) < len(self.commenu) else None)
+                        equipo_id = (serie_widget.currentData()
+                                    if serie_widget is not None else None)
 
-                    if not model or not calibr_fact or equipo_id is None:
-                        print(f"Datos incompletos en grupo {base//3 + 1}")
+                        if not model or not calibr_fact or equipo_id is None:
+                            print(f"Datos incompletos en grupo {base//3 + 1}")
+                            continue
+
+                        # Resolver serie/fecha_calibr/equip_type por ID -- nunca
+                        # por MAX(id) GROUP BY serie (el colapso que F9 elimina
+                        # en todo el resto del selector) ni por el texto decorado.
+                        cursor.execute("""
+                            SELECT serie, fecha_calibr, equip_type
+                            FROM equipos
+                            WHERE id = ?
+                        """, (equipo_id,))
+
+                        resultado = cursor.fetchone()
+                        if resultado is None:
+                            print(f"Advertencia: no se encontró el equipo id={equipo_id} "
+                                  f"para el grupo {base//3 + 1}")
+                            continue
+                        serie, fecha_calibr, equip_type = resultado
+
+                        # Preparar fila para inserción
+                        fila = (self.ref, tipo_camara, equip_type, model, serie,
+                               calibr_fact, fecha_calibr, equipo_id)
+                        filas_a_insertar.append(fila)
+
+                    except (IndexError, ValueError) as e:
+                        print(f"Error procesando grupo {base//3 + 1}: {e}")
                         continue
 
-                    # Resolver serie/fecha_calibr/equip_type por ID -- nunca
-                    # por MAX(id) GROUP BY serie (el colapso que F9 elimina
-                    # en todo el resto del selector) ni por el texto decorado.
-                    cursor.execute("""
-                        SELECT serie, fecha_calibr, equip_type
-                        FROM equipos
-                        WHERE id = ?
-                    """, (equipo_id,))
-
-                    resultado = cursor.fetchone()
-                    if resultado is None:
-                        print(f"Advertencia: no se encontró el equipo id={equipo_id} "
-                              f"para el grupo {base//3 + 1}")
-                        continue
-                    serie, fecha_calibr, equip_type = resultado
-
-                    # Preparar fila para inserción
-                    fila = (self.ref, tipo_camara, equip_type, model, serie,
-                           calibr_fact, fecha_calibr, equipo_id)
-                    filas_a_insertar.append(fila)
-
-                except (IndexError, ValueError) as e:
-                    print(f"Error procesando grupo {base//3 + 1}: {e}")
-                    continue
-
-            # Inserción por lotes para mejor rendimiento
-            if filas_a_insertar:
-                # M2 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M2): mismo
-                # contrato de reemplazo de bloque que control_cunas/
-                # control_conos -- anula lo activo de este ref ANTES de
-                # insertar el nuevo, dentro de la misma transacción ya
-                # abierta arriba. Solo si hay algo nuevo que insertar: un
-                # guardado con datos insuficientes (fuera de este if) no
-                # debe anular el bloque activo existente sin reemplazarlo.
-                cursor.execute(
-                    "UPDATE equipos_medicion SET activo = 0 "
-                    "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
-                    (self.ref,))
-                cursor.executemany(f"""
-                    INSERT INTO equipos_medicion (ref, tipo_camara, equip_type, model, serie, calibr_fact, fecha_calibr, equipo_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, filas_a_insertar)
+                # Inserción por lotes para mejor rendimiento
+                if filas_a_insertar:
+                    # M2 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M2): mismo
+                    # contrato de reemplazo de bloque que control_cunas/
+                    # control_conos -- anula lo activo de este ref ANTES de
+                    # insertar el nuevo, dentro de la misma transacción ya
+                    # abierta arriba. Solo si hay algo nuevo que insertar: un
+                    # guardado con datos insuficientes (fuera de este if) no
+                    # debe anular el bloque activo existente sin reemplazarlo.
+                    cursor.execute(
+                        "UPDATE equipos_medicion SET activo = 0 "
+                        "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
+                        (self.ref,))
+                    cursor.executemany(f"""
+                        INSERT INTO equipos_medicion (ref, tipo_camara, equip_type, model, serie, calibr_fact, fecha_calibr, equipo_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, filas_a_insertar)
                 
-                cursor.execute("COMMIT")
-                print(f"Insertados {len(filas_a_insertar)} registros de equipos correctamente")
-                # A6.3: equipos de medición del mensual (600/iX/Halcyon).
-                _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
-                                     "equipos_medicion", ref=self.ref)
+                    cursor.execute("COMMIT")
+                    print(f"Insertados {len(filas_a_insertar)} registros de equipos correctamente")
+                    # A6.3: equipos de medición del mensual (600/iX/Halcyon).
+                    _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                         "equipos_medicion", ref=self.ref)
 
-                # Actualizar tabla si existe
-                if hasattr(self, 'tabla'):
-                    self._actualizar_tabla_despues_subida()
-            else:
-                cursor.execute("ROLLBACK")
-                print("No se insertaron registros - datos insuficientes")
+                    # Actualizar tabla si existe
+                    if hasattr(self, 'tabla'):
+                        self._actualizar_tabla_despues_subida()
+                else:
+                    cursor.execute("ROLLBACK")
+                    print("No se insertaron registros - datos insuficientes")
                 
         except sqlite3.Error as e:
             try:
