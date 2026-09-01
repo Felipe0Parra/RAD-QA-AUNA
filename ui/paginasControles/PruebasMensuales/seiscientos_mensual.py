@@ -511,11 +511,11 @@ class PruebaMensual600(PruebaBasico):
         if not control_id:
             return None
         try:
-            conn = self.db_manager.obtener_conexion() if hasattr(self, 'equipo_f') and self.equipo_f != 'Tomógrafo' else Conexion().conectar()
-            cursor = conn.cursor()
-            cursor.execute("SELECT fecha FROM controles WHERE id = ?", (control_id,))
-            fila = cursor.fetchone()
-            return fila[0] if fila else None
+            with (self.db_manager.obtener_conexion() if hasattr(self, 'equipo_f') and self.equipo_f != 'Tomógrafo' else Conexion().conectar()) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT fecha FROM controles WHERE id = ?", (control_id,))
+                fila = cursor.fetchone()
+                return fila[0] if fila else None
         except Exception as e:
             print(f"Error leyendo fecha real del control {control_id}: {e}")
             return None
