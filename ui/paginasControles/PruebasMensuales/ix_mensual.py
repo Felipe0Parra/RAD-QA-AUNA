@@ -503,33 +503,33 @@ class PruebaMensualIX(PruebaMensual600):
         entero, con un solo aviso."""
         print(f"\n Función guardar_control_conos en IX")
         try:
-            conn = Conexion().conectar()
-            cursor = conn.cursor()
+            with Conexion().conectar() as conn:
+                cursor = conn.cursor()
 
-            filas_nuevas, faltantes = self._filas_y_faltantes_conos()
+                filas_nuevas, faltantes = self._filas_y_faltantes_conos()
 
-            if faltantes:
-                QMessageBox.warning(
-                    self, "Conos incompletos",
-                    "Faltan por registrar estos conos: " + ", ".join(faltantes))
-                return False
+                if faltantes:
+                    QMessageBox.warning(
+                        self, "Conos incompletos",
+                        "Faltan por registrar estos conos: " + ", ".join(faltantes))
+                    return False
 
-            cursor.execute("BEGIN TRANSACTION")
-            try:
-                cursor.execute(
-                    "UPDATE control_conos SET activo = 0 "
-                    "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
-                    (self.ref,))
-                cursor.executemany("""
-                    INSERT INTO control_conos (ref, medida, valor)
-                    VALUES (?, ?, ?)
-                """, filas_nuevas)
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
-            #print("Datos de control de conos guardados correctamente")
-            return True
+                cursor.execute("BEGIN TRANSACTION")
+                try:
+                    cursor.execute(
+                        "UPDATE control_conos SET activo = 0 "
+                        "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
+                        (self.ref,))
+                    cursor.executemany("""
+                        INSERT INTO control_conos (ref, medida, valor)
+                        VALUES (?, ?, ?)
+                    """, filas_nuevas)
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+                #print("Datos de control de conos guardados correctamente")
+                return True
         except Exception as e:
             QMessageBox.information(self, "Error", "No se pudo insertar los datos.")
             print(f"Error guardar_control_conos: {traceback.print_exc(e)}")
