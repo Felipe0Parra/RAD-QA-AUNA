@@ -1725,35 +1725,35 @@ class PruebaMensualBraq(PruebaBasico):
 
         def consulta(nombre_tabla, uid = uid, ref = ref):
                 #print('Entro a traer info')
-                conn = Conexion().conectar()
-                cursor = conn.cursor()
+                with Conexion().conectar() as conn:
+                    cursor = conn.cursor()
 
-                # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas
-                # explícitas -- `nombre_tabla` es un parámetro, así que las
-                # columnas se resuelven en tiempo de ejecución con
-                # encontrar_columnas (PRAGMA table_info, quita el id y, si
-                # existe, 'activo'), en vez de `SELECT *` + recorte
-                # posicional fijo. El recorte fijo (`[1:-1]` para todas menos
-                # dosimetriaMen) asumía que la ÚLTIMA columna siempre era
-                # `activo` -- cierto en TipoCalibracion, falso hoy en
-                # SistemaMedicion/CondicionesMedicion (sin esa columna
-                # todavía): descartaba una columna real (`observaciones` en
-                # CondicionesMedicion). encontrar_columnas solo excluye
-                # `activo` cuando de verdad está presente.
-                columnas_str, _ = encontrar_columnas(nombre_tabla, id=True, delete=0)
-                # DA-47 (PLAN_CONTRATO_COMPLETO_19-08.md §4.6, LF4): el
-                # filtro depende de la SELECTIVIDAD del WHERE, no de la
-                # tabla. `uid="ref"` selecciona un BLOQUE (N generaciones)
-                # -> debe filtrar. `uid="id"` nombra UNA fila física
-                # (TipoCalibracion, raíz) -> filtrar solo podría vaciar el
-                # formulario de una calibración anulada que el físico abrió
-                # a propósito.
-                filtro = filtro_activo(nombre_tabla) if uid != "id" else ""
-                cursor.execute(
-                    f"SELECT {columnas_str} FROM {nombre_tabla} WHERE {uid} = ?{filtro}",
-                    (ref,))
-                results = cursor.fetchall()
-                return results
+                    # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas
+                    # explícitas -- `nombre_tabla` es un parámetro, así que las
+                    # columnas se resuelven en tiempo de ejecución con
+                    # encontrar_columnas (PRAGMA table_info, quita el id y, si
+                    # existe, 'activo'), en vez de `SELECT *` + recorte
+                    # posicional fijo. El recorte fijo (`[1:-1]` para todas menos
+                    # dosimetriaMen) asumía que la ÚLTIMA columna siempre era
+                    # `activo` -- cierto en TipoCalibracion, falso hoy en
+                    # SistemaMedicion/CondicionesMedicion (sin esa columna
+                    # todavía): descartaba una columna real (`observaciones` en
+                    # CondicionesMedicion). encontrar_columnas solo excluye
+                    # `activo` cuando de verdad está presente.
+                    columnas_str, _ = encontrar_columnas(nombre_tabla, id=True, delete=0)
+                    # DA-47 (PLAN_CONTRATO_COMPLETO_19-08.md §4.6, LF4): el
+                    # filtro depende de la SELECTIVIDAD del WHERE, no de la
+                    # tabla. `uid="ref"` selecciona un BLOQUE (N generaciones)
+                    # -> debe filtrar. `uid="id"` nombra UNA fila física
+                    # (TipoCalibracion, raíz) -> filtrar solo podría vaciar el
+                    # formulario de una calibración anulada que el físico abrió
+                    # a propósito.
+                    filtro = filtro_activo(nombre_tabla) if uid != "id" else ""
+                    cursor.execute(
+                        f"SELECT {columnas_str} FROM {nombre_tabla} WHERE {uid} = ?{filtro}",
+                        (ref,))
+                    results = cursor.fetchall()
+                    return results
 
         # LF4 (PLAN_CONTRATO_COMPLETO_19-08.md §4.6): `consulta` es
         # `(nombre_tabla, uid=uid, ref=ref)` -- llamarla
