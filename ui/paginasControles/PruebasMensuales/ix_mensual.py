@@ -79,6 +79,12 @@ class PruebaMensualIX(PruebaMensual600):
             # (registros históricos).
             fecha = _fecha_control_a_qdate(self.fecha_control)
             self.date_box.setDate(fecha)
+            # R7 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase D): esta clase
+            # sobreescribe iniGUI completo sin heredar del de
+            # PruebaMensual600 -- el bloqueo de fecha aplicado ahí no
+            # llegaba aquí. Mismo motivo: cambiarla no navega ni crea nada,
+            # solo confundía al físico.
+            self.date_box.setEnabled(False)
 
         # Desconectar todos las conexiones previas
         while self.btn_guardar_ix.receivers(self.btn_guardar_ix.clicked) > 0:
@@ -443,6 +449,34 @@ class PruebaMensualIX(PruebaMensual600):
                 dato = getattr(self, line)
                 dato.textChanged.connect(updateSubirButton)
 
+    def _filas_y_faltantes_conos(self):
+        """Lectura pura de los botones de conos: no escribe, no dialoga.
+        Devuelve (filas_nuevas, faltantes) -- reusado por
+        `guardar_control_conos` y por la validación unificada de
+        `guardar_todo_ix` (A2)."""
+        medidas = [
+            ("6x6", self.btn_6_fun, self.btn_6_nofun),
+            ("10x10", self.btn_10_fun, self.btn_10_nofun),
+            ("15x15", self.btn_15_fun, self.btn_15_nofun),
+            ("20x20", self.btn_20_fun, self.btn_20_nofun),
+            ("25x25", self.btn_25_fun, self.btn_25_nofun)
+        ]
+        filas_nuevas = []
+        faltantes = []
+        for medida, btn_fun, btn_nofun in medidas:
+            if btn_fun.isChecked():
+                valor = 1
+            elif btn_nofun.isChecked():
+                valor = 0
+            else:
+                valor = None  # Ninguno seleccionado
+
+            if valor is not None:
+                filas_nuevas.append((self.ref, medida, valor))
+            else:
+                faltantes.append(medida)
+        return filas_nuevas, faltantes
+
     def guardar_control_conos(self):
         """M2 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §M2): mismo
         contrato de reemplazo de bloque que `subir_control_cunas` --
@@ -459,37 +493,20 @@ class PruebaMensualIX(PruebaMensual600):
         puede dispararse por un cono que el físico marcó y que la app
         perdió, solo por uno que nunca tocó.
 
-        Devuelve True si guardó, False si bloqueó o falló -- el llamador
-        (`guardar_todo_ix`) usa el resultado para el detalle de auditoría,
-        sin dejar de guardar cuñas por esto (el bloqueo es de la tabla de
-        conos, no del guardado entero)."""
+        Devuelve True si guardó, False si bloqueó o falló.
+
+        A2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A): la detección de
+        faltantes vive en `_faltantes_conos` (sin efectos secundarios) para
+        que `guardar_todo_ix` pueda validar conos Y cuñas ANTES de escribir
+        cualquiera de las dos -- ya no es cierto que "el bloqueo es de la
+        tabla de conos, no del guardado entero"; ahora es del guardado
+        entero, con un solo aviso."""
         print(f"\n Función guardar_control_conos en IX")
         try:
             conn = Conexion().conectar()
             cursor = conn.cursor()
 
-            # Lista de medidas y sus botones
-            medidas = [
-                ("6x6", self.btn_6_fun, self.btn_6_nofun),
-                ("10x10", self.btn_10_fun, self.btn_10_nofun),
-                ("15x15", self.btn_15_fun, self.btn_15_nofun),
-                ("20x20", self.btn_20_fun, self.btn_20_nofun),
-                ("25x25", self.btn_25_fun, self.btn_25_nofun)
-            ]
-            filas_nuevas = []
-            faltantes = []
-            for medida, btn_fun, btn_nofun in medidas:
-                if btn_fun.isChecked():
-                    valor = 1
-                elif btn_nofun.isChecked():
-                    valor = 0
-                else:
-                    valor = None  # Ninguno seleccionado
-
-                if valor is not None:
-                    filas_nuevas.append((self.ref, medida, valor))
-                else:
-                    faltantes.append(medida)
+            filas_nuevas, faltantes = self._filas_y_faltantes_conos()
 
             if faltantes:
                 QMessageBox.warning(
@@ -589,32 +606,37 @@ class PruebaMensualIX(PruebaMensual600):
     def guardar_todo_ix(self):
         #print("\n ~~~~~~ Entrando en guardar_todo_ix de", self, "~~~~~~")
         #print("Método definido en clase:", self.__class__.__name__)
+        """A2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A): validación
+        unificada. Antes, conos y cuñas se guardaban por separado -- si
+        faltaba un cono, esa tabla avisaba y no escribía, pero las cuñas se
+        guardaban igual (doble mensaje contradictorio: "falta un cono"
+        seguido de "cargados exitosamente"). Ahora se valida TODO antes de
+        escribir NADA: si falta cualquier cosa (conos o cuñas), un solo
+        aviso nombra qué falta y no se escribe ninguna de las dos tablas."""
         try:
-            # 1. Guardar conos PRIMERO (T3, PLAN_CONOS_MENSUAL_12-08.md
-            # §4-T3): si faltan medidas, `guardar_control_conos` avisa y no
-            # escribe nada -- ese aviso debe aparecer ANTES del mensaje de
-            # éxito que `subir_control_cunas` emite más abajo, para que no
-            # quede tapado ni se confunda con un guardado completo. El
-            # bloqueo es de la tabla de conos, no del guardado entero: las
-            # cuñas se guardan igual, estén los conos completos o no.
-            conos_guardados = self.guardar_control_conos()
-            #print("OK, Conos guardados en IX")
+            hay_cunas = hasattr(self, "combos_seguridad") and self.combos_seguridad
+            _, faltantes_conos = self._filas_y_faltantes_conos()
+            faltantes_cunas = self._faltantes_cunas(self.combos_seguridad) if hay_cunas else []
 
-            # 2. Guardar cuñas (copiado de la lógica de botonescombobox del padre)
-            if hasattr(self, "combos_seguridad") and self.combos_seguridad:
-                datos_seguridad = []
-                for angulo, posiciones in self.combos_seguridad.items():
-                    for pos, widget in posiciones.items():
-                        texto = widget.currentText()
-                        valor = 1 if texto.lower() == "funciona" else 0
-                        datos_seguridad.append((self.ref, angulo, pos, valor))
-                # A6.3: auditar=False -- esta acción (guardar_todo_ix) audita
-                # UNA sola vez para cuñas+conos, más abajo; subir_control_cunas
-                # no debe auditarse a sí mismo aquí (sí lo hace cuando el 600
-                # la llama directo desde su propio botón, solo-cuñas).
+            if faltantes_conos or faltantes_cunas:
+                partes = []
+                if faltantes_conos:
+                    partes.append("conos: " + ", ".join(faltantes_conos))
+                if faltantes_cunas:
+                    partes.append("cuñas: " + ", ".join(
+                        f"{angulo}° {pos}" for angulo, pos in faltantes_cunas))
+                QMessageBox.warning(
+                    self, "Datos incompletos",
+                    "Faltan por registrar -- " + "; ".join(partes))
+                return
+
+            self.guardar_control_conos()
+            if hay_cunas:
+                # A6.3: auditar=False/mostrar_mensaje=False -- esta acción
+                # (guardar_todo_ix) audita y avisa UNA sola vez para
+                # cuñas+conos, más abajo.
                 self.subir_control_cunas(self.combos_seguridad, self.df_seg_line,
-                                         auditar=False)
-                #print("OK, Cuñas guardadas en IX")
+                                         auditar=False, mostrar_mensaje=False)
 
             # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): una sola acción
             # de usuario dispara cuñas Y conos -- 1 fila para las dos (DA-16).
@@ -622,14 +644,11 @@ class PruebaMensualIX(PruebaMensual600):
             # "control_cunas_y_conos" no es ninguna tabla real -- las dos
             # tablas que sí existen son "control_cunas" y "control_conos".
             # Se mantiene la fila única, pero con el nombre de una tabla que
-            # existe (control_cunas); el detalle nombra las dos y dice si
-            # los conos entraron o no (T3) -- mismo verbo, sin inventar uno
-            # nuevo.
-            detalle = ("cuñas + conos (mensual iX)" if conos_guardados
-                      else "cuñas + conos incompletos, no se guardaron (mensual iX)")
+            # existe (control_cunas).
             _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
                                  "control_cunas", ref=getattr(self, "ref", None),
-                                 detalle=detalle)
+                                 detalle="cuñas + conos (mensual iX)")
+            QMessageBox.information(self, "", "Datos guardados correctamente")
 
             #self.bloquearboton(self.btn_guardar_ix)
         except Exception as e:

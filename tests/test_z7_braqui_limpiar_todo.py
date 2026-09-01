@@ -24,7 +24,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
@@ -36,6 +36,20 @@ from ui.paginasControles.PruebasMensuales.braq_mensual import PruebaMensualBraq
 @pytest.fixture(scope="module")
 def app():
     return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def _sin_dialogos_modales(monkeypatch):
+    """Trampa 2: `QMessageBox` real cuelga el proceso para siempre bajo
+    `QT_QPA_PLATFORM=offscreen`. Este archivo construye pantallas REALES de
+    braquiterapia, y desde B2 (PLAN_ACTIVIDAD_ESPERADA_BRAQUI_27-08.md) el
+    cálculo de la actividad esperada avisa por `QMessageBox.warning` cuando
+    no hay ninguna fuente ("Cambio de fuente") registrada antes de la fecha
+    -- exactamente el caso de la BD temporal de este archivo, y ese cálculo
+    corre dentro de `PruebaDiariaBraq.__init__`. Se mockea sobre la clase de
+    `PyQt5.QtWidgets`, inmune a desde qué módulo la importe producción."""
+    for tipo in ("information", "warning", "critical", "question"):
+        monkeypatch.setattr(QMessageBox, tipo, staticmethod(lambda *a, **k: None))
 
 
 @pytest.fixture

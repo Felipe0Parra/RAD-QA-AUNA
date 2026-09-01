@@ -260,15 +260,30 @@ class PruebaBasico(QWidget):
                 # ahora de la métrica de fuente del propio widget, con el
                 # formato más ancho en uso (dd/MM/yyyy) porque los
                 # formularios mensuales cambian a "MM/yyyy" DESPUÉS de crear.
+                # T5 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_28-08.md): sin
+                # `formato=`, lee `displayFormat()` del propio widget en
+                # vez de un literal duplicado -- la causa de clase de
+                # DP-68 era justo que un literal aparte del que de verdad
+                # se fijó (línea de encima) puede divergir en silencio.
                 getattr(self, nombre).setMinimumWidth(
-                    ancho_minimo_fecha(getattr(self, nombre),
-                                       formato="dd/MM/yyyy"))
+                    ancho_minimo_fecha(getattr(self, nombre)))
 
             elif widget_type == 'QDateTimeEdit':
                 setattr(self, nombre, QDateTimeEdit())
                 getattr(self, nombre).setCalendarPopup(True)
                 getattr(self, nombre).setDateTime(QDateTime.currentDateTime())
                 getattr(self, nombre).setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+                # H7 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): la rama
+                # QDateEdit (arriba) recibió el piso de H3.5/I5 -- esta
+                # nunca lo tuvo, pese a necesitar CASI EL DOBLE de ancho
+                # (19 caracteres de fecha+hora contra 10 de solo fecha). Sin
+                # piso, el layout la aprieta y las secciones de hora quedan
+                # fuera del área alcanzable con el mouse ("no se puede
+                # ubicar el cursor adecuadamente" -- no era rechazo de
+                # entrada, [medido] el widget sí acepta teclear la hora).
+                # T5: mismo motivo que la rama QDateEdit -- sin literal.
+                getattr(self, nombre).setMinimumWidth(
+                    ancho_minimo_fecha(getattr(self, nombre)))
 
             # Finalmente, agregar al layout correspondiente (excepto QRadioButton que ya fue agregado antes)
             if widget_type != 'QRadioButton':
@@ -604,10 +619,23 @@ class PruebaBasico(QWidget):
             if maquina == 'braqui' and (otro == "Diario" or otro == "Mensual Braquiterapia"):
                 print("    * Entra al if de si es braqui y Diario o Mensual en la función ordenar_botones")
                 distancias, promedio, desviacion, desplazamientos, promedio_des, desviacion_des = self.guardar_datos()
+                kwargs_fecha = {}
+                if otro == "Diario":
+                    # H6 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md), decisión
+                    # D-H del físico (28-08): la hora se guarda SOLO para el
+                    # diario de braqui -- el Ir-192 (73,83 días de semivida)
+                    # la necesita para la actividad esperada; en las otras 3
+                    # diarias no entra en ningún cálculo. "Mensual
+                    # Braquiterapia" comparte esta rama pero es otra
+                    # pantalla (fecha del mes, no un instante de medida): se
+                    # excluye por nombre, no por accidente de que hoy ningún
+                    # botón la alcance.
+                    kwargs_fecha["formato_fecha"] = "yyyy-MM-dd HH:mm:ss"
                 add_info(
                     self, 'braqui', [self.boolean_colums, self.actividad_ciclos], imagenes=self.archivo,
                     distancias=distancias, promedio=promedio, desviacion=desviacion,
-                    desplazamientos=desplazamientos, promedio_des=promedio_des, desviacion_des=desviacion_des
+                    desplazamientos=desplazamientos, promedio_des=promedio_des, desviacion_des=desviacion_des,
+                    **kwargs_fecha
                 )
                 #print("Después del add_info función ordenar_botones")
             if maquina == 'braqui' and (otro == "Posicionamiento Inicial"):

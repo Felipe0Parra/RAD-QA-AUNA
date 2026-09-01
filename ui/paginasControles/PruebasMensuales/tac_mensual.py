@@ -482,6 +482,15 @@ class PruebaMensualTAC(PruebaMensual600):
             # fecha_control con o sin día se muestre bien.
             fecha = _fecha_control_a_qdate(self.fecha_control)
             self.date_box.setDate(fecha)
+            # R7 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase D): esta clase
+            # sobreescribe iniGUI completo sin heredar del de
+            # PruebaMensual600 -- el bloqueo de fecha aplicado ahí no
+            # llegaba aquí. En TAC además tiene consecuencia real: sin
+            # bloquear, `fecha_actual = self.date_box.date()...` (usado al
+            # guardar sesiones Catphan) podía quedar distinta de
+            # `controles.fecha` del mismo control si el físico la cambiaba
+            # tras iniciar.
+            self.date_box.setEnabled(False)
         if hasattr(self, 'nombre_fisico1'):
             index = self.fisico1.findText(self.nombre_fisico1)
             if index >= 0:

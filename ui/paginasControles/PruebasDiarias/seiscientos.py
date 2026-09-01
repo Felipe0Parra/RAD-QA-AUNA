@@ -280,14 +280,46 @@ class PruebaDiaria600(PruebaBasico):
                 print(f"  - Botones finales: {len(self.botones_finales)}")
                 
             else:
+                # A4 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R11): sin
+                # esta rama, la pantalla conservaba los datos de la fecha
+                # anterior -- guardar entonces los persistía bajo la fecha
+                # nueva (dato que nadie introdujo para este día). Limpia
+                # los widgets para que el físico llene desde cero.
+                self._limpiar_widgets_diaria()
+                self.date_box.blockSignals(True)
+                self.date_box.setDate(fecha)
+                self.date_box.blockSignals(False)
+                self.checkBotonesFinales()
                 print(f"ℹ No hay datos registrados para la fecha {fecha_str}.")
-                
+
         except Exception as ex:
             import traceback
             traceback.print_exc()
             print(f"✗ Error al cargar datos: {str(ex)}")
         finally:
             db.close()
+
+    def _limpiar_widgets_diaria(self):
+        """A4: deja el formulario diario en blanco -- ni "Funciona" ni "No
+        funciona" marcado, campos numéricos y observaciones vacíos. Se usa
+        al llegar a una fecha sin registro (no hay dato que restaurar)."""
+        self.botones_finales.clear()
+        for fun, nofun in zip(self.df_bnt_funciona, self.df_bnt_nofunciona):
+            btn_fun = getattr(self, fun, None)
+            btn_nofun = getattr(self, nofun, None)
+            if btn_fun and btn_nofun:
+                btn_fun.setChecked(False)
+                btn_nofun.setChecked(False)
+                for boton in (btn_fun, btn_nofun):
+                    boton.setProperty("estado", "noselected")
+                    boton.style().unpolish(boton)
+                    boton.style().polish(boton)
+                    boton.update()
+        for line_name in self.df_lines:
+            if hasattr(self, line_name):
+                getattr(self, line_name).setText("")
+        if hasattr(self, 'observaciones'):
+            self.observaciones.setText("")
     def button_click(self):
         
         self.fuera_servicio.clicked.connect(self.reasignar_botonySERVICIO)

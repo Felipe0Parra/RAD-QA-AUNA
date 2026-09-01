@@ -113,6 +113,11 @@ class PruebaAnual600(PruebaMensual600):
             QMessageBox.critical(self, "Error", f"Error en la consulta: {e}")
 
     def limpiar_layout(self, layouts, user_id, maquina, user_id_f2=None,  nombre_fisico1=None, nombre_fisico2=None):
+        """A3 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R2): retorna
+        True/False igual que `PruebaMensual600.limpiar_layout` --
+        `_iniciar_moviendo_tabla` (heredado) corta si esto es False, para
+        no armar la UI de captura sobre un `self.ref` inválido (Físico 1
+        inexistente, ya avisado por `create_control`)."""
         fecha = self.date_box.date()
         fecha = fecha.toString("MM/yyyy")
         for layout in layouts:
@@ -125,6 +130,7 @@ class PruebaAnual600(PruebaMensual600):
         self.nombre_fisico1 = nombre_fisico1
         self.nombre_fisico2 = nombre_fisico2
         #print(f"ID Sesión: {self.ref}")
+        return self.ref is not None
 
     def _configurar_categorias(self):
         """Configura las categorías base de widgets"""
@@ -177,6 +183,19 @@ class PruebaAnual600(PruebaMensual600):
                 tabla_obj = entry['tabla']
                 self._configurar_eventos(tabla_obj, callback=self._calcular_discrepancias_tablas(tabla_obj, 1, 2),
                                         timer_key=f"debounce_{tabla_obj.objectName()}", delay=300)
+
+            # R1/R2/R3 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, F-5):
+            # lecturas crudas de la hoja "Linealidad".
+            tabla_um, tabla_lfc, tabla_lt, _ = self._crear_tablas_linealidad()
+            self._configurar_eventos(
+                tabla_um, callback=self._derivar_factor_linealidad_um(tabla_um),
+                timer_key=f"debounce_{tabla_um.objectName()}", delay=300)
+            self._configurar_eventos(
+                tabla_lfc, callback=self._derivar_factor_lecturas_campo(tabla_lfc),
+                timer_key=f"debounce_{tabla_lfc.objectName()}", delay=300)
+            self._configurar_eventos(
+                tabla_lt, callback=self._derivar_factor_transmision(tabla_lt),
+                timer_key=f"debounce_{tabla_lt.objectName()}", delay=300)
         except Exception as e:
             print(f"Error configurando subtoolbox: {e}")
             self.subtool = QWidget()
@@ -187,12 +206,16 @@ class PruebaAnual600(PruebaMensual600):
             headers_fc = ["Tamaño de campo", "Factor de campo", "Factor esperado", "Discrepancia (%)"]
             datos_fc = [ ["3x3", "", "",""], ["10x10", "", "", ""], ["15x15", "", "", ""], ["20x20", "", "", ""], ["25x25", "", "", ""],
                             ["30x30", "", "", ""], ["35x35", "", "", ""], ["40x40", "", "", ""]]
-            widget1, tabla_fc = PruebaMensual600.createSimpleTable1(self, 6, 4, headers_fc, datos_fc, "tabla_factor_campo", self.ref, id=True)
+            # E1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 2): filas = len(datos),
+            # nunca un número aparte -- el descuadre 6<->8 (F-4/AN-6) deja de
+            # ser posible, no solo deja de estar (mismo caso que ix_anual.py,
+            # una sola energía aquí).
+            widget1, tabla_fc = PruebaMensual600.createSimpleTable1(self, len(datos_fc), 4, headers_fc, datos_fc, "tabla_factor_campo", self.ref, id=True)
 
             # Tabla factores de transmisión de accesorios
             headers_fta = ["Cuña", "Factor de transmisión", "Factor esperado", "Discrepancia (%)"]
             datos_fta = [ ["15°", "", "",""], ["30°", "", "", ""], ["45°", "", "", ""], ["60°", "", "", ""], ["MLC", "", "", ""]]
-            widget2, tabla_fta = PruebaMensual600.createSimpleTable1(self, 5, 4, headers_fta, datos_fta, "tabla_factores_transmision", self.ref, id=True)
+            widget2, tabla_fta = PruebaMensual600.createSimpleTable1(self, len(datos_fta), 4, headers_fta, datos_fta, "tabla_factores_transmision", self.ref, id=True)
 
             # Tabla factores sobre el eje
             PPDS = ["PDD (10 x 10)", "PPD (15 x 15)", "PPD (20 x 20)"]
@@ -208,8 +231,10 @@ class PruebaAnual600(PruebaMensual600):
                 else:
                     botones = False
                 headers_fse = ["Profundidad (cm)", f"{pdd}", "PPD esperado", "Discrepancia (%)"]
-                datos_fse = [["5", "", "", ""], ["10", "", "", ""], ["15", "", "", ""]]
-                widget3, tabla_fse = PruebaMensual600.createSimpleTable1(self, 3, 4, headers_fse, datos_fse, "tabla_factores_sobre_eje", 
+                # E1: la tercera profundidad del formato oficial es 20 cm,
+                # no 15 (mismo hallazgo que en ix_anual.py para fotones).
+                datos_fse = [["5", "", "", ""], ["10", "", "", ""], ["20", "", "", ""]]
+                widget3, tabla_fse = PruebaMensual600.createSimpleTable1(self, len(datos_fse), 4, headers_fse, datos_fse, "tabla_factores_sobre_eje",
                                                                         self.ref, botones=botones, pdd=pdd, id=True)
                 layout_contenedor.addWidget(widget3)
                 self.tablas_fse.append({'tabla': tabla_fse, 'pdd': pdd})
@@ -218,9 +243,14 @@ class PruebaAnual600(PruebaMensual600):
             contenedor_cm = QWidget()                       # Para agregar el boton de reporte
             lay_contenedor_cm = QVBoxLayout(contenedor_cm)
             headers_ccm = ["Indicador", "Valor"]
-            datos_ccm = [["Fac. Calibración", ""], ["Reproducibilidad", ""], ["Linealidad R2", ""], ["Tasa mínima 80 cGy/min", ""],
-                        ["Tasa intermedia 160 cGy/min", ""], ["Tasa máxima 400 cGy/min", ""], ["Desviación estándar", ""]]
-            widget4, tabla_ccm = PruebaMensual600.createSimpleTable1(self, 7, 2, headers_ccm, datos_ccm, "tabla_control_camaras_monitoras", self.ref, id=True)
+            # E1: tasas 100/400/600 cGy/min -- el formato oficial las pide
+            # así, iguales para fotones y electrones (aquí solo hay fotones).
+            # A1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 4, F-6): fila libre
+            # de "Observaciones" -- mismo criterio que en ix_anual.py.
+            datos_ccm = [["Fac. Calibración", ""], ["Reproducibilidad", ""], ["Linealidad R2", ""], ["Tasa mínima 100 cGy/min", ""],
+                        ["Tasa máxima 400 cGy/min", ""], ["Tasa máxima 600 cGy/min", ""], ["Desviación estándar", ""],
+                        ["Observaciones", ""]]
+            widget4, tabla_ccm = PruebaMensual600.createSimpleTable1(self, len(datos_ccm), 2, headers_ccm, datos_ccm, "tabla_control_camaras_monitoras", self.ref, id=True)
             lay_contenedor_cm.addWidget(widget4)
 
             btn_reporte = QPushButton("Generar Reporte PDF")
@@ -238,6 +268,171 @@ class PruebaAnual600(PruebaMensual600):
 
         except Exception as e:
             print(f"Error creando tablas de indicadores: {e}")
+
+    # Niveles/accesorios/tasas de la hoja "Linealidad" del formato oficial
+    # (IDC-F-RT-120 V2.xlsx) -- una sola energía (6 MV) en el 600.
+    NIVELES_UM_LINEALIDAD = ["50", "100", "150", "200", "250", "300", "350", "400", "500", "600"]
+    ACCESORIOS_TRANSMISION = ["Open", "15°", "30°", "45°", "60°", "MLC"]
+    TASAS_DOSIS_UM_MIN = ["100", "300", "400", "600"]
+
+    def _crear_tablas_linealidad(self):
+        """R1/R2 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, F-5): paneles de
+        captura para las lecturas crudas de la hoja "Linealidad" -- lo que
+        hoy solo se guarda como factor final derivado. Una sola energía
+        aquí (600 = 6 MV); mismo mecanismo de guardado que las tablas de
+        arriba (loadtablacomplex/reemplazar_bloque, sin id_energia -- el
+        600 nunca lo pasa)."""
+        try:
+            headers_um = ["UM", "Q1 (nC)", "Q2 (nC)", "Q (nC)"]
+            datos_um = [[um, "", "", ""] for um in self.NIVELES_UM_LINEALIDAD]
+            widget_um, tabla_um = PruebaMensual600.createSimpleTable1(
+                self, len(datos_um), 4, headers_um, datos_um, "anual_linealidad_um", self.ref, id=True)
+
+            headers_lfc = ["Tamaño de campo", "Q1 (nC)", "Q2 (nC)", "Q (nC)", "Factor"]
+            datos_lfc = [["3x3", "", "", "", ""], ["10x10", "", "", "", ""], ["15x15", "", "", "", ""],
+                         ["20x20", "", "", "", ""], ["25x25", "", "", "", ""], ["30x30", "", "", "", ""],
+                         ["35x35", "", "", "", ""], ["40x40", "", "", "", ""]]
+            widget_lfc, tabla_lfc = PruebaMensual600.createSimpleTable1(
+                self, len(datos_lfc), 5, headers_lfc, datos_lfc, "anual_lecturas_factor_campo", self.ref, id=True)
+
+            headers_lt = ["Accesorio", "Q1 IN (nC)", "Q2 IN (nC)", "Q1 OUT (nC)", "Q2 OUT (nC)", "Q MED (nC)", "T"]
+            datos_lt = [[acc, "", "", "", "", "", ""] for acc in self.ACCESORIOS_TRANSMISION]
+            widget_lt, tabla_lt = PruebaMensual600.createSimpleTable1(
+                self, len(datos_lt), 7, headers_lt, datos_lt, "anual_lecturas_transmision", self.ref, id=True)
+
+            headers_td = ["Tasa (UM/min)", "Med 1", "Med 2"]
+            datos_td = [[tasa, "", ""] for tasa in self.TASAS_DOSIS_UM_MIN]
+            widget_td, tabla_td = PruebaMensual600.createSimpleTable1(
+                self, len(datos_td), 3, headers_td, datos_td, "anual_tasa_dosis", self.ref, id=True)
+
+            self.subtool.addItem(widget_um, "Lecturas de linealidad de unidades monitor")
+            self.subtool.addItem(widget_lfc, "Lecturas de factor de campo")
+            self.subtool.addItem(widget_lt, "Lecturas de transmisión de cuñas")
+            self.subtool.addItem(widget_td, "Tasa de dosis (constancia)")
+
+            return tabla_um, tabla_lfc, tabla_lt, tabla_td
+
+        except Exception as e:
+            print(f"Error creando tablas de linealidad: {e}")
+            return None, None, None, None
+
+    def _derivar_factor_linealidad_um(self, tabla):
+        """R3: sin cálculo -- la hoja "Linealidad" no deriva ningún factor
+        de la linealidad de UM, solo promedia Q1/Q2 en "Q (nC)". Se deja
+        aparte de _calcular_discrepancias_tablas (que exige un "esperado")
+        porque aquí no hay columna de esperado, solo promedio. Genérica
+        por tabla (sin nada específico de energía) -- iX la reusa tal cual
+        por herencia, sin redefinirla."""
+        def calcular():
+            if sip.isdeleted(tabla):
+                return
+            try:
+                for fila in range(tabla.rowCount()):
+                    try:
+                        item_q1 = tabla.item(fila, 1)
+                        item_q2 = tabla.item(fila, 2)
+                        texto_q1 = item_q1.text().strip() if item_q1 else ""
+                        texto_q2 = item_q2.text().strip() if item_q2 else ""
+                        if not texto_q1 or not texto_q2:
+                            tabla.setItem(fila, 3, QTableWidgetItem(""))
+                            continue
+                        promedio = (float(texto_q1) + float(texto_q2)) / 2
+                        tabla.setItem(fila, 3, QTableWidgetItem(f"{promedio:.4f}"))
+                    except (ValueError, AttributeError):
+                        tabla.setItem(fila, 3, QTableWidgetItem("N/A"))
+            except Exception as e:
+                print(f"Error derivando Q promedio de linealidad UM: {e}")
+        return calcular
+
+    def _derivar_factor_lecturas_campo(self, tabla):
+        """R3: `OF = Q(campo)/Q(10x10)` -- el factor se calcula y rellena
+        a partir de Q1/Q2 de cada fila, con la fila "10x10" como
+        denominador (factor 1.000 por definición, igual que el formato
+        oficial -- "10x10" también existe entre los conos de electrones,
+        así que la misma clave sirve para las dos ramas de E1). La casilla
+        del factor sigue siendo editable: esto solo la rellena, no le
+        quita el mando al físico (criterio del plan, deliberadamente
+        conservador -- no convierte el factor en derivado puro, ver
+        [[DA-58]])."""
+        def calcular():
+            if sip.isdeleted(tabla):
+                return
+            try:
+                promedios = {}
+                for fila in range(tabla.rowCount()):
+                    item_tam = tabla.item(fila, 0)
+                    item_q1 = tabla.item(fila, 1)
+                    item_q2 = tabla.item(fila, 2)
+                    tam = item_tam.text().strip() if item_tam else ""
+                    texto_q1 = item_q1.text().strip() if item_q1 else ""
+                    texto_q2 = item_q2.text().strip() if item_q2 else ""
+                    if texto_q1 and texto_q2:
+                        try:
+                            promedio = (float(texto_q1) + float(texto_q2)) / 2
+                            tabla.setItem(fila, 3, QTableWidgetItem(f"{promedio:.4f}"))
+                            promedios[tam] = promedio
+                        except ValueError:
+                            tabla.setItem(fila, 3, QTableWidgetItem("N/A"))
+                    else:
+                        tabla.setItem(fila, 3, QTableWidgetItem(""))
+
+                referencia = promedios.get("10x10")
+                if not referencia:
+                    return
+                for fila in range(tabla.rowCount()):
+                    item_tam = tabla.item(fila, 0)
+                    tam = item_tam.text().strip() if item_tam else ""
+                    if tam not in promedios:
+                        continue
+                    factor = promedios[tam] / referencia
+                    tabla.setItem(fila, 4, QTableWidgetItem(f"{factor:.4f}"))
+            except Exception as e:
+                print(f"Error derivando factor de las lecturas de campo: {e}")
+        return calcular
+
+    def _derivar_factor_transmision(self, tabla):
+        """R3: `T = Q(cuña)/Q(open)` -- Q_med de cada fila es el promedio
+        de las lecturas presentes (Q1/Q2 IN y OUT si las hay, o solo las
+        que el físico tecleó); T se deriva contra la fila "Open" como
+        referencia (T=1 por definición). Casilla editable, mismo criterio
+        que arriba."""
+        def calcular():
+            if sip.isdeleted(tabla):
+                return
+            try:
+                q_med = {}
+                for fila in range(tabla.rowCount()):
+                    item_acc = tabla.item(fila, 0)
+                    acc = item_acc.text().strip() if item_acc else ""
+                    lecturas = []
+                    for columna in (1, 2, 3, 4):
+                        item = tabla.item(fila, columna)
+                        texto = item.text().strip() if item else ""
+                        if texto:
+                            try:
+                                lecturas.append(float(texto))
+                            except ValueError:
+                                pass
+                    if lecturas:
+                        promedio = sum(lecturas) / len(lecturas)
+                        tabla.setItem(fila, 5, QTableWidgetItem(f"{promedio:.4f}"))
+                        q_med[acc] = promedio
+                    else:
+                        tabla.setItem(fila, 5, QTableWidgetItem(""))
+
+                referencia = q_med.get("Open")
+                if not referencia:
+                    return
+                for fila in range(tabla.rowCount()):
+                    item_acc = tabla.item(fila, 0)
+                    acc = item_acc.text().strip() if item_acc else ""
+                    if acc not in q_med:
+                        continue
+                    factor_t = q_med[acc] / referencia
+                    tabla.setItem(fila, 6, QTableWidgetItem(f"{factor_t:.4f}"))
+            except Exception as e:
+                print(f"Error derivando el factor de transmisión: {e}")
+        return calcular
     
     def _agregar_botones_tabla(self, layout, table, nombre_tabla, ref, id = True, id_energia=False):
         """Agrega botones de acción a la tabla optimizadamente"""
@@ -411,7 +606,7 @@ class PruebaAnual600(PruebaMensual600):
                 # Estructura de la tabla:      |      Medida      |      Valor Esperado     | Discrepancia
                 # Ejemplo: ["Tamaño de campo", "Factor de campo", "Factor de campo esperado", "Discrepancia"]
                 #          [[      "3x3",              "x",                  "y",                  "d"      ], ...]
-                
+
                 # Procesar cada fila de datos
                 for fila in range(0, tabla.rowCount()):
                     try:
@@ -419,34 +614,49 @@ class PruebaAnual600(PruebaMensual600):
                         item_medida = tabla.item(fila, columna_real)
                         item_esperado = tabla.item(fila, columna_esperada)
 
-                        valor_medida = float(item_medida.text()) if item_medida and item_medida.text() else 0.0
-                        valor_esperado = float(item_esperado.text()) if item_esperado and item_esperado.text() else 0.0
-                        
-                        # Calcular discrepancia
-                        if valor_esperado != 0:
-                            if diferencia_tipo == 'absoluta':
-                                discrepancia = abs(valor_medida - valor_esperado)
-                            if diferencia_tipo == 'porcentaje':  # Porcentaje
-                               
-                                discrepancia = (abs(valor_medida - valor_esperado)) / abs(valor_esperado)* 100
-                            
-                            if diferencia_tipo == 'promedio':
-                                # Calcular promedio de las dos columnas
-                                discrepancia = (valor_medida + valor_esperado) / 2
-                                
-                            if diferencia_tipo == 'angular':
-                                if 355<(valor_esperado) < 360:
-                                    valor_medida = 360-valor_medida
-                                    discrepancia = (abs(valor_medida - valor_esperado))
-                                else:
-                                    discrepancia = (abs(valor_medida - valor_esperado))
-                                    
-                            tabla.setItem(fila, columna_discrepancia, QTableWidgetItem(f"{discrepancia:.2f}"))
-                        else:
-                            tabla.setItem(fila, columna_discrepancia, QTableWidgetItem("0.00"))
+                        texto_medida = item_medida.text().strip() if item_medida else ""
+                        texto_esperado = item_esperado.text().strip() if item_esperado else ""
 
-                        
-                                
+                        # AN-1/D-B: una celda vacía (medida o esperado, el
+                        # callback recorre TODAS las filas en cada edición,
+                        # incluidas las que nadie ha tecleado todavía) no es
+                        # un cero -- no hay discrepancia que calcular, así que
+                        # no se escribe nada.
+                        if not texto_medida or not texto_esperado:
+                            tabla.setItem(fila, columna_discrepancia, QTableWidgetItem(""))
+                            continue
+
+                        valor_medida = float(texto_medida)
+                        valor_esperado = float(texto_esperado)
+
+                        # AN-2/D-C: la división por cero solo amenaza a
+                        # 'porcentaje' -- 'absoluta', 'angular' y 'promedio'
+                        # calculan normalmente con esperado 0.
+                        if diferencia_tipo == 'porcentaje' and valor_esperado == 0:
+                            tabla.setItem(fila, columna_discrepancia, QTableWidgetItem("N/A"))
+                            continue
+
+                        if diferencia_tipo == 'absoluta':
+                            discrepancia = abs(valor_medida - valor_esperado)
+                        elif diferencia_tipo == 'porcentaje':
+                            discrepancia = (abs(valor_medida - valor_esperado)) / abs(valor_esperado) * 100
+                        elif diferencia_tipo == 'promedio':
+                            # Calcular promedio de las dos columnas
+                            discrepancia = (valor_medida + valor_esperado) / 2
+                        elif diferencia_tipo == 'angular':
+                            # AN-3: el envoltorio 0<->360 se normaliza en los
+                            # DOS lados de la resta, cada uno de forma
+                            # independiente -- no solo en la medida, y no
+                            # solo cuando el esperado cae en el rango.
+                            m, e = valor_medida, valor_esperado
+                            if 355 < e < 360:
+                                e = 360 - e
+                            if 355 < m < 360:
+                                m = 360 - m
+                            discrepancia = abs(m - e)
+
+                        tabla.setItem(fila, columna_discrepancia, QTableWidgetItem(f"{discrepancia:.2f}"))
+
                     except (ValueError, AttributeError):
                         tabla.setItem(fila, columna_discrepancia, QTableWidgetItem("N/A"))
 

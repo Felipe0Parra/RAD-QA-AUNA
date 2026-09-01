@@ -2,6 +2,14 @@ import numpy as np
 from datetime import datetime
 from zoneinfo import ZoneInfo #Para manejo de zonas horarias
 
+# T1 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_28-08.md): única vida media del Ir-192
+# para toda la app. 73.827 d es el valor NNDC/IAEA; el diario usaba 73.83
+# (ese valor redondeado) y el mensual/CalcularActividad/load.py usaban 74.2,
+# que no corresponde a ningún valor aceptado -- divergían hasta 1.416% a 300
+# días contra una tolerancia del 3%. Ningún llamador debe volver a pasar un
+# literal: o se omite el parámetro, o se pasa esta constante por nombre.
+VIDA_MEDIA_IR192_DIAS = 73.827
+
 def factores_correccion(V_300prom,Vn_300prom, V_150prom, t, p, t0,p0):
     #print("     ● Ingresa al cálculo de los factores de corrección")
     Ks = (4/3) - V_300prom / (3*V_150prom)  # Factor de corrección para la cámara de pozo
@@ -64,7 +72,7 @@ def generar_reporte(Ks, Kpol, Ktp, A, e, dec, e_dec,ref):
     reporte.append(f"&emsp;&emsp; Entre la A<sub>f</sub> y A: %&epsilon; = {e_dec:.3f} %")
 
     return reporte
-def calcular_decaimiento(fecha_inicio_str, fecha_fin_str, actividad_inicial, vida_media_dias=73.83):
+def calcular_decaimiento(fecha_inicio_str, fecha_fin_str, actividad_inicial, vida_media_dias=VIDA_MEDIA_IR192_DIAS):
     #print("     ● Ingresa al cálculo del decaimiento")
     """
     Calcula la actividad después del decaimiento,
@@ -109,7 +117,7 @@ def CalcularActividad(V_300prom,Vn_300prom, V_150prom, t, p, t0,p0, calibracion_
 
     A = actividad_fuente(Ks, Kpol, Ktp, calibracion_camara,calibracion_electrometro, conversion, V_300prom)
     
-    dec_valor = calcular_decaimiento(fecha_inicio_str, fecha_fin_str, intensidad, vida_media_dias=74.2)
+    dec_valor = calcular_decaimiento(fecha_inicio_str, fecha_fin_str, intensidad)
 
     e, e_dec = error_porcentual(ref, A, dec_valor)
 

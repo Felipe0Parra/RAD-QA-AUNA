@@ -81,17 +81,27 @@ def _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha):
 "Función que almecena la información en la base de datos de los controles diarios"
 def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             distancias=None, promedio=None, desviacion=None,
-            desplazamientos=None, promedio_des=None, desviacion_des=None):
+            desplazamientos=None, promedio_des=None, desviacion_des=None,
+            formato_fecha='yyyy-MM-dd'):
+    """H6 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): `add_info` es genérica
+    -- la comparten las 4 diarias -- así que la excepción (guardar la hora)
+    se declara en el PARÁMETRO, con el comportamiento de hoy como valor por
+    defecto, y no con un `if nombre_tabla == 'braqui'` enterrado aquí. El
+    llamador de braqui (`ordenar_botones`, PruebasDiarias.py) es el único
+    que pasa 'yyyy-MM-dd HH:mm:ss'; los demás no cambian. `.dateTime()` en
+    vez de `.date()` es seguro para todos: cuando `formato_fecha` no lleva
+    componente de hora, el valor de hora dentro del QDateTime no afecta el
+    texto resultante."""
     print(f"Entra a la función add_info en load.py con tabla: {nombre_tabla}")
     try:
         columnas_str, placeholders = encontrar_columnas(nombre_tabla, delete=0)
-        
+
         conn = Conexion().conectar()
         cursor = conn.cursor()
 
         # Construir los valores a insertar
         lista = []
-        lista.append(self.date_box.date().toString('yyyy-MM-dd'))
+        lista.append(self.date_box.dateTime().toString(formato_fecha))
 
         user_id = self.user_id._nombre
         cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
@@ -200,6 +210,16 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
         import traceback
         traceback.print_exc()
         QMessageBox.critical(self, "Error", f"Error en la consulta: {e}")
+    finally:
+        # T7 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_28-08.md, DP-67): `conectar()`
+        # abre una conexión NUEVA en cada llamada y esta función tenía varios
+        # `return` tempranos (usuario inexistente, campo no numérico) que
+        # nunca la cerraban -- cada guardado del diario dejaba ~6
+        # descriptores abiertos sin soltar, hasta agotar el límite del
+        # proceso ("no se puede guardar sin reiniciar la app"). `conn` puede
+        # no existir si `encontrar_columnas` falló antes de crearla.
+        if 'conn' in locals() and conn is not None:
+            conn.close()
 
 def abrir_pelicula(self, id_registro):
     """
@@ -887,6 +907,13 @@ def encontrar_columnas(nombre_tabla, id = True, delete = 1):
         traceback.print_exc()
         print('Error al obtener las columnas:', e)
         return
+    finally:
+        # T7 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_28-08.md, DP-67): esta conexión
+        # nunca se cerraba -- `encontrar_columnas` la abre en CADA llamada de
+        # `add_info` (el guardado de las 4 diarias la invoca siempre), así
+        # que era una fuga por cada guardado, independiente de la de `add_
+        # info` misma.
+        conn.close()
 
     # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): `activo` es metadato de
     # anulación, agregado SIEMPRE al final por `_asegurar_activo_bloque_qc`
@@ -4360,7 +4387,7 @@ def guardarEdicion(dlg, tabla_widget, nombre_tabla, id_ref):
 
                     # Calcular decaimiento
                     dec_valor = calcular_decaimiento(datos_finales["fecha_cer"], datos_finales["fecha_cal"],
-                        datos_finales["intensidad"], vida_media_dias=74.2)
+                        datos_finales["intensidad"])
 
                     # Debug
                     print("\n-----------------------------------------------------------------------")

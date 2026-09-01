@@ -35,12 +35,26 @@ import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.load import columnas_identificadoras
 from services.db_pool import DatabaseManager
+import ui.paginasControles.PruebasAnuales.ix_anual as ix_anual_mod
 from ui.paginasControles.PruebasAnuales.ix_anual import PruebaAnualIX
 
 
 @pytest.fixture(scope="module")
 def app():
     return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def _sin_dialogos_modales(monkeypatch):
+    # A2 (PLAN_REPARACION_ANUAL_27-08.md §Fase 4, AN-7): guardar_todas_fse
+    # ahora SÍ muestra un QMessageBox.information en el camino de éxito
+    # (antes solo imprimía en consola) -- este archivo pulsa "Subir" de
+    # verdad (_pulsar_subir), muchas veces, sobre una BD real. Sin
+    # mockear esto, cada click de éxito dispararía un diálogo modal real
+    # bajo QT_QPA_PLATFORM=offscreen (Trampa 2: cuelga la suite entera,
+    # no lanza ninguna excepción).
+    monkeypatch.setattr(ix_anual_mod.QMessageBox, "information", staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(ix_anual_mod.QMessageBox, "critical", staticmethod(lambda *a, **k: None))
 
 
 @pytest.fixture

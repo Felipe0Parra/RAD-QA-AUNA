@@ -281,7 +281,6 @@ class PruebaMensual600(PruebaBasico):
         self.user_id_f1 = self.fisico1.currentData()  # userData = id del físico
     # Inicializa la interfaz para el control mensual 
     def preINIGI(self, user_id, inputs_maquina):
-        
         # Define el archivo Excel que contiene la configuración de widgets
         archivo = 'widgets.xlsx'
         
@@ -348,19 +347,19 @@ class PruebaMensual600(PruebaBasico):
         
         # Conecta las señales del botón 'Iniciar' a las funciones correspondientes:
         # 1. Limpia los layouts para reiniciar la interfaz de control.
-        
+
         self.iniciar.clicked.connect(lambda _: self.limpiar_layout([self.general_layout, self.main_layout], self.user_id_f1,   # ← ahora es el físico seleccionado en el combo
             inputs_maquina[3],
             self.user_id_f2,
             self.fisico1.currentText(),
             self.fisico2.currentText()))
-        
-        
+
+
         # 2. Inicializa la interfaz gráfica de usuario para pruebas.
         self.iniciar.clicked.connect(lambda _: self.iniGUI(inputs_maquina=inputs_maquina))
         # 3. Ejecuta la función adicional para manipulación del botón.
         self.iniciar.clicked.connect(self.button_click)
-        ''' '''        
+        ''' '''
         
         self.tabla = QTableWidget()
         self.tabla.setAlternatingRowColors(True)
@@ -451,9 +450,18 @@ class PruebaMensual600(PruebaBasico):
             self.main_layout.removeWidget(self._preview_container)
             self._preview_container.hide()
             # NO llamar deleteLater(), solo ocultar
-        
+
         # 2. Limpiar layouts
-        self.limpiar_layout(
+        # A3 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R2): este es el
+        # handler real que "Iniciar" dispara (`preINIGI` desconecta las 3
+        # conexiones originales y reconecta aquí antes de que el usuario
+        # pueda hacer click -- ese bloque de 3 conexiones es código muerto
+        # heredado, no se toca). Si `limpiar_layout` no creó ni recuperó un
+        # control (Físico 1 inexistente, `create_control` ya avisa
+        # nombrándolo), no se arma la UI de captura: evita construir sobre
+        # un `self.ref` inválido y que cualquier guardado posterior quede
+        # huérfano -- mismo contrato que AV2 (equipos).
+        creado = self.limpiar_layout(
             [self.general_layout, self.main_layout],
             self.user_id_f1,   # ← ahora es el físico seleccionado en el combo
             inputs_maquina[3],
@@ -461,12 +469,16 @@ class PruebaMensual600(PruebaBasico):
             self.fisico1.currentText(),
             self.fisico2.currentText()
         )
+        if not creado:
+            return
         # 3. Inicializar GUI normal
         self.iniGUI(inputs_maquina=inputs_maquina)
         self.button_click()
-            
+
     # Limpia los layouts y crea una nueva referencia de control en la base de datos
     def limpiar_layout(self, layouts, user_id, maquina, user_id_f2=None,  nombre_fisico1=None, nombre_fisico2=None):
+        """Devuelve True si `self.ref` quedó apuntando a un control válido
+        (creado o recuperado), False si `create_control` bloqueó (A3)."""
 
         fecha = self.date_box.date()
         # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): se guarda el día
@@ -491,6 +503,7 @@ class PruebaMensual600(PruebaBasico):
         self.fecha_control = self._fecha_real_del_control(self.ref) or fecha
         self.nombre_fisico1 = nombre_fisico1
         self.nombre_fisico2 = nombre_fisico2
+        return self.ref is not None
 
     def _fecha_real_del_control(self, control_id):
         """Lee `controles.fecha` tal como quedó guardada para `control_id`
@@ -553,6 +566,18 @@ class PruebaMensual600(PruebaBasico):
             # dd/MM/yyyy) o no (registros históricos, MM/yyyy).
             fecha = _fecha_control_a_qdate(self.fecha_control)
             self.date_box.setDate(fecha)
+            # D1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase D, R7): la fecha
+            # del control mensual se sigue pudiendo modificar tras iniciar,
+            # pero cambiarla no navega a otro control ni crea uno nuevo --
+            # no hay ningún mecanismo detrás que lea ese cambio. Dejarla
+            # editable sin serlo confundía al físico (parece que se puede
+            # cambiar de mes ahí). Se bloquea, igual que fisico1/fisico2
+            # abajo -- decisión del físico (26-08): más simple y de menor
+            # riesgo que hacerla realmente navegable (evaluado y descartado
+            # por tocar `create_control`, origen de W1, con varios defectos
+            # de estado preexistentes que la reconstrucción del formulario
+            # exponía).
+            self.date_box.setEnabled(False)
         if hasattr(self, 'nombre_fisico1'):
             index = self.fisico1.findText(self.nombre_fisico1)
             if index >= 0:
@@ -2190,7 +2215,22 @@ class PruebaMensual600(PruebaBasico):
                 self._llenar_tabla_bd(table, datos_tabla['data'], nombre_tabla)
                 #table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             else:
-                self._llenar_tabla_defaults(table, datos_tabla['data'] if nombre_tabla != "HC_precision_posicion_multilaminas_anual" else datos, editar_primera_columna=True)
+                # B0 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase B, R3/R4):
+                # la columna 0 es un identificador FIJO en toda tabla anual
+                # excepto "HC_precision_posicion_multilaminas_anual" (sus 3
+                # columnas, incluida la 0, nacen vacías -- "Medida (cm)" es
+                # un dato real que el físico captura, no una etiqueta como
+                # "10x10"/"Accesorio"/"Banco"). Con `editar_primera_columna`
+                # fijo en `True` para TODAS, el físico podía sobreescribir
+                # el identificador por accidente -- medido en el rebuild:
+                # `tamano_campo` se corrompió a '1' repetido en varias filas
+                # de `tabla_factor_campo`, y el índice UNIQUE (CL1) lo
+                # rechazó correctamente (ahí empieza R3: el guardado
+                # reportó éxito sobre ese rechazo).
+                es_multilaminas_posicion = nombre_tabla == "HC_precision_posicion_multilaminas_anual"
+                self._llenar_tabla_defaults(
+                    table, datos_tabla['data'] if not es_multilaminas_posicion else datos,
+                    editar_primera_columna=es_multilaminas_posicion)
             
             # Configuración final de tabla|
             table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -2336,20 +2376,31 @@ class PruebaMensual600(PruebaBasico):
                             id_energia = entry.get('id_energia')
                             break
             if anual and id_energia is not None:
-                loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=anual, id_energia=id_energia, id=id)
+                resultado = loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=anual, id_energia=id_energia, id=id)
             else:
                 print(f"Subiendo tabla {nombre_tabla} sin id_energia")
                 print(f"Los argumentos son: nombre_tabla={nombre_tabla}, ref={ref}, anual={anual}, id={id}")
-                loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=anual, id=id, id_energia=id_energia)
+                resultado = loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=0, anual=anual, id=id, id_energia=id_energia)
 
-            # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): punto de mayor
-            # apalancamiento del bloque -- vía compartida de "subir tabla"
-            # para casi todas las tablas simples de 600 mensual Y Halcyon
-            # mensual (halcyon_mensual.py no tiene ni un import de
-            # auditoría propio, depende enteramente de este método
-            # heredado). loadtablacomplex sigue sin auditar internamente
-            # (es capa de detalle); este es uno de sus 3 puntos de cierre
-            # reales.
+            # B1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase B, R3): este
+            # método -- "punto de mayor apalancamiento del bloque", vía
+            # compartida de "subir tabla" para casi todas las tablas
+            # simples de 600 mensual Y Halcyon mensual -- ignoraba el `bool`
+            # de loadtablacomplex, mismo síntoma H3 que `ix_anual.py` y que
+            # AV1 ya había corregido en `seiscientos_anual.py`. No estaba
+            # nombrado en el plan (que solo señalaba `ix_anual.py`), pero es
+            # la misma clase de error -- se corrige aquí también.
+            if not resultado:
+                QMessageBox.critical(
+                    self, "Error",
+                    f"No se pudo guardar {nombre_tabla}. Revise la consola "
+                    "para el detalle.")
+                return
+
+            # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): loadtablacomplex
+            # sigue sin auditar internamente (es capa de detalle); este es
+            # uno de sus 3 puntos de cierre reales. B1: solo se audita un
+            # guardado que de verdad ocurrió.
             _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
                                  nombre_tabla, ref=ref)
 
@@ -2466,7 +2517,16 @@ class PruebaMensual600(PruebaBasico):
         def subir_tabla():
             print('Entra a subir tabla en fieldSize')
             datos = []
-            loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=3, anual=False, id=False, id_energia=None)
+            # B1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase B, R3): mismo
+            # síntoma H3 que las otras dos copias -- se descartaba el
+            # resultado de loadtablacomplex y se avisaba éxito sin más.
+            resultado = loadtablacomplex(nombre_tabla, table, datos, reference=ref, from_range=3, anual=False, id=False, id_energia=None)
+            if not resultado:
+                QMessageBox.critical(
+                    self, "Error",
+                    f"No se pudo guardar {nombre_tabla}. Revise la consola "
+                    "para el detalle.")
+                return
             # H2.4: registro de auditoría del guardado real en BD.
             _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, nombre_tabla, ref=ref)
             self._actualizar_tabla_despues_subida()
@@ -3223,9 +3283,10 @@ class PruebaMensual600(PruebaBasico):
 
                     def subir():
                         print(f"\n ........ Entra a botonescombobox.subir() en {self.__class__.__name__} ........")
-                        self.subir_control_cunas(self.combos_seguridad, self.df_seg_line)
+                        guardado = self.subir_control_cunas(self.combos_seguridad, self.df_seg_line)
                         print("Se llama a subir_control_cunas en 600")
-                        self._actualizar_tabla_despues_subida()
+                        if guardado:
+                            self._actualizar_tabla_despues_subida()
                         print(f"\nLa variable equipo_f en la función bombobox cuñas es: {self.equipo_f}")
 
                     btn_guardar.clicked.connect(subir)
@@ -3382,7 +3443,8 @@ class PruebaMensual600(PruebaBasico):
             return texto
         return None
     
-    def subir_control_cunas(self, combos_seguridad, df_lines=None, auditar=True):
+    def subir_control_cunas(self, combos_seguridad, df_lines=None, auditar=True,
+                             mostrar_mensaje=True):
         """
         combos_seguridad es un diccionario con las llaves:
         {
@@ -3410,8 +3472,24 @@ class PruebaMensual600(PruebaBasico):
         silencio una fila anulada desde el popup "Ver tabla" si el control
         se vuelve a guardar después (hallazgo S1, el mismo que D3 cerró para
         el reemplazo diario).
+
+        A1/D1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R1): un combo
+        dejado en "Seleccionar..." ya no colapsa en `0` ("No funciona") --
+        eso fabricaba una afirmación clínica que nadie hizo. Si queda algún
+        combo sin marcar, no se escribe NADA (mismo contrato que
+        `guardar_control_conos`/DA-37) y se avisa nombrando ángulo+posición.
+        La detección vive en `_faltantes_cunas` (sin efectos secundarios)
+        para que `guardar_todo_ix` la reuse en su validación unificada (A2).
         """
         print("\n -> Entra en subir_control_cunas en 600")
+        faltantes = self._faltantes_cunas(combos_seguridad)
+        if faltantes:
+            QMessageBox.warning(
+                self, "Cuñas incompletas",
+                "Faltan por registrar estas posiciones: " +
+                ", ".join(f"{angulo}° {pos}" for angulo, pos in faltantes))
+            return False
+
         conn = Conexion().conectar()
         cursor = conn.cursor()
 
@@ -3456,10 +3534,24 @@ class PruebaMensual600(PruebaBasico):
         if auditar:
             _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
                                  "control_cunas", ref=getattr(self, "ref", None))
-        QMessageBox.information(self, "", "Tabla cargada correctamente")
+        if mostrar_mensaje:
+            QMessageBox.information(self, "", "Tabla cargada correctamente")
         # Actualizar tabla si existe
         if hasattr(self, 'tabla'):
             self._actualizar_tabla_despues_subida()
+        return True
+
+    def _faltantes_cunas(self, combos_seguridad):
+        """Lectura pura de los combos de cuñas: no escribe, no dialoga.
+        Devuelve la lista de (angulo, posicion) que siguen en
+        "Seleccionar..." -- reusada por `subir_control_cunas` y por la
+        validación unificada de `guardar_todo_ix` (A2)."""
+        faltantes = []
+        for angulo, posiciones in combos_seguridad.items():
+            for pos in ("in", "out", "right", "left"):
+                if posiciones[pos].currentText() not in ("Funciona", "No funciona"):
+                    faltantes.append((angulo, pos))
+        return faltantes
     
     def Traerinfo(self, combenu):
         """E2+E3 (PLAN_CONOS_MENSUAL_12-08.md §4): selecciona sobre una

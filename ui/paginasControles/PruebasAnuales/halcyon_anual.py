@@ -66,12 +66,25 @@ class PruebaAnualHalcyon(PruebaAnual600):
             _, tabla_precision = self._crear_tablas_aspectos_mlc()
             tabla_linealidadUM, _ =self._crear_tablas_aspectos_dosimetricos()
 
-            grupo_tablas_mecanicos = [tabla_ig, tabla_ic, tabla_icam]
+            # C2 (PLAN_REPARACION_ANUAL_27-08.md §Fase 1, AN-4/AN-5):
+            # tabla_icam NO va en grupo_tablas_mecanicos. Su columna 0 es una
+            # etiqueta de texto ("Longitudinal"/"Lateral"/"Vertical"), no un
+            # número -- el registro genérico (0,1,2,'absoluta') de este bucle
+            # reventaba float() y escribía "N/A" encima de "Medido (cm)"
+            # (columna 2). Antes esto no se manifestaba solo porque los dos
+            # registros compartían timer_key y el segundo cancelaba el
+            # temporizador del primero -- un accidente, no una garantía.
+            # tabla_icam tiene su propio registro, correcto, más abajo.
+            grupo_tablas_mecanicos = [tabla_ig, tabla_ic]
             for tabla in grupo_tablas_mecanicos:
-                self._configurar_eventos(tabla, callback=self._calcular_discrepancias_tablas(tabla, 0, 1, 2, diferencia_tipo='absoluta'), 
+                self._configurar_eventos(tabla, callback=self._calcular_discrepancias_tablas(tabla, 0, 1, 2, diferencia_tipo='absoluta'),
                                         timer_key=f"debounce_{tabla.objectName()}", delay=300)
 
-            self._configurar_eventos(tabla_icam, callback=self._calcular_discrepancias_tablas(tabla_icam, 1, 2, 3, diferencia_tipo='porcentaje'), 
+            # AN-4: columna_real=2 ("Medido (cm)", lo que el físico midió) y
+            # columna_esperada=1 ("Desplazamiento", el nominal) -- estaban
+            # invertidas (1,2), lo que subestimaba el porcentaje al calcular
+            # sobre el medido en vez del nominal.
+            self._configurar_eventos(tabla_icam, callback=self._calcular_discrepancias_tablas(tabla_icam, 2, 1, 3, diferencia_tipo='porcentaje'),
                                         timer_key=f"debounce_{tabla_icam.objectName()}", delay=300)
 
             self._configurar_eventos(tabla_precision, callback=self._calcular_discrepancias_tablas(tabla_precision, 0, 1, 2, diferencia_tipo='porcentaje'), 
@@ -291,6 +304,13 @@ class PruebaAnualHalcyon(PruebaAnual600):
 
     def subir_imagen_perfil_mlc_db(self, imagen, imagen_perfil_horiz, picos_perfil):
         """Sube la imagen y el perfil del MLC a la base de datos"""
+        # A3 (PLAN_REPARACION_ANUAL_27-08.md §Fase 4, AN-8): misma familia
+        # que DP-46/DP-51 -- el except se limitaba a imprimir en consola,
+        # sin avisar al físico, sin deshacer un INSERT a medias y sin
+        # cerrar la conexión abierta arriba. Ahora: rollback de lo que
+        # haya quedado a medias, aviso con critical, y `finally` cierra la
+        # conexión siempre, salga bien o mal.
+        conn = None
         try:
             from data.ManejoDatos.conection import Conexion
             conn = Conexion().conectar()
@@ -311,6 +331,15 @@ class PruebaAnualHalcyon(PruebaAnual600):
             QMessageBox.information(self, "Éxito", "Imagen y perfil del MLC subidos exitosamente a la base de datos.")
         except Exception as e:
             print(f"Error subiendo imagen y perfil del MLC a la base de datos: {e}")
+            if conn is not None:
+                conn.rollback()
+            QMessageBox.critical(
+                self, "Error",
+                f"No se pudo subir la imagen y el perfil del MLC a la base "
+                f"de datos:\n{e}\n\nVuelva a intentarlo.")
+        finally:
+            if conn is not None:
+                conn.close()
             
 # P1 (PLAN_P1_POOL_CONEXIONES_27-07.md): la clase con estado que vivía aquí
 # fue reemplazada por la fachada sin estado de services/db_pool.py.

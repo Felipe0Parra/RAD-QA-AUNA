@@ -130,12 +130,12 @@ SITIOS_CENSALES_PERMITIDOS = {
         "censo (OB1, censo.total): el observador necesita el total SIN "
         "filtrar para poder calcular `anuladas = total - activas`; la "
         "consulta de al lado (línea 146) sí filtra, y es la que compara.",
-    ("data/ManejoDatos/conection.py", 556):
+    ("data/ManejoDatos/conection.py", 584):
         "migración (E10, _asegurar_fk_on_delete_restrict): "
         "`INSERT INTO \"{temporal}\" SELECT * FROM \"{nombre}\"` copia la "
         "tabla ENTERA al reconstruirla para cambiar sus FK. Filtrar aquí "
         "no sería una lectura más estricta: BORRARÍA el histórico.",
-    ("data/ManejoDatos/conection.py", 656):
+    ("data/ManejoDatos/conection.py", 684):
         "migración (EB2d, DA-57, _asegurar_angulo_starshot_sin_unique_de_tabla): "
         "mismo patrón que E10 arriba -- copia la tabla ENTERA al "
         "reconstruirla para retirar el UNIQUE(ref, spoke_index) de tabla "
@@ -166,6 +166,45 @@ SITIOS_CENSALES_PERMITIDOS = {
         "Lo encontró ESTE frente y no ES1: era un `UPDATE {tabla}` con "
         "nombre dinámico, y el detector de ES1 solo miraba `FROM {DYN}` "
         "(hueco cerrado en LR4 con PATRON_UPDATE_DINAMICO).",
+
+    # C2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C): motivo "clave de
+    # bloque incompleta" -- JOIN + COUNT/MAX/MIN con GROUP BY sobre
+    # `pruebas.id_sesion` sin discriminar `id_tipo`. Son AGREGACIONES sobre
+    # TODAS las pruebas de una sesión, no una elección arbitraria entre
+    # varias -- mismo criterio que ES1 ya aplicó a los sitios de lista
+    # completa/agregación (`load.py:3038`/`3890`, ver
+    # SITIOS_CLAVE_INCOMPLETA_PERMITIDOS en test_le4). RT1 los ve porque los
+    # tests ejercitan de verdad `mostrar_controles_img*`/`mostrar_controles_tac`.
+    ("data/ManejoDatos/load.py", 1882):
+        "mostrar_controles_imgIX_anual -- COUNT(p.id_prueba) GROUP BY c.id: "
+        "cuenta TODAS las pruebas de la sesión, no elige una.",
+    ("data/ManejoDatos/load.py", 1916):
+        "mostrar_controles_imgIX_anual -- MAX/MIN GROUP BY c.id: agregación "
+        "sobre todas las pruebas de la sesión.",
+    ("data/ManejoDatos/load.py", 2071):
+        "mostrar_controles_imgIX -- gemelo mensual del COUNT anterior.",
+    ("data/ManejoDatos/load.py", 2119):
+        "mostrar_controles_imgIX -- gemelo mensual del MAX/MIN anterior.",
+    ("data/ManejoDatos/load.py", 2277):
+        "mostrar_controles_imgHC_anual -- gemelo Halcyon del COUNT.",
+    ("data/ManejoDatos/load.py", 2311):
+        "mostrar_controles_imgHC_anual -- gemelo Halcyon del MAX/MIN.",
+    ("data/ManejoDatos/load.py", 2468):
+        "mostrar_controles_imgHC -- gemelo Halcyon mensual del COUNT.",
+    ("data/ManejoDatos/load.py", 2516):
+        "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN.",
+    ("data/ManejoDatos/load.py", 2669):
+        "mostrar_controles_tac -- gemelo TAC del COUNT.",
+    ("data/ManejoDatos/load.py", 2717):
+        "mostrar_controles_tac -- gemelo TAC del MAX/MIN.",
+    ("scripts/observador_contrato.py", 158):
+        "_censo_y_vigente -- COUNT(*) sobre TODA la tabla (censo total, sin "
+        "relación a ningún ref/clave) -- mismo espíritu que la línea 154 ya "
+        "documentada arriba, para una tabla con clave compuesta.",
+    ("data/ManejoDatos/Tablas_Anuales/tablas_anuales.py", 61):
+        "buscar_datos_db -- función GENÉRICA reusada por muchas tablas "
+        "anuales; fetchall() sin ORDER BY/LIMIT, trae la LISTA completa de "
+        "filas activas de ese ref, no elige una.",
 }
 
 # Acumulador de la sesión completa de pytest -- una lista de

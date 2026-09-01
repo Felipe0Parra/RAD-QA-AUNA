@@ -120,6 +120,13 @@ CLAVES_ESPERADAS_DEL_PLAN = {
     "aceleradorlineal_ix": ("DATE(date)",),
     "halcyon": ("DATE(date)",),
     "braqui": ("DATE(date)",),
+    # R1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, F-5): lecturas crudas de
+    # la hoja "Linealidad" del anual 600/iX -- entran a TABLAS_ANULABLES
+    # desde que nacen, no quedan pendientes de una fase posterior.
+    "anual_linealidad_um": ("ref", "id_energia", "um"),
+    "anual_lecturas_factor_campo": ("ref", "id_energia", "clave"),
+    "anual_lecturas_transmision": ("ref", "id_energia", "accesorio"),
+    "anual_tasa_dosis": ("ref", "id_energia", "tasa_um_min"),
 }
 
 # Tablas del bloque de QC que YA estaban en TABLAS_ANULABLES antes de IV1

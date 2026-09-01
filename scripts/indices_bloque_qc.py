@@ -135,6 +135,15 @@ CLAVES_INDICE = {
     "aceleradorlineal_ix": ("DATE(date)",),
     "halcyon": ("DATE(date)",),
     "braqui": ("DATE(date)",),
+
+    # R1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, F-5): lecturas crudas de
+    # la hoja "Linealidad" del anual 600/iX. Entran a TABLAS_ANULABLES
+    # desde que nacen (a diferencia de las 30 de IV3/MI1, no quedan
+    # "declaradas por adelantado" -- R2 les da botón de guardado de una).
+    "anual_linealidad_um": ("ref", "id_energia", "um"),
+    "anual_lecturas_factor_campo": ("ref", "id_energia", "clave"),
+    "anual_lecturas_transmision": ("ref", "id_energia", "accesorio"),
+    "anual_tasa_dosis": ("ref", "id_energia", "tasa_um_min"),
 }
 
 _RE_EXPRESION_CLAVE = re.compile(r'^(\w+)\((\w+)\)$')

@@ -50,11 +50,15 @@ def bd_temporal(monkeypatch, tmp_path):
     monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
     Conexion._instance = None
     conexion = Conexion()
+    # C1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): tipo ahora debe
+    # ser 'Cambio de fuente' -- actualizar_ref_bd filtra por ese tipo desde
+    # C1, y este test verifica el camino de "sí hay calibración", no la
+    # lógica de tipo (que cubre tests/test_c1_lectura_por_clave_completa.py).
     conexion.con.execute(
         "INSERT INTO TipoCalibracion (id, user, fecha, tipo, serie, certificado, "
         "fecha_cer, intensidad, conversion, activo) VALUES "
-        "(5, 'fisico', '2026-03-15 10:00:00', 1.0, 'SN1', 1.0, '01/01/2025', "
-        "1.0, 1.0, 1)")
+        "(5, 'fisico', '2026-03-15 10:00:00', 'Cambio de fuente', 'SN1', 1.0, "
+        "'01/01/2025', 1.0, 1.0, 1)")
     conexion.con.commit()
     yield ruta
     conexion.con.close()

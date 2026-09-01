@@ -445,7 +445,13 @@ class ExportarExcel(QWidget):
                 # superadas" para cuando se atienda el Excel aparte).
                 filtro = filtro_activo(table)
                 if self.date_column and self.start_date and self.end_date:
-                    query = f"SELECT * FROM {table} WHERE {self.date_column} BETWEEN '{self.start_date}' AND '{self.end_date}'{filtro}"
+                    # H6 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): braqui
+                    # es una de las tablas que puede pasar por aquí, y su
+                    # `date` puede traer hora -- sin `DATE(...)`, una fila
+                    # justo en `end_date` con hora quedaba EXCLUIDA del
+                    # Excel por comparación de texto (más larga que el
+                    # límite). Para las demás tablas (sin hora) es un no-op.
+                    query = f"SELECT * FROM {table} WHERE DATE({self.date_column}) BETWEEN '{self.start_date}' AND '{self.end_date}'{filtro}"
                     print(self.date_column)
                 else:
                     query = f"SELECT * FROM {table} WHERE 1=1{filtro}"
@@ -511,7 +517,13 @@ class ExportarExcel(QWidget):
                     # anulada de `braqui` aportaba una imagen de más y todas
                     # las películas quedaban corridas una fila respecto a su
                     # fecha en la hoja.
-                    query = (f"SELECT pelicula FROM braqui WHERE pelicula IS NOT NULL and {self.date_column} BETWEEN '{self.start_date}' AND '{self.end_date}'"
+                    # H6 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): mismo
+                    # `DATE(...)` que la exportación principal (línea 448) --
+                    # esta consulta debe ver EXACTAMENTE las mismas filas
+                    # que aquella, o la alineación fila a fila que describe
+                    # el comentario de arriba se rompe con la primera fila
+                    # de braqui que traiga hora.
+                    query = (f"SELECT pelicula FROM braqui WHERE pelicula IS NOT NULL and DATE({self.date_column}) BETWEEN '{self.start_date}' AND '{self.end_date}'"
                              f"{filtro_activo('braqui')} ORDER BY id ASC")
                     cursor = connect.cursor()
                     cursor.execute(query)

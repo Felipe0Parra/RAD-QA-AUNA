@@ -324,11 +324,13 @@ def tablas_con_filtro_posible():
 class SinFiltro:
     """Una referencia a una tabla versionada, en un fragmento SQL, sin el
     filtro que distingue el bloque vigente del histórico -- o, para el
-    tercer motivo, CON un filtro que no debería estar."""
+    tercer motivo, CON un filtro que no debería estar; o, para el cuarto
+    (C2), con el filtro de activo puesto pero sobre una CLAVE incompleta."""
     tabla: str
     alias: str
     motivo: str  # "sin filtro de activo" | "LIMIT sin ORDER BY" |
-                 # "filtro sobre lectura de identidad"
+                 # "filtro sobre lectura de identidad" |
+                 # "clave de bloque incompleta"
 
 
 #     `tamaño_pixel` (única tabla del bloque de QC con un carácter no-ASCII en
@@ -536,6 +538,48 @@ def _es_lectura_de_identidad(texto_where, alias, tabla, claves):
     return bool(patron.search(texto_where))
 
 
+def _nombre_nucleo_de_columna(columna):
+    """`CLAVES_INDICE` declara algunas columnas como expresión
+    (`"DATE(fecha)"`), no solo como nombre simple (`"tipo"`) -- extrae el
+    identificador de columna real, para buscarlo en el WHERE sin exigir
+    que la envoltura (`DATE(...)`) esté escrita exactamente igual."""
+    m = re.search(r'([A-Za-z_]\w*)\s*\)?\s*$', columna)
+    return m.group(1) if m else columna
+
+
+def _predicado_cubre_clave(fragmento, alias, tabla, claves):
+    """C2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): ¿la sentencia
+    menciona TODAS las columnas de la clave de bloque que `CLAVES_INDICE`
+    declara para `tabla`? `AN1` ya resuelve "¿filtra vigencia?"; esta es la
+    otra mitad -- "¿el predicado cubre la clave completa, o solo una
+    parte?". Una lectura que selecciona por PARTE de la clave y desempata
+    con `ORDER BY id DESC` está eligiendo una fila arbitraria entre las que
+    comparten esa parte -- exactamente `R5` (dos calibraciones el mismo día,
+    tipos distintos, siempre ganaba el `id` más alto).
+
+    Se busca en el FRAGMENTO completo, no solo desde `WHERE`: la forma más
+    común de cubrir una clave de tabla HIJA es el propio `JOIN ... ON
+    hija.ref = padre.id` -- ahí vive la columna, no en el `WHERE` (medido
+    al escribir esto: `preguntas`/`dosimetriaMen`/`MaximosCamaras` unidas
+    así, todas legítimas). Restringir la búsqueda al `WHERE` habría
+    marcado esos ~10 sitios como "clave incompleta" por error.
+
+    Sin clave declarada para `tabla`, no hay nada que exigir -- se acepta
+    sin más (no toda tabla anulable tiene un índice único en
+    `scripts/indices_bloque_qc.py`)."""
+    clave_bloque = claves.get(tabla)
+    if not clave_bloque:
+        return True
+    for columna in clave_bloque:
+        nombre = _nombre_nucleo_de_columna(columna)
+        patron = re.compile(
+            rf'\b(?:{re.escape(alias)}\s*\.\s*)?{re.escape(nombre)}\b',
+            re.IGNORECASE)
+        if not patron.search(fragmento):
+            return False
+    return True
+
+
 def _analizar_fragmento(fragmento, tablas_versionadas):
     hallazgos = []
     refs = _tablas_referenciadas(fragmento)
@@ -544,8 +588,6 @@ def _analizar_fragmento(fragmento, tablas_versionadas):
         unica = len(refs_versionadas) == 1
         texto_where_frag = _texto_desde_where(fragmento)
         for alias, tabla in refs_versionadas.items():
-            if _filtro_presente(fragmento, alias, unica):
-                continue
             # LR4 ([[DA-48]]): con las raíces dentro del alcance, este motivo
             # dejaría en rojo las ~20 lecturas por `id` que NO deben filtrar
             # -- exigirles el filtro es exigirles el defecto que LF4
@@ -553,8 +595,29 @@ def _analizar_fragmento(fragmento, tablas_versionadas):
             # signo cambiado: allí sobra el filtro, aquí no falta. La regla
             # se comprueba una sola vez, aquí, en vez de repartirse en listas
             # blancas por ES1 y RT1.
-            if _es_referencia_de_identidad(fragmento, texto_where_frag,
-                                           alias, tabla):
+            es_identidad = _es_referencia_de_identidad(
+                fragmento, texto_where_frag, alias, tabla)
+            if _filtro_presente(fragmento, alias, unica):
+                # C2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): el
+                # filtro de vigencia está -- pero AN1 solo pregunta "¿filtra
+                # vigencia?", no "¿el predicado cubre la clave de bloque
+                # completa?". Una lectura por PARTE de la clave, desempatada
+                # con `ORDER BY id DESC`, es la misma ambigüedad que R5.
+                #
+                # Solo aplica a SELECT: un UPDATE ... SET activo = 0 WHERE
+                # ref = ? (la anulación de `reemplazar_bloque`) TOCA a
+                # propósito TODAS las combinaciones de la segunda columna de
+                # la clave de ese `ref` -- no "elige una fila arbitraria",
+                # reemplaza el bloque entero. Exigirle la clave completa
+                # sería exigir el defecto contrario: anular solo una
+                # combinación y dejar las demás vigentes por error.
+                if (_RE_SELECT_INICIO.search(fragmento) and not es_identidad
+                        and not _predicado_cubre_clave(
+                            fragmento, alias, tabla, claves_indice())):
+                    hallazgos.append(
+                        SinFiltro(tabla, alias, "clave de bloque incompleta"))
+                continue
+            if es_identidad:
                 continue
             hallazgos.append(SinFiltro(tabla, alias, "sin filtro de activo"))
         if (_RE_SELECT_INICIO.search(fragmento) and _RE_LIMIT.search(fragmento)

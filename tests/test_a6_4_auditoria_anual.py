@@ -192,7 +192,13 @@ class TestGuardarTodasFseSeiscientosAnualAudita:
 
 class TestGuardarTodasFseIxAnualAudita:
     def test_tabla_individual_audita_una_vez(self, app, bd_temporal, monkeypatch):
-        monkeypatch.setattr(ix_anual_mod, "loadtablacomplex", lambda *a, **k: None)
+        # B1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase B): el fake devuelve
+        # True (guardado exitoso) -- con `None` (falsy), guardar_todas_fse
+        # ahora bloquea la auditoría y avisa con QMessageBox.critical, que
+        # este test no mockeaba (Trampa 2, riesgo de cuelgue).
+        monkeypatch.setattr(ix_anual_mod, "loadtablacomplex", lambda *a, **k: True)
+        monkeypatch.setattr(ix_anual_mod.QMessageBox, "critical",
+                            staticmethod(lambda *a, **k: None))
         obj = _anual_pelado(PruebaAnualIX)
         obj.ref = 9
         layout = QHBoxLayout()
@@ -208,9 +214,14 @@ class TestGuardarTodasFseIxAnualAudita:
 
     def test_bucle_de_energias_fse_audita_una_sola_vez(self, app, bd_temporal, monkeypatch):
         llamadas = []
-        monkeypatch.setattr(
-            ix_anual_mod, "loadtablacomplex",
-            lambda *a, **k: llamadas.append(a))
+
+        def _fake_loadtablacomplex(*a, **k):
+            llamadas.append(a)
+            return True  # B1: guardado exitoso -- ver comentario del test anterior
+
+        monkeypatch.setattr(ix_anual_mod, "loadtablacomplex", _fake_loadtablacomplex)
+        monkeypatch.setattr(ix_anual_mod.QMessageBox, "critical",
+                            staticmethod(lambda *a, **k: None))
         obj = _anual_pelado(PruebaAnualIX)
         obj.ref = 11
         tabla_1 = object()

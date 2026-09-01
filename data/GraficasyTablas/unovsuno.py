@@ -6,9 +6,15 @@ def graficarvstiempo(self, query, ax, maquina, selected_column2, selected_chart,
     # LR3 (DA-47/DA-48): `maquina` es siempre una de las 4 diarias y la
     # lectura es por RANGO DE FECHAS (bloque). Filtra sobre la MISMA
     # variable dinámica -> protegida por construcción, sin lista blanca.
+    # H6 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): `braqui.date` puede
+    # ahora traer hora -- `DATE(...)` en el SELECT (si no, el `strptime`
+    # de abajo revienta con la hora pegada) y en el BETWEEN (si no, un
+    # registro justo en `end_date` con hora queda excluido por
+    # comparación de texto). Función compartida por las 4 diarias: para
+    # las otras 3 (`date` siempre sin hora) `DATE(...)` es un no-op.
     query.prepare(f"""
-        SELECT date, {selected_column2} FROM {maquina}
-        WHERE date BETWEEN :start_date AND :end_date{filtro_activo(maquina)}
+        SELECT DATE(date) AS date, {selected_column2} FROM {maquina}
+        WHERE DATE(date) BETWEEN :start_date AND :end_date{filtro_activo(maquina)}
         ORDER BY date ASC
     """)
     query.bindValue(":start_date", start_date)

@@ -395,26 +395,40 @@ def _crear_tablas_factores_transmision_ix(factores_transmision_data):
 def _crear_tablas_factores_sobre_eje_ix(factores_sobre_eje_data):
     """Crea múltiples tablas de factores sobre el eje, agrupadas por energía y PDD (iX)"""
     energias = [0, 1, 2, 3, 4, 5]
-    ppds = ["PDD (10 x 10)", "PPD (15 x 15)", "PPD (20 x 20)"]
+    # E1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 2): los electrones (id 2-5)
+    # ya guardan sus propios PDD de cono y su profundidad en mm (ver
+    # ix_anual.py::DEFINICIONES_ENERGIA) -- con un solo `ppds` fotón, este
+    # filtro por `tam_pdd` no encontraba coincidencia para electrones y
+    # los saltaba en silencio (dato guardado, invisible en el PDF firmado).
+    ppds_por_energia = {
+        0: ["PDD (10 x 10)", "PPD (15 x 15)", "PPD (20 x 20)"],
+        1: ["PDD (10 x 10)", "PPD (15 x 15)", "PPD (20 x 20)"],
+        2: ["PDD (6 x 6)", "PDD (10 x 10)", "PDD (20 x 20)"],
+        3: ["PDD (6 x 6)", "PDD (10 x 10)", "PDD (20 x 20)"],
+        4: ["PDD (6 x 6)", "PDD (10 x 10)", "PDD (20 x 20)"],
+        5: ["PDD (6 x 6)", "PDD (10 x 10)", "PDD (20 x 20)"],
+    }
+    unidad_profundidad_por_energia = {0: "cm", 1: "cm", 2: "mm", 3: "mm", 4: "mm", 5: "mm"}
     tablas = []
-    
+
     for energia_id in energias:
         # Para cada energía, crear una tabla combinada con los 3 PPDs
         datos_energia = [d for d in factores_sobre_eje_data if d.get('id_energia') == energia_id]
-        
+
         if not datos_energia:
             continue
-        
+
         # Agrupar por PDD
-        for pdd in ppds:
+        encabezado_profundidad = f"Profundidad ({unidad_profundidad_por_energia[energia_id]})"
+        for pdd in ppds_por_energia[energia_id]:
             datos_pdd = [d for d in datos_energia if d.get('tam_pdd') == pdd]
-            
+
             if not datos_pdd:
                 continue
-            
+
             tabla_data = []
-            tabla_data.append(['Profundidad (cm)', pdd, 'PPD esperado', 'Discrepancia (%)'])
-            
+            tabla_data.append([encabezado_profundidad, pdd, 'PPD esperado', 'Discrepancia (%)'])
+
             for dato in datos_pdd:
                 tabla_data.append([
                     dato.get('profundidad', ''),
@@ -422,15 +436,15 @@ def _crear_tablas_factores_sobre_eje_ix(factores_sobre_eje_data):
                     dato.get('ppd_esperado', ''),
                     dato.get('discrepancia', '')
                 ])
-            
-            columnas = ['Profundidad (cm)', pdd, 'PPD esperado', 'Discrepancia (%)']
+
+            columnas = [encabezado_profundidad, pdd, 'PPD esperado', 'Discrepancia (%)']
             df = pd.DataFrame(tabla_data[1:], columns=columnas)
-            
+
             tablas.append({
                 'titulo': f'Factores sobre el eje - {_obtener_nombre_energia(energia_id)} - {pdd}',
                 'dataframe': df
             })
-    
+
     return tablas
 
 def _crear_tablas_control_camaras_ix(control_camaras_data):

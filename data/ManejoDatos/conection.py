@@ -32,6 +32,34 @@ def ruta_base_datos():
     return ruta_datos('BaseDatosQA.db')
 
 
+class _ConexionUnaVez:
+    """T7 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_28-08.md): envoltorio de una
+    conexión sqlite3 que además se puede usar como `with` -- cierra la
+    conexión REAL al salir del bloque.
+
+    El `with` NATIVO de `sqlite3.Connection` no cierra nada (solo hace
+    commit/rollback de la transacción, un malentendido frecuente); por
+    eso `Conexion.conectar()` devuelve esto en vez de la conexión desnuda:
+    `with Conexion().conectar() as con:` cierra de verdad, y es lo que
+    hace que el patrón correcto sea el fácil. Cualquier sitio que siga
+    usando la conexión directamente (`con = Conexion().conectar()`, sin
+    `with`) no se rompe: todo lo que no sea `__enter__`/`__exit__` se
+    reenvía a la conexión real."""
+
+    def __init__(self, con):
+        self._con = con
+
+    def __getattr__(self, nombre):
+        return getattr(self._con, nombre)
+
+    def __enter__(self):
+        return self._con
+
+    def __exit__(self, exc_type, exc, tb):
+        self._con.close()
+        return False
+
+
 def aplicar_pragmas_conexion(con):
     """H2.5 (auditoría 2026-07-14): WAL + busy_timeout, en UN solo sitio (antes
     estaban duplicados en las 3 fábricas de conexión -> riesgo de
@@ -1723,12 +1751,77 @@ class Conexion():
             )"""
         
         tabla_control_camaras_monitoras = """
-            CREATE TABLE IF NOT EXISTS tabla_control_camaras_monitoras (    
+            CREATE TABLE IF NOT EXISTS tabla_control_camaras_monitoras (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ref INTEGER,
                 id_energia INTEGER,
                 indicador_medir TEXT,
                 valor_medido REAL,
+                FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE RESTRICT ON UPDATE CASCADE,
+                FOREIGN KEY (id_energia) REFERENCES energias(id)
+            )"""
+
+        # R1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, F-5): lecturas crudas
+        # de la hoja "Linealidad" del formato oficial -- lo que hoy solo se
+        # guarda como factor final derivado. Mismo patrón de las tablas de
+        # arriba (id/ref/id_energia + FK), sin columna `activo`: la agrega
+        # `_asegurar_activo_bloque_qc` en el arranque siguiente porque ya
+        # están en `TABLAS_ANULABLES` desde que nacen.
+        tabla_linealidad_um_anual = """
+            CREATE TABLE IF NOT EXISTS anual_linealidad_um (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER,
+                id_energia INTEGER,
+                um TEXT,
+                q1 REAL,
+                q2 REAL,
+                q_prom REAL,
+                FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE RESTRICT ON UPDATE CASCADE,
+                FOREIGN KEY (id_energia) REFERENCES energias(id)
+            )"""
+
+        tabla_lecturas_factor_campo_anual = """
+            CREATE TABLE IF NOT EXISTS anual_lecturas_factor_campo (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER,
+                id_energia INTEGER,
+                clave TEXT,
+                q1 REAL,
+                q2 REAL,
+                q_prom REAL,
+                factor REAL,
+                FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE RESTRICT ON UPDATE CASCADE,
+                FOREIGN KEY (id_energia) REFERENCES energias(id)
+            )"""
+
+        tabla_lecturas_transmision_anual = """
+            CREATE TABLE IF NOT EXISTS anual_lecturas_transmision (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER,
+                id_energia INTEGER,
+                accesorio TEXT,
+                q1_in REAL,
+                q2_in REAL,
+                q1_out REAL,
+                q2_out REAL,
+                q_med REAL,
+                factor_t REAL,
+                FOREIGN KEY (ref) REFERENCES controles(id)
+                ON DELETE RESTRICT ON UPDATE CASCADE,
+                FOREIGN KEY (id_energia) REFERENCES energias(id)
+            )"""
+
+        tabla_tasa_dosis_anual = """
+            CREATE TABLE IF NOT EXISTS anual_tasa_dosis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER,
+                id_energia INTEGER,
+                tasa_um_min TEXT,
+                med1 REAL,
+                med2 REAL,
                 FOREIGN KEY (ref) REFERENCES controles(id)
                 ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (id_energia) REFERENCES energias(id)
@@ -1742,6 +1835,10 @@ class Conexion():
         cursor.execute(tabla_factores_transmision)
         cursor.execute(tabla_factores_sobre_eje)
         cursor.execute(tabla_control_camaras_monitoras)
+        cursor.execute(tabla_linealidad_um_anual)
+        cursor.execute(tabla_lecturas_factor_campo_anual)
+        cursor.execute(tabla_lecturas_transmision_anual)
+        cursor.execute(tabla_tasa_dosis_anual)
         self.con.commit()
 
     # Tablas para el Halcyon anual o mensual
@@ -2099,7 +2196,7 @@ class Conexion():
         try:
             con = sqlite3.connect(ruta_base_datos(), check_same_thread=False)
             aplicar_pragmas_conexion(con)
-            return con
+            return _ConexionUnaVez(con)
         except Exception as e:
             print("Error al obtener conexión nueva:", e)
             return None

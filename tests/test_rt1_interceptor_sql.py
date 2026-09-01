@@ -183,9 +183,15 @@ def lector_opaco(con, tablas):
         assert hallazgos[0].motivo == "sin filtro de activo"
 
     def test_la_misma_consulta_con_filtro_no_se_marca(self, con, rt1_aislado):
-        """El contraprueba: un analizador que marca todo no sirve de nada."""
+        """El contraprueba: un analizador que marca todo no sirve de nada.
+
+        C2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C): `dosimetriaMen`
+        declara clave `(ref, energia)` -- `WHERE ref = 1` a secas ya no
+        basta para no marcarse (sería justo el hueco que C2 cierra); se
+        agrega `energia` para que el filtro sea de verdad completo."""
         fuente = self.FUENTE_OPACA.replace(
-            'WHERE ref = 1"', 'WHERE ref = 1 AND (activo IS NULL OR activo = 1)"')
+            'WHERE ref = 1"',
+            'WHERE ref = 1 AND energia = 1 AND (activo IS NULL OR activo = 1)"')
         ns = _compilar_como_produccion(fuente)
         antes = len(rt1_aislado.hallazgos_sesion)
 
@@ -200,10 +206,37 @@ class TestListaBlancaCensal:
     otra, este test lo dice (§3: dos copias del mismo criterio que se
     desincronizan es el error que originó todo el plan)."""
 
+    # C2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C): `buscar_datos_db`
+    # (tablas_anuales.py:61) es GENÉRICA -- nombre de tabla Y columnas por
+    # parámetro. Su tabla dinámica está "protegida por construcción"
+    # (filtro_activo sobre la MISMA variable, ver `_censar()` de ES1): ese
+    # camino ni siquiera agrega el sitio a `dinamicos`, así que
+    # ESTRUCTURALMENTE no puede vivir en NINGUNA lista blanca de ES1 --
+    # nunca es "un hallazgo" ahí. RT1 sí lo ve, porque cada llamada en
+    # runtime resuelve una tabla concreta con clave propia (LISTA completa,
+    # fetchall sin ORDER BY/LIMIT -- no elige una fila, mismo criterio que
+    # los sitios sí declarados en SITIOS_CLAVE_INCOMPLETA_PERMITIDOS).
+    SITIOS_SOLO_VISIBLES_EN_RT1 = {
+        ("data/ManejoDatos/Tablas_Anuales/tablas_anuales.py", 61),
+    }
+
     def test_toda_excepcion_de_rt1_esta_tambien_en_es1(self):
+        """C2: se suma EXCEPCIONES_LITERALES y SITIOS_CLAVE_INCOMPLETA_
+        PERMITIDOS a la unión -- varios de los sitios que motiva C2 (JOIN +
+        COUNT/MAX sobre `pruebas` con un filtro armado en variable
+        intermedia) ya vivían en EXCEPCIONES_LITERALES bajo el motivo
+        "sin filtro de activo": AN1 no reconoce el marcador `{DYN}` que deja
+        una variable no resoluble, así que en el análisis ESTÁTICO caen ahí
+        (motivo viejo) y nunca llegan al criterio de C2 -- solo RT1, con el
+        SQL YA resuelto en runtime, ve el motivo nuevo. Mismo criterio, dos
+        frentes, cuatro listas -- no tres, más la excepción explícita
+        (arriba) para el único sitio que ES1 no puede ver NUNCA."""
         import test_le4_lecturas_filtran_activo as es1
         declaradas_en_es1 = (set(es1.SITIOS_DINAMICOS_PERMITIDOS)
-                             | set(es1.SITIOS_CENSALES_LITERALES))
+                             | set(es1.SITIOS_CENSALES_LITERALES)
+                             | set(es1.EXCEPCIONES_LITERALES)
+                             | set(es1.SITIOS_CLAVE_INCOMPLETA_PERMITIDOS)
+                             | self.SITIOS_SOLO_VISIBLES_EN_RT1)
         for sitio, razon in _rt1.SITIOS_CENSALES_PERMITIDOS.items():
             assert sitio in declaradas_en_es1, (
                 f"{sitio} es excepción en RT1 y no en ES1 -- o la línea "

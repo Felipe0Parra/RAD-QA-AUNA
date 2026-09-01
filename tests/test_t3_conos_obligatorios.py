@@ -8,17 +8,24 @@ resto". `guardar_control_conos` acumula las medidas que quedaron con
 retorna False antes de abrir la transacción.
 
 Consecuencias verificadas aquí:
-1. El bloqueo es de la tabla de conos, no del guardado entero: las cuñas
-   del mismo click SÍ se guardan aunque los conos queden incompletos, y el
-   bloque activo anterior de conos NO se anula sin tener con qué
+1. El bloque activo anterior de conos NO se anula sin tener con qué
    reemplazarlo (coherente con M2 -- nunca anular sin insertar).
 2. El aviso nombra EXACTAMENTE las medidas que faltan.
-3. La auditoría sigue siendo una sola fila por acción (DA-16), con el
-   detalle diciendo si los conos entraron o no -- sin verbo nuevo.
-4. Interacción con T1 (§4-T3 punto 4): tras T1 el bloqueo solo puede
+3. Interacción con T1 (§4-T3 punto 4): tras T1 el bloqueo solo puede
    dispararse con conos NUNCA tocados, nunca con uno que el físico marcó y
    la app perdió -- no se re-verifica aquí (ya lo cubre T1), se deja
    documentado.
+
+**A2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R1) supersede el punto 1
+original de este docstring**: "el bloqueo es de la tabla de conos, no del
+guardado entero" resultó ser el mismo defecto que R1 -- las cuñas se
+guardaban igual que los conos bloquearan, con un doble mensaje
+contradictorio ("faltan conos" seguido de "cargados exitosamente"). Ahora
+`guardar_todo_ix` valida conos Y cuñas ANTES de escribir cualquiera de las
+dos: si falta cualquier cosa, NINGUNA tabla se toca y sale un solo aviso.
+Por eso, y por lo mismo, ya no se audita un guardado que no ocurrió --
+`TestAuditoriaUnaFilaConDetalleHonesto` verifica ausencia de fila, no un
+detalle "incompletos".
 """
 import os
 import sqlite3
@@ -135,7 +142,10 @@ class TestLos5MarcadosGuardaNormal:
 
 
 class TestDosSinMarcarNoEscribeNadaYAvisaExacto:
-    def test_bloquea_conos_pero_guarda_cunas(self, app, bd_temporal, monkeypatch):
+    def test_conos_incompletos_bloquea_todo_el_guardado(self, app, bd_temporal, monkeypatch):
+        """A2: el bloqueo dejó de ser solo de conos -- si faltan medidas,
+        tampoco se guardan las cuñas del mismo click (antes sí se
+        guardaban, doble mensaje contradictorio con el aviso de conos)."""
         avisos = []
         monkeypatch.setattr(
             QMessageBox, "warning",
@@ -160,8 +170,9 @@ class TestDosSinMarcarNoEscribeNadaYAvisaExacto:
         for simbolo in ("✓", "✗", "⚠️", "✅"):
             assert simbolo not in avisos[0], f"símbolo {simbolo!r} en el aviso (DA-18)"
 
-        # Las cuñas del mismo click SÍ se guardaron.
-        assert _filas_activas_cunas(bd_temporal, 1) == 4
+        # A2: las cuñas del mismo click YA NO se guardan -- ese doble
+        # guardado (conos bloqueados, cuñas escritas igual) era el defecto.
+        assert _filas_activas_cunas(bd_temporal, 1) == 0
 
     def test_bloque_activo_anterior_sigue_activo(self, app, bd_temporal, monkeypatch):
         monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
@@ -184,7 +195,12 @@ class TestDosSinMarcarNoEscribeNadaYAvisaExacto:
 
 
 class TestAuditoriaUnaFilaConDetalleHonesto:
-    def test_detalle_dice_si_los_conos_entraron(self, app, bd_temporal, monkeypatch):
+    def test_guardado_bloqueado_no_deja_fila_de_auditoria(self, app, bd_temporal, monkeypatch):
+        """A2: ya no existe un "guardado parcial" que auditar -- si algo
+        falta, no se escribe nada, y por tanto tampoco se audita nada. La
+        auditoría de una sola fila con detalle "incompletos" (el
+        comportamiento viejo, DA-16/M4) queda cubierta por
+        `test_todo_completo_...` de abajo para el caso que SÍ escribe."""
         monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
         monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
 
@@ -200,8 +216,28 @@ class TestAuditoriaUnaFilaConDetalleHonesto:
         finally:
             con.close()
 
-        assert len(filas) == 1, f"debe seguir siendo UNA sola fila: {filas}"
+        assert filas == [], (
+            "un guardado bloqueado por completo no debe auditarse")
+
+    def test_todo_completo_audita_una_fila_con_detalle_honesto(
+            self, app, bd_temporal, monkeypatch):
+        monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+
+        valores = {"6": "fun", "10": "fun", "15": "nofun", "20": "fun", "25": "fun"}
+        obj = _instancia_ix(ref=1, valores_conos=valores)
+        obj.guardar_todo_ix()
+
+        con = sqlite3.connect(bd_temporal)
+        try:
+            filas = con.execute(
+                "SELECT accion, tabla, detalle FROM audit_log "
+                "WHERE ref = '1'").fetchall()
+        finally:
+            con.close()
+
+        assert len(filas) == 1, f"debe ser UNA sola fila: {filas}"
         accion, tabla, detalle = filas[0]
         assert accion == "guardar"
         assert tabla == "control_cunas"  # M4: tabla real, no la inventada
-        assert "incompletos" in detalle
+        assert "cuñas" in detalle and "conos" in detalle

@@ -164,42 +164,52 @@ class TestGuardarTodoIxAuditaUnaSolaVez:
     """El caso "ojo" del plan: cuñas + conos, mismo click en iX -- 1 fila,
     no 2.
 
-    T3 (PLAN_CONOS_MENSUAL_12-08.md §4-T3) hizo el detalle de auditoría
-    condicional al resultado de `guardar_control_conos` (True = los 5 conos
-    se guardaron, False = el bloqueo de DA-37 impidió escribir). El spy
-    devuelve explícitamente cada valor -- True en el caso normal, False en
-    el caso "conos incompletos" -- para que las dos ramas del `detalle`
-    queden cubiertas, en vez de depender del `None` implícito de una
-    función sin `return`."""
+    A2 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R1) reescribió
+    `guardar_todo_ix` sobre T3 (PLAN_CONOS_MENSUAL_12-08.md §4-T3): ya no
+    hay un "guardado parcial" que auditar con detalle distinto -- la
+    validación de faltantes (`_filas_y_faltantes_conos`/`_faltantes_cunas`)
+    corre ANTES de escribir nada, y si algo falta, NINGUNA de las dos
+    tablas se toca ni se audita. El spy mockea esas dos funciones de
+    detección (no los botones/combos reales, que este objeto pelado no
+    tiene) para controlar el escenario sin reconstruir toda la UI."""
 
-    def _instancia(self, bd_temporal, conos_guardados=True):
-        class _ComboFalso:
-            def currentText(self):
-                return "Funciona"
-
+    def _instancia(self, bd_temporal, monkeypatch, todo_completo=True):
+        monkeypatch.setattr(mensual_mod.QMessageBox, "warning", lambda *a, **k: None)
+        monkeypatch.setattr(mensual_mod.QMessageBox, "information", lambda *a, **k: None)
         ref = _insertar_control(bd_temporal, equipo="Clinac ix")
         obj = _mensual_pelado(clase=PruebaMensualIX, esIX=True)
         obj.ref = ref
-        obj.combos_seguridad = {15: {"in": _ComboFalso(), "out": _ComboFalso(),
-                                     "right": _ComboFalso(), "left": _ComboFalso()}}
+        obj.combos_seguridad = {15: {}}  # solo necesita ser truthy (hay_cunas)
         obj.df_seg_line = None
 
         llamadas = []
 
-        def _subir_control_cunas_spy(combos_seguridad, df_lines=None, auditar=True):
+        if todo_completo:
+            obj._filas_y_faltantes_conos = lambda: (
+                llamadas.append(("_filas_y_faltantes_conos", None)) or
+                ([("6x6", 1)], []))
+        else:
+            obj._filas_y_faltantes_conos = lambda: (
+                llamadas.append(("_filas_y_faltantes_conos", None)) or
+                ([], ["6x6"]))
+        obj._faltantes_cunas = lambda combos: (
+            llamadas.append(("_faltantes_cunas", None)) or [])
+
+        def _subir_control_cunas_spy(combos_seguridad, df_lines=None,
+                                     auditar=True, mostrar_mensaje=True):
             llamadas.append(("subir_control_cunas", auditar))
 
         def _guardar_control_conos_spy():
             llamadas.append(("guardar_control_conos", None))
-            return conos_guardados
+            return True
 
         obj.subir_control_cunas = _subir_control_cunas_spy
         obj.guardar_control_conos = _guardar_control_conos_spy
         return obj, ref, llamadas
 
     def test_ambas_escrituras_se_disparan_pero_solo_una_fila_de_auditoria(
-            self, app, bd_temporal):
-        obj, ref, llamadas = self._instancia(bd_temporal, conos_guardados=True)
+            self, app, bd_temporal, monkeypatch):
+        obj, ref, llamadas = self._instancia(bd_temporal, monkeypatch, todo_completo=True)
         obj.guardar_todo_ix()
 
         # Las dos escrituras SÍ ocurrieron...
@@ -216,18 +226,18 @@ class TestGuardarTodoIxAuditaUnaSolaVez:
                                 "control_cunas", str(ref))
         assert filas[0][4] == "cuñas + conos (mensual iX)"
 
-    def test_conos_incompletos_deja_el_detalle_correspondiente(
-            self, app, bd_temporal):
-        """T3/DA-37: si `guardar_control_conos` bloqueó por faltar alguna
-        medida (devuelve False), sigue habiendo UNA fila de auditoría --
-        pero el detalle dice que los conos no se guardaron, en vez de
-        afirmar falsamente que sí."""
-        obj, ref, llamadas = self._instancia(bd_temporal, conos_guardados=False)
+    def test_conos_incompletos_no_escribe_nada_ni_audita(
+            self, app, bd_temporal, monkeypatch):
+        """A2: si la validación previa encuentra conos incompletos, NI
+        `subir_control_cunas` NI `guardar_control_conos` se llaman -- el
+        guardado se bloquea entero, y por tanto no hay nada que auditar."""
+        obj, ref, llamadas = self._instancia(bd_temporal, monkeypatch, todo_completo=False)
         obj.guardar_todo_ix()
 
+        assert ("subir_control_cunas", False) not in llamadas
+        assert not any(nombre == "guardar_control_conos" for nombre, _ in llamadas)
         filas = _audit_log(bd_temporal)
-        assert len(filas) == 1
-        assert filas[0][4] == "cuñas + conos incompletos, no se guardaron (mensual iX)"
+        assert filas == []
 
 
 class TestGuardarAnalisisEImagenAuditaUnaSolaVez:
@@ -307,8 +317,14 @@ class TestSubirTablaOptimizadaAudita:
         obj.ref = ref
         obj.anual = False
 
-        monkeypatch.setattr(mensual_mod, "loadtablacomplex", lambda *a, **k: None)
+        # B1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase B): el fake ahora
+        # devuelve True (guardado exitoso) -- con el `None` que tenía antes,
+        # el `if not resultado` nuevo de _subir_tabla_optimizada dispara un
+        # QMessageBox.critical sin mockear (Trampa 2, cuelga la suite).
+        monkeypatch.setattr(mensual_mod, "loadtablacomplex", lambda *a, **k: True)
         monkeypatch.setattr(mensual_mod.QMessageBox, "information",
+                            staticmethod(lambda *a, **k: None))
+        monkeypatch.setattr(mensual_mod.QMessageBox, "critical",
                             staticmethod(lambda *a, **k: None))
 
         table = object()  # loadtablacomplex está parcheado -- no se usa de verdad
@@ -317,3 +333,22 @@ class TestSubirTablaOptimizadaAudita:
         filas = _audit_log(bd_temporal)
         assert filas == [
             ("Físico de Prueba", "guardar", "indicadores_brazo", str(ref), "")]
+
+    def test_guardado_fallido_no_audita_y_avisa(self, app, bd_temporal, monkeypatch):
+        """B1: si loadtablacomplex falla, no se audita un guardado que no
+        ocurrió, y el físico se entera (antes: silencio total, H3)."""
+        ref = _insertar_control(bd_temporal)
+        obj = _mensual_pelado()
+        obj.ref = ref
+        obj.anual = False
+
+        monkeypatch.setattr(mensual_mod, "loadtablacomplex", lambda *a, **k: False)
+        avisos = []
+        monkeypatch.setattr(mensual_mod.QMessageBox, "critical",
+                            staticmethod(lambda *a, **k: avisos.append(a[1:])))
+
+        table = object()
+        obj._subir_tabla_optimizada(table, "indicadores_brazo", ref)
+
+        assert len(avisos) == 1
+        assert _audit_log(bd_temporal) == []

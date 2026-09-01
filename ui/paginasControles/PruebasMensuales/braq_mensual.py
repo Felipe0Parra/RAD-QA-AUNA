@@ -130,12 +130,19 @@ class PruebaMensualBraq(PruebaBasico):
             fecha_consulta = fecha_consulta.toString("yyyy-MM-dd")
             conn = Conexion().conectar()
             cursor = conn.cursor()
-            
-            # Usar DATE() para extraer solo la parte de fecha del campo en la BD
+
+            # C1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): antes
+            # resolvía por fecha a secas y desempataba con `ORDER BY id
+            # DESC` -- con dos calibraciones el mismo día (una "Cambio de
+            # fuente" y una "Calibración Redundante", estado que EB6 volvió
+            # soportado), siempre ganaba la de `id` más alto sin importar
+            # cuál seleccionó el físico. El guardado ya discrimina por
+            # (DATE(fecha), tipo) -- esta lectura ahora pregunta lo mismo.
+            tipo = self._tipo_calibracion_seleccionado()
             cursor.execute(
-                "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ?"
+                "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ? AND tipo = ?"
                 f"{filtro_activo('TipoCalibracion')} ORDER BY id DESC",
-                (fecha_consulta,))
+                (fecha_consulta, tipo))
             result = cursor.fetchone()
             print(f"Consulta para fecha {fecha_consulta}: {result}")
             
@@ -881,24 +888,30 @@ class PruebaMensualBraq(PruebaBasico):
         self.canvas.update()
         self.widgetgrafica.update()
 
+    def _tipo_calibracion_seleccionado(self):
+        """C1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): el tipo tal
+        como lo decide el botón marcado -- extraído de `guardar_DB` para
+        que `actualizar_ref_bd` (la lectura) discrimine por el MISMO
+        criterio que el guardado, en vez de resolver por fecha a secas y
+        desempatar con `ORDER BY id DESC` (lo que hacía ganar siempre la
+        calibración más reciente del día, sin importar cuál seleccionó el
+        físico)."""
+        if hasattr(self, 'pri_cal') and self.pri_cal.isChecked():
+            return "Control Mensual"
+        if hasattr(self, 'cambio_cal') and self.cambio_cal.isChecked():
+            return "Cambio de fuente"
+        if hasattr(self, 'es_calibracion_redundante') and self.es_calibracion_redundante:
+            return "Calibración Redundante"
+        return "Cambio de fuente"
+
     """Guarda los datos en la base de datos, maneja errores y muestra mensajes de éxito o error                                                                                                                         """
     def guardar_DB(self):
         print(f"Entra a guardar_DB en {self.__class__.__name__}")
 
         try:
             # Determinar tipo de control
-            if hasattr(self, 'pri_cal') and self.pri_cal.isChecked():
-                tipo = "Control Mensual"
-                print("Control mensual")
-            elif hasattr(self, 'cambio_cal') and self.cambio_cal.isChecked():
-                print(" Cambio de fuente ")
-                tipo = "Cambio de fuente"
-            elif hasattr(self, 'es_calibracion_redundante') and self.es_calibracion_redundante:
-                tipo = "Calibración Redundante"
-            else:
-                
-                tipo = "Cambio de fuente"
-                print(tipo)
+            tipo = self._tipo_calibracion_seleccionado()
+            print(tipo)
 
             # Datos de calibración
             serie = self.serie.text()
@@ -961,7 +974,7 @@ class PruebaMensualBraq(PruebaBasico):
 
             actividad_monitor = float(self.ref.text())
             actividad_calculada = round(actividad_fuente(Ks, Kp, Ktp, calibracion, electrometro, conversion, V_alto_prom), 3)
-            actividad_decaimiento = round(calcular_decaimiento(fecha_cer, fecha_cal, intensidad, vida_media_dias=74.2), 3)
+            actividad_decaimiento = round(calcular_decaimiento(fecha_cer, fecha_cal, intensidad), 3)
             usuario = self.user_id._nombre
 
             if tipo == 'Cambio de fuente':
@@ -1254,13 +1267,22 @@ class PruebaMensualBraq(PruebaBasico):
             # LR3 (DA-47/DA-48): lectura de BLOQUE por fecha (DP-32: la
             # fecha viene en dos formatos). El OR va entre paréntesis para
             # que el AND del filtro no se lo coma.
+            # C1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): esta
+            # carga del formulario completo tenía el mismo hueco que
+            # actualizar_ref_bd -- sin discriminar tipo, dos calibraciones
+            # el mismo día hacían ganar la de `id` más alto. Cuarto sitio,
+            # no nombrado en el plan original: misma clase de defecto,
+            # descubierto al calibrar el tripwire C2.
+            tipo = self._tipo_calibracion_seleccionado()
             query.prepare(f"""
-                SELECT * FROM TipoCalibracion 
+                SELECT * FROM TipoCalibracion
                 WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?)
+                AND tipo = ?
                 {filtro_activo('TipoCalibracion')} ORDER BY id DESC
             """)
             query.addBindValue((fecha_str))
             query.addBindValue((fecha_str))
+            query.addBindValue((tipo))
             #query.addBindValue(str(self.user_id))
             print(fecha_str)
             if not query.exec():

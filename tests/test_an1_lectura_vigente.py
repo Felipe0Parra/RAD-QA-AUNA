@@ -387,7 +387,9 @@ def test_argumento_ya_literal_no_pasa_por_el_resolver():
 def test_claves_indice_coincide_con_el_fuente():
     from scripts.indices_bloque_qc import CLAVES_INDICE as CLAVES_REALES
     claves = lv.claves_indice()
-    assert len(claves) == 57  # IV3 (52) + MI3 (4 diarias) + EB6 (TipoCalibracion)
+    # IV3 (52) + MI3 (4 diarias) + EB6 (TipoCalibracion) + R1 (4 lecturas
+    # crudas de Linealidad, PLAN_REPARACION_ANUAL_27-08.md §Fase 3)
+    assert len(claves) == 61
     assert claves == {t: frozenset(c) for t, c in CLAVES_REALES.items()}
     # LF5: la premisa que hace seguro tratar "id"/"rowid" como identidad
     # física en cualquier tabla, sin mirar CLAVES_INDICE caso por caso.

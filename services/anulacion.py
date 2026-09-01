@@ -92,6 +92,15 @@ TABLAS_ANULABLES = frozenset({
     "HC_dosimetria_anual",
     "HC_linealidad_unidades_monitor_anual",
     "HC_tamanos_campo_radiacion",
+    # R1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, F-5): lecturas crudas de
+    # la hoja "Linealidad" del anual 600/iX (antes solo se guardaba el
+    # factor final derivado; estas 4 tablas guardan lo que lo justifica).
+    # Mismo criterio que sus hermanas de arriba: entran al bloque de QC
+    # desde que nacen, con botón de guardado alcanzable (R2).
+    "anual_linealidad_um",
+    "anual_lecturas_factor_campo",
+    "anual_lecturas_transmision",
+    "anual_tasa_dosis",
     # D5: la calculadora/dosimetría más sensible NUNCA lleva delete físico.
     # dosimetriaMen no tiene ruta de borrado alcanzable todavía (el botón de
     # su diálogo -- E5 -- sigue sin conectar) pero ya nace preparada para

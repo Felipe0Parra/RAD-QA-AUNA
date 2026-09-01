@@ -36,6 +36,12 @@ class PruebaMensualHc(PruebaMensual600):
             # (registros históricos).
             fecha = _fecha_control_a_qdate(self.fecha_control)
             self.date_box.setDate(fecha)
+            # R7 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase D): esta clase
+            # sobreescribe iniGUI completo sin heredar del de
+            # PruebaMensual600 -- el bloqueo de fecha aplicado ahí no
+            # llegaba aquí. Mismo motivo: cambiarla no navega ni crea nada,
+            # solo confundía al físico.
+            self.date_box.setEnabled(False)
         if hasattr(self, 'nombre_fisico1'):
             index = self.fisico1.findText(self.nombre_fisico1)
             if index >= 0:

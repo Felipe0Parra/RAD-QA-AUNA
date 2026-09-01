@@ -35,6 +35,7 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR, ACCION_ELIMINAR
 from services.anulacion import filtro_activo
+from ui.util_fechas import ancho_minimo_fecha
 from data.ManejoDatos.load import (mostrar_db_linealidad, mostrar_db_mensualBraqui, verificar_eliminar, verificar_editar,
                                                 guardarEdicion, cancelarEdicion, abrir_pelicula)
 import datetime, sqlite3, html, re, traceback
@@ -178,10 +179,21 @@ gestor_recursos = GestorRecursos()
 # ---------------------------------------------------------  Prueba Diaria ---------------------------------------------------------- #
 
 class PruebaDiariaBraq(PruebaBasico):
-    """ 
+    """
     Inicialización de datos, construcción de la interfaz y definición de la tabla de la base de datos.
     Incluye mejoras de rendimiento: lazy loading, cache, debouncing y gestión de memoria.
     """
+
+    # B1 (PLAN_ACTIVIDAD_ESPERADA_BRAQUI_27-08.md §B1): campos de
+    # `df_lines` que la app DERIVA para la fecha vigente (por decaimiento
+    # de la fuente), no que el físico teclea. `_limpiar_widgets_diaria`
+    # vacía TODO `df_lines` al llegar a una fecha sin registro -- correcto
+    # para lo tecleado, pero estos deben recalcularse para la fecha nueva,
+    # no quedar vacíos. `cargar_dailytest_desde_db` invoca el método
+    # nombrado aquí, con la fecha nueva, inmediatamente después de limpiar.
+    # B4 vigila que esta declaración y esa invocación no se desincronicen.
+    CAMPOS_DERIVADOS_DIARIA = {'line_1_exp_act_ci': 'actividad_braq_automatica'}
+
     def __init__(self, user_id):
         super(PruebaDiariaBraq, self).__init__()
         #print("PruebaDiariaBraq       __init__ called")
@@ -210,7 +222,16 @@ class PruebaDiariaBraq(PruebaBasico):
             self._cargar_datos_iniciales()
             self.button_click()
             self._inicializar_tabla_resultados()
-            self.actividad_braq_automatica()
+            # R-1: el día que el formulario muestra al abrirse. `_al_mover_el
+            # _date_box` compara contra esto para saber si un movimiento del
+            # widget cambió el DÍA (hay que releer la BD) o solo la HORA
+            # (basta recalcular lo derivado).
+            self._fecha_mostrada = self.date_box.date()
+            # R-2: `avisar=False` -- esta llamada corre dentro de `__init__`,
+            # antes de que la ventana esté construida y visible. Un diálogo
+            # modal aquí aparecería "suelto", sin su pantalla detrás. Si no
+            # hay fuente, el físico se entera en cuanto mueve la fecha.
+            self.actividad_braq_automatica(avisar=False)
             
             
         except Exception as e:
@@ -273,6 +294,16 @@ class PruebaDiariaBraq(PruebaBasico):
         _ = self.setupBox(archivo, 'encabezado_braq')
         self.date_box.setDisplayFormat("dd/MM/yyyy HH:mm:ss")
         self.date_box.setDateTime(QDateTime.currentDateTime())
+        # T5/DP-68 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_28-08.md): `date_box`
+        # se crea en `PruebasDiarias.createInterface` con formato
+        # "dd/MM/yyyy" (10 caracteres) y su piso de ancho calculado para
+        # eso -- el `setDisplayFormat` de arriba lo cambia a 19 caracteres
+        # SIN volver a calcular el piso. El widget quedaba 72 px (54%) más
+        # angosto de lo que su propio formato pedía, y las secciones
+        # HH:mm:ss caían fuera del área alcanzable con el mouse ("no se
+        # puede ubicar el cursor adecuadamente"). Se reaplica aquí, con el
+        # formato que el widget tiene puesto en este momento.
+        self.date_box.setMinimumWidth(ancho_minimo_fecha(self.date_box))
         df, n, layouts, _ = self.setupBox(archivo, 'preguntas_braq', main=False)
 
         self.datos_tabla = self.storeDailyTests(df)
@@ -301,6 +332,16 @@ class PruebaDiariaBraq(PruebaBasico):
 
         # función compartida para crear los layouts y cosas espaciales
         self.init_ui(df, self.diccionario_invertido)
+
+        # T3 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_28-08.md), decisión del
+        # físico (28-08): la actividad esperada es la referencia
+        # independiente contra la que se juzga la reportada (tolerancia
+        # 3%) -- si se puede teclear, deja de ser independiente (DP-66).
+        # Lo llena ÚNICAMENTE el cálculo (día nuevo) o la BD (T4/T8, al
+        # abrir un registro guardado). Sin fuente registrada el campo
+        # queda vacío y el control de ese día no se puede guardar --
+        # correcto: registrar la fuente es un paso previo, no una excepción.
+        self.line_1_exp_act_ci.setReadOnly(True)
 
         self.setupButtonConnections(df, maquina='braqui')
 
@@ -340,8 +381,8 @@ class PruebaDiariaBraq(PruebaBasico):
             # LR3 (DA-47/DA-48): lectura de BLOQUE por fecha, mismo criterio
             # que seiscientos.py (filtro + ORDER BY, ver allí).
             query.prepare(f"""
-                SELECT * FROM braqui 
-                WHERE date = ?{filtro_activo('braqui')}
+                SELECT * FROM braqui
+                WHERE DATE(date) = ?{filtro_activo('braqui')}
                 ORDER BY id DESC
                 LIMIT 1
             """)
@@ -416,7 +457,15 @@ class PruebaDiariaBraq(PruebaBasico):
                     print(valor)
                     if hasattr(self, 'line_1_exp_act_ci'):
                         self.line_1_exp_act_ci.setText(str(valor_exp))
-      
+                # H3b (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): `rep` (arriba)
+                # dispara `tolerancia()` por su propia señal `textChanged` --
+                # pero en ESE momento `exp` todavía tiene el valor del día
+                # ANTERIOR (se pone recién en la línea de encima). El
+                # veredicto que quedaba en pantalla comparaba dos días
+                # distintos. Se re-evalúa aquí, una sola vez, ya con los dos
+                # valores del día que se está mostrando.
+                self.tolerancia()
+
                 if record.indexOf('tol_cyc_dummy') != -1:
                     valor_dumm = query.value('tol_cyc_dummy')
                     print(valor)
@@ -437,18 +486,63 @@ class PruebaDiariaBraq(PruebaBasico):
                         print(obs_valor)
                         print(f"✓ Cargadas observaciones")
                 if record.indexOf('pelicula') != -1:
+                    # H2 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): "limpiar
+                    # siempre, restaurar después" -- antes esta rama (SÍ hay
+                    # registro) solo limpiaba con `_limpiar_canvas()` cuando
+                    # no había imagen, y `_limpiar_canvas()` no toca
+                    # `self.archivo` ni `self.resultado_label` (a diferencia
+                    # de `resetear_imagen_ui`, H1). Un día con registro pero
+                    # sin película se quedaba con la imagen/análisis del día
+                    # anterior -- el caso exacto que produjo la fila 447.
+                    self.resetear_imagen_ui()
                     img_path = query.value('pelicula')
                     if img_path and str(img_path).strip():
                         self._cargar_imagen_pelicula((img_path))
-                        
-                        
-                    else:
-                        # Si no hay imagen, limpiar el canvas
-                        self._limpiar_canvas()
-                
-                # 4. Actualizar el date_box con la fecha cargada (sin disparar señal)
+                    # G1 (PLAN_BRAQUI_ANALISIS_PERSISTE_28-08.md): reconstruye
+                    # el informe de análisis desde las 6 columnas guardadas y
+                    # lo pinta con mostrar_texto -- idéntico a un análisis
+                    # fresco (el físico pidió que abrir un día no se vea
+                    # distinto de haberlo analizado en ese momento). Si la
+                    # fila no tiene ningún valor de análisis (las 6 en NULL)
+                    # no se llama, y el día queda sin informe -- lo que
+                    # resetear_imagen_ui ya garantiza arriba.
+                    #
+                    # [medido] `QSqlQuery.value()` devuelve '' (str) para un
+                    # NULL de SQLite, sin importar el tipo declarado de la
+                    # columna -- un REAL nulo NO llega como None. Usar
+                    # `record.isNull(...)` (la API real de Qt para esto) en
+                    # vez de comparar el valor devuelto, o un 0.0 legítimo
+                    # (promedio/desviación real de cero) se distinguiría mal
+                    # de un NULL.
+                    def _valor_o_none(columna):
+                        return None if record.isNull(columna) else query.value(columna)
+
+                    informe = self._informe_desde_columnas({
+                        'distancias': _valor_o_none('distancias'),
+                        'promedio': _valor_o_none('promedio'),
+                        'desviacion': _valor_o_none('desviacion'),
+                        'desplazamientos': _valor_o_none('desplazamientos'),
+                        'promedio_des': _valor_o_none('promedio_des'),
+                        'desviacion_des': _valor_o_none('desviacion_des'),
+                    })
+                    if informe is not None:
+                        self.mostrar_texto(informe)
+
+                # 4. Actualizar el date_box con la fecha Y HORA cargadas
+                # (sin disparar señal). T8 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_
+                # 28-08.md): antes solo se reponía la fecha -- el widget
+                # quedaba mostrando la hora que tenía puesta al navegar, no
+                # la del registro, incoherente con la actividad esperada
+                # que sí es la guardada (T4). Los registros anteriores a H6
+                # (todos los de agosto) tienen `date` sin hora:
+                # `QDateTime.fromString` da inválido para esos y se cae al
+                # `setDate` de siempre, sin inventar ninguna hora.
                 self.date_box.blockSignals(True)
-                self.date_box.setDate(fecha)
+                fecha_hora_bd = QDateTime.fromString(str(query.value('date')), "yyyy-MM-dd HH:mm:ss")
+                if fecha_hora_bd.isValid():
+                    self.date_box.setDateTime(fecha_hora_bd)
+                else:
+                    self.date_box.setDate(fecha)
                 self.date_box.blockSignals(False)
                 
                 # 5. Verificar si se debe habilitar el botón de añadir
@@ -458,15 +552,114 @@ class PruebaDiariaBraq(PruebaBasico):
                 print(f"  - Botones finales: {len(self.botones_finales)}")
                 
             else:
+                # A4 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R11): sin
+                # esta limpieza, la pantalla conservaba los datos de la
+                # fecha anterior -- guardar entonces los persistía bajo la
+                # fecha nueva (dato que nadie introdujo para este día). El
+                # físico reportó esto como "braquiterapia no limpia al
+                # cambiar de día"; ya limpiaba el canvas, faltaba lo demás.
                 print(f"No hay datos registrados para la fecha {fecha_str}.")
-                self._limpiar_canvas()
-                
+                # H2: `_limpiar_canvas()` no limpiaba `self.archivo` ni
+                # `self.resultado_label` -- `resetear_imagen_ui()` (H1) sí.
+                self.resetear_imagen_ui()
+                self._limpiar_widgets_diaria()
+                # B1: los campos derivados (CAMPOS_DERIVADOS_DIARIA) no son
+                # dato tecleado -- `_limpiar_widgets_diaria` los deja
+                # vacíos igual que a los demás, y aquí se recalculan para
+                # la fecha nueva. Explícito a propósito: no depender de que
+                # la señal `dateTimeChanged` (que también dispara este
+                # cálculo) se emita antes o después de esta -- Qt no lo
+                # garantiza y no está escrito en ningún sitio del código.
+                self._recalcular_campos_derivados_diaria(fecha)
+                self.date_box.blockSignals(True)
+                self.date_box.setDate(fecha)
+                self.date_box.blockSignals(False)
+                self.checkBotonesFinales()
+
         except Exception as ex:
             import traceback
             traceback.print_exc()
             print(f"✗ Error al cargar datos: {str(ex)}")
         finally:
             db.close()
+
+    def _limpiar_widgets_diaria(self):
+        """A4: deja el formulario diario en blanco -- ni "Funciona" ni "No
+        funciona" marcado, campos numéricos y observaciones vacíos. Se usa
+        al llegar a una fecha sin registro (no hay dato que restaurar)."""
+        self.botones_finales.clear()
+        for fun, nofun in zip(self.df_bnt_funciona, self.df_bnt_nofunciona):
+            btn_fun = getattr(self, fun, None)
+            btn_nofun = getattr(self, nofun, None)
+            if btn_fun and btn_nofun:
+                btn_fun.setChecked(False)
+                btn_nofun.setChecked(False)
+                for boton in (btn_fun, btn_nofun):
+                    boton.setProperty("estado", "noselected")
+                    boton.style().unpolish(boton)
+                    boton.style().polish(boton)
+                    boton.update()
+        for line_name in self.df_lines:
+            if hasattr(self, line_name):
+                getattr(self, line_name).setText("")
+        if hasattr(self, 'observaciones'):
+            self.observaciones.setText("")
+
+    def _instante_del_date_box(self, fecha=None):
+        """R-4: el instante con el que se calcula un campo derivado. Los dos
+        caminos que lo recalculan (cambio de día y cambio de hora) tienen que
+        usar EL MISMO, o el mismo control muestra dos valores distintos según
+        por dónde se llegó -- [medido] 5.0431 a medianoche contra 4.9979 a las
+        23:00 del mismo día, ~0.9 % con tolerancia del 3 %.
+
+        La referencia única es la hora que el `date_box` muestra: es la que el
+        físico está viendo y la que puede editar (formato "dd/MM/yyyy
+        HH:mm:ss"). Si llega una fecha explícita sin hora (`QDate`), se le
+        acopla la hora del `date_box` en vez de asumir medianoche."""
+        if fecha is None:
+            return self.date_box.dateTime()
+        if isinstance(fecha, QDateTime):
+            return fecha
+        return QDateTime(fecha, self.date_box.time())
+
+    def _recalcular_campos_derivados_diaria(self, fecha=None):
+        """B1: llama, para `fecha`, al método que calcula cada campo listado
+        en `CAMPOS_DERIVADOS_DIARIA` -- se usa tras `_limpiar_widgets_diaria`
+        para que un campo derivado no quede vacío en una fecha sin registro,
+        sino con el valor que le corresponde a esa fecha."""
+        momento = self._instante_del_date_box(fecha)
+        for campo, metodo in self.CAMPOS_DERIVADOS_DIARIA.items():
+            if hasattr(self, metodo):
+                getattr(self, metodo)(momento)
+
+    def _al_mover_el_date_box(self, momento):
+        """R-1: dueño ÚNICO del refresco cuando se mueve el `date_box`.
+
+        Antes colgaban dos conexiones de ese mismo widget --
+        `dateChanged -> cargar_dailytest_desde_db` y
+        `dateTimeChanged -> actividad_braq_automatica`-- y en cada cambio de
+        FECHA se ejecutaban las dos: dos consultas, dos cálculos de
+        decaimiento y (si algo tenía que avisarse) dos diálogos modales
+        seguidos por cada paso de la flecha del calendario.
+
+        No bastaba con quitar la segunda: `dateTimeChanged` es la única que
+        se emite cuando cambia SOLO la hora ([medido]: un cambio de hora no
+        emite `dateChanged`), así que quitarla dejaba de recalcular al editar
+        la hora. Se conserva ella sola, y aquí se decide qué hace falta:
+
+          - cambió el DÍA  -> hay que releer la BD (el registro es por fecha);
+            el cargador ya decide entre mostrar lo guardado o limpiar y
+            recalcular.
+          - cambió la HORA -> el registro es el mismo, solo hay que reajustar
+            los campos derivados al nuevo instante.
+        """
+        fecha = momento.date()
+        if fecha != getattr(self, '_fecha_mostrada', None):
+            self._fecha_mostrada = fecha
+            self.cargar_dailytest_desde_db(fecha)
+        else:
+            self._recalcular_campos_derivados_diaria(momento)
+
     def _cargar_imagen_pelicula(self, imagen_blob):
         """
         Carga y muestra una imagen en el canvas desde un BLOB de la base de datos.
@@ -531,7 +724,16 @@ class PruebaDiariaBraq(PruebaBasico):
                 tmp_path = tmp.name
             
             self.imagen_path = tmp_path
-            
+            # H2 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md, defecto c): antes
+            # SOLO la subida manual (`subir_imagen`, PruebasDiarias.py:926)
+            # asignaba `self.archivo` -- cargar un registro de la BD nunca lo
+            # reponía, así que un "Añadir" posterior (sin volver a subir el
+            # archivo) guardaba `imagenes=None` y perdía la película ya
+            # guardada. El archivo temporal tiene los mismos bytes que el
+            # BLOB (se escribió sin recodificar, ver arriba), así que
+            # reguardar desde aquí es un round-trip exacto.
+            self.archivo = tmp_path
+
                 # Asegurar que toolbar esté visible
         # Limpiar imagen previa del QLabel
            
@@ -552,11 +754,16 @@ class PruebaDiariaBraq(PruebaBasico):
             #self.label_imagen.setScaledContents(True)
             self.label_imagen.setPixmap(pix)
             if not self.parametros_creados:
-                
-                self._crear_parametros()
+                # H5 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): `_crear_
+                # interfaz_parametros()` ya llama a `_crear_parametros()`
+                # (:1106) -- llamarlo también aquí lo ejecutaba DOS veces,
+                # cada una instanciando sus propios QPushButton y
+                # reasignando self.analizar, así que el primer par quedaba
+                # huérfano pero VISIBLE (de ahí "con los botones duplicados
+                # le di analizar").
                 self._crear_interfaz_parametros()
                 self.parametros_creados=True
-                
+
             
             print(f"✓ Imagen cargada desde BLOB ({len(img_data)} bytes)")
             
@@ -580,8 +787,8 @@ class PruebaDiariaBraq(PruebaBasico):
         except Exception as e:
             print(f"⚠ Error limpiando canvas: {e}")
 
-    def actividad_braq_automatica(self, fecha = None):
-        """ 
+    def actividad_braq_automatica(self, fecha = None, avisar = True):
+        """
         La idea es obtener los datos de registros anteriores y modificarlos y que se guarden con respecto a la fuente
         correspondiente a esa fecha, también, obtener la actividad esperada de una fuente pasada o presente según
         la selección de una fecha.
@@ -589,18 +796,22 @@ class PruebaDiariaBraq(PruebaBasico):
         -Obtener la dosis inicial según el serial
         -Calcular el tiempo transcurrido entre ese instante y la fecha actual
         """
+        conn = None
         try:
             conn = sqlite3.connect(_conection.ruta_base_datos())
             cursor = conn.cursor()
             if fecha is None:
                 current_datetime = self.date_box.dateTime().toPyDateTime()
-            else:
+            elif isinstance(fecha, QDateTime):
                 current_datetime = fecha.toPyDateTime()
-            # if fecha is None:
-            #     current_datetime = self.date_box.dateTime().toPyDateTime()
-            # else:
-            #     current_datetime = fecha
-            
+            else:
+                # B2 (PLAN_ACTIVIDAD_ESPERADA_BRAQUI_27-08.md §B2, BQ-4):
+                # cargar_dailytest_desde_db recalcula este campo pasando el
+                # QDate que entrega su propia señal dateChanged -- QDate no
+                # tiene toPyDateTime(). Se normaliza a medianoche de ese día,
+                # igual que hace QDateTime(QDate) por defecto.
+                current_datetime = QDateTime(fecha).toPyDateTime()
+
             filtro_tc = filtro_activo('TipoCalibracion').replace("activo", "tc.activo")
             cursor.execute(f"""
                 SELECT tc.fecha, tc.fecha_cer, tc.serie, tc.intensidad
@@ -613,7 +824,30 @@ class PruebaDiariaBraq(PruebaBasico):
 
             row = cursor.fetchone()
             if not row:
+                # B2 (BQ-3): antes seguía al desempaquetado de `row` de
+                # abajo y reventaba con TypeError, tragado por el `except`
+                # general -- campo vacío y CERO avisos, el mismo síntoma que
+                # el defecto principal por otra causa. El `return` es además
+                # imprescindible para que B1 pueda recalcular sin arrastrar
+                # esa excepción.
+                #
+                # R-2: el aviso se pudo restaurar al unificar el disparador
+                # (R-1). Con dos conexiones sobre el `date_box` este diálogo
+                # se veía DOS veces, modal, por cada paso de la flecha del
+                # calendario; con un solo dueño se ve una. `avisar=False`
+                # queda para el llamador de `__init__`, que corre antes de
+                # que la ventana exista.
                 print("No existe fuente válida antes de esa fecha")
+                if hasattr(self, 'line_1_exp_act_ci'):
+                    self.line_1_exp_act_ci.setText("")
+                if avisar:
+                    QMessageBox.warning(
+                        self, "Sin fuente registrada",
+                        "No hay ninguna fuente (\"Cambio de fuente\") "
+                        "registrada en o antes de esta fecha, así que no se "
+                        "puede calcular la actividad esperada.\n\n"
+                        "Sin ese dato el control diario no se puede guardar.")
+                return
 
             fecha_instalacion, fecha_a0_str, serie, a0 = row
 
@@ -623,23 +857,41 @@ class PruebaDiariaBraq(PruebaBasico):
 
             periodo_medio = 73.83
             print(a0)
-            actividad = calcular_decaimiento(fecha_a0.strftime("%Y-%m-%d %H:%M:%S"), current_datetime.strftime("%Y-%m-%d %H:%M:%S"), a0, vida_media_dias=73.83)
+            actividad = calcular_decaimiento(fecha_a0.strftime("%Y-%m-%d %H:%M:%S"), current_datetime.strftime("%Y-%m-%d %H:%M:%S"), a0)
             #actividad = a0*np.exp((-np.log(2))*dias/periodo_medio)
 
-            
-            
+
+
             if actividad:
                 actividad = round(actividad, 4)
                 print(" La actividad es: ", actividad)
                 if hasattr(self, 'line_1_exp_act_ci'):
                     self.line_1_exp_act_ci.setText(str(actividad))
-            
+
         except Exception as e:
-            print("Error no mayor ", e)
+            # B2/R-2: antes este `except` tragaba CUALQUIER fallo con un
+            # `print` del mensaje suelto -- el físico solo veía el campo
+            # vacío, sin saber que algo había fallado, y sin traceback no
+            # había con qué diagnosticarlo. Un fallo aquí es la diferencia
+            # entre poder registrar el control del día y no poder.
+            print("Error calculando la actividad esperada:", e)
+            traceback.print_exc()
+            if avisar:
+                QMessageBox.warning(
+                    self, "Error calculando la actividad esperada",
+                    f"No se pudo calcular la actividad esperada para esta "
+                    f"fecha:\n{e}\n\nSin ese dato el control diario no se "
+                    f"puede guardar.")
+        finally:
+            # B2: esta conexión nunca se cerraba -- una fuga por cada llamada,
+            # y este método corre en cada cambio de fecha. Se cierra siempre,
+            # también en el `return` temprano de "sin fuente registrada".
+            if conn is not None:
+                conn.close()
       
     def tolerancia(self):
         try:
-        
+
             if hasattr(self, 'line_1_exp_act_ci') and hasattr(self, 'line_1_rep_act_ci'):
                 expected = float(self.line_1_exp_act_ci.text())
                 calculated = float(self.line_1_rep_act_ci.text())
@@ -651,6 +903,16 @@ class PruebaDiariaBraq(PruebaBasico):
                 else:
                     self.line_1_rep_act_ci.setStyleSheet("")
         except Exception as e:
+            # H3a (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): antes, si algún
+            # campo estaba vacío (o el cálculo fallaba por cualquier otra
+            # razón, p. ej. `expected == 0`), este `except` se limitaba a un
+            # `print` y DEJABA EL ESTILO COMO ESTABA -- de ahí que el rojo
+            # dependiera de la dirección del viaje. [medido] en el log del
+            # físico: "could not convert string to float: ''", impreso por
+            # este mismo `except`. Sin un veredicto calculable no puede
+            # quedar el estilo de un cálculo anterior.
+            if hasattr(self, 'line_1_rep_act_ci'):
+                self.line_1_rep_act_ci.setStyleSheet("")
             print(e)
 
 
@@ -707,8 +969,21 @@ class PruebaDiariaBraq(PruebaBasico):
         self.cancel_edit.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
         
         if hasattr(self, 'date_box'):
-            self.date_box.dateChanged.connect(self.cargar_dailytest_desde_db)
-            self.date_box.dateTimeChanged.connect(self.actividad_braq_automatica)
+            # R-1 (PLAN_ACTIVIDAD_ESPERADA_BRAQUI_27-08.md §7): UNA sola
+            # conexión. `dateTimeChanged` es la señal que cubre los dos casos
+            # (cambio de día y cambio de hora); `dateChanged` no se emite al
+            # cambiar solo la hora. `_al_mover_el_date_box` decide cuál de los
+            # dos ocurrió y hace lo que corresponde -- ver su docstring.
+            #
+            # G4/DP-56 (PLAN_BRAQUI_ANALISIS_PERSISTE_28-08.md): [medido]
+            # Qt emite SIEMPRE `dateTimeChanged` ANTES que `dateChanged`,
+            # sin importar el orden de conexión. Con dos conexiones (como
+            # antes de R-1) el recalculador corría primero y el cargador,
+            # después, borraba lo que acababa de escribir -- la carrera
+            # que dejaba vacía la actividad esperada y bloqueaba el
+            # guardado. `tests/test_g4_orden_senales_y_conexion_unica.py`
+            # falla si vuelve a colgar una segunda conexión aquí.
+            self.date_box.dateTimeChanged.connect(self._al_mover_el_date_box)
         self.line_1_rep_act_ci.textChanged.connect(self.tolerancia)
         self.subir_sin_datos.clicked.connect(self._subir_vacio)
         
@@ -766,10 +1041,18 @@ class PruebaDiariaBraq(PruebaBasico):
         # --- LIMPIAR FIGURA ---
         if hasattr(self, 'figure'):
             self.figure.clear()
+            # H1 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): figure.clear() no
+            # repinta -- el canvas seguía mostrando el render anterior hasta
+            # que algo forzaba un repintado (el físico lo vio desaparecer
+            # recién al mover la rueda del zoom, y concluyó que el zoom
+            # "revelaba" la placa nueva). `_limpiar_canvas` (:688) sí hace
+            # `draw()`; esta función no lo hacía -- misma función, dos
+            # versiones, ahora una sola correcta.
+            self.canvas.draw()
 
         # --- RESTAURAR UPLOADER ---
         self.label_imagen.clear()
-        
+
         # self.analizar.hide()
         # self.boton_guardar.hide()
         # self.spin_umbral.hide()
@@ -778,11 +1061,18 @@ class PruebaDiariaBraq(PruebaBasico):
         # self.label_dist.hide()
         #self.parametros_creados=False
 
-        
-        
-
         self.imagen_path = None
-        
+        # H1: self.archivo es el BLOB (o la ruta) que `add_info` persiste --
+        # nada lo limpiaba, así que sobrevivía a un cambio de día y se
+        # reguardaba bajo la fecha nueva (fila 447 del handoff: el 31 quedó
+        # con la imagen y el análisis del 28).
+        self.archivo = None
+        if hasattr(self, 'resultado_label'):
+            # H1: self.resultado_label es la fuente de los 6 números que lee
+            # `guardar_datos()` -- se crea recién al analizar la primera
+            # imagen (`mostrar_texto`), de ahí el hasattr.
+            self.resultado_label.clear()
+
 
     def mostrar_submenu(self):
         
@@ -829,13 +1119,13 @@ class PruebaDiariaBraq(PruebaBasico):
         botones_vertical.addWidget(self.analizar)
         self.analizar.clicked.connect(self.analizar_imagen)
 
-        self.boton_guardar = QPushButton("Guardar")
-        self.boton_guardar.setFixedSize(100, 40)
-        self.boton_guardar.setStyleSheet("background-color: rgb(181, 212, 0); color: white; border-radius: 10px;")
-        botones_vertical.addWidget(self.boton_guardar)
-
-        self.boton_guardar.clicked.connect(self.guardar_datos)
-
+        # H4 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): el botón "Guardar" de
+        # este panel llamaba a `guardar_datos()`, que es un extractor puro --
+        # lee el QLabel de resultados y devuelve una tupla, no escribe nada
+        # en la BD. El físico lo pulsaba creyendo que guardaba, y no pasaba
+        # nada porque, literalmente, no pasaba nada. El único guardado del
+        # diario es "Añadir" (btn_add -> ordenar_botones -> guardar_datos()
+        # + add_info(...)), que sí persiste las dos mitades juntas.
 
         # Agrega el layout vertical de botones al layout horizontal principal
         layout.addLayout(botones_vertical)
@@ -1074,6 +1364,64 @@ class PruebaDiariaBraq(PruebaBasico):
         #print("Resultados extraídos:", distancias, promedio, desviacion, desplazamientos, promedio_des, desviacion_des)
         return distancias, promedio, desviacion, desplazamientos, promedio_des, desviacion_des
 
+    def _informe_desde_columnas(self, fila):
+        """G1 (PLAN_BRAQUI_ANALISIS_PERSISTE_28-08.md): reconstruye el
+        MISMO HTML que `generar_reporte(control="B")`
+        (`analisisImagenes/Analisis_PlacaRC.py`) produce, a partir de las
+        6 columnas que `guardar_datos()` (arriba) extrajo de ese texto y
+        guardó -- `distancias`/`desplazamientos` ya incluyen los
+        corchetes del repr de Python, capturados tal cual por sus regex,
+        así que interpolarlas de vuelta reproduce el mismo texto exacto.
+
+        Devuelve None si la fila no tiene NINGÚN valor de análisis (las
+        6 en NULL) -- ese caso no se pinta. Cada sección ("Líneas
+        Detectadas" / "Alineación del campo") se decide por separado,
+        igual que el reporte original: una placa puede tener distancias
+        sin desplazamientos o viceversa, y ese análisis parcial se
+        reproduce tal cual, sin inventar ceros ni omitir la sección."""
+        distancias = fila.get('distancias')
+        promedio = fila.get('promedio')
+        desviacion = fila.get('desviacion')
+        desplazamientos = fila.get('desplazamientos')
+        promedio_des = fila.get('promedio_des')
+        desviacion_des = fila.get('desviacion_des')
+
+        if not any([distancias, promedio is not None, desviacion is not None,
+                    desplazamientos, promedio_des is not None, desviacion_des is not None]):
+            return None
+
+        reporte = ["<b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RESULTADO DE ANÁLISIS DE LA IMAGEN</b>"]
+
+        reporte.append("<br><b>Líneas Detectadas:</b><br>")
+        if distancias and promedio is not None and desviacion is not None:
+            reporte.append(
+                "&nbsp;&nbsp;&nbsp;&nbsp;<b>Distancias entre líneas(mm):</b> "
+                f"<span style='font-weight:normal'>{distancias}</span><br>")
+            reporte.append(
+                "&nbsp;&nbsp;&nbsp;&nbsp;<b>Promedio =</b> "
+                f"<span style='font-weight:normal'>{float(promedio):.2f} mm</span><br>")
+            reporte.append(
+                "&nbsp;&nbsp;&nbsp;&nbsp;<b>Desviación estándar =</b> "
+                f"<span style='font-weight:normal'>{float(desviacion):.2f} mm</span><br>")
+        else:
+            reporte.append("&nbsp;&nbsp;<b>No se puede convertir a milímetros o no hay distancias detectadas.</b><br>")
+
+        reporte.append("<br><b>Alineación del campo con las líneas</b><br>")
+        if desplazamientos and promedio_des is not None and desviacion_des is not None:
+            reporte.append(
+                "&nbsp;&nbsp;&nbsp;&nbsp;<b>Desplazamientos entre líneas y centros circulares (mm):</b> "
+                f"<span style='font-weight:normal'>{desplazamientos}</span><br>")
+            reporte.append(
+                "&nbsp;&nbsp;&nbsp;&nbsp;<b>Promedio =</b> "
+                f"<span style='font-weight:normal'>{float(promedio_des):.2f} mm</span><br>")
+            reporte.append(
+                "&nbsp;&nbsp;&nbsp;&nbsp;<b>Desviación estándar =</b> "
+                f"<span style='font-weight:normal'>{float(desviacion_des):.2f} mm</span><br>")
+        else:
+            reporte.append("&nbsp;&nbsp;<b>No hay diferencias detectadas.</b><br>")
+
+        return "".join(reporte)
+
     def verificar_columna_pelicula(self, item):
         col_pelicula = self.table.columnCount() - 1
         if item.column() == col_pelicula and item.text() == "Imagen cargada":
@@ -1243,11 +1591,16 @@ class PruebaDiariaBraq(PruebaBasico):
 
         elif selected_chart == "Actividad vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
-            
+            # H6 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): `date` puede
+            # ahora traer hora (solo braqui). `DATE(...)` en el SELECT (para
+            # que `strptime('%Y-%m-%d')` de abajo no reviente) y en el
+            # BETWEEN (para que un registro justo en `end_date` con hora no
+            # quede excluido por comparación de texto) -- compatible con las
+            # filas históricas sin hora (DATE('2026-08-28') == '2026-08-28').
             query.prepare(f"""
-                SELECT date, tol_rep_act_ci, tol_exp_act
+                SELECT DATE(date) AS date, tol_rep_act_ci, tol_exp_act
                 FROM braqui
-                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
+                WHERE DATE(date) BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)
@@ -1284,10 +1637,10 @@ class PruebaDiariaBraq(PruebaBasico):
             #print("Entro a datos dosimetricos vs tiempo")
             
             query.prepare(f"""
-                SELECT date, 
+                SELECT DATE(date) AS date,
                 tol_cyc_dummy,tol_cyc_rad
                 FROM braqui
-                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
+                WHERE DATE(date) BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)
@@ -1519,9 +1872,16 @@ class CalRedundanteFuente(PruebaMensualBraq):
             fecha = fila_fecha[0]
 
             # 2. Obtener datos de TipoCalibracion
+            # C1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): el paso 1
+            # ya filtró por tipo = "Cambio de fuente"; este paso preguntaba
+            # solo por `fecha`, perdiendo ese filtro -- si otra calibración
+            # (p.ej. "Calibración Redundante") comparte la misma fecha con
+            # un `id` mayor, el `ORDER BY id DESC` la traía a ella en vez de
+            # la "Cambio de fuente" que el paso 1 identificó.
             cursor.execute(
                 "SELECT serie, certificado, fecha_cer, intensidad, conversion "
-                f"FROM TipoCalibracion WHERE fecha = ?{filtro_activo('TipoCalibracion')}"
+                f"FROM TipoCalibracion WHERE fecha = ? AND tipo = \"Cambio de fuente\""
+                f"{filtro_activo('TipoCalibracion')}"
                 " ORDER BY id DESC", (fecha,))
             tipo_data = cursor.fetchone()
             if tipo_data:
@@ -2038,15 +2398,43 @@ class Linealidad(PruebaBasico):
                 self.checkBotonesFinales()
 
             else:
+                # A4 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R11): sin
+                # esta rama, la pantalla conservaba los datos de la fecha
+                # anterior -- guardar entonces los persistía bajo la fecha
+                # nueva (dato que nadie introdujo para este día).
                 print(f"No hay datos registrados para la fecha {fecha_str}.")
-               
-                
+                self._limpiar_widgets_diaria()
+                self.date_box.blockSignals(True)
+                self.date_box.setDate(fecha)
+                self.date_box.blockSignals(False)
+                self.checkBotonesFinales()
+
         except Exception as ex:
             import traceback
             traceback.print_exc()
             print(f"✗ Error al cargar datos: {str(ex)}")
         finally:
             db.close()
+
+    def _limpiar_widgets_diaria(self):
+        """A4: deja el formulario de linealidad en blanco -- combos al
+        placeholder inicial, campos numéricos y filas de medidas vacíos.
+        Estructura de widgets propia de esta clase (Linealidad), distinta
+        de la de PruebaDiariaBraq -- no comparte el helper homónimo."""
+        for combo_name in ('combo_modelo', 'combo_serie', 'combo_modelo_elec', 'combo_serie_elec'):
+            combo = getattr(self, combo_name, None)
+            if combo:
+                combo.setCurrentIndex(0)
+        for nombre_widget in ('repro_med1', 'repro_med2', 'repro_med3', 'repro_med4',
+                              'repro_med5', 'repro_prom', 'q_est', 't_integrado', 'i_est',
+                              'exactitud', 'repro', 'tiempo_transito', 'calibracion',
+                              'electrometro'):
+            widget = getattr(self, nombre_widget, None)
+            if widget:
+                widget.setText("")
+        for fila in self.medidas_lienalidad:
+            for campo in fila[1:5]:
+                campo.setText("")
 
     def comboBox_equipos(self):
         """
@@ -3074,23 +3462,29 @@ class PosicionamientoInicial(PruebaBasico):
             fecha_consulta = fecha_consulta.toString("yyyy-MM-dd")
             conn = Conexion().conectar()
             cursor = conn.cursor()
-            
-            # Usar DATE() para extraer solo la parte de fecha del campo en la BD
+
+            # C1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): el
+            # posicionamiento inicial de la fuente ocurre al instalarla --
+            # el evento "Cambio de fuente", nunca una "Calibración
+            # Redundante" (verificación posterior de una fuente ya
+            # instalada). Sin este filtro, dos calibraciones el mismo día
+            # hacían ganar la de `id` más alto sin importar el tipo, igual
+            # que en braq_mensual.py y _ejecutar_carga_calibracion.
             cursor.execute(
-                "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ?"
+                "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ? AND tipo = \"Cambio de fuente\""
                 f"{filtro_activo('TipoCalibracion')} ORDER BY id DESC",
                 (fecha_consulta,))
             result = cursor.fetchone()
             print(f"Consulta para fecha {fecha_consulta}: {result}")
-            
+
             if result:
                 ref_bd = result[0]
             else:
                 ref_bd = None
-                
+
             conn.close()
             return ref_bd
-        
+
         nuevo_ref_bd = consulta_db(fecha)
 
         # LR5 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR5, BRQ-1): hasta aquí
@@ -3546,11 +3940,16 @@ class PosicionamientoInicial(PruebaBasico):
 
         elif selected_chart == "Actividad vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
-            
+            # H6 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): `date` puede
+            # ahora traer hora (solo braqui). `DATE(...)` en el SELECT (para
+            # que `strptime('%Y-%m-%d')` de abajo no reviente) y en el
+            # BETWEEN (para que un registro justo en `end_date` con hora no
+            # quede excluido por comparación de texto) -- compatible con las
+            # filas históricas sin hora (DATE('2026-08-28') == '2026-08-28').
             query.prepare(f"""
-                SELECT date, tol_rep_act_ci, tol_exp_act
+                SELECT DATE(date) AS date, tol_rep_act_ci, tol_exp_act
                 FROM braqui
-                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
+                WHERE DATE(date) BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)
@@ -3587,10 +3986,10 @@ class PosicionamientoInicial(PruebaBasico):
             #print("Entro a datos dosimetricos vs tiempo")
             
             query.prepare(f"""
-                SELECT date, 
+                SELECT DATE(date) AS date,
                 tol_cyc_dummy,tol_cyc_rad
                 FROM braqui
-                WHERE date BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
+                WHERE DATE(date) BETWEEN :start_date AND :end_date{filtro_activo('braqui')}
                 ORDER BY date ASC
             """)
             query.bindValue(":start_date", start_date)
