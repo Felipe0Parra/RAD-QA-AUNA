@@ -114,33 +114,41 @@ CENSO_RAICES = {
         (LISTA, "mostrar_controles_imgIX_anual: SELECT MAX de parámetros"),
     ("data/ManejoDatos/load.py", 2071, "controles"):
         (LISTA, "mostrar_controles_imgIX: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2119, "controles"):
-        (LISTA, "mostrar_controles_imgIX: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2277, "controles"):
+    # RETIRADA el 01-09 (A9, PLAN_FUGA_CONEXIONES_01-09.md §9): vivía
+    # aquí como ("data/ManejoDatos/load.py", 2119, "controles"), LISTA,
+    # "mostrar_controles_imgIX: SELECT MAX de parámetros" -- A9 envolvió
+    # el cuerpo de mostrar_controles_imgIX en un `with Conexion().
+    # conectar() as conn:` y censar_raices() (línea ~358: "if textos is
+    # None: continue") deja de ver el sitio en cuanto `query` se vuelve
+    # irresoluble para _rastrear_variable (Trampa 6, mismo punto ciego
+    # que A7). El sitio SIGUE ahí y sigue filtrando -- solo el analizador
+    # de este archivo perdió visibilidad; ver test_eb5/test_le4 para la
+    # entrada equivalente, movida a su lista de OPACOS en vez de borrada.
+    ("data/ManejoDatos/load.py", 2276, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2311, "controles"):
+    ("data/ManejoDatos/load.py", 2310, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2468, "controles"):
+    ("data/ManejoDatos/load.py", 2467, "controles"):
         (LISTA, "mostrar_controles_imgHC: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2516, "controles"):
+    ("data/ManejoDatos/load.py", 2515, "controles"):
         (LISTA, "mostrar_controles_imgHC: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2669, "controles"):
+    ("data/ManejoDatos/load.py", 2668, "controles"):
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2717, "controles"):
+    ("data/ManejoDatos/load.py", 2716, "controles"):
         (LISTA, "mostrar_controles_tac: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 4520, "controles"):
+    ("data/ManejoDatos/load.py", 4519, "controles"):
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4534, "controles"):
+    ("data/ManejoDatos/load.py", 4533, "controles"):
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4597, "controles"):
+    ("data/ManejoDatos/load.py", 4596, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4607, "controles"):
+    ("data/ManejoDatos/load.py", 4606, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4820, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4819, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
 
     # -- Halcyon ---------------------------------------------------------
@@ -293,8 +301,15 @@ CENSO_RAICES = {
 # sitio en sí (una fila física) desaparece del censo; lo reemplaza
 # `reemplazar_bloque` (services/anulacion.py), invisible para este
 # analizador (SQL armado detrás de un `ast.Call`). Un sitio menos: 74 -> 73.
-FILAS_ESPERADAS = 73
-SITIOS_FISICOS_ESPERADOS = 71
+# A9 (PLAN_FUGA_CONEXIONES_01-09.md §9, 01-09): `mostrar_controles_imgIX`
+# (load.py:2119, el SELECT MAX final) queda invisible para este analizador
+# -- A9 envolvió el cuerpo en un `with Conexion().conectar() as conn:` y
+# `_rastrear_variable` da la variable `query` por irresoluble en cuanto se
+# la toca dentro de un `ast.With` (Trampa 6, mismo punto ciego que A7). El
+# sitio SIGUE filtrando -- solo dejó de ser visible aquí. Un sitio menos:
+# 73 -> 72.
+FILAS_ESPERADAS = 72
+SITIOS_FISICOS_ESPERADOS = 70
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

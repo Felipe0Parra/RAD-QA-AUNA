@@ -106,16 +106,10 @@ SITIOS_LITERALES_PERMITIDOS = {
     # existir, no porque se haya relajado el criterio -- y el test
     # `test_sitios_literales_coinciden_con_la_lista_revisada` es lo que
     # obligó a hacerlo explícito en vez de dejar una excepción muerta.
-    ("data/ManejoDatos/load.py", 2091):
-        "mostrar_controles_imgIX_anual -- backfill de UNA sola vez de "
-        "pruebas.mes_control (columna derivada de created_at), con guarda "
-        "de idempotencia (solo corre si la columna no existía) y filtrado a "
-        "'activo' -- migración, no reemplazo de bloque en cada guardado. "
-        "Primero de tres sitios gemelos.",
-    ("data/ManejoDatos/load.py", 2488):
+    ("data/ManejoDatos/load.py", 2487):
         "mostrar_controles_imgHC_anual -- gemelo del backfill de "
         "mes_control anterior, misma guarda de idempotencia y mismo filtro.",
-    ("data/ManejoDatos/load.py", 2689):
+    ("data/ManejoDatos/load.py", 2688):
         "mostrar_controles_tac -- tercer gemelo del backfill de "
         "mes_control, misma guarda de idempotencia y mismo filtro.",
     ("scripts/migrar_bd_a_estandar.py", 355):
@@ -182,6 +176,26 @@ SITIOS_DINAMICOS_PERMITIDOS = {
 # INSERT/DDL/SELECT, irrelevantes para EB5, y se descartan con una línea.
 # ---------------------------------------------------------------------------
 SITIOS_OPACOS_PERMITIDOS = {
+    ("data/ManejoDatos/load.py", 2119):
+        "SELECT (mostrar_controles_imgIX, MAX/MIN final) -- no aplica a "
+        "EB5, un SELECT nunca muta el bloque vigente. Opaco desde A9 "
+        "(PLAN_FUGA_CONEXIONES_01-09.md §9) por el mismo punto ciego de "
+        "Trampa 6 que el UPDATE de la línea 2091, arriba.",
+    ("data/ManejoDatos/load.py", 2091):
+        # A9 (PLAN_FUGA_CONEXIONES_01-09.md §9, 01-09): vivía en
+        # SITIOS_LITERALES_PERMITIDOS (resuelto via _rastrear_variable
+        # antes del `with`) hasta que A9 envolvió el cuerpo de
+        # mostrar_controles_imgIX en un `with Conexion().conectar() as
+        # conn:` -- mismo punto ciego que A7 (Trampa 6): el resolver da
+        # `query_addmonth` por irresoluble en cuanto se la toca dentro
+        # de un ast.With. El comentario original decía "imgIX_anual"
+        # por error -- ese gemelo (mostrar_controles_imgIX_anual,
+        # verificado) NO tiene este backfill, es de solo lectura.
+        "mostrar_controles_imgIX -- backfill de UNA sola vez de "
+        "pruebas.mes_control (columna derivada de created_at), con guarda "
+        "de idempotencia (solo corre si la columna no existía) y filtrado a "
+        "'activo' -- migración, no reemplazo de bloque en cada guardado. "
+        "Primero de tres sitios gemelos (imgHC, tac).",
     ("data/ManejoDatos/load.py", 839):
         # A7 (PLAN_FUGA_CONEXIONES_01-09.md, 01-09): vivía en
         # SITIOS_DINAMICOS_PERMITIDOS hasta que A7 envolvió TODO el
@@ -226,14 +240,14 @@ SITIOS_OPACOS_PERMITIDOS = {
         "INSERT (users, admin de arranque) -- no aplica a EB5.",
     ("data/ManejoDatos/load.py", 358):
         "INSERT (controles, alta de un control nuevo) -- no aplica a EB5.",
-    ("data/ManejoDatos/load.py", 4330):
+    ("data/ManejoDatos/load.py", 4329):
         "guardarEdicion (A3, DA-05/DA-07/DA-08) -- mecanismo GENÉRICO de "
         "edición directa de una celda: tabla y columna dinámicas (elegidas "
         "en la UI), WHERE por id físico O por (ref, energia) según la "
         "tabla. Mecanismo de corrección PERMANENTE, decidido, auditado -- "
         "no el patrón G1/G2 que este plan elimina (que mutaba TODO el "
         "bloque en cada guardado, no un campo puntual con rastro).",
-    ("data/ManejoDatos/load.py", 4410):
+    ("data/ManejoDatos/load.py", 4409):
         "guardarEdicion -- recálculo en cascada de ResultadosActividad "
         "(Ks/Kp/Ktp/actividad_calculada/actividad_decaimiento) al editar un "
         "campo de TipoCalibracion. Filtra 'activo' (filtro_activo), opaco "
@@ -241,7 +255,7 @@ SITIOS_OPACOS_PERMITIDOS = {
         "misma función. Parte del mismo mecanismo A3/DA-05 que la entrada "
         "anterior: una corrección dispara su recálculo derivado, ambos con "
         "el mismo rastro de auditoría.",
-    ("data/ManejoDatos/load.py", 4746):
+    ("data/ManejoDatos/load.py", 4745):
         "eliminarRegistro, rama else -- DELETE físico, alcanzable SOLO "
         "para tablas fuera del cierre transitivo de QC (catálogos "
         "genéricos). La rama if (anular_fila) cubre las 59 tablas de "

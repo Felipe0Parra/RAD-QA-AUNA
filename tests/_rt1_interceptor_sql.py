@@ -183,19 +183,27 @@ SITIOS_CENSALES_PERMITIDOS = {
         "sobre todas las pruebas de la sesión.",
     ("data/ManejoDatos/load.py", 2071):
         "mostrar_controles_imgIX -- gemelo mensual del COUNT anterior.",
-    ("data/ManejoDatos/load.py", 2119):
-        "mostrar_controles_imgIX -- gemelo mensual del MAX/MIN anterior.",
-    ("data/ManejoDatos/load.py", 2277):
+    # RETIRADA el 01-09 (A9, PLAN_FUGA_CONEXIONES_01-09.md §9): vivía
+    # aquí como ("data/ManejoDatos/load.py", 2119), "mostrar_controles_
+    # imgIX -- gemelo mensual del MAX/MIN anterior." -- A9 envolvió el
+    # cuerpo de mostrar_controles_imgIX en un `with Conexion().
+    # conectar() as conn:`; el sitio pasó a SITIOS_OPACOS_PERMITIDOS de
+    # ES1 (test_le4), y test_rt1_no_hereda_los_sitios_opacos_de_es1
+    # prohíbe que RT1 mantenga su propia excepción para un sitio que ES1
+    # ya no puede resolver -- RT1 lo sigue cubriendo en tiempo de
+    # ejecución (el interceptor ve el SQL ya resuelto sobre la conexión
+    # real), no hace falta la excepción estática aquí.
+    ("data/ManejoDatos/load.py", 2276):
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del COUNT.",
-    ("data/ManejoDatos/load.py", 2311):
+    ("data/ManejoDatos/load.py", 2310):
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2468):
+    ("data/ManejoDatos/load.py", 2467):
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del COUNT.",
-    ("data/ManejoDatos/load.py", 2516):
+    ("data/ManejoDatos/load.py", 2515):
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2669):
+    ("data/ManejoDatos/load.py", 2668):
         "mostrar_controles_tac -- gemelo TAC del COUNT.",
-    ("data/ManejoDatos/load.py", 2717):
+    ("data/ManejoDatos/load.py", 2716):
         "mostrar_controles_tac -- gemelo TAC del MAX/MIN.",
     ("scripts/observador_contrato.py", 158):
         "_censo_y_vigente -- COUNT(*) sobre TODA la tabla (censo total, sin "

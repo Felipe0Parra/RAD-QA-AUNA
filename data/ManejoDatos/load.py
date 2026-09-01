@@ -2059,67 +2059,66 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
           # O el atributo que corresponda a tu usuario
         generar_reporte_sistema_imagenes(parent, fecha, maquina, usuario, id_sesion, sistema_imagenes=True)
 def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
-    conn = Conexion().conectar()
-    cursor = conn.cursor()
-    tableWidget.clearContents()
-    tableWidget.setRowCount(0)
-    tableWidget.setColumnCount(0)
-    # LF1b: filtro de 'pruebas' en el ON del LEFT JOIN, no en el WHERE --
-    # así un control sin pruebas VIGENTES (todas anuladas) sigue apareciendo
-    # con num_pruebas=0, en vez de desaparecer de la lista (WHERE lo haría).
-    filtro_p_on = filtro_activo('pruebas').replace("activo", "p.activo")
-    cursor.execute(f"""
-    SELECT c.id, c.fecha, c.equipo, c.control, COUNT(p.id_prueba) as num_pruebas
-    FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
-    WHERE c.equipo = 'Clinac ix' AND c.control = 'Mensual'
+    with Conexion().conectar() as conn:
+        cursor = conn.cursor()
+        tableWidget.clearContents()
+        tableWidget.setRowCount(0)
+        tableWidget.setColumnCount(0)
+        # LF1b: filtro de 'pruebas' en el ON del LEFT JOIN, no en el WHERE --
+        # así un control sin pruebas VIGENTES (todas anuladas) sigue apareciendo
+        # con num_pruebas=0, en vez de desaparecer de la lista (WHERE lo haría).
+        filtro_p_on = filtro_activo('pruebas').replace("activo", "p.activo")
+        cursor.execute(f"""
+        SELECT c.id, c.fecha, c.equipo, c.control, COUNT(p.id_prueba) as num_pruebas
+        FROM controles c
+        LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
+        WHERE c.equipo = 'Clinac ix' AND c.control = 'Mensual'
+            AND (c.activo IS NULL OR c.activo = 1)
+            GROUP BY c.id
+        """)
+        conn.commit()
+        cursor.execute("PRAGMA table_info(pruebas)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if "mes_control" not in columns:
+            print("mes control")
+            cursor.execute("ALTER TABLE pruebas ADD COLUMN mes_control TEXT")
+
+        query_addmonth = f"""
+                        UPDATE pruebas
+                        SET mes_control = strftime('%Y-%m', created_at)
+                        WHERE mes_control IS NULL{filtro_activo('pruebas')}
+                        """
+        cursor.execute(query_addmonth)
+        conn.commit()
+
+
+        "-----------------------------------------------------------------------------------------------------------------"
+
+        query = f"""
+        SELECT
+        c.id as id_sesion,
+        c.fecha as fecha,
+        u.fullname,
+        c.equipo,
+        MAX(p.kv) as kv,
+        MAX(p.ma) as ma,
+        MAX(p.espesor_corte) as espesor_corte,
+        MAX(p.imagen_path) as imagen_path,
+        MAX(p.imagen_resultado) as imagen_resultado,
+        MIN(p.id_prueba) as id_prueba
+        FROM controles c
+        LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
+        LEFT JOIN users u ON c.user_id = u.fullname
+        WHERE c.equipo = 'Clinac ix'
+        AND c.control = 'Mensual'
         AND (c.activo IS NULL OR c.activo = 1)
-        GROUP BY c.id
-    """)
-    conn.commit()
-    cursor.execute("PRAGMA table_info(pruebas)")
-    columns = [col[1] for col in cursor.fetchall()]
-    if "mes_control" not in columns:
-        print("mes control")
-        cursor.execute("ALTER TABLE pruebas ADD COLUMN mes_control TEXT")
+        GROUP BY c.id, c.equipo
+        ORDER BY c.fecha DESC
+        """
 
-    query_addmonth = f"""
-                    UPDATE pruebas
-                    SET mes_control = strftime('%Y-%m', created_at)
-                    WHERE mes_control IS NULL{filtro_activo('pruebas')}
-                    """
-    cursor.execute(query_addmonth)
-    conn.commit()
-
-
-    "-----------------------------------------------------------------------------------------------------------------"
-
-    query = f"""
-    SELECT
-    c.id as id_sesion,
-    c.fecha as fecha,
-    u.fullname,
-    c.equipo,
-    MAX(p.kv) as kv,
-    MAX(p.ma) as ma,
-    MAX(p.espesor_corte) as espesor_corte,
-    MAX(p.imagen_path) as imagen_path,
-    MAX(p.imagen_resultado) as imagen_resultado,
-    MIN(p.id_prueba) as id_prueba
-    FROM controles c
-    LEFT JOIN pruebas p ON p.id_sesion = c.id{filtro_p_on}
-    LEFT JOIN users u ON c.user_id = u.fullname
-    WHERE c.equipo = 'Clinac ix'
-    AND c.control = 'Mensual'
-    AND (c.activo IS NULL OR c.activo = 1)
-    GROUP BY c.id, c.equipo
-    ORDER BY c.fecha DESC
-    """
-
-    cursor.execute(query)
-    rows = cursor.fetchall()
-    conn.commit()
-    conn.close()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        conn.commit()
 
     headers = [ 
         ("Fecha", None),
