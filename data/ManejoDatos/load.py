@@ -937,58 +937,58 @@ def encontrar_columnas(nombre_tabla, id = True, delete = 1):
     return columnas_str, placeholders
 
 def conectarfueradeservicio(self, nombre_tabla):
-    conn = Conexion().conectar()
-    cursor = conn.cursor()
+    with Conexion().conectar() as conn:
+        cursor = conn.cursor()
 
-    fecha_actual = self.date_box.date().toString('yyyy-MM-dd')
-    lista = []
-    lista.append(fecha_actual)
+        fecha_actual = self.date_box.date().toString('yyyy-MM-dd')
+        lista = []
+        lista.append(fecha_actual)
 
-    user_id = self.user_id._nombre
-    cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
-    if cursor.fetchone() is None:
-        QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
-        return
-
-    lista.append(user_id)
-    observaciones_text = self.observaciones.text() if self.observaciones else ""
-    lista.append(observaciones_text)
-
-    # D2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): mismo contrato de
-    # reemplazo por fecha que add_info (H2.2) -- antes este INSERT no
-    # borraba la fila previa de esa fecha, así que dos declaraciones para
-    # el mismo día (o una normal seguida de otra fuera de servicio, o
-    # viceversa) acumulaban filas vacías. Causa raíz de las 7 filas del
-    # 2026-08-05 en aceleradorlineal_ix.
-    # D3: "activo" filtra las filas ANULADAS (E7/hallazgo S1) -- una fila
-    # anulada de esa fecha no cuenta como "reemplazo" ni se borra.
-    cursor.execute(
-        f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ? "
-        "AND (activo IS NULL OR activo = 1)",
-        (fecha_actual,))
-    es_reemplazo = cursor.fetchone()[0] > 0
-    if es_reemplazo:
-        fecha_legible = self.date_box.date().toString("dd/MM/yyyy")
-        if not _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha_legible):
+        user_id = self.user_id._nombre
+        cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
+        if cursor.fetchone() is None:
+            QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
             return
-        _registrar_auditoria(user_id, ACCION_REEMPLAZO, nombre_tabla, ref=fecha_actual)
 
-    # EB4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB4, 24-08): mismo cambio
-    # que `add_info` -- anula el reporte anterior en vez de borrarlo.
-    sql = f"INSERT INTO {nombre_tabla} (date, user_id, observaciones) VALUES (?, ?, ?)"
-    cursor.execute("BEGIN")
-    reemplazar_bloque(
-        cursor, nombre_tabla, [("DATE(date)", fecha_actual)],
-        sql, [tuple(lista)], user_id, ref=fecha_actual, auditar=False)
-    conn.commit()
+        lista.append(user_id)
+        observaciones_text = self.observaciones.text() if self.observaciones else ""
+        lista.append(observaciones_text)
 
-    # A6.5 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): declarar un equipo
-    # fuera de servicio el día. D2: detalle explícito -- antes esta fila
-    # era indistinguible en audit_log de un control diario normal.
-    _registrar_auditoria(user_id, ACCION_GUARDAR, nombre_tabla, ref=fecha_actual,
-                         detalle="equipo fuera de servicio")
+        # D2 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): mismo contrato de
+        # reemplazo por fecha que add_info (H2.2) -- antes este INSERT no
+        # borraba la fila previa de esa fecha, así que dos declaraciones para
+        # el mismo día (o una normal seguida de otra fuera de servicio, o
+        # viceversa) acumulaban filas vacías. Causa raíz de las 7 filas del
+        # 2026-08-05 en aceleradorlineal_ix.
+        # D3: "activo" filtra las filas ANULADAS (E7/hallazgo S1) -- una fila
+        # anulada de esa fecha no cuenta como "reemplazo" ni se borra.
+        cursor.execute(
+            f"SELECT COUNT(*) FROM {nombre_tabla} WHERE DATE(date) = ? "
+            "AND (activo IS NULL OR activo = 1)",
+            (fecha_actual,))
+        es_reemplazo = cursor.fetchone()[0] > 0
+        if es_reemplazo:
+            fecha_legible = self.date_box.date().toString("dd/MM/yyyy")
+            if not _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha_legible):
+                return
+            _registrar_auditoria(user_id, ACCION_REEMPLAZO, nombre_tabla, ref=fecha_actual)
 
-    QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
+        # EB4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB4, 24-08): mismo cambio
+        # que `add_info` -- anula el reporte anterior en vez de borrarlo.
+        sql = f"INSERT INTO {nombre_tabla} (date, user_id, observaciones) VALUES (?, ?, ?)"
+        cursor.execute("BEGIN")
+        reemplazar_bloque(
+            cursor, nombre_tabla, [("DATE(date)", fecha_actual)],
+            sql, [tuple(lista)], user_id, ref=fecha_actual, auditar=False)
+        conn.commit()
+
+        # A6.5 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): declarar un equipo
+        # fuera de servicio el día. D2: detalle explícito -- antes esta fila
+        # era indistinguible en audit_log de un control diario normal.
+        _registrar_auditoria(user_id, ACCION_GUARDAR, nombre_tabla, ref=fecha_actual,
+                             detalle="equipo fuera de servicio")
+
+        QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
 
 def guardar_resultado_CambioFuente(
     user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion,
