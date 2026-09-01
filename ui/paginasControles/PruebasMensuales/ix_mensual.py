@@ -544,59 +544,59 @@ class PruebaMensualIX(PruebaMensual600):
         desempata de forma determinista (`ORDER BY medida, id DESC`, la
         primera fila de cada medida gana -- la más reciente)."""
         try:
-            conn = self.db_manager.obtener_conexion()
-            cursor = conn.cursor()
+            with self.db_manager.obtener_conexion() as conn:
+                cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT medida, valor
-                FROM control_conos
-                WHERE ref = ? AND activo = 1
-                ORDER BY medida, id DESC
-            """, (self.ref,))
+                cursor.execute("""
+                    SELECT medida, valor
+                    FROM control_conos
+                    WHERE ref = ? AND activo = 1
+                    ORDER BY medida, id DESC
+                """, (self.ref,))
 
-            results = cursor.fetchall()
-            if not results:
-                return False
+                results = cursor.fetchall()
+                if not results:
+                    return False
 
-            widgets_por_medida = {
-                "6x6":   (getattr(self, 'btn_6_fun', None), getattr(self, 'btn_6_nofun', None)),
-                "10x10": (getattr(self, 'btn_10_fun', None), getattr(self, 'btn_10_nofun', None)),
-                "15x15": (getattr(self, 'btn_15_fun', None), getattr(self, 'btn_15_nofun', None)),
-                "20x20": (getattr(self, 'btn_20_fun', None), getattr(self, 'btn_20_nofun', None)),
-                "25x25": (getattr(self, 'btn_25_fun', None), getattr(self, 'btn_25_nofun', None)),
-            }
+                widgets_por_medida = {
+                    "6x6":   (getattr(self, 'btn_6_fun', None), getattr(self, 'btn_6_nofun', None)),
+                    "10x10": (getattr(self, 'btn_10_fun', None), getattr(self, 'btn_10_nofun', None)),
+                    "15x15": (getattr(self, 'btn_15_fun', None), getattr(self, 'btn_15_nofun', None)),
+                    "20x20": (getattr(self, 'btn_20_fun', None), getattr(self, 'btn_20_nofun', None)),
+                    "25x25": (getattr(self, 'btn_25_fun', None), getattr(self, 'btn_25_nofun', None)),
+                }
 
-            medidas_vistas = set()
-            registros_procesados = 0
-            for medida, valor in results:
-                if medida in medidas_vistas:
-                    continue  # desempate: la primera fila (id DESC) gana
-                medidas_vistas.add(medida)
+                medidas_vistas = set()
+                registros_procesados = 0
+                for medida, valor in results:
+                    if medida in medidas_vistas:
+                        continue  # desempate: la primera fila (id DESC) gana
+                    medidas_vistas.add(medida)
 
-                if medida not in widgets_por_medida:
-                    print(f"Medida {medida} no reconocida")
-                    continue
+                    if medida not in widgets_por_medida:
+                        print(f"Medida {medida} no reconocida")
+                        continue
 
-                btn_fun, btn_nofun = widgets_por_medida[medida]
-                if btn_fun is None or btn_nofun is None:
-                    print(f"Widget no encontrado para medida {medida}")
-                    continue
+                    btn_fun, btn_nofun = widgets_por_medida[medida]
+                    if btn_fun is None or btn_nofun is None:
+                        print(f"Widget no encontrado para medida {medida}")
+                        continue
 
-                btn_fun.setChecked(valor == 1)
-                btn_nofun.setChecked(valor == 0)
-                # T2 (PLAN_CONOS_MENSUAL_12-08.md §4-T2): `setChecked` por
-                # sí solo no tiene efecto visual -- las reglas de
-                # `estilo.qss` para estos botones dependen SOLO de la
-                # propiedad dinámica `estado`, no existe ninguna regla
-                # `:checked`. Sin este paso, el botón correcto queda
-                # marcado internamente pero en pantalla se ve igual que
-                # uno sin marcar (D3), lo que induce a pulsarlo (D2).
-                seleccionado, otro = (
-                    (btn_fun, btn_nofun) if valor == 1 else (btn_nofun, btn_fun))
-                self.cambiar_estilo(seleccionado, otro)
-                registros_procesados += 1
+                    btn_fun.setChecked(valor == 1)
+                    btn_nofun.setChecked(valor == 0)
+                    # T2 (PLAN_CONOS_MENSUAL_12-08.md §4-T2): `setChecked` por
+                    # sí solo no tiene efecto visual -- las reglas de
+                    # `estilo.qss` para estos botones dependen SOLO de la
+                    # propiedad dinámica `estado`, no existe ninguna regla
+                    # `:checked`. Sin este paso, el botón correcto queda
+                    # marcado internamente pero en pantalla se ve igual que
+                    # uno sin marcar (D3), lo que induce a pulsarlo (D2).
+                    seleccionado, otro = (
+                        (btn_fun, btn_nofun) if valor == 1 else (btn_nofun, btn_fun))
+                    self.cambiar_estilo(seleccionado, otro)
+                    registros_procesados += 1
 
-            return registros_procesados > 0
+                return registros_procesados > 0
 
         except Exception as e:
             print(f"Error inesperado en Traerinfo_conos: {e}")
