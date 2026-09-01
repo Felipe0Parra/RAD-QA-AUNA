@@ -72,34 +72,34 @@ class PruebaMensual600(PruebaBasico):
         try:
             
             if hasattr(self, 'equipo_f') and (self.equipo_f != 'Tomógrafo'):
-                conn = self.db_manager.obtener_conexion()
+                _gestor_conn = self.db_manager.obtener_conexion()
             else:
-                conn = Conexion().conectar()
-            
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, fullname FROM users WHERE role = 'Físico Médico'")
-            fisicos = cursor.fetchall()
-            
+                _gestor_conn = Conexion().conectar()
 
-            # Usa el parámetro id_f1, no self.id_f1
+            with _gestor_conn as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, fullname FROM users WHERE role = 'Físico Médico'")
+                fisicos = cursor.fetchall()
 
-            id_f1_num = id_f1._nombre if hasattr(id_f1, "_nombre") else id_f1
-            print(f"id_f1 recibido: {id_f1}, id_f1_num usado: {id_f1_num}")
-            nombre_f1 = [fis[1] for fis in fisicos if fis[1] == id_f1_num] if id_f1_num is not None else []
-            # Z8 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): "exitosa"
-            # junto a una lista vacía es contradictorio -- una lista vacía
-            # es un resultado LEGÍTIMO (el usuario con sesión abierta no
-            # tiene role='Físico Médico', p.ej. admin/jefe verificando el
-            # formulario), no un fallo de la consulta.
-            if nombre_f1:
-                print(f"Consulta de físicos: usuario actual identificado como físico -- {nombre_f1[0]}")
-            else:
-                print("Consulta de físicos: el usuario actual no aparece en la "
-                      "lista de físicos (role='Físico Médico') -- normal si "
-                      "quien inició sesión no tiene ese rol")
-        
-            
-            return fisicos, nombre_f1
+
+                # Usa el parámetro id_f1, no self.id_f1
+
+                id_f1_num = id_f1._nombre if hasattr(id_f1, "_nombre") else id_f1
+                print(f"id_f1 recibido: {id_f1}, id_f1_num usado: {id_f1_num}")
+                nombre_f1 = [fis[1] for fis in fisicos if fis[1] == id_f1_num] if id_f1_num is not None else []
+                # Z8 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): "exitosa"
+                # junto a una lista vacía es contradictorio -- una lista vacía
+                # es un resultado LEGÍTIMO (el usuario con sesión abierta no
+                # tiene role='Físico Médico', p.ej. admin/jefe verificando el
+                # formulario), no un fallo de la consulta.
+                if nombre_f1:
+                    print(f"Consulta de físicos: usuario actual identificado como físico -- {nombre_f1[0]}")
+                else:
+                    print("Consulta de físicos: el usuario actual no aparece en la "
+                          "lista de físicos (role='Físico Médico') -- normal si "
+                          "quien inició sesión no tiene ese rol")
+
+                return fisicos, nombre_f1
         except Exception as e:
             print(f"Error al consultar físicos: {e}")
           
