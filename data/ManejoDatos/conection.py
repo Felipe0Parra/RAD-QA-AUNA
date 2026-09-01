@@ -56,6 +56,15 @@ class _ConexionUnaVez:
         return self._con
 
     def __exit__(self, exc_type, exc, tb):
+        # R1 (PLAN_FUGA_CONEXIONES_01-09.md §8.8): [medido] `close()` solo
+        # YA revierte una transacción abierta (SQLite lo hace al cerrar el
+        # handle) -- este `rollback()` explícito no cambia el resultado,
+        # pero hace el invariante de P1 ("sin transacción abierta") una
+        # garantía LEGIBLE en el código, no un efecto colateral implícito
+        # del que depender. NUNCA `commit()`: eso convertiría un guardado
+        # interrumpido a medias en una escritura parcial comprometida.
+        if self._con.in_transaction:
+            self._con.rollback()
         self._con.close()
         return False
 
