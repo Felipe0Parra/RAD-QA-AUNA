@@ -811,162 +811,158 @@ class Config(PruebaBasico):
         v1 = float(self.v1_cal.text()) if self.v1_cal.text() else None
         activo = 1 if self.sel_activo.isChecked() else 0
 
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
 
-        # Obtener datos originales del equipo
-        cursor.execute("""
-            SELECT equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr,
-                    fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado
-            FROM equipos
-            WHERE id = ?
-        """, (id_equipo,))
-        datos_originales = cursor.fetchone()
+            # Obtener datos originales del equipo
+            cursor.execute("""
+                SELECT equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr,
+                        fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado
+                FROM equipos
+                WHERE id = ?
+            """, (id_equipo,))
+            datos_originales = cursor.fetchone()
 
-        if not datos_originales:
-            QMessageBox.warning(self, "Advertencia", "No se encontró el equipo original.")
-            conn.close()
-            return
+            if not datos_originales:
+                QMessageBox.warning(self, "Advertencia", "No se encontró el equipo original.")
+                return
 
-        # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.4/§9): `vigente` ya no se
-        # recalcula al editar -- columna retirada del contrato de los
-        # servicios (nadie la lee para decidir ni mostrar). Se conserva el
-        # valor histórico tal cual estaba, como dato inerte.
-        vigente = datos_originales[12]
-        activo_original = datos_originales[11]
+            # F8 (PLAN_F_CIERRE_ESTANDAR_29-07.md §8.4/§9): `vigente` ya no se
+            # recalcula al editar -- columna retirada del contrato de los
+            # servicios (nadie la lee para decidir ni mostrar). Se conserva el
+            # valor histórico tal cual estaba, como dato inerte.
+            vigente = datos_originales[12]
+            activo_original = datos_originales[11]
 
-        # G2 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-G2, DA-01): el
-        # gate de F7 aquí (reactivar 0->1 exigía admin) se retiró -- ahora
-        # TODA la edición del catálogo exige admin desde la entrada
-        # (habilitar2, más arriba en este archivo), así que pedir la clave
-        # otra vez al guardar era fricción sin ganancia. Se conserva el
-        # detalle de auditoría con activo: X->Y (más abajo), que es lo que
-        # hace reconstruible una reactivación.
+            # G2 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-G2, DA-01): el
+            # gate de F7 aquí (reactivar 0->1 exigía admin) se retiró -- ahora
+            # TODA la edición del catálogo exige admin desde la entrada
+            # (habilitar2, más arriba en este archivo), así que pedir la clave
+            # otra vez al guardar era fricción sin ganancia. Se conserva el
+            # detalle de auditoría con activo: X->Y (más abajo), que es lo que
+            # hace reconstruible una reactivación.
 
-        # Función para comparar valores de forma robusta
-        def valores_iguales(nuevo, original):
-            # Si ambos son None o vacíos
-            if (nuevo is None or nuevo == "") and (original is None or original == ""):
-                return True
-            # Si uno es None y el otro no
-            if (nuevo is None or nuevo == "") != (original is None or original == ""):
-                return False
+            # Función para comparar valores de forma robusta
+            def valores_iguales(nuevo, original):
+                # Si ambos son None o vacíos
+                if (nuevo is None or nuevo == "") and (original is None or original == ""):
+                    return True
+                # Si uno es None y el otro no
+                if (nuevo is None or nuevo == "") != (original is None or original == ""):
+                    return False
             
-            # Convertir a string para comparación uniforme
-            nuevo_str = str(nuevo).strip()
-            original_str = str(original).strip() if original is not None else ""
+                # Convertir a string para comparación uniforme
+                nuevo_str = str(nuevo).strip()
+                original_str = str(original).strip() if original is not None else ""
             
-            # Para fechas, normalizar formato (quitar ceros iniciales)
-            if "/" in nuevo_str and "/" in original_str:
+                # Para fechas, normalizar formato (quitar ceros iniciales)
+                if "/" in nuevo_str and "/" in original_str:
+                    try:
+                        # Dividir fecha y normalizar cada parte
+                        nuevo_partes = [str(int(p)) for p in nuevo_str.split("/")]
+                        original_partes = [str(int(p)) for p in original_str.split("/")]
+                        return nuevo_partes == original_partes
+                    except:
+                        pass
+            
+                # Para números, comparar como float si es posible
                 try:
-                    # Dividir fecha y normalizar cada parte
-                    nuevo_partes = [str(int(p)) for p in nuevo_str.split("/")]
-                    original_partes = [str(int(p)) for p in original_str.split("/")]
-                    return nuevo_partes == original_partes
+                    return float(nuevo_str) == float(original_str)
                 except:
                     pass
             
-            # Para números, comparar como float si es posible
-            try:
-                return float(nuevo_str) == float(original_str)
-            except:
-                pass
-            
-            # Comparación de strings normalizada
-            return nuevo_str == original_str
+                # Comparación de strings normalizada
+                return nuevo_str == original_str
 
-        # Comparar cada campo individualmente
-        datos_formulario = [tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion, 
-                            fabricante, t_cal, p_cal, h_cal, v1]
-        datos_originales_sin_activo = list(datos_originales[:11])  # Excluye activo e imagen
+            # Comparar cada campo individualmente
+            datos_formulario = [tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion, 
+                                fabricante, t_cal, p_cal, h_cal, v1]
+            datos_originales_sin_activo = list(datos_originales[:11])  # Excluye activo e imagen
         
-        # Verificar si hay cambios reales
-        hay_cambios = False
-        cambios_detectados = []
-        nueva_imagen_blob = None
-        hay_nueva_imagen = hasattr(self, "imagen_path") and self.imagen_path
-        if hay_nueva_imagen:
-            with open(self.imagen_path, "rb") as f:
-                nueva_imagen_blob = f.read()
-        nombres_campos = ["tipo", "modelo", "serie", "factor_calibracion", "segundo_factor", "fecha_calibracion", 
-                            "fabricante", "t_cal", "p_cal", "h_cal", "v1"]
+            # Verificar si hay cambios reales
+            hay_cambios = False
+            cambios_detectados = []
+            nueva_imagen_blob = None
+            hay_nueva_imagen = hasattr(self, "imagen_path") and self.imagen_path
+            if hay_nueva_imagen:
+                with open(self.imagen_path, "rb") as f:
+                    nueva_imagen_blob = f.read()
+            nombres_campos = ["tipo", "modelo", "serie", "factor_calibracion", "segundo_factor", "fecha_calibracion", 
+                                "fabricante", "t_cal", "p_cal", "h_cal", "v1"]
         
-        for i, (nuevo, original, nombre) in enumerate(zip(datos_formulario, datos_originales_sin_activo, nombres_campos)):
-            if not valores_iguales(nuevo, original):
-                hay_cambios = True
-                cambios_detectados.append(f" - {nombre}: '{original}' → '{nuevo}'")
+            for i, (nuevo, original, nombre) in enumerate(zip(datos_formulario, datos_originales_sin_activo, nombres_campos)):
+                if not valores_iguales(nuevo, original):
+                    hay_cambios = True
+                    cambios_detectados.append(f" - {nombre}: '{original}' → '{nuevo}'")
         
-        solo_cambio_activo = (not hay_cambios and not hay_nueva_imagen and activo != activo_original)
+            solo_cambio_activo = (not hay_cambios and not hay_nueva_imagen and activo != activo_original)
 
-        # F7 punto 2: el detalle lleva los valores viejo->nuevo (mismo
-        # formato que guardarEdicion, A3) -- aplica a cualquier cambio de
-        # activo, no solo a la reactivación, porque sin valores el rastro
-        # no permite reconstruir el estado.
-        if activo != activo_original:
-            cambios_detectados.append(f"activo: {int(activo_original)}→{int(activo)}")
+            # F7 punto 2: el detalle lleva los valores viejo->nuevo (mismo
+            # formato que guardarEdicion, A3) -- aplica a cualquier cambio de
+            # activo, no solo a la reactivación, porque sin valores el rastro
+            # no permite reconstruir el estado.
+            if activo != activo_original:
+                cambios_detectados.append(f"activo: {int(activo_original)}→{int(activo)}")
 
-        if solo_cambio_activo:
-            cursor.execute("UPDATE equipos SET activo = ?, vigente = ? WHERE id = ?",
-                        (activo, vigente, id_equipo))
-        else:
-            if hay_cambios or hay_nueva_imagen:
-                # G3 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-G3,
-                # DA-21): no crear una fila IDÉNTICA a otra ya activa --
-                # caso real 82/83/84 del rebuild 30-07. Editar SIGUE
-                # bifurcando siempre (DA-21, sin excepción); esto solo
-                # bloquea la fila resultante si su certificado (los 7
-                # campos clínicos, no fabricante/imagen) ya está activo en
-                # OTRA fila de la misma serie. `id != ?` excluye la propia
-                # fila que se edita -- cambiar solo `fabricante` no debe
-                # bloquearse contra su propio certificado sin cambios,
-                # solo contra el de OTRA fila ya activa.
-                cursor.execute("""
-                    SELECT calibr_fact, calibr_fact2, fecha_calibr, t_cal, p_cal, h_cal, v1
-                    FROM equipos WHERE equip_type = ? AND serie = ? AND activo = 1 AND id != ?
-                """, (tipo, serie, id_equipo))
-                campos_certificado_nuevos = [factor_calibracion, segundo_factor,
-                                            fecha_calibracion, t_cal, p_cal, h_cal, v1]
-                for fila_activa in cursor.fetchall():
-                    if all(valores_iguales(nuevo, original) for nuevo, original in
-                            zip(campos_certificado_nuevos, fila_activa)):
-                        QMessageBox.warning(
-                            self, "Calibración duplicada",
-                            f"Ya hay una calibración idéntica registrada para "
-                            f"este equipo (fecha {fila_activa[2]}).")
-                        conn.close()
-                        return
-
-                # Bug de índice preexistente (anterior a F6-F10/F7, hallado
-                # al tocar la línea de al lado): `datos_originales[12]` es
-                # `vigente`, no `imagen_certificado` -- ese es el índice 13
-                # del SELECT de arriba. Sin este fix, editar un equipo SIN
-                # subir una imagen nueva escribía el valor de `vigente`
-                # (0/1/None) dentro de la columna BLOB de la imagen.
-                imagen_blob = nueva_imagen_blob if hay_nueva_imagen else datos_originales[13]
-                cursor.execute("""
-                    INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, 
-                                        fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion,
-                    fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_blob))
+            if solo_cambio_activo:
+                cursor.execute("UPDATE equipos SET activo = ?, vigente = ? WHERE id = ?",
+                            (activo, vigente, id_equipo))
             else:
-                QMessageBox.information(self, "Información", "No se detectaron cambios en el equipo.")
-                conn.commit()
-                conn.close()
-                return
+                if hay_cambios or hay_nueva_imagen:
+                    # G3 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md §5-G3,
+                    # DA-21): no crear una fila IDÉNTICA a otra ya activa --
+                    # caso real 82/83/84 del rebuild 30-07. Editar SIGUE
+                    # bifurcando siempre (DA-21, sin excepción); esto solo
+                    # bloquea la fila resultante si su certificado (los 7
+                    # campos clínicos, no fabricante/imagen) ya está activo en
+                    # OTRA fila de la misma serie. `id != ?` excluye la propia
+                    # fila que se edita -- cambiar solo `fabricante` no debe
+                    # bloquearse contra su propio certificado sin cambios,
+                    # solo contra el de OTRA fila ya activa.
+                    cursor.execute("""
+                        SELECT calibr_fact, calibr_fact2, fecha_calibr, t_cal, p_cal, h_cal, v1
+                        FROM equipos WHERE equip_type = ? AND serie = ? AND activo = 1 AND id != ?
+                    """, (tipo, serie, id_equipo))
+                    campos_certificado_nuevos = [factor_calibracion, segundo_factor,
+                                                fecha_calibracion, t_cal, p_cal, h_cal, v1]
+                    for fila_activa in cursor.fetchall():
+                        if all(valores_iguales(nuevo, original) for nuevo, original in
+                                zip(campos_certificado_nuevos, fila_activa)):
+                            QMessageBox.warning(
+                                self, "Calibración duplicada",
+                                f"Ya hay una calibración idéntica registrada para "
+                                f"este equipo (fecha {fila_activa[2]}).")
+                            return
 
-        conn.commit()
-        conn.close()
+                    # Bug de índice preexistente (anterior a F6-F10/F7, hallado
+                    # al tocar la línea de al lado): `datos_originales[12]` es
+                    # `vigente`, no `imagen_certificado` -- ese es el índice 13
+                    # del SELECT de arriba. Sin este fix, editar un equipo SIN
+                    # subir una imagen nueva escribía el valor de `vigente`
+                    # (0/1/None) dentro de la columna BLOB de la imagen.
+                    imagen_blob = nueva_imagen_blob if hay_nueva_imagen else datos_originales[13]
+                    cursor.execute("""
+                        INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, 
+                                            fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion,
+                        fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_blob))
+                else:
+                    QMessageBox.information(self, "Información", "No se detectaron cambios en el equipo.")
+                    conn.commit()
+                    return
 
-        # H2.4/F7: detalle con los campos cambiados; si `activo` cambió,
-        # incluye el valor viejo->nuevo (punto 2) -- sin eso el rastro no
-        # permite reconstruir el estado (p. ej. una reactivación).
-        _registrar_auditoria(
-            _usuario_actual(self), ACCION_ACTUALIZAR, "equipos", ref=f"{modelo}/{serie}",
-            detalle="; ".join(cambios_detectados))
+            conn.commit()
 
-        QMessageBox.information(self, "Éxito", "Los cambios se han guardado correctamente.")
-        self.cargartabla()
+            # H2.4/F7: detalle con los campos cambiados; si `activo` cambió,
+            # incluye el valor viejo->nuevo (punto 2) -- sin eso el rastro no
+            # permite reconstruir el estado (p. ej. una reactivación).
+            _registrar_auditoria(
+                _usuario_actual(self), ACCION_ACTUALIZAR, "equipos", ref=f"{modelo}/{serie}",
+                detalle="; ".join(cambios_detectados))
+
+            QMessageBox.information(self, "Éxito", "Los cambios se han guardado correctamente.")
+            self.cargartabla()
 
 
     def eliminarEquipo(self):
