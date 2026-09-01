@@ -229,22 +229,22 @@ class Config(PruebaBasico):
     
     def cargarDatos(self, lista):
         print("Función cargarDatos en equipos.py")
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
-        # Calcular vigencia usando función existente
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
+            # Calcular vigencia usando función existente
         
-        # E3: fabricante en la MISMA posición relativa que usa guardarCambios
-        # (tras fecha_calibr) -- antes el alta lo omitía y quedaba NULL ("NA").
-        cursor.execute("""
-            INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr,
-                        fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, lista)
-        conn.commit()
-        # H2.4: alta de equipo -- ref = "modelo/serie" (lista[1]/lista[2]).
-        _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "equipos",
-                             ref=f"{lista[1]}/{lista[2]}")
-        QMessageBox.information(self, "Éxito", "Datos insertados correctamente en la base de datos.")
+            # E3: fabricante en la MISMA posición relativa que usa guardarCambios
+            # (tras fecha_calibr) -- antes el alta lo omitía y quedaba NULL ("NA").
+            cursor.execute("""
+                INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr,
+                            fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, lista)
+            conn.commit()
+            # H2.4: alta de equipo -- ref = "modelo/serie" (lista[1]/lista[2]).
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "equipos",
+                                 ref=f"{lista[1]}/{lista[2]}")
+            QMessageBox.information(self, "Éxito", "Datos insertados correctamente en la base de datos.")
 
     def actualizar_unidades_calibracion(self, tipo=None):
         # Versión simple: ajustar placeholder/estilo y solo mostrar/ocultar widgets existentes del df
