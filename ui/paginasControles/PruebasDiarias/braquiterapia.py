@@ -2126,9 +2126,9 @@ class Linealidad(PruebaBasico):
             if k != 'repro_prom':
                 self.repro_fields[k].textChanged.connect(actualizar)  
     def cargar_nombres_tablas(self):
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         
     
     def initDATA(self, user_id):
