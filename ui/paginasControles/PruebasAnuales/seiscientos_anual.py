@@ -20,94 +20,94 @@ class PruebaAnual600(PruebaMensual600):
 
     def create_control(self, maquina, fecha, user_id, user_id_f2=None):
         try:
-            conn = Conexion().conectar()
-            cursor = conn.cursor()
+            with Conexion().conectar() as conn:
+                cursor = conn.cursor()
 
-            # La fecha entra como 'MM/YYYY', convertir a objeto QDate
-            fecha_formateada = fecha.split('/') # ['MM', 'YYYY']
+                # La fecha entra como 'MM/YYYY', convertir a objeto QDate
+                fecha_formateada = fecha.split('/') # ['MM', 'YYYY']
             
-            # Validar usuario
-            user_id = self.user_id._nombre
-            cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
-            if cursor.fetchone() is None:
-                QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
-                return
-            
-            # X1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): sin esta
-            # inicialización, un control anual sin 2º físico (user_id_f2=None,
-            # el caso común) dejaba _nombre_fisico2 sin asignar -->
-            # UnboundLocalError al armar `lista` más abajo. None es además la
-            # representación correcta de "sin 2º físico" (no el centinela de
-            # texto " ---- " que sí usaba la versión mensual, load.py).
-            _nombre_fisico2 = None
-            if user_id_f2:
-                cursor.execute("SELECT fullname FROM users WHERE id = ?", (user_id_f2,))
-                row = cursor.fetchone()
-                if row is None:
-                    QMessageBox.critical(self, "Error", f"El usuario '{user_id_f2}' no existe en la base de datos.")
+                # Validar usuario
+                user_id = self.user_id._nombre
+                cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
+                if cursor.fetchone() is None:
+                    QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
                     return
-                _nombre_fisico2 = row[0]  # Obtener el nombre del físico 2
+            
+                # X1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): sin esta
+                # inicialización, un control anual sin 2º físico (user_id_f2=None,
+                # el caso común) dejaba _nombre_fisico2 sin asignar -->
+                # UnboundLocalError al armar `lista` más abajo. None es además la
+                # representación correcta de "sin 2º físico" (no el centinela de
+                # texto " ---- " que sí usaba la versión mensual, load.py).
+                _nombre_fisico2 = None
+                if user_id_f2:
+                    cursor.execute("SELECT fullname FROM users WHERE id = ?", (user_id_f2,))
+                    row = cursor.fetchone()
+                    if row is None:
+                        QMessageBox.critical(self, "Error", f"El usuario '{user_id_f2}' no existe en la base de datos.")
+                        return
+                    _nombre_fisico2 = row[0]  # Obtener el nombre del físico 2
 
-            # Verificar si ya existe registro para esa máquina y fecha
-            # LR3 (DA-47/DA-48): lectura de BLOQUE. Gemela de
-            # `load.py::create_control` (N1) pero SIN la clasificación de
-            # DA-34: aquí un control anulado del mismo año se devolvía como
-            # si estuviera vigente y dejaba el año bloqueado (W1). Con el
-            # filtro se crea uno nuevo al lado -- que es lo que DA-49 elige,
-            # y el índice UNIQUE de U2 es parcial sobre las vigentes, así
-            # que los dos conviven. Ver DP-27.
-            cursor.execute(
-                "SELECT id FROM controles WHERE fecha LIKE ? AND equipo = ? "
-                f"AND control = 'Anual'{filtro_activo('controles')} ORDER BY id DESC",
-                (f"%{fecha_formateada[1]}%", maquina) # Usar solo el año para controles anuales
-            )
-            old_id = cursor.fetchone()
-            if old_id is not None:
-                control_id = old_id[0]
-
-                # B4 (PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.2): actualizar
-                # el(los) físico(s) aunque el control anual ya exista, igual
-                # que ya hacía el mensual (data/ManejoDatos/load.py::
-                # create_control) -- sin esto, reabrir el control anual del
-                # mismo año para registrar el 2º físico nunca quedaba
-                # guardado en `controles.user_id_f2`.
+                # Verificar si ya existe registro para esa máquina y fecha
+                # LR3 (DA-47/DA-48): lectura de BLOQUE. Gemela de
+                # `load.py::create_control` (N1) pero SIN la clasificación de
+                # DA-34: aquí un control anulado del mismo año se devolvía como
+                # si estuviera vigente y dejaba el año bloqueado (W1). Con el
+                # filtro se crea uno nuevo al lado -- que es lo que DA-49 elige,
+                # y el índice UNIQUE de U2 es parcial sobre las vigentes, así
+                # que los dos conviven. Ver DP-27.
                 cursor.execute(
-                    "UPDATE controles SET user_id = ?, user_id_f2 = ? WHERE id = ?",
-                    (user_id, _nombre_fisico2, control_id)
+                    "SELECT id FROM controles WHERE fecha LIKE ? AND equipo = ? "
+                    f"AND control = 'Anual'{filtro_activo('controles')} ORDER BY id DESC",
+                    (f"%{fecha_formateada[1]}%", maquina) # Usar solo el año para controles anuales
                 )
+                old_id = cursor.fetchone()
+                if old_id is not None:
+                    control_id = old_id[0]
+
+                    # B4 (PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.2): actualizar
+                    # el(los) físico(s) aunque el control anual ya exista, igual
+                    # que ya hacía el mensual (data/ManejoDatos/load.py::
+                    # create_control) -- sin esto, reabrir el control anual del
+                    # mismo año para registrar el 2º físico nunca quedaba
+                    # guardado en `controles.user_id_f2`.
+                    cursor.execute(
+                        "UPDATE controles SET user_id = ?, user_id_f2 = ? WHERE id = ?",
+                        (user_id, _nombre_fisico2, control_id)
+                    )
+                    conn.commit()
+
+                    if hasattr(self, 'equipo_f') and self.equipo_f == 'Tomógrafo':
+                        self.old_id = True
+                    QMessageBox.information(self, "Éxito", f"Puede seguir con el proceso de llenado de datos del {fecha_formateada[1]}.")
+                    return control_id
+
+                # Insertar nuevo registro
+                lista = [maquina, "Anual", fecha, user_id, _nombre_fisico2]
+                sql = "INSERT INTO controles (equipo, control, fecha, user_id, user_id_f2) VALUES (?,?,?,?,?)"
+                cursor.execute(sql, lista)
                 conn.commit()
 
-                if hasattr(self, 'equipo_f') and self.equipo_f == 'Tomógrafo':
-                    self.old_id = True
-                QMessageBox.information(self, "Éxito", f"Puede seguir con el proceso de llenado de datos del {fecha_formateada[1]}.")
-                return control_id
+                new_id = cursor.lastrowid
+                if hasattr(self, 'equipo_f') and self.equipo_f == 'Tomógrafo' and new_id:
+                    self.old_id = False
+                QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
 
-            # Insertar nuevo registro
-            lista = [maquina, "Anual", fecha, user_id, _nombre_fisico2]
-            sql = "INSERT INTO controles (equipo, control, fecha, user_id, user_id_f2) VALUES (?,?,?,?,?)"
-            cursor.execute(sql, lista)
-            conn.commit()
+                # A6.4 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): mismo patrón que
+                # el create_control mensual (data/ManejoDatos/load.py) -- el
+                # anual nunca dejaba rastro de la creación del control. Solo se
+                # audita el alta (INSERT); la reapertura (UPDATE más arriba)
+                # tampoco se audita en el mensual, por consistencia entre
+                # hermanos.
+                mes_creado, anio_creado = _mes_anio_de_fecha(fecha)
+                if mes_creado is not None:
+                    detalle_legible = f"{maquina} -- Anual {mes_creado:02d}/{anio_creado}"
+                else:
+                    detalle_legible = f"{maquina} -- Anual {fecha}"
+                _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "controles",
+                                     ref=new_id, detalle=detalle_legible)
 
-            new_id = cursor.lastrowid
-            if hasattr(self, 'equipo_f') and self.equipo_f == 'Tomógrafo' and new_id:
-                self.old_id = False
-            QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
-
-            # A6.4 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): mismo patrón que
-            # el create_control mensual (data/ManejoDatos/load.py) -- el
-            # anual nunca dejaba rastro de la creación del control. Solo se
-            # audita el alta (INSERT); la reapertura (UPDATE más arriba)
-            # tampoco se audita en el mensual, por consistencia entre
-            # hermanos.
-            mes_creado, anio_creado = _mes_anio_de_fecha(fecha)
-            if mes_creado is not None:
-                detalle_legible = f"{maquina} -- Anual {mes_creado:02d}/{anio_creado}"
-            else:
-                detalle_legible = f"{maquina} -- Anual {fecha}"
-            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "controles",
-                                 ref=new_id, detalle=detalle_legible)
-
-            return new_id
+                return new_id
 
         except sqlite3.Error as e:
             QMessageBox.critical(self, "Error", f"Error en la consulta: {e}")
