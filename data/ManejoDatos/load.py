@@ -259,125 +259,125 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
     print("Entrando a crear control")
     print(maquina)
     try:
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
 
-        # Validar usuario
-        #user_id = self.user_id._nombre
-        cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
-        if cursor.fetchone() is None:
-            QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
-            return
-
-        # X1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): antes se guardaba
-        # el centinela de texto " ---- " cuando no había 2º físico --
-        # user_id_f2 tiene FOREIGN KEY a users(fullname), así que ese
-        # centinela viola la integridad referencial (7 filas así en
-        # producción) y además bloquearía activar PRAGMA foreign_keys=ON
-        # (W2). NULL es la representación correcta de "sin 2º físico"; todo
-        # lector existente ya lo trata igual (`if user_id_f2:`/`if
-        # resultado[1]:` -- ambos falsy con None).
-        _nombre_fisico2 = None
-        if user_id_f2:
-            cursor.execute("SELECT fullname FROM users WHERE id = ?", (user_id_f2,))
-            row = cursor.fetchone()
-            if row is None:
-                QMessageBox.critical(self, "Error", f"El usuario '{user_id_f2}' no existe en la base de datos.")
+            # Validar usuario
+            #user_id = self.user_id._nombre
+            cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
+            if cursor.fetchone() is None:
+                QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
                 return
-            _nombre_fisico2 = row[0]
 
-        # Determinar tipo y fecha según si es anual o mensual
-        es_anual = hasattr(self, 'esiX_images') and self.esiX_images or (hasattr(self, 'esHC_images') and self.esHC_images)
-        tipo_control = "Anual" if es_anual else "Mensual"
+            # X1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): antes se guardaba
+            # el centinela de texto " ---- " cuando no había 2º físico --
+            # user_id_f2 tiene FOREIGN KEY a users(fullname), así que ese
+            # centinela viola la integridad referencial (7 filas así en
+            # producción) y además bloquearía activar PRAGMA foreign_keys=ON
+            # (W2). NULL es la representación correcta de "sin 2º físico"; todo
+            # lector existente ya lo trata igual (`if user_id_f2:`/`if
+            # resultado[1]:` -- ambos falsy con None).
+            _nombre_fisico2 = None
+            if user_id_f2:
+                cursor.execute("SELECT fullname FROM users WHERE id = ?", (user_id_f2,))
+                row = cursor.fetchone()
+                if row is None:
+                    QMessageBox.critical(self, "Error", f"El usuario '{user_id_f2}' no existe en la base de datos.")
+                    return
+                _nombre_fisico2 = row[0]
+
+            # Determinar tipo y fecha según si es anual o mensual
+            es_anual = hasattr(self, 'esiX_images') and self.esiX_images or (hasattr(self, 'esHC_images') and self.esHC_images)
+            tipo_control = "Anual" if es_anual else "Mensual"
         
 
-        # F2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): la identidad de un
-        # control mensual es (equipo, mes, anio, tipo) -- el dia NUNCA es
-        # parte de la llave (H14/B5). Comparar "fecha = ?" como texto exacto
-        # dejaba inalcanzables las 3 fichas de produccion que ya traen dia
-        # (con datos reales colgando de dosimetriaMen/tamano_campo) y, una
-        # vez que el formulario empiece a guardar el dia real (F3), habria
-        # creado un control nuevo cada vez que se abriera un dia distinto
-        # del mismo mes.
-        # N1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md), retirado por LR7
-        # (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR7, [[DA-49]]): antes esta
-        # consulta no filtraba "activo" -- un control ANULADO se devolvía
-        # igual que uno activo, y como "Subir" ya bloquea sobre un control
-        # anulado (W1), el mes quedaba inutilizable en silencio. N2 lo
-        # resolvió ofreciendo reactivar; DA-49 revierte esa decisión: la
-        # causa real era esta lectura sin filtrar, y con el filtro puesto
-        # (DA-47/LR3) un control anulado deja de "aparecer" como candidato
-        # -- se ignora sin más y más abajo se crea uno nuevo al lado, legal
-        # porque el índice único de U2 es parcial sobre las filas activas.
-        # Lo anulado sigue en la BD y se consulta en el visor de LR6.
-        cursor.execute(
-            f"SELECT id, fecha FROM controles WHERE equipo = ? AND control = ?{filtro_activo('controles')}",
-            (maquina, tipo_control)
-        )
-        control_activo_id, fecha_activo = None, None
-        for fila_id, fecha_existente in cursor.fetchall():
-            if not _mismo_mes(fecha_existente, fecha):
-                continue
-            if control_activo_id is None:
-                control_activo_id, fecha_activo = fila_id, fecha_existente
-
-        if control_activo_id is not None:
-            control_id = control_activo_id
-            fecha_existente = fecha_activo
-
-            # Actualizar el físico aunque ya exista el registro
+            # F2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): la identidad de un
+            # control mensual es (equipo, mes, anio, tipo) -- el dia NUNCA es
+            # parte de la llave (H14/B5). Comparar "fecha = ?" como texto exacto
+            # dejaba inalcanzables las 3 fichas de produccion que ya traen dia
+            # (con datos reales colgando de dosimetriaMen/tamano_campo) y, una
+            # vez que el formulario empiece a guardar el dia real (F3), habria
+            # creado un control nuevo cada vez que se abriera un dia distinto
+            # del mismo mes.
+            # N1 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md), retirado por LR7
+            # (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR7, [[DA-49]]): antes esta
+            # consulta no filtraba "activo" -- un control ANULADO se devolvía
+            # igual que uno activo, y como "Subir" ya bloquea sobre un control
+            # anulado (W1), el mes quedaba inutilizable en silencio. N2 lo
+            # resolvió ofreciendo reactivar; DA-49 revierte esa decisión: la
+            # causa real era esta lectura sin filtrar, y con el filtro puesto
+            # (DA-47/LR3) un control anulado deja de "aparecer" como candidato
+            # -- se ignora sin más y más abajo se crea uno nuevo al lado, legal
+            # porque el índice único de U2 es parcial sobre las filas activas.
+            # Lo anulado sigue en la BD y se consulta en el visor de LR6.
             cursor.execute(
-                "UPDATE controles SET user_id = ?, user_id_f2 = ? WHERE id = ?",
-                (user_id, _nombre_fisico2, control_id)
+                f"SELECT id, fecha FROM controles WHERE equipo = ? AND control = ?{filtro_activo('controles')}",
+                (maquina, tipo_control)
             )
+            control_activo_id, fecha_activo = None, None
+            for fila_id, fecha_existente in cursor.fetchall():
+                if not _mismo_mes(fecha_existente, fecha):
+                    continue
+                if control_activo_id is None:
+                    control_activo_id, fecha_activo = fila_id, fecha_existente
+
+            if control_activo_id is not None:
+                control_id = control_activo_id
+                fecha_existente = fecha_activo
+
+                # Actualizar el físico aunque ya exista el registro
+                cursor.execute(
+                    "UPDATE controles SET user_id = ?, user_id_f2 = ? WHERE id = ?",
+                    (user_id, _nombre_fisico2, control_id)
+                )
+                conn.commit()
+
+                if hasattr(self, 'equipo_f') and self.equipo_f in ('Tomógrafo', 'Clinac ix', 'Halcyon'):
+                    self.old_id = True
+                # F4 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): decisión del
+                # físico -- no se pregunta nada, solo se avisa y se carga. El
+                # aviso menciona la fecha REALMENTE registrada
+                # (fecha_existente), no la fecha elegida para buscar, para que
+                # quede claro que se está continuando un control ya existente.
+                mes_encontrado, anio_encontrado = _mes_anio_de_fecha(fecha_existente)
+                if mes_encontrado is not None:
+                    referencia_mes = f"{mes_encontrado:02d}/{anio_encontrado}"
+                else:
+                    referencia_mes = fecha_existente
+                QMessageBox.information(
+                    self, "Control existente",
+                    f"Se cargó el control mensual de {maquina} correspondiente "
+                    f"a {referencia_mes}, con fecha registrada {fecha_existente}. "
+                    f"Puede continuar el llenado de datos."
+                )
+                return control_id
+
+            # Insertar nuevo registro
+            lista = [maquina, tipo_control, fecha, user_id, _nombre_fisico2]
+            sql = "INSERT INTO controles (equipo, control, fecha, user_id, user_id_f2) VALUES (?,?,?,?,?)"
+            cursor.execute(sql, lista)
             conn.commit()
 
-            if hasattr(self, 'equipo_f') and self.equipo_f in ('Tomógrafo', 'Clinac ix', 'Halcyon'):
-                self.old_id = True
-            # F4 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): decisión del
-            # físico -- no se pregunta nada, solo se avisa y se carga. El
-            # aviso menciona la fecha REALMENTE registrada
-            # (fecha_existente), no la fecha elegida para buscar, para que
-            # quede claro que se está continuando un control ya existente.
-            mes_encontrado, anio_encontrado = _mes_anio_de_fecha(fecha_existente)
-            if mes_encontrado is not None:
-                referencia_mes = f"{mes_encontrado:02d}/{anio_encontrado}"
+            new_id = cursor.lastrowid
+            if hasattr(self, 'equipo_f') and (self.equipo_f == 'Tomógrafo' or self.equipo_f == 'Clinac ix' or self.equipo_f == 'Halcyon') and new_id:
+                self.old_id = False
+            QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
+
+            # F4c/F4d (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): create_control
+            # nunca dejaba rastro de auditoría -- sin esto, la ventana de
+            # edición de dos meses (F4b) no tendría ancla alguna para ningún
+            # control nuevo. `detalle` es legible (equipo + mes/año), no solo
+            # el id numérico, para que el visor "Registros" no obligue a
+            # cruzar ids contra `controles` a mano.
+            mes_creado, anio_creado = _mes_anio_de_fecha(fecha)
+            if mes_creado is not None:
+                detalle_legible = f"{maquina} -- {tipo_control} {mes_creado:02d}/{anio_creado}"
             else:
-                referencia_mes = fecha_existente
-            QMessageBox.information(
-                self, "Control existente",
-                f"Se cargó el control mensual de {maquina} correspondiente "
-                f"a {referencia_mes}, con fecha registrada {fecha_existente}. "
-                f"Puede continuar el llenado de datos."
-            )
-            return control_id
+                detalle_legible = f"{maquina} -- {tipo_control} {fecha}"
+            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "controles",
+                                  ref=new_id, detalle=detalle_legible)
 
-        # Insertar nuevo registro
-        lista = [maquina, tipo_control, fecha, user_id, _nombre_fisico2]
-        sql = "INSERT INTO controles (equipo, control, fecha, user_id, user_id_f2) VALUES (?,?,?,?,?)"
-        cursor.execute(sql, lista)
-        conn.commit()
-
-        new_id = cursor.lastrowid
-        if hasattr(self, 'equipo_f') and (self.equipo_f == 'Tomógrafo' or self.equipo_f == 'Clinac ix' or self.equipo_f == 'Halcyon') and new_id:
-            self.old_id = False
-        QMessageBox.information(self, "Éxito", "Datos insertados correctamente.")
-
-        # F4c/F4d (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): create_control
-        # nunca dejaba rastro de auditoría -- sin esto, la ventana de
-        # edición de dos meses (F4b) no tendría ancla alguna para ningún
-        # control nuevo. `detalle` es legible (equipo + mes/año), no solo
-        # el id numérico, para que el visor "Registros" no obligue a
-        # cruzar ids contra `controles` a mano.
-        mes_creado, anio_creado = _mes_anio_de_fecha(fecha)
-        if mes_creado is not None:
-            detalle_legible = f"{maquina} -- {tipo_control} {mes_creado:02d}/{anio_creado}"
-        else:
-            detalle_legible = f"{maquina} -- {tipo_control} {fecha}"
-        _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR, "controles",
-                              ref=new_id, detalle=detalle_legible)
-
-        return new_id
+            return new_id
 
     except sqlite3.Error as e:
         QMessageBox.critical(self, "Error", f"Error en la consulta: {e}")
