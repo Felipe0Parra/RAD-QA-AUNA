@@ -1200,7 +1200,7 @@ Esta todo bien en el proceso de construccion?, que son los warnings con hidden i
 
 - La calculadora de dosis para electrones no esta dejando cerrar que porque falta llenar le campo de SSD, el problema es que esa casilla no es visible, si se debe incluir o no, no lo se. Pero al menos en el formato de excel .xls en el que nos hemos basado aparece (100 cm)
 
-- Acaso el comparador de app contra excel esta mintiendo sobre el valor real calculaod, si no por que no coincide exactamente el de la app con el de la tabla de comparacion? Por ejemplo, la calculadora dice, 1.1648 y la ventana de comparacion en la columna de app dice 1.164700y pues no entiendo bien porque, se que hay algunos archivos .xls que estan mal llenados, pero para eso tenemos varios y los documentos de referencia pdf.
+- Acaso el comparador de app contra excel esta mintiendo sobre el valor real calculado, si no por que no coincide exactamente el de la app con el de la tabla de comparacion? Por ejemplo, la calculadora dice, 1.1648 y la ventana de comparacion en la columna de app dice 1.164700y pues no entiendo bien porque, se que hay algunos archivos .xls que estan mal llenados, pero para eso tenemos varios y los documentos de referencia pdf.
 
 - Al menos en el IX hay que poner un subtitulo o texto indicador de cuales energias son para electrones y cuales para fotones, ya que solo aparecen 6 botones sin mas 6 MV, 15 MV, 6 MV, 9 MV, ... y es facil cometer errores de seleccion y permite un proceso mas limpio del codigo y al usar la app.
 
