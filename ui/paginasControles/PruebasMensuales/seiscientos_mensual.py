@@ -3490,56 +3490,56 @@ class PruebaMensual600(PruebaBasico):
                 ", ".join(f"{angulo}° {pos}" for angulo, pos in faltantes))
             return False
 
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("BEGIN TRANSACTION")
-        try:
-            cursor.execute(
-                "UPDATE control_cunas SET activo = 0 "
-                "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
-                (self.ref,))
+            cursor.execute("BEGIN TRANSACTION")
+            try:
+                cursor.execute(
+                    "UPDATE control_cunas SET activo = 0 "
+                    "WHERE ref = ? AND (activo IS NULL OR activo = 1)",
+                    (self.ref,))
 
-            for angulo, posiciones in combos_seguridad.items():
-                in_val    = 1 if posiciones["in"].currentText() == "Funciona" else 0
-                out_val   = 1 if posiciones["out"].currentText() == "Funciona" else 0
-                right_val = 1 if posiciones["right"].currentText() == "Funciona" else 0
-                left_val  = 1 if posiciones["left"].currentText() == "Funciona" else 0
+                for angulo, posiciones in combos_seguridad.items():
+                    in_val    = 1 if posiciones["in"].currentText() == "Funciona" else 0
+                    out_val   = 1 if posiciones["out"].currentText() == "Funciona" else 0
+                    right_val = 1 if posiciones["right"].currentText() == "Funciona" else 0
+                    left_val  = 1 if posiciones["left"].currentText() == "Funciona" else 0
 
-                cursor.execute("""
-                    INSERT INTO control_cunas (ref, angulo, in_val, out_val, right_val, left_val)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (self.ref, angulo, in_val, out_val, right_val, left_val))
+                    cursor.execute("""
+                        INSERT INTO control_cunas (ref, angulo, in_val, out_val, right_val, left_val)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (self.ref, angulo, in_val, out_val, right_val, left_val))
 
-            if df_lines is not None:
-                for line in df_lines:
-                    if line == "observaciones_segu":
-                        line_edit = getattr(self, line, None)
-                        print(f"line: {line}, widget: {line_edit}")
-                        if line_edit is not None and isinstance(line_edit, QLineEdit):
-                            print(f"Texto actual en {line}: '{line_edit.text()}'")
-                            texto = line_edit.text().strip()
-                            cursor.execute("""
-                                UPDATE control_cunas
-                                SET observaciones = ?
-                                WHERE ref = ? AND activo = 1
-                            """, (texto, self.ref))
+                if df_lines is not None:
+                    for line in df_lines:
+                        if line == "observaciones_segu":
+                            line_edit = getattr(self, line, None)
+                            print(f"line: {line}, widget: {line_edit}")
+                            if line_edit is not None and isinstance(line_edit, QLineEdit):
+                                print(f"Texto actual en {line}: '{line_edit.text()}'")
+                                texto = line_edit.text().strip()
+                                cursor.execute("""
+                                    UPDATE control_cunas
+                                    SET observaciones = ?
+                                    WHERE ref = ? AND activo = 1
+                                """, (texto, self.ref))
 
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        #QMessageBox.information(self, "Éxito", "Datos de control de cuñas insertados correctamente.")
-        print("Datos de control de cuñas insertados correctamente")
-        if auditar:
-            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
-                                 "control_cunas", ref=getattr(self, "ref", None))
-        if mostrar_mensaje:
-            QMessageBox.information(self, "", "Tabla cargada correctamente")
-        # Actualizar tabla si existe
-        if hasattr(self, 'tabla'):
-            self._actualizar_tabla_despues_subida()
-        return True
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            #QMessageBox.information(self, "Éxito", "Datos de control de cuñas insertados correctamente.")
+            print("Datos de control de cuñas insertados correctamente")
+            if auditar:
+                _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
+                                     "control_cunas", ref=getattr(self, "ref", None))
+            if mostrar_mensaje:
+                QMessageBox.information(self, "", "Tabla cargada correctamente")
+            # Actualizar tabla si existe
+            if hasattr(self, 'tabla'):
+                self._actualizar_tabla_despues_subida()
+            return True
 
     def _faltantes_cunas(self, combos_seguridad):
         """Lectura pura de los combos de cuñas: no escribe, no dialoga.
