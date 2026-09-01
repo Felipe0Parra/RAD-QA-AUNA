@@ -1137,74 +1137,74 @@ def _leer_datos_mlc_db(ref):
     Devuelve un dict con DataFrames y metadatos.
     """
     from data.ManejoDatos.conection import Conexion
-    conn = Conexion().conectar()
-    cursor = conn.cursor()
+    with Conexion().conectar() as conn:
+        cursor = conn.cursor()
 
-    # ── configuracion_picketfence ─────────────────────────────────
-    cursor.execute(f"""
-        SELECT fecha, equipo, fisico_1, fisico_2,
-               tolerancia, action_tolerance, imagen_mlc
-        FROM configuracion_picketfence
-        WHERE ref = ?{filtro_activo('configuracion_picketfence')}
-        ORDER BY id DESC LIMIT 1
-    """, (ref,))
-    row = cursor.fetchone()
-    if not row:
-        raise ValueError(f"No hay datos MLC para ref={ref}")
+        # ── configuracion_picketfence ─────────────────────────────────
+        cursor.execute(f"""
+            SELECT fecha, equipo, fisico_1, fisico_2,
+                   tolerancia, action_tolerance, imagen_mlc
+            FROM configuracion_picketfence
+            WHERE ref = ?{filtro_activo('configuracion_picketfence')}
+            ORDER BY id DESC LIMIT 1
+        """, (ref,))
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError(f"No hay datos MLC para ref={ref}")
 
-    fecha, equipo, fisico_1, fisico_2, tol, action, imagen_blob = row
-    cfg_ref_id = cursor.lastrowid  # id de configuracion para FK
+        fecha, equipo, fisico_1, fisico_2, tol, action, imagen_blob = row
+        cfg_ref_id = cursor.lastrowid  # id de configuracion para FK
 
     
     
 
-    imagen_blob = dicom_to_png_blob(imagen_blob)
-    # Obtener el id real de configuracion_picketfence
-    cursor.execute(f"""
-        SELECT id FROM configuracion_picketfence
-        WHERE ref = ?{filtro_activo('configuracion_picketfence')} ORDER BY id DESC LIMIT 1
-    """, (ref,))
-    cfg_id = cursor.fetchone()[0]
+        imagen_blob = dicom_to_png_blob(imagen_blob)
+        # Obtener el id real de configuracion_picketfence
+        cursor.execute(f"""
+            SELECT id FROM configuracion_picketfence
+            WHERE ref = ?{filtro_activo('configuracion_picketfence')} ORDER BY id DESC LIMIT 1
+        """, (ref,))
+        cfg_id = cursor.fetchone()[0]
 
-    # ── error_picket ──────────────────────────────────────────────
-    cursor.execute(f"""
-        SELECT picket, picket_mean_error, picket_max_error
-        FROM error_picket
-        WHERE ref = ?{filtro_activo('error_picket')}
-        ORDER BY picket
-    """, (ref,))
-    picket_rows = cursor.fetchall()
+        # ── error_picket ──────────────────────────────────────────────
+        cursor.execute(f"""
+            SELECT picket, picket_mean_error, picket_max_error
+            FROM error_picket
+            WHERE ref = ?{filtro_activo('error_picket')}
+            ORDER BY picket
+        """, (ref,))
+        picket_rows = cursor.fetchall()
 
-    # ── leaf_error ────────────────────────────────────────────────
-    cursor.execute(f"""
-        SELECT leaf, error
-        FROM leaf_error
-        WHERE ref = ?{filtro_activo('leaf_error')}
-        ORDER BY leaf
-    """, (ref,))
-    leaf_rows = cursor.fetchall()
+        # ── leaf_error ────────────────────────────────────────────────
+        cursor.execute(f"""
+            SELECT leaf, error
+            FROM leaf_error
+            WHERE ref = ?{filtro_activo('leaf_error')}
+            ORDER BY leaf
+        """, (ref,))
+        leaf_rows = cursor.fetchall()
 
-    # ── highest_leaf_errors ───────────────────────────────────────
-    cursor.execute(f"""
-        SELECT leaf_out, picket_asociado, desviacion
-        FROM highest_leaf_errors
-        WHERE ref = ?{filtro_activo('highest_leaf_errors')}
-        ORDER BY desviacion DESC
-    """, (ref,))
-    worst_rows = cursor.fetchall()
+        # ── highest_leaf_errors ───────────────────────────────────────
+        cursor.execute(f"""
+            SELECT leaf_out, picket_asociado, desviacion
+            FROM highest_leaf_errors
+            WHERE ref = ?{filtro_activo('highest_leaf_errors')}
+            ORDER BY desviacion DESC
+        """, (ref,))
+        worst_rows = cursor.fetchall()
 
-    return {
-        "fecha":       fecha,
-        "equipo":      equipo,
-        "fisico_1":    fisico_1,
-        "fisico_2":    fisico_2,
-        "tol":         tol,
-        "action":      action,
-        "imagen_blob": imagen_blob,
-        "picket_rows": picket_rows,   # [(picket, mean, max), ...]
-        "leaf_rows":   leaf_rows,     # [(leaf, std), ...]
-        "worst_rows":  worst_rows,    # [(leaf, picket, desv), ...]
-    }
+        return {
+            "fecha":       fecha,
+            "equipo":      equipo,
+            "fisico_1":    fisico_1,
+            "fisico_2":    fisico_2,
+            "tol":         tol,
+            "action":      action,
+            "imagen_blob": imagen_blob,
+            "picket_rows": picket_rows,   # [(picket, mean, max), ...]
+            "leaf_rows":   leaf_rows,     # [(leaf, std), ...]
+            "worst_rows":  worst_rows,    # [(leaf, picket, desv), ...]
+        }
 
 
 def _header_footer_mlc(c, doc, datos, logo_path):
