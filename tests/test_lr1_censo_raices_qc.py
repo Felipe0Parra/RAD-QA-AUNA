@@ -130,25 +130,27 @@ CENSO_RAICES = {
         (LISTA, "mostrar_controles_imgHC_anual: SELECT MAX de parámetros"),
     ("data/ManejoDatos/load.py", 2467, "controles"):
         (LISTA, "mostrar_controles_imgHC: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2515, "controles"):
-        (LISTA, "mostrar_controles_imgHC: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2668, "controles"):
+    # RETIRADA el 01-09 (A10, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
+    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2515,
+    # "controles"), LISTA, "mostrar_controles_imgHC: SELECT MAX de
+    # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
+    ("data/ManejoDatos/load.py", 2667, "controles"):
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2716, "controles"):
+    ("data/ManejoDatos/load.py", 2715, "controles"):
         (LISTA, "mostrar_controles_tac: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 4519, "controles"):
+    ("data/ManejoDatos/load.py", 4518, "controles"):
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4533, "controles"):
+    ("data/ManejoDatos/load.py", 4532, "controles"):
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4596, "controles"):
+    ("data/ManejoDatos/load.py", 4595, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4606, "controles"):
+    ("data/ManejoDatos/load.py", 4605, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4819, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4818, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
 
     # -- Halcyon ---------------------------------------------------------
@@ -308,8 +310,10 @@ CENSO_RAICES = {
 # la toca dentro de un `ast.With` (Trampa 6, mismo punto ciego que A7). El
 # sitio SIGUE filtrando -- solo dejó de ser visible aquí. Un sitio menos:
 # 73 -> 72.
-FILAS_ESPERADAS = 72
-SITIOS_FISICOS_ESPERADOS = 70
+# A10 (mismo día, mismo motivo): gemelo exacto sobre `mostrar_controles_
+# imgHC` (load.py:2515). Un sitio menos: 72 -> 71.
+FILAS_ESPERADAS = 71
+SITIOS_FISICOS_ESPERADOS = 69
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

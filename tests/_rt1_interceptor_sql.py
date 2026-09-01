@@ -199,11 +199,12 @@ SITIOS_CENSALES_PERMITIDOS = {
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del MAX/MIN.",
     ("data/ManejoDatos/load.py", 2467):
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del COUNT.",
-    ("data/ManejoDatos/load.py", 2515):
-        "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2668):
+    # RETIRADA el 01-09 (A10, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
+    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2515),
+    # "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN."
+    ("data/ManejoDatos/load.py", 2667):
         "mostrar_controles_tac -- gemelo TAC del COUNT.",
-    ("data/ManejoDatos/load.py", 2716):
+    ("data/ManejoDatos/load.py", 2715):
         "mostrar_controles_tac -- gemelo TAC del MAX/MIN.",
     ("scripts/observador_contrato.py", 158):
         "_censo_y_vigente -- COUNT(*) sobre TODA la tabla (censo total, sin "
