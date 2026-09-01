@@ -1845,18 +1845,18 @@ class PruebaMensual600(PruebaBasico):
         print(df_lines)
         try:
             # Obtener columnas del esquema
-            conn = self.db_manager.obtener_conexion()
-            cursor = conn.cursor()
-            cursor.execute(f"PRAGMA table_info({nombre_tabla})")
-            nombres_columnas = [row[1] for row in cursor.fetchall()]
+            with self.db_manager.obtener_conexion() as conn:
+                cursor = conn.cursor()
+                cursor.execute(f"PRAGMA table_info({nombre_tabla})")
+                nombres_columnas = [row[1] for row in cursor.fetchall()]
 
-            prueba1 = self.pruebatalas(nombre_tabla, ref)
-            if prueba1:
-                fila = prueba1[0]  # primera fila
-                datos_dict = dict(zip(nombres_columnas, fila))
-                self._rellenar_campos(df_lines, datos_dict, readonly=False,
-                                      nombre_tabla=nombre_tabla)
-                return True
+                prueba1 = self.pruebatalas(nombre_tabla, ref)
+                if prueba1:
+                    fila = prueba1[0]  # primera fila
+                    datos_dict = dict(zip(nombres_columnas, fila))
+                    self._rellenar_campos(df_lines, datos_dict, readonly=False,
+                                          nombre_tabla=nombre_tabla)
+                    return True
         except Exception as e:
             print(f"Error al cargar desde BD: {e}")
         return False
@@ -2963,29 +2963,29 @@ class PruebaMensual600(PruebaBasico):
             return self._model_cache[cache_key]
         
         try:
-            conn = self.db_manager.obtener_conexion()
-            cursor = conn.cursor()
-            modelos = set()
+            with self.db_manager.obtener_conexion() as conn:
+                cursor = conn.cursor()
+                modelos = set()
             
-            # Query optimizada con índices
-            cursor.execute(f"""
-            SELECT DISTINCT {selected_column}
-            FROM equipos
-            WHERE {filter_column} = ? AND activo = 1
-            ORDER BY {selected_column}
-            """, (valor_ref,))
+                # Query optimizada con índices
+                cursor.execute(f"""
+                SELECT DISTINCT {selected_column}
+                FROM equipos
+                WHERE {filter_column} = ? AND activo = 1
+                ORDER BY {selected_column}
+                """, (valor_ref,))
             
-            rows = cursor.fetchall()
-            for row in rows:
-                if row[0]:  # Verificar que no sea None
-                    modelos.add(row[0])
+                rows = cursor.fetchall()
+                for row in rows:
+                    if row[0]:  # Verificar que no sea None
+                        modelos.add(row[0])
             
-            # Guardar en caché local
-            if not hasattr(self, '_model_cache'):
-                self._model_cache = {}
-            self._model_cache[cache_key] = modelos
+                # Guardar en caché local
+                if not hasattr(self, '_model_cache'):
+                    self._model_cache = {}
+                self._model_cache[cache_key] = modelos
             
-            return modelos
+                return modelos
             
         except sqlite3.Error as e:
             print(f"Error de base de datos en buscarModeloActivo: {e}")
@@ -3022,24 +3022,24 @@ class PruebaMensual600(PruebaBasico):
             return self._series_cache[cache_key]
 
         try:
-            conn = self.db_manager.obtener_conexion()
-            cursor = conn.cursor()
+            with self.db_manager.obtener_conexion() as conn:
+                cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT id, serie, fecha_calibr, equip_type
-                FROM equipos
-                WHERE model = ? AND activo = 1
-                ORDER BY serie, id DESC
-            """, (modelo,))
+                cursor.execute("""
+                    SELECT id, serie, fecha_calibr, equip_type
+                    FROM equipos
+                    WHERE model = ? AND activo = 1
+                    ORDER BY serie, id DESC
+                """, (modelo,))
 
-            series_data = [row for row in cursor.fetchall() if row]
+                series_data = [row for row in cursor.fetchall() if row]
 
-            # Guardar en caché local
-            if not hasattr(self, '_series_cache'):
-                self._series_cache = {}
-            self._series_cache[cache_key] = series_data
+                # Guardar en caché local
+                if not hasattr(self, '_series_cache'):
+                    self._series_cache = {}
+                self._series_cache[cache_key] = series_data
 
-            return series_data
+                return series_data
 
         except sqlite3.Error as e:
             print(f"Error de BD en obtenerSeriesConVigencia: {e}")
@@ -3566,119 +3566,119 @@ class PruebaMensual600(PruebaBasico):
         `activo` y el desempate determinista).
         """
         try:
-            conn = self.db_manager.obtener_conexion()
-            cursor = conn.cursor()
+            with self.db_manager.obtener_conexion() as conn:
+                cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT tipo_camara, model, serie, calibr_fact, equipo_id, id
-                FROM equipos_medicion
-                WHERE ref = ? AND (activo IS NULL OR activo = 1)
-                ORDER BY tipo_camara, id DESC
-            """, (self.ref,))
+                cursor.execute("""
+                    SELECT tipo_camara, model, serie, calibr_fact, equipo_id, id
+                    FROM equipos_medicion
+                    WHERE ref = ? AND (activo IS NULL OR activo = 1)
+                    ORDER BY tipo_camara, id DESC
+                """, (self.ref,))
 
-            results = cursor.fetchall()
-            if not results:
-                return False
+                results = cursor.fetchall()
+                if not results:
+                    return False
 
-            # Una fila por tipo_camara: la primera de cada grupo, por el
-            # ORDER BY ... id DESC (la de id más alto -- el bloque vigente
-            # cuando hay varios activos, caso real ref=30).
-            filas_por_tipo = {}
-            for tipo_camara, model, serie, calibr_fact, equipo_id, _fila_id in results:
-                if tipo_camara not in filas_por_tipo:
-                    filas_por_tipo[tipo_camara] = (model, serie, calibr_fact, equipo_id)
+                # Una fila por tipo_camara: la primera de cada grupo, por el
+                # ORDER BY ... id DESC (la de id más alto -- el bloque vigente
+                # cuando hay varios activos, caso real ref=30).
+                filas_por_tipo = {}
+                for tipo_camara, model, serie, calibr_fact, equipo_id, _fila_id in results:
+                    if tipo_camara not in filas_por_tipo:
+                        filas_por_tipo[tipo_camara] = (model, serie, calibr_fact, equipo_id)
 
-            tipos_camara = self._tipos_camara()
-            fecha_referencia = (
-                self.date_box.date() if hasattr(self, 'date_box') and self.date_box
-                else QDate.currentDate()
-            )
+                tipos_camara = self._tipos_camara()
+                fecha_referencia = (
+                    self.date_box.date() if hasattr(self, 'date_box') and self.date_box
+                    else QDate.currentDate()
+                )
 
-            for tipo_camara, (model, serie, calibr_fact, equipo_id) in filas_por_tipo.items():
-                if tipo_camara not in tipos_camara:
-                    print(f"Advertencia: tipo_camara desconocido '{tipo_camara}' "
-                          f"en ref={self.ref}")
-                    continue
-                base_index = tipos_camara.index(tipo_camara) * 3
-                if base_index + 2 >= len(combenu):
-                    print(f"Advertencia: no hay widgets para tipo_camara "
-                          f"'{tipo_camara}' (ref={self.ref})")
-                    continue
+                for tipo_camara, (model, serie, calibr_fact, equipo_id) in filas_por_tipo.items():
+                    if tipo_camara not in tipos_camara:
+                        print(f"Advertencia: tipo_camara desconocido '{tipo_camara}' "
+                              f"en ref={self.ref}")
+                        continue
+                    base_index = tipos_camara.index(tipo_camara) * 3
+                    if base_index + 2 >= len(combenu):
+                        print(f"Advertencia: no hay widgets para tipo_camara "
+                              f"'{tipo_camara}' (ref={self.ref})")
+                        continue
 
-                try:
-                    modelo_widget = combenu[base_index]
-                    serie_widget = combenu[base_index + 1]
-                    calibr_widget = combenu[base_index + 2]
+                    try:
+                        modelo_widget = combenu[base_index]
+                        serie_widget = combenu[base_index + 1]
+                        calibr_widget = combenu[base_index + 2]
 
-                    # 1. Modelo: `findText` sobre la lista ya poblada por
-                    # `conectarDB`. Solo si no aparece (equipo anulado
-                    # después de guardarse el control), se agrega como
-                    # respaldo, dejando constancia por consola.
-                    if isinstance(modelo_widget, QComboBox):
-                        idx_modelo = modelo_widget.findText(model)
-                        if idx_modelo == -1:
-                            print(f"Advertencia: modelo '{model}' ya no está activo "
-                                  f"(ref={self.ref}, tipo_camara={tipo_camara}); "
-                                  f"se agrega como respaldo")
-                            modelo_widget.addItem(model)
+                        # 1. Modelo: `findText` sobre la lista ya poblada por
+                        # `conectarDB`. Solo si no aparece (equipo anulado
+                        # después de guardarse el control), se agrega como
+                        # respaldo, dejando constancia por consola.
+                        if isinstance(modelo_widget, QComboBox):
                             idx_modelo = modelo_widget.findText(model)
-                        modelo_widget.setCurrentIndex(idx_modelo)
-                        modelo_widget.setEnabled(True)
+                            if idx_modelo == -1:
+                                print(f"Advertencia: modelo '{model}' ya no está activo "
+                                      f"(ref={self.ref}, tipo_camara={tipo_camara}); "
+                                      f"se agrega como respaldo")
+                                modelo_widget.addItem(model)
+                                idx_modelo = modelo_widget.findText(model)
+                            modelo_widget.setCurrentIndex(idx_modelo)
+                            modelo_widget.setEnabled(True)
 
-                    # 2. Series: las señales aún no están conectadas
-                    # (`button_click` corre después de `iniGUI`), así que
-                    # `setEquipoSeleccionado` no se dispara solo -- se
-                    # poblán explícitamente con el mismo helper que la
-                    # selección en vivo.
-                    if isinstance(serie_widget, QComboBox):
-                        self._poblar_combo_series(model, serie_widget, fecha_referencia)
+                        # 2. Series: las señales aún no están conectadas
+                        # (`button_click` corre después de `iniGUI`), así que
+                        # `setEquipoSeleccionado` no se dispara solo -- se
+                        # poblán explícitamente con el mismo helper que la
+                        # selección en vivo.
+                        if isinstance(serie_widget, QComboBox):
+                            self._poblar_combo_series(model, serie_widget, fecha_referencia)
 
-                        # 3. Selección de la serie: por `equipo_id` cuando
-                        # la fila lo tiene (todas las escritas desde F9).
-                        # Para las históricas con `equipo_id = NULL`,
-                        # respaldo por texto. Si ninguno acierta, se añade
-                        # una entrada al final con el id resuelto por
-                        # (model, serie) y se avisa por consola.
-                        idx_serie = -1
-                        if equipo_id is not None:
-                            idx_serie = serie_widget.findData(equipo_id)
-                        if idx_serie == -1:
-                            idx_serie = serie_widget.findText(
-                                f"Serie: {serie}", Qt.MatchStartsWith)
-                        if idx_serie == -1:
-                            cursor.execute("""
-                                SELECT id FROM equipos
-                                WHERE model = ? AND serie = ? AND activo = 1
-                                ORDER BY id DESC LIMIT 1
-                            """, (model, serie))
-                            fila_equipo = cursor.fetchone()
-                            equipo_id_resuelto = fila_equipo[0] if fila_equipo else None
-                            print(f"Advertencia: no se pudo ubicar la serie '{serie}' "
-                                  f"de '{model}' en el combo (ref={self.ref}, "
-                                  f"tipo_camara={tipo_camara}); se agrega al final")
-                            serie_widget.addItem(f"Serie: {serie}", equipo_id_resuelto)
-                            idx_serie = serie_widget.count() - 1
-                        serie_widget.setCurrentIndex(idx_serie)
-                        serie_widget.setEnabled(True)
+                            # 3. Selección de la serie: por `equipo_id` cuando
+                            # la fila lo tiene (todas las escritas desde F9).
+                            # Para las históricas con `equipo_id = NULL`,
+                            # respaldo por texto. Si ninguno acierta, se añade
+                            # una entrada al final con el id resuelto por
+                            # (model, serie) y se avisa por consola.
+                            idx_serie = -1
+                            if equipo_id is not None:
+                                idx_serie = serie_widget.findData(equipo_id)
+                            if idx_serie == -1:
+                                idx_serie = serie_widget.findText(
+                                    f"Serie: {serie}", Qt.MatchStartsWith)
+                            if idx_serie == -1:
+                                cursor.execute("""
+                                    SELECT id FROM equipos
+                                    WHERE model = ? AND serie = ? AND activo = 1
+                                    ORDER BY id DESC LIMIT 1
+                                """, (model, serie))
+                                fila_equipo = cursor.fetchone()
+                                equipo_id_resuelto = fila_equipo[0] if fila_equipo else None
+                                print(f"Advertencia: no se pudo ubicar la serie '{serie}' "
+                                      f"de '{model}' en el combo (ref={self.ref}, "
+                                      f"tipo_camara={tipo_camara}); se agrega al final")
+                                serie_widget.addItem(f"Serie: {serie}", equipo_id_resuelto)
+                                idx_serie = serie_widget.count() - 1
+                            serie_widget.setCurrentIndex(idx_serie)
+                            serie_widget.setEnabled(True)
 
-                    # 4. Factor de calibración: se restaura el valor
-                    # HISTÓRICO guardado en `equipos_medicion`, no el
-                    # vigente del catálogo -- y se re-aplica AL FINAL,
-                    # después de tocar los combos (el histórico gana sobre
-                    # lo que la cascada recalcula, patrón D2.2/K3). Hoy no
-                    # se dispara `setCalibracion` porque las señales aún no
-                    # existen, pero el orden queda escrito para que no
-                    # rompa si algún día se conectan antes.
-                    if isinstance(calibr_widget, QLineEdit):
-                        calibr_widget.setText(str(calibr_fact))
-                        calibr_widget.setEnabled(True)
+                        # 4. Factor de calibración: se restaura el valor
+                        # HISTÓRICO guardado en `equipos_medicion`, no el
+                        # vigente del catálogo -- y se re-aplica AL FINAL,
+                        # después de tocar los combos (el histórico gana sobre
+                        # lo que la cascada recalcula, patrón D2.2/K3). Hoy no
+                        # se dispara `setCalibracion` porque las señales aún no
+                        # existen, pero el orden queda escrito para que no
+                        # rompa si algún día se conectan antes.
+                        if isinstance(calibr_widget, QLineEdit):
+                            calibr_widget.setText(str(calibr_fact))
+                            calibr_widget.setEnabled(True)
 
-                except (IndexError, AttributeError) as e:
-                    print(f"Error configurando widgets para tipo_camara "
-                          f"'{tipo_camara}': {e}")
-                    continue
+                    except (IndexError, AttributeError) as e:
+                        print(f"Error configurando widgets para tipo_camara "
+                              f"'{tipo_camara}': {e}")
+                        continue
 
-            return True
+                return True
 
         except sqlite3.Error as e:
             print(f"Error de BD en Traerinfo: {e}")
@@ -3706,97 +3706,97 @@ class PruebaMensual600(PruebaBasico):
         #print("------ Función Traerinfo_cunas (optimizada)")
 
         try:
-            conn = self.db_manager.obtener_conexion()
-            cursor = conn.cursor()
+            with self.db_manager.obtener_conexion() as conn:
+                cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT angulo, in_val, out_val, right_val, left_val
-                FROM control_cunas
-                WHERE ref = ? AND activo = 1
-                ORDER BY angulo, id DESC
-            """, (self.ref,))
+                cursor.execute("""
+                    SELECT angulo, in_val, out_val, right_val, left_val
+                    FROM control_cunas
+                    WHERE ref = ? AND activo = 1
+                    ORDER BY angulo, id DESC
+                """, (self.ref,))
 
-            results = cursor.fetchall()
+                results = cursor.fetchall()
 
-            if not results:
-                #print("No hay datos guardados de cuñas para esta ref:", self.ref)
-                return False
+                if not results:
+                    #print("No hay datos guardados de cuñas para esta ref:", self.ref)
+                    return False
 
-            # Desempate determinista: con ORDER BY angulo, id DESC, la
-            # primera fila que se ve de cada ángulo es la más reciente.
-            vistos = set()
-            results_desempatados = []
-            for row in results:
-                angulo = row[0]
-                if angulo in vistos:
-                    continue
-                vistos.add(angulo)
-                results_desempatados.append(row)
-            results = results_desempatados
+                # Desempate determinista: con ORDER BY angulo, id DESC, la
+                # primera fila que se ve de cada ángulo es la más reciente.
+                vistos = set()
+                results_desempatados = []
+                for row in results:
+                    angulo = row[0]
+                    if angulo in vistos:
+                        continue
+                    vistos.add(angulo)
+                    results_desempatados.append(row)
+                results = results_desempatados
 
-            # Mapeo optimizado de ángulos a widgets
-            combo_dict = {
-                15: {"in": getattr(self, 'cuna_15_in', None), "out": getattr(self, 'cuna_15_out', None), 
-                     "right": getattr(self, 'cuna_15_ri', None), "le": getattr(self, 'cuna_15_le', None)},
-                30: {"in": getattr(self, 'cuna_30_in', None), "out": getattr(self, 'cuna_30_out', None), 
-                     "right": getattr(self, 'cuna_30_ri', None), "le": getattr(self, 'cuna_30_le', None)},
-                45: {"in": getattr(self, 'cuna_45_in', None), "out": getattr(self, 'cuna_45_out', None), 
-                     "right": getattr(self, 'cuna_45_ri', None), "le": getattr(self, 'cuna_45_le', None)},
-                60: {"in": getattr(self, 'cuna_60_in', None), "out": getattr(self, 'cuna_60_out', None), 
-                     "right": getattr(self, 'cuna_60_ri', None), "le": getattr(self, 'cuna_60_le', None)},
-            }
+                # Mapeo optimizado de ángulos a widgets
+                combo_dict = {
+                    15: {"in": getattr(self, 'cuna_15_in', None), "out": getattr(self, 'cuna_15_out', None), 
+                         "right": getattr(self, 'cuna_15_ri', None), "le": getattr(self, 'cuna_15_le', None)},
+                    30: {"in": getattr(self, 'cuna_30_in', None), "out": getattr(self, 'cuna_30_out', None), 
+                         "right": getattr(self, 'cuna_30_ri', None), "le": getattr(self, 'cuna_30_le', None)},
+                    45: {"in": getattr(self, 'cuna_45_in', None), "out": getattr(self, 'cuna_45_out', None), 
+                         "right": getattr(self, 'cuna_45_ri', None), "le": getattr(self, 'cuna_45_le', None)},
+                    60: {"in": getattr(self, 'cuna_60_in', None), "out": getattr(self, 'cuna_60_out', None), 
+                         "right": getattr(self, 'cuna_60_ri', None), "le": getattr(self, 'cuna_60_le', None)},
+                }
 
-            # Mapeo de valores a textos
-            valor_a_texto = {1: "Funciona", 0: "No funciona"}
+                # Mapeo de valores a textos
+                valor_a_texto = {1: "Funciona", 0: "No funciona"}
             
-            registros_procesados = 0
+                registros_procesados = 0
             
-            for row in results:
-                try:
-                    angulo, in_val, out_val, right_val, left_val = row
+                for row in results:
+                    try:
+                        angulo, in_val, out_val, right_val, left_val = row
 
-                    if angulo not in combo_dict:
-                        print(f"Ángulo {angulo} no reconocido")
+                        if angulo not in combo_dict:
+                            print(f"Ángulo {angulo} no reconocido")
+                            continue
+
+                        # Mapeo de posiciones a valores
+                        mapping = {
+                            "in": in_val,
+                            "out": out_val,
+                            "right": right_val,
+                            "le": left_val,
+                        }
+
+                        # Configurar cada combo de este ángulo
+                        for pos, val in mapping.items():
+                            combo = combo_dict[angulo][pos]
+                            if combo is not None and isinstance(combo, QComboBox):
+                                combo.blockSignals(False)
+                                texto = valor_a_texto.get(val, "Seleccionar...")
+                            
+                                # Buscar el texto en el combo o agregarlo
+                                if combo.findText(texto) != -1:
+                                    combo.setCurrentText(texto)
+                                else:
+                                    combo.addItem(texto)
+                                    combo.setCurrentText(texto)
+                            
+                                combo.setEnabled(True)  # Bloquear edición
+                                combo.blockSignals(False)
+                            
+                                # Aplicar color según estado
+                                self.actualizar_color(combo, texto)
+                            else:
+                                print(f"Widget no encontrado: cuna_{angulo}_{pos}")
+
+                        registros_procesados += 1
+                    
+                    except (ValueError, TypeError) as e:
+                        print(f"Error procesando registro de cuña: {e}")
                         continue
 
-                    # Mapeo de posiciones a valores
-                    mapping = {
-                        "in": in_val,
-                        "out": out_val,
-                        "right": right_val,
-                        "le": left_val,
-                    }
-
-                    # Configurar cada combo de este ángulo
-                    for pos, val in mapping.items():
-                        combo = combo_dict[angulo][pos]
-                        if combo is not None and isinstance(combo, QComboBox):
-                            combo.blockSignals(False)
-                            texto = valor_a_texto.get(val, "Seleccionar...")
-                            
-                            # Buscar el texto en el combo o agregarlo
-                            if combo.findText(texto) != -1:
-                                combo.setCurrentText(texto)
-                            else:
-                                combo.addItem(texto)
-                                combo.setCurrentText(texto)
-                            
-                            combo.setEnabled(True)  # Bloquear edición
-                            combo.blockSignals(False)
-                            
-                            # Aplicar color según estado
-                            self.actualizar_color(combo, texto)
-                        else:
-                            print(f"Widget no encontrado: cuna_{angulo}_{pos}")
-
-                    registros_procesados += 1
-                    
-                except (ValueError, TypeError) as e:
-                    print(f"Error procesando registro de cuña: {e}")
-                    continue
-
-            #print(f"Datos de cuñas cargados: {registros_procesados} registros")
-            return registros_procesados > 0
+                #print(f"Datos de cuñas cargados: {registros_procesados} registros")
+                return registros_procesados > 0
             
         except sqlite3.Error as e:
             print(f"Error de BD en Traerinfo_cunas: {e}")
@@ -3848,52 +3848,52 @@ class PruebaMensual600(PruebaBasico):
         """Consulta optimizada de tablas con caché y mejor manejo de errores"""
         try:
             # Usar pool de conexiones
-            conn = self.db_manager.obtener_conexion()
-            cursor = conn.cursor()
-            # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas
-            # explícitas, excluyendo SOLO 'activo' (siempre la última del
-            # esquema -- ALTER TABLE ADD COLUMN de _asegurar_activo_bloque_qc
-            # siempre anexa al final). Se conserva el prefijo identificador
-            # (ref/id/id_energia) en el SELECT: los recortes row[1:]/row[2:]
-            # de más abajo dependen de la INSTANCIA que llama (mensual vs.
-            # anual de Halcyon leen la MISMA tabla con recortes distintos),
-            # no de la tabla -- no se pueden fusionar con el SELECT. No se
-            # usa encontrar_columnas: sus defaults (id=True quita la
-            # primera columna, delete=1 quita una más) romperían ese
-            # prefijo que aquí sí hace falta conservar.
-            cursor.execute(f"PRAGMA table_info({nombre_tabla})")
-            columnas = [c[1] for c in cursor.fetchall()]
-            if (nombre_tabla in TABLAS_ANULABLES and columnas
-                    and columnas[-1] == "activo"):
-                columnas.pop()
-            columnas_str = ", ".join(columnas)
-            # Query con parámetros seguros
-            sql = f"SELECT {columnas_str} FROM {nombre_tabla} WHERE ref = ?"
-            params = [ref]
-            if id_energia is not None:
-                sql += " AND id_energia = ?"
-                params.append(id_energia)
-            if pdd is not None:
-                sql += " AND tam_pdd = ?"
-                params.append(pdd)
-            # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): este read
-            # genérico sirve tanto al "Ver tabla" mensual del grupo C como
-            # a la relectura de dosimetriaMen -- sin este filtro, un
-            # reguardado (que ya anula en vez de pisar) dejaría visible el
-            # bloque anulado en vez del vigente. filtro_activo() no hace
-            # nada si la tabla no está en el bloque de QC.
-            sql += filtro_activo(nombre_tabla)
-            cursor.execute(sql, params)
-            results = cursor.fetchall()
-            if (id and hasattr(self, 'anual') and not self.anual) or (id and not hasattr(self, 'anual') and hasattr(self, 'esHc') and self.esHc):
-                if id_energia is None:
-                #Retornar los resultados sin el id
-                    print(f"Retornando sin id_energia, {nombre_tabla}: ")
-                    return [row[1:] for row in results] if results else []
+            with self.db_manager.obtener_conexion() as conn:
+                cursor = conn.cursor()
+                # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas
+                # explícitas, excluyendo SOLO 'activo' (siempre la última del
+                # esquema -- ALTER TABLE ADD COLUMN de _asegurar_activo_bloque_qc
+                # siempre anexa al final). Se conserva el prefijo identificador
+                # (ref/id/id_energia) en el SELECT: los recortes row[1:]/row[2:]
+                # de más abajo dependen de la INSTANCIA que llama (mensual vs.
+                # anual de Halcyon leen la MISMA tabla con recortes distintos),
+                # no de la tabla -- no se pueden fusionar con el SELECT. No se
+                # usa encontrar_columnas: sus defaults (id=True quita la
+                # primera columna, delete=1 quita una más) romperían ese
+                # prefijo que aquí sí hace falta conservar.
+                cursor.execute(f"PRAGMA table_info({nombre_tabla})")
+                columnas = [c[1] for c in cursor.fetchall()]
+                if (nombre_tabla in TABLAS_ANULABLES and columnas
+                        and columnas[-1] == "activo"):
+                    columnas.pop()
+                columnas_str = ", ".join(columnas)
+                # Query con parámetros seguros
+                sql = f"SELECT {columnas_str} FROM {nombre_tabla} WHERE ref = ?"
+                params = [ref]
+                if id_energia is not None:
+                    sql += " AND id_energia = ?"
+                    params.append(id_energia)
+                if pdd is not None:
+                    sql += " AND tam_pdd = ?"
+                    params.append(pdd)
+                # DO1 (PLAN_CONTRATO_GUARDADO_13-08.md §6-DO1): este read
+                # genérico sirve tanto al "Ver tabla" mensual del grupo C como
+                # a la relectura de dosimetriaMen -- sin este filtro, un
+                # reguardado (que ya anula en vez de pisar) dejaría visible el
+                # bloque anulado en vez del vigente. filtro_activo() no hace
+                # nada si la tabla no está en el bloque de QC.
+                sql += filtro_activo(nombre_tabla)
+                cursor.execute(sql, params)
+                results = cursor.fetchall()
+                if (id and hasattr(self, 'anual') and not self.anual) or (id and not hasattr(self, 'anual') and hasattr(self, 'esHc') and self.esHc):
+                    if id_energia is None:
+                    #Retornar los resultados sin el id
+                        print(f"Retornando sin id_energia, {nombre_tabla}: ")
+                        return [row[1:] for row in results] if results else []
+                    else:
+                        return [row[2:] for row in results] if results else []
                 else:
-                    return [row[2:] for row in results] if results else []
-            else:
-                return results if results else []
+                    return results if results else []
             
         
             
