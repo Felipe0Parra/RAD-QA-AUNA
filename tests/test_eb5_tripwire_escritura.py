@@ -161,11 +161,6 @@ SITIOS_DINAMICOS_PERMITIDOS = {
         "mensual 600/iX. La rama hermana (UPDATE SET activo=0) es la que "
         "corre para cualquier tabla del bloque de QC -- ver el propio "
         "comentario del archivo, 'fuera de alcance de este plan'.",
-    ("data/ManejoDatos/load.py", 839):
-        "subirlineasmensuales, rama 'fuera del bloque de QC' -- mismo "
-        "criterio que la entrada anterior: solo corre para tablas sin "
-        "'activo' (p.ej. 'preguntas' antes de PR1). Contrato original, sin "
-        "cambios; documentado también en el propio archivo.",
     ("ui/paginasControles/PruebasDiarias/PruebasDiarias.py", 854):
         "edición directa de UNA celda ya identificada por su id físico "
         "(QtSql, DA-08) -- gemelo Qt del mecanismo genérico de "
@@ -187,6 +182,20 @@ SITIOS_DINAMICOS_PERMITIDOS = {
 # INSERT/DDL/SELECT, irrelevantes para EB5, y se descartan con una línea.
 # ---------------------------------------------------------------------------
 SITIOS_OPACOS_PERMITIDOS = {
+    ("data/ManejoDatos/load.py", 839):
+        # A7 (PLAN_FUGA_CONEXIONES_01-09.md, 01-09): vivía en
+        # SITIOS_DINAMICOS_PERMITIDOS hasta que A7 envolvió TODO el
+        # cuerpo de subirlineasmensuales en un `with Conexion().
+        # conectar() as conn:` -- _rastrear_variable (services/
+        # lectura_vigente.py) da cualquier variable por irresoluble en
+        # cuanto se la toca dentro de un ast.With (mismo trato que
+        # For/While/Try). Punto ciego del analizador ante el `with`,
+        # no un cambio de riesgo -- mismo sql/cursor.execute(sql, datos)
+        # de siempre.
+        "subirlineasmensuales, rama 'fuera del bloque de QC' -- mismo "
+        "criterio que la entrada anterior: solo corre para tablas sin "
+        "'activo' (p.ej. 'preguntas' antes de PR1). Contrato original, sin "
+        "cambios; documentado también en el propio archivo.",
     ("services/anulacion.py", 247):
         # R1 (PLAN_REPARACION_ANUAL_27-08.md, 27-08): 238->247, desplazado
         # por las 4 tablas nuevas agregadas a TABLAS_ANULABLES. Mismo sitio.

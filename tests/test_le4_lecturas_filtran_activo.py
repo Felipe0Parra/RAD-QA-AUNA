@@ -163,7 +163,6 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("data/ManejoDatos/load.py", 1045): "guardar_resultado_CambioFuente (EB2b) -- anula las 5 hijas del bloque ANTERIOR de TipoCalibracion sobre su `ref` viejo; escritura de anulación, no lectura",
     ("data/ManejoDatos/load.py", 619): "eliminarfilas/subirlineas -- anula el bloque vigente antes de insertar el nuevo; YA filtra 'activo' a mano en el WHERE compuesto (línea 552)",
     ("data/ManejoDatos/load.py", 810): "subirlineasmensuales -- anula el bloque vigente de ese `ref`; ya filtra 'activo' a mano en el propio texto",
-    ("data/ManejoDatos/load.py", 839): "subirlineasmensuales, rama FUERA del bloque de QC (`preguntas` antes de PR1 y las tablas sin columna `activo`): UPDATE parcial por `ref`, contrato original",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 289): "subirlineasmensuales_ix -- anula el bloque vigente de (ref, energia); ya filtra 'activo' a mano en el propio texto",
     ("scripts/saneamiento_bloque_qc.py", 116): "SA2 -- anula por `rowid` las filas duplicadas que perdieron el desempate: identidad física, una fila nombrada",
     ("ui/paginasControles/PruebasDiarias/PruebasDiarias.py", 854): "edición directa de UNA celda ya identificada (`WHERE id = ?`) -- identidad, no filtra (DA-47)",
@@ -373,6 +372,18 @@ SITIOS_CENSALES_LITERALES = {
 #     (`sql += filtro_activo(nombre_tabla)`, una llamada real, no un
 #     literal -- por eso es opaca para el resolver aunque esté bien).
 SITIOS_OPACOS_PERMITIDOS = {
+    # A7 (PLAN_FUGA_CONEXIONES_01-09.md, 01-09): este sitio vivia en
+    # SITIOS_DINAMICOS_PERMITIDOS (resuelto, "rama fuera del bloque de
+    # QC") hasta que A7 envolvio TODO el cuerpo de subirlineasmensuales
+    # en un `with Conexion().conectar() as conn:` -- _rastrear_variable
+    # (services/lectura_vigente.py) da CUALQUIER variable por
+    # irresoluble en cuanto se la toca dentro de un ast.With (mismo
+    # trato que For/While/Try), sin mirar si la propia llamada esta en
+    # el mismo bloque. Es un punto ciego del analizador ante el `with`,
+    # no un cambio de riesgo: el mismo `sql`/`cursor.execute(sql, datos)`
+    # de siempre. Se muda aqui en vez de arreglar el analizador (fuera
+    # de alcance de ese plan).
+    ("data/ManejoDatos/load.py", 839): "subirlineasmensuales, rama FUERA del bloque de QC (`preguntas` antes de PR1 y las tablas sin columna `activo`): UPDATE parcial por `ref`, contrato original -- sin cambios de fondo, ver comentario arriba",
     # EB0/EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB0/EB1, DA-52, 24-08):
     # tres sitios de `services/anulacion.py` cuyo SQL se arma detrás de un
     # `ast.Call` (función auxiliar), invisible para este detector estático
