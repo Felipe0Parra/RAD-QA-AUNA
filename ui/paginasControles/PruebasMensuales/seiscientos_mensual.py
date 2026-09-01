@@ -237,37 +237,36 @@ class PruebaMensual600(PruebaBasico):
         # fecha completa como texto exacto.
         fecha_elegida = self.date_box.date().toString("MM/yyyy")
         try:
-            conn = self.db_manager.obtener_conexion() if hasattr(self, 'equipo_f') and self.equipo_f != 'Tomógrafo' else Conexion().conectar()
-            cursor = conn.cursor()
-            # LR3 (DA-47/DA-48): lectura de BLOQUE -- devuelve todos los
-            # controles del equipo y desempata el mes en Python. Sin filtro,
-            # un control ANULADO del mes prestaba sus físicos al formulario.
-            cursor.execute(
-                "SELECT fecha, user_id, user_id_f2 FROM controles WHERE equipo = ?"
-                f"{filtro_activo('controles')}",
-                (self.equipo_f,)
-            )
-            resultado = None
-            for fecha_existente, user_id, user_id_f2 in cursor.fetchall():
-                if _mismo_mes(fecha_existente, fecha_elegida):
-                    resultado = (user_id, user_id_f2)
-                    break
+            with (self.db_manager.obtener_conexion() if hasattr(self, 'equipo_f') and self.equipo_f != 'Tomógrafo' else Conexion().conectar()) as conn:
+                cursor = conn.cursor()
+                # LR3 (DA-47/DA-48): lectura de BLOQUE -- devuelve todos los
+                # controles del equipo y desempata el mes en Python. Sin filtro,
+                # un control ANULADO del mes prestaba sus físicos al formulario.
+                cursor.execute(
+                    "SELECT fecha, user_id, user_id_f2 FROM controles WHERE equipo = ?"
+                    f"{filtro_activo('controles')}",
+                    (self.equipo_f,)
+                )
+                resultado = None
+                for fecha_existente, user_id, user_id_f2 in cursor.fetchall():
+                    if _mismo_mes(fecha_existente, fecha_elegida):
+                        resultado = (user_id, user_id_f2)
+                        break
 
-            if resultado:
-                # Z8 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): fisico1/
-                # fisico2 son QComboBox -- setText() no existe ahí
-                # (AttributeError garantizado, atrapado en silencio por el
-                # except de abajo). Se seleccionan por texto, mismo patrón
-                # que el resto del archivo (líneas ~287-289, ~527-530).
-                if resultado[0]:
-                    indice_f1 = self.fisico1.findText(resultado[0])
-                    if indice_f1 >= 0:
-                        self.fisico1.setCurrentIndex(indice_f1)
-                if resultado[1]:
-                    indice_f2 = self.fisico2.findText(resultado[1])
-                    if indice_f2 >= 0:
-                        self.fisico2.setCurrentIndex(indice_f2)
-            conn.close()
+                if resultado:
+                    # Z8 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): fisico1/
+                    # fisico2 son QComboBox -- setText() no existe ahí
+                    # (AttributeError garantizado, atrapado en silencio por el
+                    # except de abajo). Se seleccionan por texto, mismo patrón
+                    # que el resto del archivo (líneas ~287-289, ~527-530).
+                    if resultado[0]:
+                        indice_f1 = self.fisico1.findText(resultado[0])
+                        if indice_f1 >= 0:
+                            self.fisico1.setCurrentIndex(indice_f1)
+                    if resultado[1]:
+                        indice_f2 = self.fisico2.findText(resultado[1])
+                        if indice_f2 >= 0:
+                            self.fisico2.setCurrentIndex(indice_f2)
         except Exception as e:
             print(f"Error al actualizar el físico seleccionado: {e}")
            
