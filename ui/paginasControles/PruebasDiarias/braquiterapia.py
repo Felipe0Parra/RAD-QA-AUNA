@@ -3051,16 +3051,15 @@ class Linealidad(PruebaBasico):
 
             placeholders = ','.join(['?'] * len(datos))
 
-            conn = Conexion().conectar()
-            cursor = conn.cursor()
-            cursor.execute(f'''
-                INSERT INTO LinealidadBraquiterapia ({columnas})
-                VALUES ({placeholders})
-            ''', datos)
+            with Conexion().conectar() as conn:
+                cursor = conn.cursor()
+                cursor.execute(f'''
+                    INSERT INTO LinealidadBraquiterapia ({columnas})
+                    VALUES ({placeholders})
+                ''', datos)
 
-            ref = cursor.lastrowid
-            conn.commit()
-            conn.close()
+                ref = cursor.lastrowid
+                conn.commit()
             # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): sin auditar
             # hasta ahora.
             _registrar_auditoria(user, ACCION_GUARDAR, "LinealidadBraquiterapia", ref=ref)

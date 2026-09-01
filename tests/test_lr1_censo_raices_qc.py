@@ -244,16 +244,16 @@ CENSO_RAICES = {
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2651, "LinealidadBraquiterapia"):
         (LISTA, "linealidad por fecha para el PDF -- ya filtraba (el sitio "
                 "que fijó el patrón: filtro + ORDER BY id DESC)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3162, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3161, "TipoCalibracion"):
         (LISTA, "JOIN a la calibración de una fecha para graficar máximos -- "
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3191, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3190, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3473, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3472, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3949, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3948, "braqui"):
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3988, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3987, "braqui"):
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
     ("ui/paginasControles/PruebasDiarias/seiscientos.py", 186, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),
