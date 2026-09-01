@@ -204,13 +204,13 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 886):
         "INSERT (linealidad_ct) -- no aplica a EB5, un INSERT nunca muta el "
         "bloque vigente.",
-    ("data/ManejoDatos/conection.py", 583):
+    ("data/ManejoDatos/conection.py", 592):
         "DDL (E10 -- CREATE TABLE de la tabla temporal de la migración "
         "CASCADE->RESTRICT) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 683):
+    ("data/ManejoDatos/conection.py", 692):
         "DDL (EB2d, DA-57 -- CREATE TABLE de la tabla temporal que retira "
         "el UNIQUE de angulo_starshot) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 2188):
+    ("data/ManejoDatos/conection.py", 2197):
         # R1 (PLAN_REPARACION_ANUAL_27-08.md, 27-08): 2091->2160, desplazado
         # por las 4 tablas nuevas (CREATE TABLE) agregadas a
         # crearTablasAnuales. Mismo sitio.
