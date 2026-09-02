@@ -995,15 +995,14 @@ class Config(PruebaBasico):
         # deja de ofrecerse en los selectores (equipos_service.py ya filtra
         # activo=1) pero un control histórico que lo referencia sigue
         # resolviendo su modelo/serie.
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
-        # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): identificación ANTES
-        # de anular -- mismo patrón de ref que guardarCambios (f"{modelo}/{serie}").
-        cursor.execute("SELECT equip_type, model, serie FROM equipos WHERE id = ?", (id_equipo,))
-        fila_equipo = cursor.fetchone()
-        cursor.execute("UPDATE equipos SET activo = 0 WHERE id = ?", (id_equipo,))
-        conn.commit()
-        conn.close()
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
+            # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): identificación ANTES
+            # de anular -- mismo patrón de ref que guardarCambios (f"{modelo}/{serie}").
+            cursor.execute("SELECT equip_type, model, serie FROM equipos WHERE id = ?", (id_equipo,))
+            fila_equipo = cursor.fetchone()
+            cursor.execute("UPDATE equipos SET activo = 0 WHERE id = ?", (id_equipo,))
+            conn.commit()
 
         if fila_equipo:
             equip_type, modelo, serie = fila_equipo
