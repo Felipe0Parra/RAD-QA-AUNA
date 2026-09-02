@@ -136,21 +136,23 @@ CENSO_RAICES = {
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
     ("data/ManejoDatos/load.py", 2667, "controles"):
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2715, "controles"):
-        (LISTA, "mostrar_controles_tac: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 4518, "controles"):
+    # RETIRADA el 01-09 (A11, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
+    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2715,
+    # "controles"), LISTA, "mostrar_controles_tac: SELECT MAX de
+    # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
+    ("data/ManejoDatos/load.py", 4517, "controles"):
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4532, "controles"):
+    ("data/ManejoDatos/load.py", 4531, "controles"):
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4595, "controles"):
+    ("data/ManejoDatos/load.py", 4594, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4605, "controles"):
+    ("data/ManejoDatos/load.py", 4604, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4818, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4817, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
 
     # -- Halcyon ---------------------------------------------------------
@@ -312,8 +314,10 @@ CENSO_RAICES = {
 # 73 -> 72.
 # A10 (mismo día, mismo motivo): gemelo exacto sobre `mostrar_controles_
 # imgHC` (load.py:2515). Un sitio menos: 72 -> 71.
-FILAS_ESPERADAS = 71
-SITIOS_FISICOS_ESPERADOS = 69
+# A11 (mismo día, mismo motivo): tercer gemelo, `mostrar_controles_tac`
+# (load.py:2715). Un sitio menos: 71 -> 70.
+FILAS_ESPERADAS = 70
+SITIOS_FISICOS_ESPERADOS = 68
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

@@ -218,6 +218,18 @@ class TestListaBlancaCensal:
     # los sitios sí declarados en SITIOS_CLAVE_INCOMPLETA_PERMITIDOS).
     SITIOS_SOLO_VISIBLES_EN_RT1 = {
         ("data/ManejoDatos/Tablas_Anuales/tablas_anuales.py", 61),
+        # CORRECCIÓN 01-09 (A9/A10/A11, PLAN_FUGA_CONEXIONES_01-09.md §9):
+        # mostrar_controles_imgIX/imgHC/tac, motivo "clave de bloque
+        # incompleta" sobre 'pruebas' (preexistente, ver el comentario en
+        # _rt1_interceptor_sql.py). El `with` de P3 (Trampa 6) volvió estos
+        # 3 sitios opacos para ES1 -- viven en SITIOS_OPACOS_PERMITIDOS de
+        # test_le4, no en ninguna de las 4 listas de arriba -- así que caen
+        # aquí exactamente por la misma razón estructural que tablas_
+        # anuales.py:61: ES1 no puede clasificarlos, RT1 sí porque ve el SQL
+        # ya resuelto en tiempo de ejecución.
+        ("data/ManejoDatos/load.py", 2119),
+        ("data/ManejoDatos/load.py", 2515),
+        ("data/ManejoDatos/load.py", 2715),
     }
 
     def test_toda_excepcion_de_rt1_esta_tambien_en_es1(self):
@@ -249,10 +261,23 @@ class TestListaBlancaCensal:
 
     def test_rt1_no_hereda_los_sitios_opacos_de_es1(self):
         """Heredarlos anularía el frente dinámico justo donde aporta: un
-        sitio opaco al AST sí es legible en tiempo de ejecución."""
+        sitio opaco al AST sí es legible en tiempo de ejecución.
+
+        CORRECCIÓN 01-09: el solape con `TestListaBlancaCensal.
+        SITIOS_SOLO_VISIBLES_EN_RT1` (A9/A10/A11) NO es la herencia que este
+        test prohíbe -- RT1 no está copiando el punto ciego de ES1 como
+        atajo, tiene su PROPIA razón independiente (motivo "clave de bloque
+        incompleta", preexistente al `with` de P3) para seguir cubriendo
+        esos 3 sitios. Lo que el test sigue vigilando es que NINGÚN OTRO
+        sitio se cuele por el mismo atajo sin pasar por esa misma
+        justificación explícita."""
         import test_le4_lecturas_filtran_activo as es1
-        assert not (set(_rt1.SITIOS_CENSALES_PERMITIDOS)
+        solapado = (set(_rt1.SITIOS_CENSALES_PERMITIDOS)
                     & set(es1.SITIOS_OPACOS_PERMITIDOS))
+        inesperado = solapado - TestListaBlancaCensal.SITIOS_SOLO_VISIBLES_EN_RT1
+        assert not inesperado, (
+            f"RT1 heredó sitio(s) opaco(s) de ES1 sin justificación propia "
+            f"documentada en SITIOS_SOLO_VISIBLES_EN_RT1: {inesperado}")
 
 
 class TestDenominadorDeCobertura:

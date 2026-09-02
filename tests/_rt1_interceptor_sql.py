@@ -183,25 +183,33 @@ SITIOS_CENSALES_PERMITIDOS = {
         "sobre todas las pruebas de la sesión.",
     ("data/ManejoDatos/load.py", 2071):
         "mostrar_controles_imgIX -- gemelo mensual del COUNT anterior.",
-    # RETIRADA el 01-09 (A9, PLAN_FUGA_CONEXIONES_01-09.md §9): vivía
-    # aquí como ("data/ManejoDatos/load.py", 2119), "mostrar_controles_
-    # imgIX -- gemelo mensual del MAX/MIN anterior." -- A9 envolvió el
-    # cuerpo de mostrar_controles_imgIX en un `with Conexion().
-    # conectar() as conn:`; el sitio pasó a SITIOS_OPACOS_PERMITIDOS de
-    # ES1 (test_le4), y test_rt1_no_hereda_los_sitios_opacos_de_es1
-    # prohíbe que RT1 mantenga su propia excepción para un sitio que ES1
-    # ya no puede resolver -- RT1 lo sigue cubriendo en tiempo de
-    # ejecución (el interceptor ve el SQL ya resuelto sobre la conexión
-    # real), no hace falta la excepción estática aquí.
+    # CORRECCIÓN 01-09 (A9/A10/A11, PLAN_FUGA_CONEXIONES_01-09.md §9): las
+    # tres entradas de esta familia (2119/2515/2715) se retiraron por error
+    # al envolver mostrar_controles_imgIX/imgHC/tac en `with` (P3) -- se
+    # asumió que el motivo era Trampa 6 (el sitio se vuelve opaco para ES1),
+    # igual que A7. Es FALSO para estas tres: el motivo real de `lv.analizar`
+    # aquí es "clave de bloque incompleta" (la clave de 'pruebas' es
+    # (id_sesion, id_tipo) -- scripts/indices_bloque_qc.py -- y el JOIN solo
+    # cubre id_sesion), preexistente a este plan y AJENO al `with`: ya vivía
+    # aquí antes del commit 7e7eba8 (A9), con `filtro_p_on` puesto y todo.
+    # Retirarlas dejó a RT1 sin excepción para un hallazgo REAL que sigue
+    # ocurriendo en cada ejecución -- confirmado reproduciendo el error con
+    # tests/test_c2_listados_ocultan_anulados.py (accumula en la sesión, se
+    # ve al cerrar cualquier corrida que ejercite estas 3 funciones). Se
+    # restauran con el número de línea vigente (sin cambios: P3 no desplazó
+    # estas líneas). test_rt1_no_hereda_los_sitios_opacos_de_es1 permite
+    # este solape puntual porque está documentado como independiente, no
+    # heredado -- ver EXCEPCIONES_INDEPENDIENTES en test_rt1_interceptor_sql.py.
+    ("data/ManejoDatos/load.py", 2119):
+        "mostrar_controles_imgIX -- gemelo mensual del MAX/MIN anterior.",
     ("data/ManejoDatos/load.py", 2276):
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del COUNT.",
     ("data/ManejoDatos/load.py", 2310):
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del MAX/MIN.",
     ("data/ManejoDatos/load.py", 2467):
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del COUNT.",
-    # RETIRADA el 01-09 (A10, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
-    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2515),
-    # "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN."
+    ("data/ManejoDatos/load.py", 2515):
+        "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN.",
     ("data/ManejoDatos/load.py", 2667):
         "mostrar_controles_tac -- gemelo TAC del COUNT.",
     ("data/ManejoDatos/load.py", 2715):
