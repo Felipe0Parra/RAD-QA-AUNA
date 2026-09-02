@@ -333,8 +333,6 @@ SITIOS_LECTURA_REVISADOS = {
         "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", "mostrar_tabla_maximos"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("ui/paginasControles/PruebasMensuales/tac_mensual.py", "_existe_ref"):
-        "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
     ("ui/paginasGuia/equipos.py", "cargartabla"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
 }

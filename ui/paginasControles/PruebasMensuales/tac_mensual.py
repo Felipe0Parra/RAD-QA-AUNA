@@ -159,14 +159,13 @@ class GestorReconstruccion:
     def _existe_ref(self, ref, equipo):
         """Verifica si existe un registro en la base de datos con el ID (ref) y el equipo dado"""
         try:
-            conn = Conexion().conectar()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT 1 FROM controles WHERE id = ? AND equipo = ?",
-                (ref, equipo)
-            )
-            existe = cursor.fetchone() is not None if self.tac.old_id else False
-            conn.close()
+            with Conexion().conectar() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT 1 FROM controles WHERE id = ? AND equipo = ?",
+                    (ref, equipo)
+                )
+                existe = cursor.fetchone() is not None if self.tac.old_id else False
             return existe
         except Exception as e:
             print(f"Error al verificar existencia de ref: {e}")
