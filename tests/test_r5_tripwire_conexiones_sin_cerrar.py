@@ -337,8 +337,6 @@ SITIOS_LECTURA_REVISADOS = {
         "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
     ("ui/paginasGuia/equipos.py", "cargartabla"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("ui/paginasGuia/equipos.py", "editarEquipo"):
-        "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
 }
 
 

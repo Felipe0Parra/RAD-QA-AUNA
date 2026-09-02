@@ -700,16 +700,15 @@ class Config(PruebaBasico):
         print(f"ID del equipo seleccionado: {id_equipo}")
 
         # Consultar la base de datos para obtener los datos del equipo
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, 
-                    fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado
-            FROM equipos
-            WHERE id = ?
-        """, (id_equipo,))
-        equipo = cursor.fetchone()
-        conn.close()
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, 
+                        fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado
+                FROM equipos
+                WHERE id = ?
+            """, (id_equipo,))
+            equipo = cursor.fetchone()
 
         if not equipo:
             QMessageBox.warning(self, "Advertencia", "No se encontró el equipo en la base de datos.")
