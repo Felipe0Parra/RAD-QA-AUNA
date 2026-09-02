@@ -634,11 +634,10 @@ class Config(PruebaBasico):
         if item.column() == col_certificado and item.text() in ("PDF", "Imagen"):
             id_equipo = item.data(Qt.UserRole)
 
-            conn = Conexion().conectar()
-            cursor = conn.cursor()
-            cursor.execute("SELECT imagen_certificado FROM equipos WHERE id = ?", (id_equipo,))
-            blob = cursor.fetchone()[0]
-            conn.close()
+            with Conexion().conectar() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT imagen_certificado FROM equipos WHERE id = ?", (id_equipo,))
+                blob = cursor.fetchone()[0]
 
             if not blob:
                 return
