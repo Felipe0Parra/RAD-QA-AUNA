@@ -20,10 +20,14 @@ refleje un formato fijado DESPUÉS de la creación del widget.
 
 Este test es censal sobre los `date_box` de las diarias que SÍ pasan por
 el mecanismo compartido (braqui, 600, iX) -- Halcyon crea su `date_box` a
-mano (`halcyon.py:148`, fuera de `createInterface` por completo) y nunca
-tuvo este piso; es un hallazgo aparte, documentado como deuda, no en
+mano (`halcyon.py:148`, fuera de `createInterface` por completo) y hasta
+`H1` nunca tuvo este piso; documentado como deuda en `DP-72`, fuera de
 alcance de T5 (que es la regresión de braqui, no una garantía nueva para
-una pantalla que nunca la tuvo)."""
+una pantalla que nunca la tuvo).
+
+`H1` (PLAN_FUGA_CONEXIONES_01-09.md §5) cierra esa deuda: Halcyon gana el
+mismo `setDisplayFormat`/`setMinimumWidth` en `iniGUI`, así que se suma
+`PruebaDiariaHc` al censo de abajo -- las 4 diarias quedan cubiertas."""
 import os
 
 import pytest
@@ -38,6 +42,7 @@ from ui.util_fechas import ancho_minimo_fecha
 from ui.paginasControles.PruebasDiarias.braquiterapia import PruebaDiariaBraq
 from ui.paginasControles.PruebasDiarias.seiscientos import PruebaDiaria600
 from ui.paginasControles.PruebasDiarias.IX import PruebaDiariaIX
+from ui.paginasControles.PruebasDiarias.halcyon import PruebaDiariaHc
 
 
 @pytest.fixture(scope="module")
@@ -73,7 +78,7 @@ class _UsuarioFalso:
     _nombre = "Físico de Prueba"
 
 
-@pytest.mark.parametrize("clase", [PruebaDiariaBraq, PruebaDiaria600, PruebaDiariaIX])
+@pytest.mark.parametrize("clase", [PruebaDiariaBraq, PruebaDiaria600, PruebaDiariaIX, PruebaDiariaHc])
 class TestT5AnchoMinimoCubreElFormatoReal:
     def test_date_box_no_queda_mas_angosto_que_su_propio_formato(
             self, app, bd_temporal, clase):

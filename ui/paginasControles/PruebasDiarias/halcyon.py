@@ -6,6 +6,7 @@ from data.GraficasyTablas.tablas import load_table, asignar_encabezados
 from data.ManejoDatos.obtenerDatosHalcyon import previsualizar_halcyon, agregar_halcyon
 from data.GraficasyTablas.unovsuno import graficarvstiempo
 from models.PDF.reportes import reporte
+from ui.util_fechas import ancho_minimo_fecha
 import pandas as pd
 
 class PruebaDiariaHc(PruebaBasico):
@@ -148,6 +149,14 @@ class PruebaDiariaHc(PruebaBasico):
         self.date_box = QDateEdit()
         self.date_box.setCalendarPopup(True)  # Muestra un calendario desplegable
         self.date_box.setDate(QDate.currentDate())  # Fecha inicial: hoy
+        # H1 (PLAN_FUGA_CONEXIONES_01-09.md §5, DP-72): este widget se crea a
+        # mano, fuera de PruebasDiarias.createInterface -- nunca tuvo el
+        # formato fijo ni el piso de ancho que sus 3 hermanas sí tienen desde
+        # T5. Sin esto arranca mostrando la fecha en el formato del locale
+        # del SO y con 0 px de mínimo (mismo defecto que G1/DA-23 cerró para
+        # equipos.py::calib_date).
+        self.date_box.setDisplayFormat("yyyy/MM/dd")
+        self.date_box.setMinimumWidth(ancho_minimo_fecha(self.date_box))
         self.date_box.dateChanged.connect(self.convert_date_to_str)  # Conexión al método
         
         #ingresar datos de encabezado
