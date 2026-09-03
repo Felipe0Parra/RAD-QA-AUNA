@@ -1,0 +1,53 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+
+-   repo: local
+    hooks:
+    # bandit DESACTIVADO temporalmente el 02-09-2026 -- comentario del
+    # físico al ejecutar I0 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): tocar
+    # CUALQUIER línea de un archivo grande y legado (braquiterapia.py, 4326
+    # líneas) hace que bandit escanee el archivo ENTERO y bloquee el commit
+    # con hallazgos preexistentes sin relación con el diff -- en este caso,
+    # 12 consultas SQL por f-string (B608) que ya estaban ahí antes de I0,
+    # ninguna introducida por él. "Estos bloqueos son pertinentes y
+    # requieren nuestra atención, pero no es momento de resolverlos."
+    # No se borra la configuración: se comenta para que quede visible y se
+    # retome como tarea propia (auditar y corregir las f-string SQL de
+    # verdad, con su propio plan) en vez de silenciarse para siempre.
+    # -   id: bandit
+    #     name: bandit (analizador de seguridad de Python)
+    #     # `repo: local` en vez del mirror oficial de PyCQA: usa el binario
+    #     # que ya se instaló y se verificó en esta máquina (snap, v1.9.3),
+    #     # sin depender de que pre-commit resuelva un tag de versión remoto.
+    #     entry: bandit
+    #     language: system
+    #     types: [python]
+    #     # tests/ queda fuera a propósito: los fixtures de la suite usan
+    #     # contraseñas/tokens de mentira a propósito (p. ej. password="x")
+    #     # -- son ruido esperado, no un hallazgo real. .venv/build/ nunca
+    #     # deberían llegar a estar en el índice, pero se excluyen por si acaso.
+    #     exclude: ^(tests/|\.venv/|build/)
+    #     args: ["--severity-level=medium", "--confidence-level=medium"]
+
+    -   id: gitleaks
+        name: gitleaks (secretos en el diff a commitear)
+        # `protect --staged`: solo mira lo que este commit va a introducir,
+        # no el historial completo (eso es `gitleaks detect`, para una
+        # auditoría puntual, no para cada commit).
+        entry: gitleaks protect --staged --no-banner
+        language: system
+        pass_filenames: false
+        always_run: true
+
+# socket (Socket.dev) NO entra aquí a propósito -- ver DP-74/DP-76 en
+# CLAUDE.md: sube el manifiesto de dependencias por red y depende de que
+# haya internet, a diferencia de bandit/gitleaks que son locales e
+# instantáneos. Encaja como chequeo manual/periódico sobre requirements.txt
+# (`socket manifest` / `socket npm/...`), no como puerta de cada commit --
+# decisión tomada el 02-09-2026, ver HISTORIAL_RADQA.md.
