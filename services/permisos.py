@@ -73,3 +73,29 @@ def es_admin_equivalente(username):
               "equivalencia codificada legada (BD sin migrar o fallo de BD)")
         return True
     return False
+
+
+# U1 (PLAN_PESTANA_USUARIOS_02-09.md): quién administra USUARIOS (alta/baja),
+# deliberadamente distinto de quién es admin-equivalente para el resto de la
+# app. "fisico" NO entra aquí -- DA-35 lo agregó a ROLES_ADMIN_EQUIVALENTE de
+# forma TEMPORAL, y la gestión de usuarios no debe heredar esa apertura.
+ROLES_GESTION_USUARIOS = {"admin", "jefe"}
+
+
+def es_fisico_jefe(username):
+    """True si `username` puede dar de alta y de baja usuarios.
+
+    Deliberadamente SEPARADO de es_admin_equivalente(): DA-35 metió
+    "fisico" en ROLES_ADMIN_EQUIVALENTE de forma temporal, y la gestión
+    de usuarios no debe heredar esa apertura. Aquí NO hay fallback
+    legado: si el rol no se puede resolver se DENIEGA. Es lo contrario
+    del criterio de es_admin_equivalente(), y a propósito -- allí
+    denegar dejaba a la física en jefe sin permisos en un turno clínico
+    (peor que conceder de más); aquí conceder de más significa que
+    cualquiera pueda crear cuentas, y no hay ninguna urgencia clínica en
+    dar de alta a un usuario.
+    """
+    if not username:
+        return False
+    rol = rol_de(username)
+    return rol in ROLES_GESTION_USUARIOS
