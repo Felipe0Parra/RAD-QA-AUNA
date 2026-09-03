@@ -482,11 +482,26 @@ class TestB4NingunCampoDerivadoSeLimpiaSinRecalcularse:
             assert cargador is not None, (
                 f"{ruta.name}::{clase} declara CAMPOS_DERIVADOS_DIARIA pero "
                 f"no tiene `cargar_dailytest_desde_db` donde recalcularlos")
-            limpia = _llama_a(cargador, "_limpiar_widgets_diaria")
+            # I2 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): `cargar_dailytest_
+            # desde_db` ya no llama a `_limpiar_widgets_diaria` directo --
+            # llama a `_restablecer_formulario_diario` (el limpiador
+            # canónico único, que también restablece "fuera de servicio",
+            # el botón "Añadir" y `botones_ordenados`), que a su vez SÍ la
+            # llama. Un AST plano queda ciego a ese nivel de indirección
+            # -- mismo punto ciego que I0 ya obligó a corregir en
+            # `_clases_diarias`. Se acepta cualquiera de los dos nombres
+            # aquí; que el envoltorio de verdad limpie por dentro lo
+            # garantiza `test_i2_limpiador_canonico.py` por separado (las
+            # dos pruebas COMPUESTAS dan la garantía transitiva completa,
+            # sin que ninguna tenga que conocer la implementación de la
+            # otra).
+            limpia = (_llama_a(cargador, "_limpiar_widgets_diaria")
+                      or _llama_a(cargador, "_restablecer_formulario_diario"))
             recalcula = _llama_a(cargador, "_recalcular_campos_derivados_diaria")
             assert limpia, (
                 f"{ruta.name}::{clase}: `cargar_dailytest_desde_db` no llama "
-                f"a `_limpiar_widgets_diaria` (¿se movió la limpieza de A4?)")
+                f"a `_limpiar_widgets_diaria` ni a `_restablecer_formulario_"
+                f"diario` (¿se movió la limpieza de A4?)")
             assert recalcula, (
                 f"{ruta.name}::{clase} declara los campos derivados "
                 f"{sorted(derivados)} pero `cargar_dailytest_desde_db` nunca "

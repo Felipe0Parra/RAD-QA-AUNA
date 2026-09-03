@@ -559,10 +559,11 @@ class PruebaDiariaBraq(PruebaBasico):
                 # físico reportó esto como "braquiterapia no limpia al
                 # cambiar de día"; ya limpiaba el canvas, faltaba lo demás.
                 print(f"No hay datos registrados para la fecha {fecha_str}.")
-                # H2: `_limpiar_canvas()` no limpiaba `self.archivo` ni
-                # `self.resultado_label` -- `resetear_imagen_ui()` (H1) sí.
-                self.resetear_imagen_ui()
-                self._limpiar_widgets_diaria()
+                # I2 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): un solo
+                # limpiador (fuera de servicio, botones, botón Añadir,
+                # botones_ordenados E imagen -- H1/H2 -- todo en una
+                # llamada, no una lista aparte que se puede desincronizar).
+                self._restablecer_formulario_diario()
                 # B1: los campos derivados (CAMPOS_DERIVADOS_DIARIA) no son
                 # dato tecleado -- `_limpiar_widgets_diaria` los deja
                 # vacíos igual que a los demás, y aquí se recalculan para

@@ -679,36 +679,43 @@ class PruebaBasico(QWidget):
         self.fueradeservicio = False
 
     def clean_info(self, imagenes = False):
-        self._restablecer_fuera_de_servicio()
-        for boton in self.datos_tabla:
-            # Quitar propiedad 'estado'
-            boton[0].setProperty("estado", "")
-            boton[0].style().unpolish(boton[0])
-            boton[0].style().polish(boton[0])
-            boton[0].update()
-        self.botones_finales.clear()
-        print("Limpiando data")
+        """El botón "Limpiar" -- delega en `_restablecer_formulario_diario`
+        (I2), la MISMA función que usa el cambio de día a una fecha sin
+        registro. Antes tenían dos pilas de limpieza independientes que
+        discrepaban en 4 puntos [medido, PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md
+        §0]: el modo "fuera de servicio", el color de los botones Funciona/
+        No funciona, `botones_ordenados`, y el botón "Añadir"."""
+        self._restablecer_formulario_diario(imagen=imagenes)
 
-        try:
-            self.botones_ordenados.clear()
-
-        except ValueError:
-            pass
-
-        for line in self.df_lines:
-            dato = getattr(self, line)
-            dato.clear()
-
+    def _restablecer_boton_anadir(self):
+        """Extraído de `clean_info` (I2): deja "Añadir" deshabilitado y en
+        rojo -- `checkBotonesFinales()` lo vuelve a habilitar solo si de
+        verdad se cumplen las condiciones para ESE día."""
         self.btn_add.setObjectName("boton_nofunciona")
         self.btn_add.style().unpolish(self.btn_add)
         self.btn_add.style().polish(self.btn_add)
         self.btn_add.setEnabled(False)
         self.btn_add.setProperty("estado", "noselected")
 
-        if imagenes:
+    def _restablecer_formulario_diario(self, imagen=True):
+        """ÚNICA definición de "formulario diario en blanco" (I2,
+        PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md). Los dos disparadores -- el
+        botón "Limpiar" y el cambio de día a una fecha sin registro --
+        llamaban antes a dos pilas distintas que discrepaban en 4 puntos.
+        Lo que un camino puede hacer y el otro no es lo que ocurre DESPUÉS
+        de limpiar (p. ej. recalcular un campo derivado en B1), nunca la
+        limpieza misma.
+
+        `imagen=False` para las pantallas sin `resetear_imagen_ui` (iX,
+        600 -- ver D-5/D-6 del plan): llamarlo ahí con el valor por
+        defecto revienta con AttributeError."""
+        self._restablecer_fuera_de_servicio()
+        self._limpiar_widgets_diaria()
+        self._restablecer_boton_anadir()
+        if getattr(self, "botones_ordenados", None) is not None:
+            self.botones_ordenados.clear()
+        if imagen:
             self.resetear_imagen_ui()
-
-
 
     # I0 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): subida desde
     # `braquiterapia.py`/`IX.py`/`seiscientos.py` -- las 3 copias eran

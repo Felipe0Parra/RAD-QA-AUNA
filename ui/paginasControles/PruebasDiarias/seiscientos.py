@@ -285,7 +285,10 @@ class PruebaDiaria600(PruebaBasico):
                 # anterior -- guardar entonces los persistía bajo la fecha
                 # nueva (dato que nadie introdujo para este día). Limpia
                 # los widgets para que el físico llene desde cero.
-                self._limpiar_widgets_diaria()
+                # I2 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): un solo
+                # limpiador, igual que el botón "Limpiar" -- imagen=False,
+                # 600 no tiene `resetear_imagen_ui`.
+                self._restablecer_formulario_diario(imagen=False)
                 self.date_box.blockSignals(True)
                 self.date_box.setDate(fecha)
                 self.date_box.blockSignals(False)

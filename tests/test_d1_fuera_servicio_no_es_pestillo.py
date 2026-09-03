@@ -39,6 +39,14 @@ def _formulario(app):
     w.botones_ordenados = []
     w.df_lines = []
     w.boolean_colums = []
+    # I2 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): `clean_info` ahora delega
+    # en `_restablecer_formulario_diario`, que llama a
+    # `_limpiar_widgets_diaria` -- necesita estos dos aunque estén vacíos,
+    # o `zip(self.df_bnt_funciona, ...)` revienta con AttributeError. Este
+    # doble es deliberadamente mínimo (D1 solo prueba la bandera "fuera de
+    # servicio"), pero ahora `clean_info` de verdad los necesita.
+    w.df_bnt_funciona = []
+    w.df_bnt_nofunciona = []
     w.dosis = []
     w.dosis_ix = []
     return w

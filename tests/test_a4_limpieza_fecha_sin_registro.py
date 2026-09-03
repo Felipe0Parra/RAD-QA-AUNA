@@ -211,6 +211,14 @@ class TestCargarDailytestLimpiaSoloSiNoHayRegistro:
         obj.boolean_colums = []
         obj.df_lines = []
         obj.opeenDatabase = lambda: _FakeDb()
+        # I2 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): `cargar_dailytest_
+        # desde_db` ahora pasa por `_restablecer_formulario_diario`, que
+        # además de `_limpiar_widgets_diaria` toca `btn_add` -- sin este
+        # doble mínimo, la rama "sin registro" revienta con AttributeError
+        # DENTRO del try/except de producción (silenciado, no lo ve pytest
+        # directamente) y aborta antes de `date_box.setDate`/
+        # `checkBotonesFinales`.
+        obj.btn_add = QPushButton()
         monkeypatch.setattr(seiscientos_mod, "QSqlQuery", _FakeQuery)
         return obj
 
@@ -249,6 +257,8 @@ class TestCargarDailytestLimpiaSoloSiNoHayRegistro:
         obj.boolean_colums = []
         obj.df_lines = []
         obj.opeenDatabase = lambda: _FakeDb()
+        # I2: ver el comentario equivalente en `_obj_seiscientos`.
+        obj.btn_add = QPushButton()
         monkeypatch.setattr(ix_mod, "QSqlQuery", _FakeQuery)
         llamadas = []
         obj._limpiar_widgets_diaria = lambda: llamadas.append("limpio")
@@ -275,6 +285,8 @@ class TestCargarDailytestLimpiaSoloSiNoHayRegistro:
         # unitario sobre el CARGADOR, no sobre el reseteo de imagen (que
         # tiene su propio test, test_h1_reseteo_imagen_ui_limpia_todo.py).
         obj.resetear_imagen_ui = lambda: None
+        # I2: ver el comentario equivalente en `_obj_seiscientos`.
+        obj.btn_add = QPushButton()
         monkeypatch.setattr(braq_mod, "QSqlQuery", _FakeQuery)
         llamadas = []
         obj._limpiar_widgets_diaria = lambda: llamadas.append("limpio")
