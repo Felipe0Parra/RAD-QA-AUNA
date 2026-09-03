@@ -18,7 +18,7 @@ from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamic
 from services.equipos_service import EquiposService
 from services.etiqueta_equipo import etiqueta_equipo
 from services.vigencia_equipo import es_vigente_en_fecha
-from PyQt5.QtWidgets import (QHBoxLayout, QVBoxLayout, QWidget, QToolBox, QPushButton, QLabel, QComboBox, QTableWidget, 
+from PyQt5.QtWidgets import (QHBoxLayout, QVBoxLayout, QWidget, QToolBox, QPushButton, QLabel, QComboBox, QTableWidget,
                             QTableWidgetItem, QMessageBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout, QDialog,
                             QDateEdit, QSplitter)
 from PyQt5.QtSql import QSqlQuery
@@ -94,12 +94,12 @@ class OptimizadorAnalisis:
     def __init__(self):
         self._dependencias_cargadas = False
         self._modulos_importados = {}
-    
+
     def precargar_dependencias(self):
         """Pre-carga librerías pesadas una sola vez al inicio"""
         if self._dependencias_cargadas:
             return
-        
+
         try:
             import cv2
             import numpy as np
@@ -109,7 +109,7 @@ class OptimizadorAnalisis:
             #print("✅ Dependencias pre-cargadas exitosamente")
         except ImportError as e:
             print(f"⚠️ Advertencia: No se pudieron pre-cargar algunas dependencias: {e}")
-    
+
     def validar_imagen_rapida(self, ruta_imagen: str) -> bool:
         """Validación rápida de imagen antes de procesamiento pesado"""
         import os
@@ -117,21 +117,21 @@ class OptimizadorAnalisis:
             # Verificar que el archivo existe
             if not os.path.exists(ruta_imagen):
                 return False
-            
+
             # Verificar tamaño de archivo (evitar archivos corruptos)
             tamaño = os.path.getsize(ruta_imagen)
             if tamaño < 1000:  # Menor a 1KB, probablemente corrupto
                 return False
-            
+
             # Verificar extensión de imagen
             extensiones_validas = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
             _, ext = os.path.splitext(ruta_imagen.lower())
             if ext not in extensiones_validas:
                 return False
-            
+
             return True
         except Exception as e:
-            
+
             print(f"Error validando imagen: {e}")
             return False
 
@@ -140,7 +140,7 @@ class GestorRecursos:
     def __init__(self):
         self._figuras_reutilizables = weakref.WeakSet()
         self._canvas_reutilizables = weakref.WeakSet()
-    
+
     def obtener_figura_reutilizable(self):
         """Obtiene una figura reutilizable o crea una nueva"""
         for figura in self._figuras_reutilizables:
@@ -153,17 +153,17 @@ class GestorRecursos:
         nueva_figura = Figure()
         self._figuras_reutilizables.add(nueva_figura)
         return nueva_figura
-    
+
     def obtener_canvas_reutilizable(self, figura=None):
         """Obtiene un canvas reutilizable o crea uno nuevo"""
         if figura is None:
             figura = self.obtener_figura_reutilizable()
-        
+
         for canvas in self._canvas_reutilizables:
             if hasattr(canvas, 'figure'):
                 canvas.figure = figura
                 return canvas
-        
+
         # Si no hay canvas disponibles, crear nuevo
         mpl = get_matplotlib_components()
         FigureCanvas = mpl['FigureCanvas']
@@ -197,25 +197,25 @@ class PruebaDiariaBraq(PruebaBasico):
     def __init__(self, user_id):
         super(PruebaDiariaBraq, self).__init__()
         #print("PruebaDiariaBraq       __init__ called")
-        
+
         # Pre-cargar dependencias para mejor rendimiento
         optimizador_analisis.precargar_dependencias()
-        
+
         # Inicializar timers para debouncing
         self._timer_busqueda = QTimer()
         self._timer_busqueda.setSingleShot(True)
         self._timer_busqueda.timeout.connect(self._ejecutar_busqueda_filtrada)
-        
+
         # Timer para debouncing de análisis cuando se cambian parámetros
         self._timer_analisis = QTimer()
         self._timer_analisis.setSingleShot(True)
         self._timer_analisis.timeout.connect(self._ejecutar_analisis_diferido)
-        
+
         # Cache y gestión de recursos
         self._widgets_lazy = {}
         self._recursos_creados = set()
-        
-        
+
+
         try:
             self.initDATA(user_id)
             self.initUI()
@@ -232,13 +232,13 @@ class PruebaDiariaBraq(PruebaBasico):
             # modal aquí aparecería "suelto", sin su pantalla detrás. Si no
             # hay fuente, el físico se entera en cuanto mueve la fecha.
             self.actividad_braq_automatica(avisar=False)
-            
-            
+
+
         except Exception as e:
             print(f"Error en inicialización de PruebaDiariaBraq: {e}")
-            self._mostrar_error_usuario("Error de Inicialización", 
+            self._mostrar_error_usuario("Error de Inicialización",
                                     f"No se pudo inicializar la interfaz: {str(e)}")
-    
+
     def _cargar_datos_iniciales(self):
         """Carga datos iniciales de forma optimizada"""
         try:
@@ -260,10 +260,10 @@ class PruebaDiariaBraq(PruebaBasico):
             # Conectar el doble click para mostrar imágenes
             self.resultados_table.itemDoubleClicked.connect(self.abrir_imagen_resultado)
             self._widgets_lazy['resultados_table'] = self.resultados_table
-    
+
     """ Diccionario con los nombres de las herramientas para los category (menu desplegable para ingresar).                                                                                     """
     def initDATA(self, user_id):
-        
+
         self.diccionario_invertido = {
             'int_con_box': ['Interrupción desde consola', '', 'scatter'],
             'emerg_con': ['Parada de emergencia','', 'scatter'],
@@ -283,7 +283,7 @@ class PruebaDiariaBraq(PruebaBasico):
             'tol_cyc_rad': ['Ciclos de la fuente', '', 'line'],
             'observaciones' : ['Observaciones', '', 'Na']
         }
-        
+
         self.init_data(user_id, self.diccionario_invertido)
 
     """ Crea la estructura visual general, usa QToolBox para organizar las secciones y prepara el area de gráficos                                                                               """
@@ -325,7 +325,7 @@ class PruebaDiariaBraq(PruebaBasico):
         toolbox.addItem(self.category3, 'OBSERVACIONES')
 
         _ = self.setupBox(archivo, 'btn')
-        
+
         self.btn_add.setObjectName("boton_nofunciona")
         self.btn_add.setEnabled(True)
         self.btn_add.setProperty("estado", "noselected")
@@ -354,26 +354,26 @@ class PruebaDiariaBraq(PruebaBasico):
         self.boton_eliminar.setFixedSize(100, 40)
         self.boton_eliminar.setStyleSheet("background-color: #d9534f; color: white; border-radius: 10px;")
         self.boton_eliminar.clicked.connect(self.eliminar_fila_resultado)
-        
+
 
     """ Crea los botones y conecta las acciones de los botones a sus respectivas funciones                                                                                                        """
     def cargar_dailytest_desde_db(self, fecha=None):
         """
         Carga datos de pruebas diarias desde la base de datos y los mapea a los widgets de la GUI.
-        
+
         Args:
             fecha: QDate object o None. Si es None, usa la fecha del date_box.
         """
         if fecha is None:
             fecha = self.date_box.date()
-        
+
         # Convertir QDate a string en formato compatible con la BD
         fecha_str = fecha.toString("yyyy-MM-dd")
-        
+
         db = self.opeenDatabase()
         if not db:
             return
-        
+
         try:
             query = QSqlQuery(db)
             print("consultando db")
@@ -389,27 +389,27 @@ class PruebaDiariaBraq(PruebaBasico):
             query.addBindValue((fecha_str))
             #query.addBindValue(str(self.user_id))
             print(fecha_str)
-            
+
             if not query.exec():
                 print(f"Error en consulta: {query.lastError().text()}")
                 db.close()
                 return
-            
+
             if query.next():
                 # Limpiar datos actuales primero
                 self.botones_finales.clear()
-                
+
                 # Obtener todos los nombres de columnas de la consulta
                 record = query.record()
-                
+
                 # 1. Cargar botones Funciona/No Funciona (columnas booleanas)
                 for columna_db in self.boolean_colums:
                     # Verificar si la columna existe en el resultado
                     if record.indexOf(columna_db) == -1:
                         continue
-                        
+
                     valor = query.value(columna_db)
-                    
+
                     # Buscar el par de botones correspondiente
                     found = False
                     for fun, nofun in zip(self.df_bnt_funciona, self.df_bnt_nofunciona):
@@ -418,7 +418,7 @@ class PruebaDiariaBraq(PruebaBasico):
                         if columna_db.replace('_', ' ') in fun.lower() or columna_db in fun:
                             btn_fun = getattr(self, fun, None)
                             btn_nofun = getattr(self, nofun, None)
-                            
+
                             if btn_fun and btn_nofun:
                                 if valor == 1 or valor == '1' or valor == True:
                                     # Activar "Funciona"
@@ -432,26 +432,26 @@ class PruebaDiariaBraq(PruebaBasico):
                                     self.botones_finales.add((btn_nofun, nofun))
                                 found = True
                                 break
-                    
+
                     if not found:
                         print(f"⚠ No se encontraron botones para: {columna_db}")
-                
+
                 # 2. Cargar QLineEdit (datos numéricos)
                 columnas_numericas = ['line_1_rep_act_ci', 'line_1_exp_act_ci', 'line_1_cyc_dummy', 'line_1_cyc_rad']
-                
-                """ 
+
+                """
 
                 Querida futura persona que le hará mantenimiento a este código, solo tengo una cosa que decir: Que Dios se apiade de ti.
-                
-                
+
+
                 """
-                
+
                 if record.indexOf('tol_rep_act_ci') != -1:
                     valor_rep = query.value('tol_rep_act_ci')
                     print(valor)
                     if hasattr(self, 'line_1_rep_act_ci'):
                         self.line_1_rep_act_ci.setText(str(valor_rep))
-                        
+
                 if record.indexOf('tol_exp_act') != -1:
                     valor_exp = query.value('tol_exp_act')
                     print(valor)
@@ -471,13 +471,13 @@ class PruebaDiariaBraq(PruebaBasico):
                     print(valor)
                     if hasattr(self, 'line_1_cyc_dummy'):
                         self.line_1_cyc_dummy.setText(str(valor_dumm))
-                        
+
                 if record.indexOf('tol_cyc_rad') != -1:
                     valor_rad = query.value('tol_cyc_rad')
                     print(valor)
                     if hasattr(self, 'line_1_cyc_rad'):
                         self.line_1_cyc_rad.setText(str(valor_rad))
-                    
+
                 # 3. Cargar observaciones
                 if record.indexOf('observaciones') != -1:
                     obs_valor = query.value('observaciones')
@@ -544,13 +544,13 @@ class PruebaDiariaBraq(PruebaBasico):
                 else:
                     self.date_box.setDate(fecha)
                 self.date_box.blockSignals(False)
-                
+
                 # 5. Verificar si se debe habilitar el botón de añadir
                 self.checkBotonesFinales()
-                
+
                 print(f"✓ Datos del {fecha_str} cargados correctamente.")
                 print(f"  - Botones finales: {len(self.botones_finales)}")
-                
+
             else:
                 # A4 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R11): sin
                 # esta limpieza, la pantalla conservaba los datos de la
@@ -582,28 +582,6 @@ class PruebaDiariaBraq(PruebaBasico):
             print(f"✗ Error al cargar datos: {str(ex)}")
         finally:
             db.close()
-
-    def _limpiar_widgets_diaria(self):
-        """A4: deja el formulario diario en blanco -- ni "Funciona" ni "No
-        funciona" marcado, campos numéricos y observaciones vacíos. Se usa
-        al llegar a una fecha sin registro (no hay dato que restaurar)."""
-        self.botones_finales.clear()
-        for fun, nofun in zip(self.df_bnt_funciona, self.df_bnt_nofunciona):
-            btn_fun = getattr(self, fun, None)
-            btn_nofun = getattr(self, nofun, None)
-            if btn_fun and btn_nofun:
-                btn_fun.setChecked(False)
-                btn_nofun.setChecked(False)
-                for boton in (btn_fun, btn_nofun):
-                    boton.setProperty("estado", "noselected")
-                    boton.style().unpolish(boton)
-                    boton.style().polish(boton)
-                    boton.update()
-        for line_name in self.df_lines:
-            if hasattr(self, line_name):
-                getattr(self, line_name).setText("")
-        if hasattr(self, 'observaciones'):
-            self.observaciones.setText("")
 
     def _instante_del_date_box(self, fecha=None):
         """R-4: el instante con el que se calcula un campo derivado. Los dos
@@ -663,21 +641,21 @@ class PruebaDiariaBraq(PruebaBasico):
     def _cargar_imagen_pelicula(self, imagen_blob):
         """
         Carga y muestra una imagen en el canvas desde un BLOB de la base de datos.
-        
+
         Args:
             imagen_blob: Datos binarios de la imagen (BLOB de la BD)
         """
         from PyQt5.QtWidgets import QMessageBox
         from io import BytesIO
-        
+
         try:
             # Verificar que hay datos
-            
+
             if not imagen_blob:
                 print("⚠ No hay datos de imagen en el BLOB")
                 self._limpiar_canvas()
                 return
-            
+
             # Convertir a bytes usando la misma lógica que en tu código
             if isinstance(imagen_blob, bytes):
                 img_data = imagen_blob
@@ -691,29 +669,29 @@ class PruebaDiariaBraq(PruebaBasico):
                     print(f"⚠ Tipo de dato no reconocido: {type(imagen_blob)}")
                     self._limpiar_canvas()
                     return
-            
+
             # Verificar que tenemos datos válidos
             if len(img_data) == 0:
                 print("⚠ El BLOB de imagen está vacío")
                 self._limpiar_canvas()
                 return
-            
+
             # Limpiar el canvas antes de mostrar nueva imagen
-            
-            
+
+
             # Cargar imagen desde bytes usando PIL/Pillow
             from PyQt5.QtGui import QPixmap
             from PIL import Image
             import numpy as np
-            
+
             # Crear objeto de imagen desde bytes
             imagen_io = BytesIO(img_data)
             img = Image.open(imagen_io)
-            
+
             # Convertir a RGB si es necesario (algunas imágenes pueden estar en otros modos)
             if img.mode != 'RGB':
                 img = img.convert('RGB')
-             
+
             # Convertir a array numpy para matplotlib
             img_array = np.array(img)
             from openpyxl.drawing.image import Image as Im
@@ -722,7 +700,7 @@ class PruebaDiariaBraq(PruebaBasico):
                 tmp.write(img_data)
                 tmp.flush()
                 tmp_path = tmp.name
-            
+
             self.imagen_path = tmp_path
             # H2 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md, defecto c): antes
             # SOLO la subida manual (`subir_imagen`, PruebasDiarias.py:926)
@@ -736,10 +714,10 @@ class PruebaDiariaBraq(PruebaBasico):
 
                 # Asegurar que toolbar esté visible
         # Limpiar imagen previa del QLabel
-           
+
 
             # Cargar imagen desde bytes usando PIL
-        
+
 
             # Convertir PIL → QPixmap
             buffer = BytesIO()
@@ -764,9 +742,9 @@ class PruebaDiariaBraq(PruebaBasico):
                 self._crear_interfaz_parametros()
                 self.parametros_creados=True
 
-            
+
             print(f"✓ Imagen cargada desde BLOB ({len(img_data)} bytes)")
-            
+
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -888,7 +866,7 @@ class PruebaDiariaBraq(PruebaBasico):
             # también en el `return` temprano de "sin fuente registrada".
             if conn is not None:
                 conn.close()
-      
+
     def tolerancia(self):
         try:
 
@@ -923,16 +901,16 @@ class PruebaDiariaBraq(PruebaBasico):
         self.btn_add.clicked.connect(lambda _, maquina='braqui', otro = "Diario" : self.ordenar_botones(maquina, self.fueradeservicio, otro))
         self.btn_add.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
         self.btn_add.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
-        
+
         #self.btn_add.clicked.connect(lambda _: self.clean_info(imagenes=False))
         #self.btn_add.clicked.connect(lambda _:self.clean_info)
 
         self.btn_clean.clicked.connect(lambda _: self.clean_info(imagenes=True))
-        
+
         self.btn_submit.clicked.connect(
-            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text(): 
-                reporte(self, fecha=self.date_box.date().toString('yyyy-MM-dd'), 
-                        maquina=maquina, id_maquina=id_maquina, tipo_reporte='diario', 
+            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
+                reporte(self, fecha=self.date_box.date().toString('yyyy-MM-dd'),
+                        maquina=maquina, id_maquina=id_maquina, tipo_reporte='diario',
                         diccionario=self.diccionario_invertido, umbrales=None)
         )
 
@@ -941,33 +919,33 @@ class PruebaDiariaBraq(PruebaBasico):
         self.boton_aceptar.clicked.connect(lambda _, line=None: self.checkBotonesFinales(line, braqui=True, otro=self.posi_inicial))
         self.no_control_day()
         self.boton_cancel.clicked.connect(self.cancelarbraqui)
-        
+
         """for line in self.df_lines:
             dato = getattr(self, line)
             dato.textChanged.connect(lambda _, line=line: self.checkBotonesFinales(line, braqui=True))"""
-        
+
         self.btn_delete.clicked.connect(lambda _, maquina='braqui': self.verificar_eliminar(maquina, [self.boolean_colums, self.actividad_ciclos]))
 
         self.menu_graficar.currentIndexChanged.connect(self.mostrar_submenu)
-        
+
         for grafica in self.graficar:
             grafica.currentIndexChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
             self.btn_submit.clicked.connect(lambda _, grafica=grafica: self.plotter(grafica))
             self.limit1.dateChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
             self.limit2.dateChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
-        
+
         self.search_bar.textChanged.connect(self._iniciar_busqueda_debounced)
-        
+
         self.edit_table.clicked.connect(self.verificar_editar)
 
         self.accept_edit.clicked.connect(lambda: self.cargarDatosEditados(self.item, self.old_value, "braqui"))
         self.accept_edit.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
         self.accept_edit.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
-        
+
         self.cancel_edit.clicked.connect(lambda: self.cancelarEdicion(self.item, self.old_value))
         self.cancel_edit.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
         self.cancel_edit.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
-        
+
         if hasattr(self, 'date_box'):
             # R-1 (PLAN_ACTIVIDAD_ESPERADA_BRAQUI_27-08.md §7): UNA sola
             # conexión. `dateTimeChanged` es la señal que cubre los dos casos
@@ -986,30 +964,30 @@ class PruebaDiariaBraq(PruebaBasico):
             self.date_box.dateTimeChanged.connect(self._al_mover_el_date_box)
         self.line_1_rep_act_ci.textChanged.connect(self.tolerancia)
         self.subir_sin_datos.clicked.connect(self._subir_vacio)
-        
 
-    """ Muestra el submenu de graficas dependiendo de la seleccion del menu principal 
+
+    """ Muestra el submenu de graficas dependiendo de la seleccion del menu principal
     """
-        
+
     def no_control_day(self):
         if hasattr(self, 'subir_sin_datos') and self.subir_sin_datos:
             print("Botón subir sin datos")
             self.subir_sin_datos.setEnabled(False)
-        
+
         self.observaciones.textChanged.connect(lambda _: self.subir_sin_datos.setEnabled(True))
     def _subir_vacio(self):
         """Setea campos vacíos y luego guarda en la BD."""
         self._setear_estado_vacio()          # 1) poblar botones_finales con valores vacíos
         self.ordenar_botones(                # 2) guardar en la base de datos
-            'braqui', 
-            self.fueradeservicio, 
+            'braqui',
+            self.fueradeservicio,
             "Diario"
         )
     def _setear_estado_vacio(self):
         """Pone todos los campos en cero o vacío."""
         # Limpiar botones funciona/no funciona
         self.botones_finales.clear()
-        
+
         # Setear líneas numéricas a "0"
         for line_name in ['line_1_rep_act_ci', 'line_1_exp_act_ci',
                         'line_1_cyc_dummy', 'line_1_cyc_rad']:
@@ -1018,15 +996,15 @@ class PruebaDiariaBraq(PruebaBasico):
                 widget.blockSignals(True)
                 widget.setText("0")
                 widget.blockSignals(False)
-        
+
         # Limpiar observaciones
-        
+
         # Setear botones booleanos a False (no funciona)
-        
 
 
-        
-            
+
+
+
     def clean_info(self, imagenes=False):
         """Z7 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): 'Limpiar datos'
         no limpiaba TODO -- self.df_lines excluye a propósito el campo
@@ -1075,14 +1053,14 @@ class PruebaDiariaBraq(PruebaBasico):
 
 
     def mostrar_submenu(self):
-        
+
         for grafica in self.graficar:
             grafica.hide()
             grafica.setCurrentIndex(0)
         selection = self.menu_graficar.currentIndex()
-        
+
         if selection > 0 and selection <= len(self.graficar):
-            self.graficar[selection-1].show()  
+            self.graficar[selection-1].show()
 
     """ Crea los parámetros de umbral y distancia mínima entre picos, y los botones de analizar y guardar                                                                                            """
     def _crear_parametros(self):
@@ -1107,7 +1085,7 @@ class PruebaDiariaBraq(PruebaBasico):
         layout.addWidget(self.label_dist)
         layout.addWidget(self.spin_dist)
         layout.addStretch()
-        
+
         # Conectar cambios de parámetros al debouncing (útil para ajustes en la misma imagen)
         self.spin_umbral.valueChanged.connect(self.analizar_imagen_con_debouncing)
         self.spin_dist.valueChanged.connect(self.analizar_imagen_con_debouncing)
@@ -1154,13 +1132,13 @@ class PruebaDiariaBraq(PruebaBasico):
 
             # Validación rápida antes del procesamiento
             if not optimizador_analisis.validar_imagen_rapida(self.imagen_path):
-                self._mostrar_error_usuario("Error de Imagen", 
+                self._mostrar_error_usuario("Error de Imagen",
                                            "La imagen seleccionada no es válida o está corrupta.")
                 return None
 
             # Pre-cargar dependencias si es necesario
             optimizador_analisis.precargar_dependencias()
-            
+
             # Ejecutar análisis optimizado (sin caché innecesario)
             #print(f"📸 Procesando imagen diaria: {self.imagen_path}")
             resultado = self._ejecutar_analisis_optimizado(umbral, distancia)
@@ -1170,20 +1148,20 @@ class PruebaDiariaBraq(PruebaBasico):
                 self._asegurar_toolbar_visible()
                 self.btn_add.setEnabled(True)
                 return resultado
-            
+
         except Exception as e:
             #logger.error(f"Error en análisis de imagen: {e}")
-            self._mostrar_error_usuario("Error de Análisis", 
+            self._mostrar_error_usuario("Error de Análisis",
                                     f"No se pudo analizar la imagen: {str(e)}")
         return None
-    
+
     def _crear_interfaz_parametros(self):
         """Crea la interfaz de parámetros de forma lazy"""
         self.parametros_layout = self._crear_parametros()
         self.layout_imagen.addLayout(self.parametros_layout)
 
         self.boton_ayuda = QPushButton("?")
-        self.boton_ayuda.setToolTip("Presione para ver ayuda sobre los parámetros.") 
+        self.boton_ayuda.setToolTip("Presione para ver ayuda sobre los parámetros.")
         self.setStyleSheet("""
             QToolTip {
                 background-color: rgba(177, 241, 251, 0.64);
@@ -1194,7 +1172,7 @@ class PruebaDiariaBraq(PruebaBasico):
         """)
         self.boton_ayuda.clicked.connect(self.mostrar_ayuda_parametros)
         self.botones_layout.addWidget(self.boton_ayuda)
-    
+
     def _ejecutar_analisis_optimizado(self, umbral: float, distancia: int) -> Optional[str]:
         """Ejecuta análisis optimizado"""
         try:
@@ -1215,7 +1193,7 @@ class PruebaDiariaBraq(PruebaBasico):
             traceback.print_exc()
             print(f"Error ejecutando análisis: {e}")
             return None
-    
+
     def _asegurar_toolbar_visible(self):
         """Asegura que la toolbar esté visible, reutilizando recursos"""
         if not hasattr(self, 'toolbar') or self.toolbar is None:
@@ -1225,19 +1203,19 @@ class PruebaDiariaBraq(PruebaBasico):
             self.col2.addWidget(self.toolbar)
         elif self.col2.indexOf(self.toolbar) == -1:
             self.col2.addWidget(self.toolbar)
-    
+
     def analizar_imagen_con_debouncing(self):
         """Análisis con debouncing para ajustes de parámetros en la misma imagen"""
         if not hasattr(self, 'imagen_path') or not self.imagen_path:
             return
-        
+
         # Cancelar análisis anterior si está en progreso
         if hasattr(self, '_timer_analisis'):
             self._timer_analisis.stop()
-        
+
         # Timer para evitar análisis excesivos al cambiar parámetros
         self._timer_analisis.start(500)  # 500ms de delay
-    
+
     def _ejecutar_analisis_diferido(self):
         """Ejecuta el análisis después del debouncing"""
         resultado = self.analizar_imagen()
@@ -1296,7 +1274,7 @@ class PruebaDiariaBraq(PruebaBasico):
         self.canvas.update()
         self.widgetgrafica.update()
         #self.wf2.setSizes([1, 0])
-    
+
     def guardar_datos(self):
         """
         Extrae los resultados del análisis de imagen desde el texto mostrado en self.resultado.
@@ -1307,7 +1285,7 @@ class PruebaDiariaBraq(PruebaBasico):
             return "", None, None, "", None, None
 
         resultado_html = self.resultado_label.text().strip()
-        
+
         if not resultado_html:
             return "", None, None, "", None, None
         #print("Entra a la función guardar_datos (solo extracción) en braquiterapia.py")
@@ -1559,24 +1537,24 @@ class PruebaDiariaBraq(PruebaBasico):
 
     """ Genera el espacio para graficar, incluyendo el canvas y los menús desplegables                                                                                                            """
     def plotter(self, menu):
-    
+
         #Se limpia el espacio paa graficar y se configura
         self.figure.clear()
         ax = self.figure.add_subplot(111)
-        
+
         #Se abre la base de datos y se encuentra que se va a graficar
         db = self.opeenDatabase()
         selected_chart = menu.currentText()  # QComboBox con tipos de gráfica
-        
+
         if selected_chart == "Seleccione...": #No se si sea necesario pero es para no tneer errores
             return
-        
-        #Se establecen los limites de l grafica 
+
+        #Se establecen los limites de l grafica
         start_date = self.limit1.date().toString('yyyy-MM-dd')
         end_date = self.limit2.date().toString('yyyy-MM-dd')
-        
+
         query = QSqlQuery(db)
-        
+
         selected_column1 = self.graficos_mapeo1.get(selected_chart, None)
         selected_column2 = self.graficos_mapeo2.get(selected_chart, None)
 
@@ -1619,7 +1597,7 @@ class PruebaDiariaBraq(PruebaBasico):
                 x_data.append(query.value(0))  # la fecha
                 y_data1.append(float(query.value(1)))  # tol_fot_6mv
                 y_data2.append(float(query.value(2)))  # tol_fot_15mv
-            
+
             date = [datetime.datetime.strptime(date, '%Y-%m-%d').date() for date in x_data]
 
             ax.plot(date, y_data1, marker='o', label='actividad reportada')
@@ -1631,11 +1609,11 @@ class PruebaDiariaBraq(PruebaBasico):
             ax.set_title('Actividad reportada vs actividad esperada')
             ax.grid(True)
             ax.legend()
-        
-        
+
+
         elif selected_chart == "Ciclos vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
-            
+
             query.prepare(f"""
                 SELECT DATE(date) AS date,
                 tol_cyc_dummy,tol_cyc_rad
@@ -1659,7 +1637,7 @@ class PruebaDiariaBraq(PruebaBasico):
                 x_data.append(query.value(0))  # la fecha
                 y_data1.append(float(query.value(1)))  # tol_fot_6mv
                 y_data2.append(float(query.value(2)))  # tol_fot_15mv
-            
+
             date = [datetime.datetime.strptime(date, '%Y-%m-%d').date() for date in x_data]
 
             ax.plot(date, y_data1, marker='o', label='Ciclos del dummy')
@@ -1670,7 +1648,7 @@ class PruebaDiariaBraq(PruebaBasico):
             ax.set_ylabel('Dosis')
             ax.set_title('Ciclos del dummy vs ciclos de la fuente')
             ax.grid(True)
-            ax.legend()        
+            ax.legend()
 
         elif selected_column1 in [
             'int_con_box', 'emerg_con', 'blq_puerta',
@@ -1678,14 +1656,14 @@ class PruebaDiariaBraq(PruebaBasico):
             'mon_area', 'lum_puerta', 'tub_guia',
             'visual_sys', 'intercom', 'mon_rad_port'
         ]:
-            
+
             graficarvstiempo(self, query, ax, 'braqui', selected_column1, selected_chart, start_date, end_date, True)
-        
+
         # Redibuja en el canvas
         self.canvas.draw()
 
         db.close()
-    
+
     def cleanup_recursos(self):
         """Limpia recursos para liberar memoria"""
         #logger.info("Limpiando recursos de PruebaDiariaBraq")
@@ -1695,14 +1673,14 @@ class PruebaDiariaBraq(PruebaBasico):
                 if widget and hasattr(widget, 'deleteLater'):
                     widget.deleteLater()
             self._widgets_lazy.clear()
-            
+
             # Limpiar canvas y figuras
             if hasattr(self, 'canvas') and self.canvas:
                 try:
                     self.canvas.figure.clear()
                 except:
                     pass
-            
+
             # Limpiar toolbar
             if hasattr(self, 'toolbar') and self.toolbar:
                 try:
@@ -1710,11 +1688,11 @@ class PruebaDiariaBraq(PruebaBasico):
                     self.toolbar = None
                 except:
                     pass
-                    
+
             #print("Recursos limpiados exitosamente")
         except Exception as e:
             print(f"Error limpiando recursos: {e}")
-    
+
     def _mostrar_error_usuario(self, titulo: str, mensaje: str):
         """Muestra errores al usuario de forma consistente"""
         #print(f"{titulo}: {mensaje}")
@@ -1722,7 +1700,7 @@ class PruebaDiariaBraq(PruebaBasico):
             QMessageBox.warning(self, titulo, mensaje)
         except Exception as e:
             print(f"Error mostrando mensaje al usuario: {e}")
-    
+
     def _ejecutar_busqueda_filtrada(self):
         """Ejecuta búsqueda filtrada después del debouncing"""
         try:
@@ -1732,19 +1710,19 @@ class PruebaDiariaBraq(PruebaBasico):
                 self.filtrarTabla()
         except Exception as e:
             print(f"Error en búsqueda filtrada: {e}")
-    
+
     def _iniciar_busqueda_debounced(self):
         """Inicia búsqueda con debouncing para evitar búsquedas excesivas"""
         self._timer_busqueda.stop()
         self._timer_busqueda.start(300)  # 300ms de delay
-    
+
     def __del__(self):
         """Destructor para limpieza automática"""
         try:
             self.cleanup_recursos()
         except:
             pass
-    
+
     def abrir_imagen_resultado(self, item):
         """Abre la imagen cuando se hace doble clic en la columna de imagen"""
         import os
@@ -1752,27 +1730,27 @@ class PruebaDiariaBraq(PruebaBasico):
         from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QScrollArea
         from PyQt5.QtGui import QPixmap
         from PyQt5.QtCore import Qt
-        
+
         # Verificar si es la columna de imagen (columna 6)
         if item.column() != 6:
             return
-        
+
         imagen_path = item.text()
         if not imagen_path or imagen_path == "":
             QMessageBox.warning(self, "Advertencia", "No hay imagen asociada a este resultado.")
             return
-        
+
         # Verificar si el archivo existe
         if not os.path.exists(imagen_path):
             QMessageBox.warning(self, "Error", f"La imagen no se encontró en:\n{imagen_path}")
             return
-        
+
         try:
             # Crear dialog para mostrar la imagen
             dialog = QDialog(self)
             dialog.setWindowTitle(f"Imagen - {os.path.basename(imagen_path)}")
             dialog.resize(800, 600)
-            
+
             # Aplicar estilo si existe
             try:
                 import sys
@@ -1785,34 +1763,34 @@ class PruebaDiariaBraq(PruebaBasico):
                     dialog.setStyleSheet(qss_file.read_text(encoding="utf-8"))
             except Exception:
                 pass  # Si no se puede cargar el estilo, continuar sin él
-            
+
             layout = QVBoxLayout(dialog)
-            
+
             # Crear scroll area para la imagen
             scroll_area = QScrollArea()
             scroll_area.setWidgetResizable(True)
             scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-            
+
             # Cargar y mostrar imagen
             label_imagen = QLabel()
             pixmap = QPixmap(imagen_path)
-            
+
             if pixmap.isNull():
                 QMessageBox.warning(self, "Error", "No se pudo cargar la imagen.")
                 return
-            
+
             # Escalar imagen si es muy grande
             if pixmap.width() > 1200 or pixmap.height() > 800:
                 pixmap = pixmap.scaled(1200, 800, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            
+
             label_imagen.setPixmap(pixmap)
             label_imagen.setAlignment(Qt.AlignCenter)
             scroll_area.setWidget(label_imagen)
-            
+
             layout.addWidget(scroll_area)
             dialog.exec_()
-            
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al abrir la imagen:\n{str(e)}")
 
@@ -1828,30 +1806,30 @@ class CalRedundanteFuente(PruebaMensualBraq):
         super().__init__(user_id)
         #self.date_box.date
         self.button_click()
-        
+
 
     def cargar_datos_ultima_calibracion(self) -> bool:
         """
         Carga datos de la última calibración con manejo mejorado de errores
         y uso del gestor de conexiones optimizado.
-        
+
         Returns:
             bool: True si la carga fue exitosa, False en caso contrario
         """
         try:
             with gestor_db.obtener_conexion() as conn:
                 return self._ejecutar_carga_calibracion(conn)
-                
+
         except Exception as e:
             #logger.error(f"Error cargando datos de calibración: {e}")
-            self._mostrar_error_usuario("Error de Carga", 
+            self._mostrar_error_usuario("Error de Carga",
                                         f"No se pudieron cargar los datos de calibración: {str(e)}")
             return False
-    
+
     def _ejecutar_carga_calibracion(self, conn) -> bool:
         """Ejecuta la lógica de carga de calibración con conexión establecida"""
         try:
-            conn = Conexion().conectar() 
+            conn = Conexion().conectar()
             if conn is None:
                 print("No se pudo conectar a la base de datos.")
                 return
@@ -1986,8 +1964,8 @@ class CalRedundanteFuente(PruebaMensualBraq):
         finally:
             if conn:
                 conn.close()
-        
-        
+
+
 
 " Verificación de la Linealidad"
 class Linealidad(PruebaBasico):
@@ -2005,49 +1983,49 @@ class Linealidad(PruebaBasico):
         # Inicializar componentes principales
         self.tabla_resultados = QTableWidget()
         #self.tabla_resultados.setEditTriggers(QTableWidget.NoEditTriggers)
-        
+
         # Timers para debouncing
         self._timer_calculo = QTimer()
         self._timer_calculo.setSingleShot(True)
         self._timer_calculo.timeout.connect(self._calcular_corriente_estacionaria)
-        
+
         # Timer para búsqueda
         self._timer_busqueda = QTimer()
         self._timer_busqueda.setSingleShot(True)
         self._timer_busqueda.timeout.connect(self._ejecutar_busqueda_filtrada)
-        
+
         # Cache para cálculos
         self._cache_calculos = {}
-        
+
         try:
             self.initDATA(user_id)
             self.initUI()
-           
-            
+
+
             self._configurar_campos_readonly()
             self._configurar_calculos_automaticos()
             #self._cargar_datos_iniciales()
-            
-            
-            
-            
-            
+
+
+
+
+
             # Cargar datos de forma diferida
             QTimer.singleShot(100, self._cargar_datos_diferidos)
             self.button_click()
-            
-            
+
+
         except Exception as e:
             #logger.error(f"Error inicializando Linealidad: {e}")
             self._mostrar_error_usuario("Error de Inicialización", str(e))
-    
+
     def _cargar_datos_diferidos(self):
         """Carga datos pesados de forma diferida"""
         try:
             mostrar_db_linealidad(self)
             self.cargar_nombres_tablas()
             self.generar_tabla_medidas()
-           
+
             self.repro_med1 = getattr(self, 'repro_med1')
             self.repro_med2 = getattr(self, 'repro_med2')
             self.repro_med3 = getattr(self, 'repro_med3')
@@ -2056,43 +2034,43 @@ class Linealidad(PruebaBasico):
             self.repro_prom = getattr(self, 'repro_prom')
         except Exception as e:
             print(f"Error en carga diferida: {e}")
-    
+
     def _configurar_campos_readonly(self):
         """Configura campos de solo lectura"""
         self.exactitud.setReadOnly(True)
         self.repro.setReadOnly(True)
         self.tiempo_transito.setReadOnly(True)
-    
+
     def _configurar_calculos_automaticos(self):
         """Configura cálculos automáticos con debouncing"""
         self.q_est.textChanged.connect(self._iniciar_calculo_debounced)
         self.t_integrado.textChanged.connect(self._iniciar_calculo_debounced)
-    
+
     def _iniciar_calculo_debounced(self):
         """Inicia cálculo con debouncing para evitar cálculos excesivos"""
         self._timer_calculo.stop()
         self._timer_calculo.start(300)  # 300ms de delay
-    
+
     def _calcular_corriente_estacionaria(self):
         """Calcula la corriente estacionaria con manejo de errores"""
         try:
             q_text = self.q_est.text().strip()
             t_text = self.t_integrado.text().strip()
-            
+
             if not q_text or not t_text:
                 self.i_est.setText("")
                 return
-                
+
             q_val = float(q_text)
             t_val = float(t_text)
-            
+
             if t_val == 0:
                 self.i_est.setText("∞")
                 return
-                
+
             resultado = q_val / t_val
             self.i_est.setText(f"{resultado:.2f}")
-            
+
         except ValueError as e:
             #logger.warning(f"Error en cálculo de corriente: {e}")
             self.i_est.setText("Error")
@@ -2101,10 +2079,10 @@ class Linealidad(PruebaBasico):
             self.i_est.setText("")
 
         self.botones_layout = QHBoxLayout()
-        
+
         self.col2.addLayout(self.botones_layout)
-        
-            
+
+
     def _mapear_repro_widgets(self):
         self.repro_fields = {
             k: getattr(self, k)
@@ -2124,15 +2102,15 @@ class Linealidad(PruebaBasico):
 
         for k in self.repro_fields:
             if k != 'repro_prom':
-                self.repro_fields[k].textChanged.connect(actualizar)  
+                self.repro_fields[k].textChanged.connect(actualizar)
     def cargar_nombres_tablas(self):
         with Conexion().conectar() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        
-    
+
+
     def initDATA(self, user_id):
-    
+
         self.diccionario_invertido = {
             'modelo' : ['Modeo de la cámara', '', 'line'],
             'serie_cp': ['Serie de la cámra de Pozo', '', 'line'],
@@ -2153,13 +2131,13 @@ class Linealidad(PruebaBasico):
             'repro' : ['Reproducibilidad (%)', '', 'line'],
             'tiempo_transito' : ['Tiempo de Transito', '', 'line']
         }
-        
+
         self.init_data(user_id, self.diccionario_invertido)
         print(hasattr(self, 'repro_med1'))
         for k in self.diccionario_invertido:
             print(k, hasattr(self, k))
-       
-        
+
+
 
     def initUI(self):
         self.layout_cambio = QHBoxLayout()
@@ -2168,16 +2146,16 @@ class Linealidad(PruebaBasico):
         _ = self.setupBox(archivo, 'encabezado_LinealidadBraqui')
         self.date_box.setDisplayFormat("yyyy/MM/dd")
         df, n, layouts, _ = self.setupBox(archivo, 'preguntas_LinealidadBraqui', main=False)
-        
+
         self.datos_tabla = self.storeDailyTests(df)
-        
+
         self._mapear_repro_widgets()
         self._configurar_promedio_repro()
 
         self.comboBox_equipos()
         self._mapear_repro_widgets()
         self._configurar_promedio_repro()
-       
+
 
         for k, w in self.widgets.items():
             setattr(self, k, w)
@@ -2189,7 +2167,7 @@ class Linealidad(PruebaBasico):
         self.category5 = QWidget()
 
         toolbox = QToolBox()
-        
+
         self.general_layout.addWidget(toolbox)
 
         for i, layout in enumerate(layouts, 1):
@@ -2204,7 +2182,7 @@ class Linealidad(PruebaBasico):
         toolbox.addItem(self.category1, 'SISTEMA DE MEDICIÓN')
         toolbox.addItem(self.category2, 'CARGA COLECTADA EN 60s')
         toolbox.addItem(self.category3, 'LINEALIDAD')
-        
+
         toolbox.addItem(self.category5, "MEDICIÓN")
         toolbox.addItem(self.category4, "RESULTADOS")
 
@@ -2215,13 +2193,13 @@ class Linealidad(PruebaBasico):
         self.btn_add.clicked.connect(self.guardar_linealidad)
         print(self.date_box.date().toString('yyyy-MM-dd'))
         self.btn_submit.clicked.connect(
-            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text(): 
+            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
                 mostrar_db_linealidad(self))
 
         # ------------------------------ GRÁFICOS Y TABLA EDITABLE -------------------------------------------------
         # Crear gráficos específicos para mensual manualmente (sin usar init_ui)
         menu_graficas = ["Seleccionar...", "Máximos de la cámara", "Linealidad de la fuente"]
-        
+
         # Crear canvas y menús manualmente
         mpl = get_matplotlib_components()
         Figure = mpl['Figure']
@@ -2229,14 +2207,14 @@ class Linealidad(PruebaBasico):
 
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
-        
+
         # Crear menú principal
         self.menu_graficar = QComboBox()
         self.menu_graficar.addItems(menu_graficas)
-        
+
         # Crear layout para menús
         caja_menu_graficas = QHBoxLayout()
-        
+
         caja_menu_graficas.addWidget(QLabel("Fecha:"))
         self.date_grafica = QDateEdit()
         self.date_grafica.setCalendarPopup(True)
@@ -2246,7 +2224,7 @@ class Linealidad(PruebaBasico):
         caja_menu_graficas.addWidget(QLabel("Gráfico:"))
         caja_menu_graficas.addWidget(self.menu_graficar)
 
-        
+
         self.settfigure = QHBoxLayout()
         self.settfigure.addLayout(caja_menu_graficas)
 
@@ -2254,8 +2232,8 @@ class Linealidad(PruebaBasico):
         self.col2 = QVBoxLayout()
         self.col2.addLayout(self.settfigure)
         self.col2.addWidget(self.canvas)
-        
-        # COLUMNA DERECHA - tabla editable 
+
+        # COLUMNA DERECHA - tabla editable
         self.edit_table_tools = self.createTable(df=df, headers=None)
         self.col2_1 = QVBoxLayout()
         self.col2_1.addWidget(self.table)
@@ -2293,25 +2271,25 @@ class Linealidad(PruebaBasico):
         self.setupButtonConnections(df, maquina='braqui')
         if hasattr(self, 'date_box'):
             self.date_box.dateChanged.connect(self.cargar_dailytest_desde_db)
-            
-        
+
+
     def cargar_dailytest_desde_db(self, fecha=None):
         """
         Carga datos de pruebas diarias desde la base de datos y los mapea a los widgets de la GUI.
-        
+
         Args:
             fecha: QDate object o None. Si es None, usa la fecha del date_box.
         """
         if fecha is None:
             fecha = self.date_box.date()
-        
+
         # Convertir QDate a string en formato compatible con la BD
         fecha_str = fecha.toString("yyyy-MM-dd")
-        
+
         db = self.opeenDatabase()
         if not db:
             return
-        
+
         try:
             query = QSqlQuery(db)
             print("consultando db en linealidad")
@@ -2320,7 +2298,7 @@ class Linealidad(PruebaBasico):
             # ORDER BY (mismo patrón que la consulta gemela de la línea 2263,
             # que ya lo tenía desde LF).
             query.prepare(f"""
-                SELECT * FROM LinealidadBraquiterapia 
+                SELECT * FROM LinealidadBraquiterapia
                 WHERE DATE(fecha) = ?{filtro_activo('LinealidadBraquiterapia')}
                 ORDER BY id DESC
                 LIMIT 1
@@ -2328,12 +2306,12 @@ class Linealidad(PruebaBasico):
             query.addBindValue((fecha_str))
             #query.addBindValue(str(self.user_id))
             print(fecha_str)
-            
+
             if not query.exec():
                 print(f"Error en consulta: {query.lastError().text()}")
                 db.close()
                 return
-            
+
             if query.next():
                 record = query.record()
 
@@ -2447,24 +2425,24 @@ class Linealidad(PruebaBasico):
             self._cargar_modelos_camara_pozo()
             self._cargar_modelos_electrometro()
             self._conectar_señales_equipos()
-            
+
         except Exception as e:
             #logger.error(f"Error configurando equipos: {e}")
-            self._mostrar_error_usuario("Error de Equipos", 
+            self._mostrar_error_usuario("Error de Equipos",
                                         f"No se pudieron cargar los equipos: {str(e)}")
-    
+
     def _configurar_referencias_widgets(self):
         """Configura referencias a widgets de equipos"""
         # Cámara de pozo
         self.combo_modelo = self.widgets['modelo']
         self.combo_serie = self.widgets['serie_cp']
         self.line_cal = self.widgets['calibracion']
-        
+
         # Electrómetro
         self.combo_modelo_elec = self.widgets['modelo_elec']
         self.combo_serie_elec = self.widgets['serie_ele']
         self.line_cal_elec = self.widgets['electrometro']
-    
+
     def _cargar_modelos_camara_pozo(self):
         """Carga modelos de cámara de pozo (fila actual por vigente, H2.10)"""
         try:
@@ -2484,7 +2462,7 @@ class Linealidad(PruebaBasico):
         except Exception as e:
             #logger.error(f"Error cargando modelos de electrómetro: {e}")
             raise
-    
+
     def _conectar_señales_equipos(self):
         """Conecta señales de cambio de equipos"""
         self.combo_modelo.currentTextChanged.connect(self.on_modelo_pozo_cambio)
@@ -2498,26 +2476,26 @@ class Linealidad(PruebaBasico):
         Usa gestor de BD optimizado y manejo mejorado de errores.
         """
         #logger.debug(f"Cambio de modelo de pozo: {modelo}")
-        
+
         try:
             self._limpiar_combo_series()
-            
+
             if not modelo or modelo == "Seleccionar...":
                 return
-                
+
             series_data = self._obtener_series_equipo('Cámara de pozo', modelo)
             self._poblar_combo_series(series_data)
-            
+
         except Exception as e:
             #logger.error(f"Error cambiando modelo de pozo: {e}")
-            self._mostrar_error_usuario("Error de Equipos", 
+            self._mostrar_error_usuario("Error de Equipos",
                                        f"No se pudieron cargar las series: {str(e)}")
-    
+
     def _limpiar_combo_series(self):
         """Limpia el combo de series"""
         self.combo_serie.clear()
         self.combo_serie.addItem("Seleccionar Serie...")
-    
+
     def _obtener_series_equipo(self, tipo_equipo: str, modelo: str) -> List[Tuple]:
         """G10 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): TODAS las
         calibraciones ACTIVAS del modelo, sin colapsar por serie -- antes
@@ -2588,51 +2566,51 @@ class Linealidad(PruebaBasico):
         #self.btn_add.clicked.connect(lambda _, maquina='braqui', otro = "Diario" : self.ordenar_botones(maquina, self.fueradeservicio, otro))
         #self.btn_add.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
         self.btn_add.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
-        
+
         #self.btn_add.clicked.connect(lambda _: self.clean_info(imagenes=False))
         #self.btn_add.clicked.connect(lambda _:self.clean_info)
 
         #self.btn_clean.clicked.connect(lambda _: self.clean_info(imagenes=True))
-        
+
 
         #self.boton_aceptar.clicked.connect(self.subirlisto)
         self.posi_inicial = "Linealidad Braquiterapia"
         self.checkBotonesFinales(line=None, braqui=True, otro=self.posi_inicial)
-        
+
         #self.boton_cancel.clicked.connect(self.cancelarbraqui)
-        
+
         """for line in self.df_lines:
             dato = getattr(self, line)
             dato.textChanged.connect(lambda _, line=line: self.checkBotonesFinales(line, braqui=True))"""
-                                                             
-        self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.table, "LinealidadBraquiterapia", None)) 
+
+        self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.table, "LinealidadBraquiterapia", None))
 
         #self.menu_graficar.currentIndexChanged.connect(self.mostrar_submenu)
-        
+
         # for grafica in self.graficar:
         #     grafica.currentIndexChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
         #     self.btn_submit.clicked.connect(lambda _, grafica=grafica: self.plotter(grafica))
         #     self.limit1.dateChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
         #     self.limit2.dateChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
-        
+
         self.search_bar.textChanged.connect(self._iniciar_busqueda_debounced)
-        
+
         self.edit_table.clicked.connect(self.verificar_editar)
 
         self.accept_edit.clicked.connect(lambda: self.cargarDatosEditados(self.item, self.old_value, "braqui"))
         self.accept_edit.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
         self.accept_edit.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
-        
+
         self.cancel_edit.clicked.connect(lambda: self.cancelarEdicion(self.item, self.old_value))
         self.cancel_edit.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
         self.cancel_edit.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
         self.btn_submit.clicked.connect(
         lambda: self._generar_reporte_linealidad()
         )
-    
-     
-    
-    
+
+
+
+
     def construir_tablas_reporte_linealidad(self, fecha):
         # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): hallado auditando
         # SELECT * -- este método leía por índice POSICIONAL asumiendo un
@@ -2711,15 +2689,15 @@ class Linealidad(PruebaBasico):
             'resultados_linealidad':       df_resultados,
             'grafico_linealidad':          df_grafico,
         }
-    
+
 
     def _generar_reporte_linealidad(self):
-        
+
         fecha = self.date_box.date().toString('yyyy-MM-dd')
         maquina = self.mach_name2.text()
         id_maquina = self.code_1.text()
         usuario = self.user_id._nombre
-        
+
 
         tablas = self.construir_tablas_reporte_linealidad(fecha)
         if tablas is None:
@@ -2752,7 +2730,7 @@ class Linealidad(PruebaBasico):
         self.window = PdfViewer(pdf_data=pdf_bytes, fecha=fecha,
                                 maquina=maquina, tipo_reporte='Linealidad')
         self.window.show()
-        
+
     def _obtener_firma_usuario(self, usuario, db):
         """Extrae firma y rol de un usuario desde la BD. Reutilizable."""
         temp_image_path = None
@@ -2772,7 +2750,7 @@ class Linealidad(PruebaBasico):
                         pixmap.save(temp_image_path, "PNG")
                 except Exception as e:
                     print(f"Error procesando firma: {e}")
-        return temp_image_path, rol  
+        return temp_image_path, rol
     def on_serie_elec_cambio(self):
         """Cuando seleccionan serie de electrómetro, llenar factor de
         calibración. G10: resuelve por el ID en `currentData()`, nunca por
@@ -2917,7 +2895,7 @@ class Linealidad(PruebaBasico):
         tiempo_parada = []  # Definir antes del try para evitar NameError en el except
         try:
             tiempo_parada, q1, q2, promedios, tiempo_efectivo = self.extraer_datos_medidas()
-            
+
             x = np.array(tiempo_parada)
             y = np.array(tiempo_efectivo)
             m, b = np.polyfit(x, y, 1)
@@ -2974,8 +2952,8 @@ class Linealidad(PruebaBasico):
             traceback.print_exc()
             if not tiempo_parada:
                 QMessageBox.warning(self, "Advertencia", "No se ingresaron datos válidos.")
-                
-    
+
+
     def guardar_linealidad(self):
         try:
             user = self.user_id._nombre
@@ -3097,7 +3075,7 @@ class Linealidad(PruebaBasico):
         dialog = QDialog(self)
         dialog.setWindowTitle("Carga colectada en 60s - Reproducibilidad")
         dialog.setMinimumSize(870, 120)  # Ancho x Alto mínimo
-        dialog.resize(270, 120)   
+        dialog.resize(270, 120)
         layout = QVBoxLayout()
 
         table = QTableWidget(1, 6)
@@ -3106,7 +3084,7 @@ class Linealidad(PruebaBasico):
             item = QTableWidgetItem(f"{val:.2f}" if val is not None else "-")
             item.setTextAlignment(Qt.AlignCenter)
             table.setItem(0, i, item)
-            
+
 
         layout.addWidget(table)
         dialog.setLayout(layout)
@@ -3119,7 +3097,7 @@ class Linealidad(PruebaBasico):
         dialog = QDialog(self)
         dialog.setWindowTitle("Medidas de Linealidad")
         dialog.setMinimumSize(550, 500)  # Ancho x Alto mínimo
-        dialog.resize(700, 500)   
+        dialog.resize(700, 500)
         layout = QVBoxLayout()
 
         table = QTableWidget(10, 5)
@@ -3135,12 +3113,12 @@ class Linealidad(PruebaBasico):
         dialog.setLayout(layout)
         dialog.exec_()
 
-    
+
     def plotter_mensual_desde_menu(self, selected_chart):
         """Método para graficar cuando se selecciona desde el menú"""
         if selected_chart == "Seleccionar...":
             return
-        
+
         # Usar solo la fecha actual seleccionada
         fecha_seleccionada = self.date_grafica.date().toString('yyyy-MM-dd')
         self._ejecutar_grafico_mensual(selected_chart, fecha_seleccionada)
@@ -3149,7 +3127,7 @@ class Linealidad(PruebaBasico):
         """Método interno que ejecuta la gráfica"""
         # Limpiar el espacio para graficar
         self.figure.clear()
-        
+
         # Funcion para graficar los datos de máximos de cámara
         def graficar_maximos_camara(canvas, query, fecha):
             """Grafica los datos de máximos de cámara para una fecha específica"""
@@ -3167,11 +3145,11 @@ class Linealidad(PruebaBasico):
             """)
             query.bindValue(0, fecha)
             query.exec_()
-            
+
             posiciones = []
             promedios = []
-            
-        
+
+
             while query.next():
                 # Convertir a float para evitar el error de numpy
                 posiciones.append(float(query.value(0)))
@@ -3203,19 +3181,19 @@ class Linealidad(PruebaBasico):
             """)
             query.bindValue(0, fecha)
             query.exec_()
-            
+
             tiempo_parada = []    # Para valores _tp
             tiempo_efectivo = []  # Para valores _te
-            
+
             while query.next():
                 # Iterar por cada par tp/te (10 puntos total)
                 for i in range(10):  # 10 puntos de medición
                     tp_index = i * 2      # Índices pares: 0, 2, 4, 6, 8, 10, 12, 14, 16, 18
                     te_index = i * 2 + 1  # Índices impares: 1, 3, 5, 7, 9, 11, 13, 15, 17, 19
-                    
+
                     tp_value = query.value(tp_index)  # lin_tp_i
                     te_value = query.value(te_index)  # lin_te_i
-                    
+
                     if tp_value is not None:
                         tiempo_parada.append(float(tp_value))
                     if te_value is not None:
@@ -3223,11 +3201,11 @@ class Linealidad(PruebaBasico):
 
             if tiempo_efectivo and tiempo_parada:
                 graficar_linealidad(canvas, tiempo_efectivo, tiempo_parada)
-        
+
         # Abrir la base de datos
         db = self.opeenDatabase()
         query = QSqlQuery(db)
-        
+
         if selected_chart == "Máximos de la cámara":
             graficar_maximos_camara(self.canvas, query, fecha)
         elif selected_chart == "Linealidad de la fuente":
@@ -3236,7 +3214,7 @@ class Linealidad(PruebaBasico):
         # Redibujar en el canvas
         self.canvas.draw()
         db.close()
-    
+
     def cleanup_recursos(self):
         """Limpia recursos de la clase Linealidad"""
         #logger.info("Limpiando recursos de Linealidad")
@@ -3244,19 +3222,19 @@ class Linealidad(PruebaBasico):
             # Detener timers
             if hasattr(self, '_timer_calculo'):
                 self._timer_calculo.stop()
-            
+
             # Limpiar cache
             if hasattr(self, '_cache_calculos'):
                 self._cache_calculos.clear()
-            
+
             # Limpiar widgets pesados
             if hasattr(self, 'canvas') and self.canvas:
                 self.canvas.figure.clear()
-                
+
             #print("Recursos de Linealidad limpiados")
         except Exception as e:
             print(f"Error limpiando recursos de Linealidad: {e}")
-    
+
     def _mostrar_error_usuario(self, titulo: str, mensaje: str):
         """Muestra errores al usuario de forma consistente"""
         print(f"{titulo}: {mensaje}")
@@ -3264,7 +3242,7 @@ class Linealidad(PruebaBasico):
             QMessageBox.warning(self, titulo, mensaje)
         except Exception as e:
             print(f"Error mostrando mensaje al usuario: {e}")
-    
+
     def _ejecutar_busqueda_filtrada(self):
         """Ejecuta búsqueda filtrada después del debouncing"""
         try:
@@ -3274,7 +3252,7 @@ class Linealidad(PruebaBasico):
                 self.filtrarTabla()
         except Exception as e:
             print(f"Error en búsqueda filtrada: {e}")
-    
+
     def _iniciar_busqueda_debounced(self):
         """Inicia búsqueda con debouncing para evitar búsquedas excesivas"""
         self._timer_busqueda.stop()
@@ -3287,46 +3265,46 @@ class PosicionamientoInicial(PruebaBasico):
     Incluye mejoras de rendimiento, cache de resultados y manejo optimizado de errores.
     """
     desplazamientoReady = pyqtSignal(object)
-    
-    def __init__(self, user_id): 
+
+    def __init__(self, user_id):
         super(PosicionamientoInicial, self).__init__()
         #print("PosicionamientoInicial __init__ called")
-        
+
         self.user_id = user_id
         self.ref_bd=None
         # Pre-cargar dependencias para mejor rendimiento
         optimizador_analisis.precargar_dependencias()
-        
+
         # Inicializar timer para debouncing de búsqueda
         self._timer_busqueda = QTimer()
         self._timer_busqueda.setSingleShot(True)
         self._timer_busqueda.timeout.connect(self._ejecutar_busqueda_filtrada)
-        
+
         # Timer para debouncing de análisis cuando se cambian parámetros
         self._timer_analisis = QTimer()
         self._timer_analisis.setSingleShot(True)
         self._timer_analisis.timeout.connect(self._ejecutar_analisis_diferido)
-        
+
         # Inicializar componentes con lazy loading
         try:
             self.initDATA(user_id)
             self.initUI()
-            
+
             self._inicializar_recursos()
-            
+
             # Cargar BD de forma diferida para mejorar tiempo de inicialización
             QTimer.singleShot(50, lambda: mostrar_db_mensualBraqui(self))
-            
+
         except Exception as e:
             print(f"Error inicializando PosicionamientoInicial: {e}")
             self._mostrar_error_usuario("Error de Inicialización", str(e))
-    
+
     def _inicializar_recursos(self):
         """Inicializa recursos de forma lazy"""
         self.resultados_table = QTableWidget()
         self.resultados_table.setColumnCount(7)
         self.resultados_table.setEditTriggers(QTableWidget.NoEditTriggers)
-    
+
     """ Diccionario con los nombres de las herramientas para los category (menu desplegable para ingresar).                                                                                        """
     def initDATA(self, user_id):
 
@@ -3349,9 +3327,9 @@ class PosicionamientoInicial(PruebaBasico):
             'tol_cyc_rad': ['Ciclos de la fuente', '', 'line'],
             'observaciones' : ['Observaciones', '', 'Na']
         }
-        
+
         self.init_data(user_id, self.diccionario_invertido)
-        
+
 
     """ Crea la estructura visual general, usa QToolBox para organizar las secciones y prepara el area de gráficos                                                                                  """
     def initUI(self):
@@ -3391,24 +3369,24 @@ class PosicionamientoInicial(PruebaBasico):
         self.boton_eliminar.setStyleSheet("background-color: #d9534f; color: white; border-radius: 10px;")
         self.boton_eliminar.clicked.connect(self.eliminar_fila_resultado)
         self.button_click()
-        
-        
-    
+
+
+
     """ Crea los botones y conecta las acciones de los botones a sus respectivas funciones                                                                                  """
-    
-    
-            
-    
+
+
+
+
     def button_click(self):
         #print("Entra a la función button_click de la clase PosicionamientoInicial")
         self.fuera_servicio.clicked.connect(self.reasignar_botonySERVICIO)
 
         self.btn_clean.clicked.connect(lambda _: self.clean_info(imagenes=True))
-        
+
         self.btn_submit.clicked.connect(
-            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text(): 
-                reporte(self, fecha=self.date_box.date().toString('yyyy-MM-dd'), 
-                        maquina=maquina, id_maquina=id_maquina, tipo_reporte='diario', 
+            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
+                reporte(self, fecha=self.date_box.date().toString('yyyy-MM-dd'),
+                        maquina=maquina, id_maquina=id_maquina, tipo_reporte='diario',
                         diccionario=self.diccionario_invertido, umbrales=None)
         )
 
@@ -3422,18 +3400,18 @@ class PosicionamientoInicial(PruebaBasico):
         #print("Llama a la función checkBotonesFinales en button_click de la clase PosicionamientoInicial")
 
         self.boton_cancel.clicked.connect(self.cancelarbraqui)
-        
-        self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.table, "TipoCalibracion", None)) 
+
+        self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.table, "TipoCalibracion", None))
         self.btn_delete.clicked.connect(lambda: mostrar_db_mensualBraqui(self))
         self.menu_graficar.currentIndexChanged.connect(self.mostrar_submenu)
         self.date_box.dateChanged.connect(self.actualizar_ref_bd)
-        
+
         for grafica in self.graficar:
             grafica.currentIndexChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
             self.btn_submit.clicked.connect(lambda _, grafica=grafica: self.plotter(grafica))
             self.limit1.dateChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
             self.limit2.dateChanged.connect(lambda _, grafica=grafica: self.plotter(grafica))
-        
+
         self.search_bar.textChanged.connect(self._iniciar_busqueda_debounced)
 
     def clean_info(self, imagenes=False):
@@ -3455,7 +3433,7 @@ class PosicionamientoInicial(PruebaBasico):
     def actualizar_ref_bd(self, fecha=None):
         """Actualiza self.ref_bd cuando cambia la fecha"""
         fecha = self.date_box.date()
-        
+
         def consulta_db(fecha_consulta):
             # Pasar de el formato guardado "yyyy/MM/dd HH:mm:ss" a "yyyy/MM/dd"
             fecha_consulta = fecha_consulta.toString("yyyy-MM-dd")
@@ -3511,12 +3489,12 @@ class PosicionamientoInicial(PruebaBasico):
             print(f"ref_bd actualizado a: {self.ref_bd}")
 
     def mostrar_submenu(self):
-        
+
         for grafica in self.graficar:
             grafica.hide()
             grafica.setCurrentIndex(0)
         selection = self.menu_graficar.currentIndex()
-        
+
         if selection > 0 and selection <= len(self.graficar):
             self.graficar[selection-1].show()
 
@@ -3543,7 +3521,7 @@ class PosicionamientoInicial(PruebaBasico):
         layout.addWidget(self.label_dist)
         layout.addWidget(self.spin_dist)
         layout.addStretch()
-        
+
         # Conectar cambios de parámetros al debouncing para PosicionamientoInicial
         self.spin_umbral.valueChanged.connect(self.analizar_imagen_con_debouncing)
         self.spin_dist.valueChanged.connect(self.analizar_imagen_con_debouncing)
@@ -3594,7 +3572,7 @@ class PosicionamientoInicial(PruebaBasico):
 
             # Pre-cargar dependencias si es necesario
             optimizador_analisis.precargar_dependencias()
-            
+
             # Ejecutar análisis optimizado de posicionamiento
             #print(f"📸 Procesando imagen de posicionamiento: {self.imagen_path}")
             resultado = self._ejecutar_analisis_posicionamiento_optimizado(umbral, distancia)
@@ -3608,14 +3586,14 @@ class PosicionamientoInicial(PruebaBasico):
             #logger.error(f"Error en análisis de posicionamiento: {e}")
             self._mostrar_error_usuario("Error de Análisis", f"No se pudo analizar la imagen: {str(e)}")
         return None
-    
+
     def _configurar_interfaz_analisis(self):
         """Configura la interfaz de análisis de forma lazy"""
         self.parametros_layout = self._crear_parametros()
         self.layout_imagen.addLayout(self.parametros_layout)
 
         self.boton_ayuda = QPushButton("?")
-        self.boton_ayuda.setToolTip("Presione para ver ayuda sobre los parámetros.") 
+        self.boton_ayuda.setToolTip("Presione para ver ayuda sobre los parámetros.")
         self.setStyleSheet("""
             QToolTip {
                 background-color: rgba(177, 241, 251, 0.64);
@@ -3624,14 +3602,14 @@ class PosicionamientoInicial(PruebaBasico):
                 font-size: 14px;
             }
         """)
-        
+
         self.boton_ayuda.clicked.connect(self.mostrar_ayuda_parametros)
         self.botones_layout.addWidget(self.boton_ayuda)
-    
+
     def _ejecutar_analisis_posicionamiento_optimizado(self, umbral: float, distancia: int) -> Optional[str]:
         """Ejecuta análisis optimizado de posicionamiento sin caché innecesario"""
         try:
-            
+
             # Ejecutar análisis con imagen optimizada si está disponible
             return analizar_lineas(
                 imagen_path=self.imagen_path,
@@ -3646,7 +3624,7 @@ class PosicionamientoInicial(PruebaBasico):
         except Exception as e:
             print(f"Error ejecutando análisis de posicionamiento: {e}")
             return None
-    
+
     def _asegurar_toolbar_posicionamiento(self):
         """Asegura que la toolbar esté visible para posicionamiento"""
         if not hasattr(self, 'toolbar') or self.toolbar is None:
@@ -3656,19 +3634,19 @@ class PosicionamientoInicial(PruebaBasico):
             self.col2.addWidget(self.toolbar)
         elif self.col2.indexOf(self.toolbar) == -1:
             self.col2.addWidget(self.toolbar)
-    
+
     def analizar_imagen_con_debouncing(self):
         """Análisis con debouncing para ajustes de parámetros en PosicionamientoInicial"""
         if not hasattr(self, 'imagen_path') or not self.imagen_path:
             return
-        
+
         # Cancelar análisis anterior si está en progreso
         if hasattr(self, '_timer_analisis'):
             self._timer_analisis.stop()
-        
+
         # Timer para evitar análisis excesivos al cambiar parámetros
         self._timer_analisis.start(500)  # 500ms de delay
-    
+
     def _ejecutar_analisis_diferido(self):
         """Ejecuta el análisis después del debouncing para posicionamiento"""
         resultado = self.analizar_imagen()
@@ -3905,26 +3883,26 @@ class PosicionamientoInicial(PruebaBasico):
         """)
         msg.exec_()
 
-    """ Genera el espacio para graficar, incluyendo el canvas y los menús desplegables                                                                                                              """ 
+    """ Genera el espacio para graficar, incluyendo el canvas y los menús desplegables                                                                                                              """
     def plotter(self, menu):
-    
+
         #Se limpia el espacio paa graficar y se configura
         self.figure.clear()
         ax = self.figure.add_subplot(111)
-        
+
         #Se abre la base de datos y se encuentra que se va a graficar
         db = self.opeenDatabase()
         selected_chart = menu.currentText()  # QComboBox con tipos de gráfica
-        
+
         if selected_chart == "Seleccione...": #No se si sea necesario pero es para no tneer errores
             return
-        
-        #Se establecen los limites de l grafica 
+
+        #Se establecen los limites de l grafica
         start_date = self.limit1.date().toString('yyyy-MM-dd')
         end_date = self.limit2.date().toString('yyyy-MM-dd')
-        
+
         query = QSqlQuery(db)
-        
+
         selected_column1 = self.graficos_mapeo1.get(selected_chart, None)
         selected_column2 = self.graficos_mapeo2.get(selected_chart, None)
 
@@ -3967,7 +3945,7 @@ class PosicionamientoInicial(PruebaBasico):
                 x_data.append(query.value(0))  # la fecha
                 y_data1.append(float(query.value(1)))  # tol_fot_6mv
                 y_data2.append(float(query.value(2)))  # tol_fot_15mv
-            
+
             date = [datetime.datetime.strptime(date, '%Y-%m-%d').date() for date in x_data]
 
             ax.plot(date, y_data1, marker='o', label='actividad reportada')
@@ -3979,11 +3957,11 @@ class PosicionamientoInicial(PruebaBasico):
             ax.set_title('Actividad reportada vs actividad esperada')
             ax.grid(True)
             ax.legend()
-        
-        
+
+
         elif selected_chart == "Ciclos vs tiempo":
             #print("Entro a datos dosimetricos vs tiempo")
-            
+
             query.prepare(f"""
                 SELECT DATE(date) AS date,
                 tol_cyc_dummy,tol_cyc_rad
@@ -4007,7 +3985,7 @@ class PosicionamientoInicial(PruebaBasico):
                 x_data.append(query.value(0))  # la fecha
                 y_data1.append(float(query.value(1)))  # tol_fot_6mv
                 y_data2.append(float(query.value(2)))  # tol_fot_15mv
-            
+
             date = [datetime.datetime.strptime(date, '%Y-%m-%d').date() for date in x_data]
 
             ax.plot(date, y_data1, marker='o', label='Ciclos del dummy')
@@ -4018,7 +3996,7 @@ class PosicionamientoInicial(PruebaBasico):
             ax.set_ylabel('Dosis')
             ax.set_title('Ciclos del dummy vs ciclos de la fuente')
             ax.grid(True)
-            ax.legend()        
+            ax.legend()
 
         elif selected_column1 in [
             'int_con_box', 'emerg_con', 'blq_puerta',
@@ -4026,13 +4004,13 @@ class PosicionamientoInicial(PruebaBasico):
             'mon_area', 'lum_puerta', 'tub_guia',
             'visual_sys', 'intercom', 'mon_rad_port'
         ]:
-            
+
             graficarvstiempo(self, query, ax, 'braqui', selected_column1, selected_chart, start_date, end_date, True)
-        
+
         # Redibuja en el canvas
         self.canvas.draw()
         db.close()
-    
+
     def cleanup_recursos(self):
         """Limpia recursos de PosicionamientoInicial"""
         #logger.info("Limpiando recursos de PosicionamientoInicial")
@@ -4041,14 +4019,14 @@ class PosicionamientoInicial(PruebaBasico):
             if hasattr(self, 'resultados_table') and self.resultados_table:
                 self.resultados_table.clearContents()
                 self.resultados_table.deleteLater()
-            
+
             # Limpiar canvas y figuras
             if hasattr(self, 'canvas') and self.canvas:
                 try:
                     self.canvas.figure.clear()
                 except:
                     pass
-            
+
             # Limpiar toolbar
             if hasattr(self, 'toolbar') and self.toolbar:
                 try:
@@ -4059,7 +4037,7 @@ class PosicionamientoInicial(PruebaBasico):
             #print("Recursos de PosicionamientoInicial limpiados")
         except Exception as e:
             print(f"Error limpiando recursos de PosicionamientoInicial: {e}")
-    
+
     def _mostrar_error_usuario(self, titulo: str, mensaje: str):
         """Muestra errores al usuario de forma consistente"""
         print(f"{titulo}: {mensaje}")
@@ -4067,7 +4045,7 @@ class PosicionamientoInicial(PruebaBasico):
             QMessageBox.warning(self, titulo, mensaje)
         except Exception as e:
             print(f"Error mostrando mensaje al usuario: {e}")
-    
+
     def _ejecutar_busqueda_filtrada(self):
         """Ejecuta búsqueda filtrada después del debouncing"""
         try:
@@ -4077,16 +4055,15 @@ class PosicionamientoInicial(PruebaBasico):
                 self.filtrarTabla()
         except Exception as e:
             print(f"Error en búsqueda filtrada: {e}")
-    
+
     def _iniciar_busqueda_debounced(self):
         """Inicia búsqueda con debouncing para evitar búsquedas excesivas"""
         self._timer_busqueda.stop()
         self._timer_busqueda.start(300)  # 300ms de delay
-    
+
     def __del__(self):
         """Destructor para limpieza automática"""
         try:
             self.cleanup_recursos()
         except:
             pass
-

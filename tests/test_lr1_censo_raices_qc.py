@@ -235,37 +235,37 @@ CENSO_RAICES = {
     # -- ui/PruebasDiarias -----------------------------------------------
     ("ui/paginasControles/PruebasDiarias/IX.py", 268, "aceleradorlineal_ix"):
         (LISTA, "reporte diario del Clinac iX por fecha"),
-    ("ui/paginasControles/PruebasDiarias/IX.py", 466, "aceleradorlineal_ix"):
+    ("ui/paginasControles/PruebasDiarias/IX.py", 444, "aceleradorlineal_ix"):
         (LISTA, "serie temporal del Clinac iX por rango de fechas"),
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 383, "braqui"):
         (LISTA, "reporte diario de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 816, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 794, "TipoCalibracion"):
         (LISTA, "última fuente instalada antes de una fecha dada"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1600, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1578, "braqui"):
         (LISTA, "serie temporal de actividad por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1639, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1617, "braqui"):
         (LISTA, "serie temporal de ciclos de braqui por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1862, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1840, "TipoCalibracion"):
         (LISTA, "última fecha registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1881, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1859, "TipoCalibracion"):
         (LISTA, "datos de la calibración de braquiterapia de esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1941, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1919, "TipoCalibracion"):
         (LISTA, "última fecha con tipo 'Cambio de fuente' (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2322, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2300, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2651, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2629, "LinealidadBraquiterapia"):
         (LISTA, "linealidad por fecha para el PDF -- ya filtraba (el sitio "
                 "que fijó el patrón: filtro + ORDER BY id DESC)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3161, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3139, "TipoCalibracion"):
         (LISTA, "JOIN a la calibración de una fecha para graficar máximos -- "
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3190, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3168, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3472, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3450, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3948, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3926, "braqui"):
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3987, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3965, "braqui"):
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
     ("ui/paginasControles/PruebasDiarias/seiscientos.py", 186, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),

@@ -362,11 +362,17 @@ class TestAlcanceResetearImagenUiOtrasPantallas:
 
 
 class TestAlcanceLinealidadSinCambioDeComportamiento:
-    """§4.2 fila 3: hay DOS métodos `_limpiar_widgets_diaria` homónimos en
-    el archivo (`PruebaDiariaBraq` y `Linealidad`), sin relación de
-    herencia. Ninguna edición de este plan tocó la clase `Linealidad`
-    (verificado: todos los cambios cayeron dentro de `PruebaDiariaBraq` o
-    `PosicionamientoInicial`) -- este test es el guardia de esa afirmación."""
+    """§4.2 fila 3: en la fecha de este plan (28-08) había DOS métodos
+    `_limpiar_widgets_diaria` homónimos en el archivo (`PruebaDiariaBraq` y
+    `Linealidad`), sin relación de herencia. Ninguna edición de ESTE plan
+    tocó la clase `Linealidad` (verificado: todos los cambios cayeron
+    dentro de `PruebaDiariaBraq` o `PosicionamientoInicial`) -- este test
+    es el guardia de esa afirmación.
+
+    [actualizado 02-09, `I0`/`PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md`]: la de
+    `PruebaDiariaBraq` subió a `PruebaBasico` (compartida con IX/600); la de
+    `Linealidad` -- la que este test ejercita -- sigue siendo la suya
+    propia, sin tocar, exactamente como este test lo exige."""
 
     def test_linealidad_limpia_igual_que_antes(self, app, bd_temporal):
         d = Linealidad(_UsuarioFalso())

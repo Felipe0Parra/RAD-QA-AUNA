@@ -10,9 +10,9 @@ from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamic
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_EDITAR, usuario_actual as _usuario_actual
 from ui.util_fechas import ancho_minimo_fecha  # I5
-from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QRadioButton, QLabel, QLineEdit, 
-                            QComboBox, QAbstractItemDelegate, QTableWidget, QTableWidgetItem, QHeaderView, 
-                            QSizePolicy, QDateEdit, QDateTimeEdit, QSplitter, QMessageBox, QAbstractItemView, 
+from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QRadioButton, QLabel, QLineEdit,
+                            QComboBox, QAbstractItemDelegate, QTableWidget, QTableWidgetItem, QHeaderView,
+                            QSizePolicy, QDateEdit, QDateTimeEdit, QSplitter, QMessageBox, QAbstractItemView,
                             QGridLayout, QScrollArea, QFileDialog, QDialog)
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import *
@@ -57,7 +57,7 @@ class PruebaBasico(QWidget):
             self.general_layout = QVBoxLayout()
         datos = DataFront(documento, sheet_name )
         df, n = datos.extrdatos()
-    
+
         layouts, comboboxes = self.createInterface(df, n)
         if main is True:
             for layout in layouts:
@@ -122,8 +122,8 @@ class PruebaBasico(QWidget):
         self.col2.addLayout(self.settfigure)
         self.col2.addLayout(date_limit)
         self.col2.addWidget(self.canvas)
-        
-        # COLUMNA DERECHA - tabla editable 
+
+        # COLUMNA DERECHA - tabla editable
         self.edit_table_tools = self.createTable(df=df, headers=None)
         self.col2_1 = QVBoxLayout()
         self.col2_1.addWidget(self.table)
@@ -176,7 +176,7 @@ class PruebaBasico(QWidget):
 
             if widget_type == 'QPushButton':
                 boton = QPushButton(descripcion)
-                boton.setCheckable(True)  
+                boton.setCheckable(True)
                 setattr(self, nombre, boton)
 
             elif widget_type == 'QRadioButton':
@@ -224,9 +224,9 @@ class PruebaBasico(QWidget):
                     getattr(self, row['nombres']).setText('N/a')
                 else:
                     getattr(self, row['nombres']).setText(str(row['descripcion']))  # Convierte a str solo si no es NaN
-                    
+
                 getattr(self, row['nombres']).setReadOnly(True)
-                
+
             elif widget_type == 'QComboBox':
                 combo = QComboBox()
                 combo.addItem(str(descripcion))
@@ -238,7 +238,7 @@ class PruebaBasico(QWidget):
                     layouts[prueba].setVerticalSpacing(10)
 
                 layouts[prueba].addWidget(combo, *pose)
-                
+
             elif widget_type == 'QDateEdit':
                 setattr(self, nombre, QDateEdit())
                 getattr(self, nombre).setCalendarPopup(True)
@@ -300,24 +300,24 @@ class PruebaBasico(QWidget):
         if df is not None:
             self.table = QTableWidget ()
             self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)# crea la tabla
-            
-        elif headers is not None:  
+
+        elif headers is not None:
             l = len(headers)
             self.table = QTableWidget ()       # crea la tabla
-            self.table.setColumnCount(l) #numero de columnas 
+            self.table.setColumnCount(l) #numero de columnas
             self.table.setHorizontalHeaderLabels(headers)
             self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-            
-        self.table.verticalHeader().setVisible(False) 
-        
-        
-        self.btn_delete = QPushButton('Eliminar')    
+
+        self.table.verticalHeader().setVisible(False)
+
+
+        self.btn_delete = QPushButton('Eliminar')
         self.edit_table = QPushButton('Editar')
         self.accept_edit = QPushButton('Aceptar')
         self.accept_edit.hide()
         self.cancel_edit = QPushButton('Cancelar')
         self.cancel_edit.hide()
-        
+
         # Barra de búsqueda
         self.search_bar = QLineEdit()
         self.search_bar.setPlaceholderText("Buscar en la tabla...")
@@ -328,7 +328,7 @@ class PruebaBasico(QWidget):
         edit_table_tools.addWidget(self.accept_edit)
         edit_table_tools.addWidget(self.cancel_edit)
         edit_table_tools.addWidget(self.search_bar)
-        
+
         return edit_table_tools
 
     def filtrarTabla(self):
@@ -347,24 +347,24 @@ class PruebaBasico(QWidget):
     def storeDailyTests(self, df):
         todo = []
         self.df_bnt_funciona = df.loc[df.descripcion == 'Funciona']['nombres']
-        self.df_bnt_nofunciona = df.loc[df.descripcion == 'No funciona']['nombres'] 
+        self.df_bnt_nofunciona = df.loc[df.descripcion == 'No funciona']['nombres']
         self.df_lines = df.loc[df.widget_type == 'QLineEdit']['nombres']
         self.df_lines = [line for line in self.df_lines if line != "observaciones"]
 
-        for btn_si, btn_no in zip(self.df_bnt_funciona, self.df_bnt_nofunciona): 
+        for btn_si, btn_no in zip(self.df_bnt_funciona, self.df_bnt_nofunciona):
             dato = getattr(self, btn_si)
             dato = (dato, btn_si)
             todo.append(dato)
             dato1 = getattr(self, btn_no)
             dato1 = (dato1, btn_no)
             todo.append(dato1)
-            
+
         return todo
 
     " Configura el estilo de los botones Funciona y No Funciona"
     def setupButtonConnections(self, df, maquina = None):
         self.df_bnt_funciona = df.loc[df.descripcion == 'Funciona']['nombres']
-        self.df_bnt_nofunciona = df.loc[df.descripcion == 'No funciona']['nombres'] 
+        self.df_bnt_nofunciona = df.loc[df.descripcion == 'No funciona']['nombres']
         self.df_lines_dosis = df.loc[(df.widget_type == 'QLineEdit') & (df.prueba == 'aspectos dosimetricos')]['nombres']
         self.df_lines_dosis = [line for line in self.df_lines_dosis]
 
@@ -384,8 +384,8 @@ class PruebaBasico(QWidget):
                 btn_nofun.clicked.connect(lambda _, a=(btn_nofun, nofun), b=(btn_fun, fun) : self.completar(a, b))
 
     def cargar_dailytest_desde_db(self):
-        return 
-        
+        return
+
     def completar(self, selected, rejected, maquina = None):
         selected_btn = selected[0]
         rejected_btn = rejected[0]
@@ -407,30 +407,30 @@ class PruebaBasico(QWidget):
         selected.setProperty("estado", "selected")
         selected.style().unpolish(selected)
         selected.style().polish(selected)
-        
+
         rejected.setProperty("estado", "noselected")
         rejected.style().unpolish(rejected)
         rejected.style().polish(rejected)
-        
+
         # Force update of the widget
         selected.update()
-        rejected.update() 
+        rejected.update()
 
     def otra_funcion(self, selected, refected, maquina =None):
         # Extraemos solo los botones de las tuplas en el set
         botones_existentes = {boton for boton, _ in self.botones_finales}
-        
+
         if refected[0] in botones_existentes:
             # Eliminamos la tupla con el botón refected
             self.botones_finales = {t for t in self.botones_finales if t[0] != refected[0]}
-        
+
         # Agregamos la nueva tupla selected
         self.botones_finales.add(selected)
-        
-        if maquina == 'ix':
-            self.checkBotonesFinales(ix = True)    
 
-    def checkLineEdits(self, ix=False): 
+        if maquina == 'ix':
+            self.checkBotonesFinales(ix = True)
+
+    def checkLineEdits(self, ix=False):
         #print("Entra a checkLineEdits ")
         if ix:
             for line in self.df_lines : #and self.df_lines_parciales: #self.df_lines = df.loc[df.widget_type == 'QLineEdit']['nombres']
@@ -443,13 +443,13 @@ class PruebaBasico(QWidget):
                 if dato.text().strip():
                     return True
             return False
-        else:  #####NO ES UN and CAMBIA ESO      
-            for line in self.df_lines : #and self.df_lines_parciales: 
+        else:  #####NO ES UN and CAMBIA ESO
+            for line in self.df_lines : #and self.df_lines_parciales:
                 dato = getattr(self, line)
                 if not dato.text().strip():
                     return False
             return True
- 
+
     def checkBotonesFinales(self, line = None, halcyon=False,ix = False, braqui = False, otro = None):
         #print("Entra a la función checkBotonesFinales ")
         if ix:
@@ -461,7 +461,7 @@ class PruebaBasico(QWidget):
                 self.btn_add.update()
                 self.btn_add.setEnabled(True)
                 #self.btn_add.setProperty("estado", "noselected")
-       
+
         elif halcyon:
             #print(f"    - Entra a la condición maquina IX")
             if len(self.botones_finales) == 12 and self.checkLineEdits(ix=False):
@@ -490,7 +490,7 @@ class PruebaBasico(QWidget):
                 self.btn_add.setObjectName("")
                 self.btn_add.style().unpolish(self.btn_add)
                 self.btn_add.style().polish(self.btn_add)
-                self.btn_add.update() 
+                self.btn_add.update()
                 self.btn_add.setEnabled(True)
         #Para que se habilite el boton de añadir para la lienalidad de braquiterapia
         elif braqui == True and otro == "Linealidad Braquiterapia":
@@ -520,12 +520,12 @@ class PruebaBasico(QWidget):
 
     def menuAnidado(self, menu_graficas, graficos):
         graficar= []
-        
+
         menu_graficar = QComboBox()
         for item in menu_graficas:
             menu_graficar.addItem(item)
         menu_graficar.model().item(0).setEnabled(False)
-        
+
         for submenu in graficos:
             grafica = QComboBox()
             for item in submenu:
@@ -533,7 +533,7 @@ class PruebaBasico(QWidget):
             grafica.model().item(0).setEnabled(False)
             grafica.hide()
             graficar.append(grafica)
-        
+
         return menu_graficar, graficar
 
     def plotterSpaceEX(self, menu_graficas, graficos):
@@ -543,28 +543,28 @@ class PruebaBasico(QWidget):
         self.figure = plt.figure()
         FigureCanvas = mpl['FigureCanvas']
         canvas = FigureCanvas(self.figure)
-        
+
         # caja para cambiar de grafica
         menu_graficar, graficar = self.menuAnidado(menu_graficas, graficos)
-        
+
         # fechas limite
         date_limit = QHBoxLayout()
-        
+
         self.limit1name = QLabel('Fecha de inicio:')
         self.limit1 = QDateEdit()
         self.limit1.setCalendarPopup(True)
         self.limit1.setDate(QDate.currentDate())
-        
+
         self.limit2name = QLabel('Fecha de finalizacion:')
         self.limit2 = QDateEdit()
         self.limit2.setCalendarPopup(True)
         self.limit2.setDate(QDate.currentDate())
-        
+
         date_limit.addWidget(self.limit1name)
         date_limit.addWidget(self.limit1)
         date_limit.addWidget(self.limit2name)
         date_limit.addWidget(self.limit2)
-        
+
         return date_limit, canvas, menu_graficar, graficar
 
     def opeenDatabase(self):
@@ -590,8 +590,8 @@ class PruebaBasico(QWidget):
 
         if selected_row == -1:
             QMessageBox.warning(self, 'Error', 'Por favor elija una fila para eliminar')
-            return  
-        
+            return
+
         dialogo = DialogAdminPermisoEliminar(self.user_id)
         respuesta = dialogo.exec()
         self.delete_info(maquina, lista) if respuesta == QDialog.DialogCode.Accepted else None
@@ -698,19 +698,47 @@ class PruebaBasico(QWidget):
         for line in self.df_lines:
             dato = getattr(self, line)
             dato.clear()
-        
+
         self.btn_add.setObjectName("boton_nofunciona")
         self.btn_add.style().unpolish(self.btn_add)
         self.btn_add.style().polish(self.btn_add)
         self.btn_add.setEnabled(False)
         self.btn_add.setProperty("estado", "noselected")
-        
+
         if imagenes:
             self.resetear_imagen_ui()
 
-    
 
-    def verificar_editar(self): 
+
+    # I0 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): subida desde
+    # `braquiterapia.py`/`IX.py`/`seiscientos.py` -- las 3 copias eran
+    # byte-idénticas o difirieron solo en una línea en blanco [medido].
+    # Diff puramente mecánico: mismo cuerpo exacto, sin cambio de
+    # comportamiento. Halcyon (que no la tenía) la hereda sin usarla
+    # todavía -- no llama a esta función hoy.
+    def _limpiar_widgets_diaria(self):
+        """A4: deja el formulario diario en blanco -- ni "Funciona" ni "No
+        funciona" marcado, campos numéricos y observaciones vacíos. Se usa
+        al llegar a una fecha sin registro (no hay dato que restaurar)."""
+        self.botones_finales.clear()
+        for fun, nofun in zip(self.df_bnt_funciona, self.df_bnt_nofunciona):
+            btn_fun = getattr(self, fun, None)
+            btn_nofun = getattr(self, nofun, None)
+            if btn_fun and btn_nofun:
+                btn_fun.setChecked(False)
+                btn_nofun.setChecked(False)
+                for boton in (btn_fun, btn_nofun):
+                    boton.setProperty("estado", "noselected")
+                    boton.style().unpolish(boton)
+                    boton.style().polish(boton)
+                    boton.update()
+        for line_name in self.df_lines:
+            if hasattr(self, line_name):
+                getattr(self, line_name).setText("")
+        if hasattr(self, 'observaciones'):
+            self.observaciones.setText("")
+
+    def verificar_editar(self):
         print(f"\n* Pide el usuario para editar")
         row = self.table.currentRow()
         col = self.table.currentColumn()
@@ -718,7 +746,7 @@ class PruebaBasico(QWidget):
         if row == -1 or col == -1:
             QMessageBox.warning(self, 'Error', 'Por favor elija una celda para editar')
             return
-        
+
         dialogo = DialogAdminPermisoEditar(self.user_id)
         respuesta = dialogo.exec()
         if respuesta == QDialog.DialogCode.Accepted:
@@ -792,7 +820,7 @@ class PruebaBasico(QWidget):
         self.cancel_edit.hide()
         QMessageBox.information(self, "Cancelado", "Edición cancelada, cambios revertidos.")
 
-    def cargarDatosEditados(self, item, old_value, database):  
+    def cargarDatosEditados(self, item, old_value, database):
         # Desconectar la señal para evitar llamadas múltiples
         try:
             self.table.itemChanged.disconnect(self.cargarDatosEditados)
@@ -888,7 +916,7 @@ class PruebaBasico(QWidget):
         # Recargar la tabla para reflejar el cambio
         # (si tienes función de recarga, la llamarías aquí)
 
-    def imagenUpLoader(self, analisis = True):  
+    def imagenUpLoader(self, analisis = True):
         widget_imagen = QWidget()
         layout_imagen = QVBoxLayout(widget_imagen)
 
@@ -897,16 +925,16 @@ class PruebaBasico(QWidget):
         self.scroll_area.setWidgetResizable(True)
 
         self.zoom_factor = 1.0
-        
+
         # Imagen inicial (placeholder)
         self.label_imagen = ImagenInteractiva()
         self.label_imagen.setAlignment(Qt.AlignCenter)
         self.label_imagen.setText("Subir imagen")
         self.label_imagen.setStyleSheet("color: gray; font-size: 18px;")
-        
+
         self.scroll_area.setWidget(self.label_imagen)
         layout_imagen.addWidget(self.scroll_area)
-        
+
         # Botones principales
         self.boton_subir = QPushButton("Seleccionar Imagen")
         self.boton_aceptar = QPushButton("Aceptar")
@@ -936,7 +964,7 @@ class PruebaBasico(QWidget):
         self.botones_layout = botones
 
         self.layout_canvas = QVBoxLayout()
-        layout_imagen.addLayout(self.layout_canvas) 
+        layout_imagen.addLayout(self.layout_canvas)
         self.layout_imagen = layout_imagen
 
         # Conexiones
@@ -975,19 +1003,19 @@ class PruebaBasico(QWidget):
             if not hasattr(self, "zoomConnected") or not self.zoomConnected:
                 self.label_imagen.ruedaScroll.connect(self.zoom_rueda)
                 self.zoomConnected = True
-            
+
             self.boton_subir.hide()
             self.boton_aceptar.show()
             if analisis:
                 print("Analisis de imagen activado en subir_imagen en PruebasDiarias.py")
-                self.boton_aceptar.clicked.connect(self.analizar_imagen)  
-                print("analizando imagen") 
+                self.boton_aceptar.clicked.connect(self.analizar_imagen)
+                print("analizando imagen")
                 self.boton_aceptar.clicked.connect(lambda:print("Aceptar imagen activado en PruebasDiarias.py"))
                 #self.btn_add.clicked.connect(self.clean_info)
-                
+
             else:
-                self.boton_aceptar.clicked.connect(lambda:print("Archivo: ", archivo))   
-            
+                self.boton_aceptar.clicked.connect(lambda:print("Archivo: ", archivo))
+
             self.boton_cancel.show()
             self.boton_zoom_mas.setEnabled(True)
             self.boton_zoom_mas.show()
@@ -1006,13 +1034,13 @@ class PruebaBasico(QWidget):
             self.botones_layout.insertWidget(0, self.agregar_imagen)
 
 
-    
+
     def cancelarbraqui(self):
         self.archivo = None
         self.pixmap_original = QPixmap()
 
         atributos  = ["label_imagen", "boton_aceptar", "boton_cancel", "boton_zoom_mas", "boton_zoom_menos", "boton_seubir"]
-        
+
         if any(hasattr(self, attr) for attr in atributos) and self.label_imagen is not None:
             self.label_imagen.clear()
             self.label_imagen.setText("Subir imagen")
@@ -1043,22 +1071,22 @@ class PruebaBasico(QWidget):
 
     def upload_image(self, SAVE_FOLDER):
         file_path, _ = QFileDialog.getOpenFileName(self, "Seleccionar Imagen", "", "Imágenes (*.png *.jpg *.jpeg *.bmp *.gif)")
-        
+
         if file_path:
             filename = os.path.basename(file_path)
             save_path = os.path.join(SAVE_FOLDER, filename)
-            
+
             with open(file_path, "rb") as f_in:
                 with open(save_path, "wb") as f_out:
                     f_out.write(f_in.read())
-            
+
             pixmap = QPixmap(save_path)
             #pixmap = pixmap.scaled(500, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             #image_label.setPixmap(pixmap)
             #scaled_pixmap = pixmap.scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             #image_label.setPixmap(scaled_pixmap)
             return pixmap
-    
+
     def zoom_mas(self):
         self.zoom_factor += 0.1
         self.actualizar_imagen()

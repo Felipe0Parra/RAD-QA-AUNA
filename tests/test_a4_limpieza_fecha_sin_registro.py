@@ -130,8 +130,12 @@ def _line_con_texto(texto):
 
 
 class TestLimpiarWidgetsDiariaUnitario:
-    """Cada clase tiene su propio `_limpiar_widgets_diaria` -- estructura de
-    widgets distinta, mismo contrato: nada marcado, nada con texto."""
+    """`_limpiar_widgets_diaria` es una sola función, heredada de
+    `PruebaBasico` (subida ahí por `I0`, `PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md`
+    -- antes vivía copiada, byte a byte, en `PruebaDiaria600`/`IX`/`Braq`).
+    `Linealidad` es la excepción: sus widgets son otros por completo (combos
+    de modelo/serie, no Funciona/No funciona) y conserva su propia versión,
+    sin relación de herencia con `PruebaBasico`."""
 
     def _obj_botones_lineas(self, clase):
         obj = clase.__new__(clase)

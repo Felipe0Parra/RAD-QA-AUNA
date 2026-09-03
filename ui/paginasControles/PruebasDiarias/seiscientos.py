@@ -20,17 +20,17 @@ class PruebaDiaria600(PruebaBasico):
         load_table(self, self.boolean_colums, self.dosis,  "aceleradorlineal_600")
         asignar_encabezados(self, 'aceleradorlineal_600')
         self.button_click()
-    
+
     def initDATA(self, user_id):
         self.botones_ordenados = []
         self.botones_finales = set()
         self.user_id = user_id
         #print(f'User en init dataseicientos :{self.user_id}')
         self.fueradeservicio = False
-    
+
         self.graficos_mapeo1 = {}
         self.graficos_mapeo2 = {}
-        
+
         self.diccionario_invertido = {
             "luces_consola": ["Luces consola", '', "scatter"],
             "luces_puerta": ["Luces puerta", '', "scatter"],
@@ -51,7 +51,7 @@ class PruebaDiaria600(PruebaBasico):
             "dosis_referencia": ["Datos dosimetricos", 3, "line"],
             "observaciones": ["Observaciones", "", "Na"]
         }
-        
+
         for k, v in self.diccionario_invertido.items():
             if v[2] == "scatter":
                 self.graficos_mapeo1[v[0]] = k
@@ -59,19 +59,19 @@ class PruebaDiaria600(PruebaBasico):
                 self.graficos_mapeo2[v[0]] = k
             else:
                 pass
-        
+
         self.boolean_colums = self.graficos_mapeo1.values()
         self.dosis = ['dosis_referencia']
-    
+
     def iniGUI(self):
         self.main_layout = QHBoxLayout() #la mama
-        
+
         archivo = 'widgets.xlsx'
         _ = self.setupBox(archivo, 'encabezado_600') #ME CREA LA COLUMNA Y SU VAINA
         self.date_box.setDisplayFormat("dd/MM/yyyy")
         df, n, layouts, _ = self.setupBox(archivo, 'preguntas_600', main = False)
         self.datos_tabla = self.storeDailyTests(df)
-        
+
         self.canson1 = QWidget()
         self.canson2 = QWidget()
         self.canson3 = QWidget()
@@ -79,9 +79,9 @@ class PruebaDiaria600(PruebaBasico):
 
         toolbox= QToolBox()
         self.general_layout.addWidget(toolbox)
-        
+
         i = 1
-        for layout in layouts: 
+        for layout in layouts:
             name = f'canson{i}'
             getattr(self, name).setLayout(layout)
             i+=1
@@ -90,17 +90,17 @@ class PruebaDiaria600(PruebaBasico):
         toolbox.addItem(self.canson2, 'ASPECTOS MECÁNICOS')
         toolbox.addItem(self.canson3, 'ASPECTOS DOSIMÉTRICOS')
         toolbox.addItem(self.canson4, 'OBSERVACIONES')
-    
+
         # botones
         _ = self.setupBox(archivo, 'btn')
-        
+
         self.btn_add.setObjectName("boton_nofunciona")
         self.btn_add.setEnabled(False)
         self.btn_add.setProperty("estado", "noselected")
-        
+
         ## GRAFICOS
         self.edit_table_tools = self.createTable(df=df, headers=None)
-        
+
         # Crear zona de graficas
         menu_graficas = ['Seleccione...','Seguridad', 'Aspectos mecánicos', 'Aspectos dosimétricos']
         lista = [valor[0] for valor in  self.diccionario_invertido.values()]
@@ -110,71 +110,71 @@ class PruebaDiaria600(PruebaBasico):
         graf_2.insert(0, 'Seleccione...')
         graf_3 = ['Seleccione...', "Datos dosimetricos"]
         graficos = [graf_1, graf_2, graf_3]
-        
+
         date_limit, self.canvas, self.menu_graficar, self.graficar = self.plotterSpaceEX(menu_graficas, graficos)
-        
+
         caja_menu_graficas = QHBoxLayout()
         caja_menu_graficas.addWidget(self.menu_graficar)
-        for grafica in self.graficar: 
+        for grafica in self.graficar:
             caja_menu_graficas.addWidget(grafica)
-        
+
         self.settfigure = QHBoxLayout()
         self.settfigure.addLayout(caja_menu_graficas)
-        
+
         # Design Our Layout
         self.col2 = QVBoxLayout()
-        
+
         self.col2.addLayout(self.settfigure)
         self.col2.addLayout(date_limit)
         self.col2.addWidget(self.canvas)
-        
+
         self.col2_1 = QVBoxLayout()
         self.col2_1.addWidget(self.table)
         self.col2_1.addLayout(self.edit_table_tools)
-        
+
         self.wf2 = QSplitter(Qt.Orientation.Vertical)
-        
+
         self.widgetgrafica = QWidget()
         self.widgetgrafica.setLayout(self.col2)
-        
+
         self.widgettabla = QWidget()
         self.widgettabla.setLayout(self.col2_1)
-        
+
         self.wf2.addWidget(self.widgetgrafica)
         self.wf2.addWidget(self.widgettabla)
-        
+
         self.wf = QWidget()
         self.wf.setLayout(self.general_layout)
-        
+
         self.splitter_principal = QSplitter(Qt.Horizontal)
         self.splitter_principal.addWidget(self.wf)
         self.splitter_principal.addWidget(self.wf2)
-        
+
         self.main_layout.addWidget(self.splitter_principal)
-        
+
         #self.general_layout.removeWidget(self.btn_add)
         #self.btn_add.deleteLater()  # Opcional para liberar memoria
-        
+
         self.setLayout(self.main_layout)
-        
+
         self.setupButtonConnections(df, maquina = 'ix')
     def cargar_dailytest_desde_db(self, fecha=None):
         """
         Carga datos de pruebas diarias desde la base de datos y los mapea a los widgets de la GUI.
-        
+
         Args:
             fecha: QDate object o None. Si es None, usa la fecha del date_box.
         """
         if fecha is None:
             fecha = self.date_box.date()
-        
+
         # Convertir QDate a string en formato compatible con la BD
         fecha_str = fecha.toString("yyyy-MM-dd")
-        
+
         db = self.opeenDatabase()
         if not db:
             return
-        
+
         try:
             query = QSqlQuery(db)
             print("consultando db")
@@ -184,7 +184,7 @@ class PruebaDiaria600(PruebaBasico):
             # una fecha puede tener varias generaciones y `LIMIT 1` sin
             # orden devuelve la más antigua.
             query.prepare(f"""
-                SELECT * FROM aceleradorlineal_600 
+                SELECT * FROM aceleradorlineal_600
                 WHERE date = ?{filtro_activo('aceleradorlineal_600')}
                 ORDER BY id DESC
                 LIMIT 1
@@ -192,27 +192,27 @@ class PruebaDiaria600(PruebaBasico):
             query.addBindValue((fecha_str))
             #query.addBindValue(str(self.user_id))
             print(fecha_str)
-            
+
             if not query.exec():
                 print(f"Error en consulta: {query.lastError().text()}")
                 db.close()
                 return
-            
+
             if query.next():
                 # Limpiar datos actuales primero
                 self.botones_finales.clear()
-                
+
                 # Obtener todos los nombres de columnas de la consulta
                 record = query.record()
-                
+
                 # 1. Cargar botones Funciona/No Funciona (columnas booleanas)
                 for columna_db in self.boolean_colums:
                     # Verificar si la columna existe en el resultado
                     if record.indexOf(columna_db) == -1:
                         continue
-                        
+
                     valor = query.value(columna_db)
-                    
+
                     # Buscar el par de botones correspondiente
                     found = False
                     for fun, nofun in zip(self.df_bnt_funciona, self.df_bnt_nofunciona):
@@ -221,7 +221,7 @@ class PruebaDiaria600(PruebaBasico):
                         if columna_db.replace('_', ' ') in fun.lower() or columna_db in fun:
                             btn_fun = getattr(self, fun, None)
                             btn_nofun = getattr(self, nofun, None)
-                            
+
                             if btn_fun and btn_nofun:
                                 if valor == 1 or valor == '1' or valor == True:
                                     # Activar "Funciona"
@@ -235,50 +235,50 @@ class PruebaDiaria600(PruebaBasico):
                                     self.botones_finales.add((btn_nofun, nofun))
                                 found = True
                                 break
-                    
+
                     if not found:
                         print(f"⚠ No se encontraron botones para: {columna_db}")
-                
+
                 # 2. Cargar QLineEdit (datos numéricos)
                 columnas_numericas = ['laseres', 'telemetro', 'tamano_campo', 'centrado_reticulo', 'dosis_referencia']
-                
+
                 for columna_db in columnas_numericas:
                     if record.indexOf(columna_db) == -1:
                         continue
-                        
+
                     valor = query.value(columna_db)
                     if valor is not None and str(valor).strip() != '':
                         # Buscar el widget en df_lines que corresponda
                         for line_name in self.df_lines:
                             if hasattr(self, line_name):
                                 # Intentar match por nombre
-                                if (columna_db in line_name.lower() or 
+                                if (columna_db in line_name.lower() or
                                     line_name.lower() in columna_db or
                                     columna_db.replace('_', '') in line_name.lower()):
-                                    
+
                                     line_widget = getattr(self, line_name)
                                     line_widget.setText(str(valor))
                                     print(f"✓ Cargado {columna_db}: {valor} en {line_name}")
                                     break
-                
+
                 # 3. Cargar observaciones
                 if record.indexOf('observaciones') != -1:
                     obs_valor = query.value('observaciones')
                     if obs_valor and hasattr(self, 'observaciones'):
                         self.observaciones.setText(str(obs_valor))
                         print(f"✓ Cargadas observaciones")
-                
+
                 # 4. Actualizar el date_box con la fecha cargada (sin disparar señal)
                 self.date_box.blockSignals(True)
                 self.date_box.setDate(fecha)
                 self.date_box.blockSignals(False)
-                
+
                 # 5. Verificar si se debe habilitar el botón de añadir
                 self.checkBotonesFinales()
-                
+
                 print(f"✓ Datos del {fecha_str} cargados correctamente.")
                 print(f"  - Botones finales: {len(self.botones_finales)}")
-                
+
             else:
                 # A4 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase A, R11): sin
                 # esta rama, la pantalla conservaba los datos de la fecha
@@ -299,70 +299,49 @@ class PruebaDiaria600(PruebaBasico):
         finally:
             db.close()
 
-    def _limpiar_widgets_diaria(self):
-        """A4: deja el formulario diario en blanco -- ni "Funciona" ni "No
-        funciona" marcado, campos numéricos y observaciones vacíos. Se usa
-        al llegar a una fecha sin registro (no hay dato que restaurar)."""
-        self.botones_finales.clear()
-        for fun, nofun in zip(self.df_bnt_funciona, self.df_bnt_nofunciona):
-            btn_fun = getattr(self, fun, None)
-            btn_nofun = getattr(self, nofun, None)
-            if btn_fun and btn_nofun:
-                btn_fun.setChecked(False)
-                btn_nofun.setChecked(False)
-                for boton in (btn_fun, btn_nofun):
-                    boton.setProperty("estado", "noselected")
-                    boton.style().unpolish(boton)
-                    boton.style().polish(boton)
-                    boton.update()
-        for line_name in self.df_lines:
-            if hasattr(self, line_name):
-                getattr(self, line_name).setText("")
-        if hasattr(self, 'observaciones'):
-            self.observaciones.setText("")
     def button_click(self):
-        
+
         self.fuera_servicio.clicked.connect(self.reasignar_botonySERVICIO)
         self.btn_add.clicked.connect(lambda _, maquina='aceleradorlineal_600' : self.ordenar_botones(maquina, self.fueradeservicio))
         #self.btn_add.clicked.connect(lambda _, maquina='aceleradorlineal_600' : add_info(self, maquina, [self.boolean_colums, self.dosis]))
 
             #self.btn_add.clicked.connect(self.clean_info)
-        
+
         if self.btn_clean.clicked:
             self.btn_clean.clicked.connect(lambda _: self.clean_info(imagenes=False))
-        
+
         if self.btn_submit.clicked:
             self.btn_submit.clicked.connect(
-                lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text(): 
-                    reporte(self, fecha = self.date_box.date().toString('yyyy-MM-dd'), 
-                            maquina = maquina, id_maquina=id_maquina, tipo_reporte='diario', 
+                lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
+                    reporte(self, fecha = self.date_box.date().toString('yyyy-MM-dd'),
+                            maquina = maquina, id_maquina=id_maquina, tipo_reporte='diario',
                             diccionario=self.diccionario_invertido, umbrales= "si")
             )
-        
+
         for line in self.df_lines:
             dato = getattr(self, line)
-            dato.textChanged.connect(self.checkBotonesFinales) 
-    
+            dato.textChanged.connect(self.checkBotonesFinales)
+
         self.btn_delete.clicked.connect(lambda _, maquina = 'aceleradorlineal_600' : self.verificar_eliminar(maquina, [self.boolean_colums, self.dosis]))
         self.menu_graficar.currentIndexChanged.connect(self.mostrar_submenu)
         for grafica in self.graficar:
             grafica.currentIndexChanged.connect(lambda _, grafica = grafica: self.plotter(grafica))
-            self.btn_submit.clicked.connect(lambda _, grafica = grafica: self.plotter(grafica)) 
+            self.btn_submit.clicked.connect(lambda _, grafica = grafica: self.plotter(grafica))
             self.limit1.dateChanged.connect(lambda _, grafica = grafica: self.plotter(grafica))
             self.limit2.dateChanged.connect(lambda _, grafica = grafica: self.plotter(grafica))
-        
+
         if self.search_bar.textChanged:
             self.search_bar.textChanged.connect(self.filtrarTabla)  # Conectar evento de búsqueda
         #print(self.botones_ordenados)  # Para ver el resultado
-        
+
         if self.edit_table.clicked:
             self.edit_table.clicked.connect(self.verificar_editar)
-    
+
         if self.accept_edit.clicked:
             self.accept_edit.clicked.connect(lambda: self.cargarDatosEditados(self.item, self.old_value, "aceleradorlineal_600"))
             self.accept_edit.clicked.connect(lambda: load_table(self, self.boolean_colums, self.dosis,  "aceleradorlineal_600"))
             self.accept_edit.clicked.connect(lambda:asignar_encabezados(self, 'aceleradorlineal_600'))
-        
+
         if self.cancel_edit.clicked:
             self.cancel_edit.clicked.connect(lambda: self.cancelarEdicion(self.item, self.old_value))
             self.cancel_edit.clicked.connect(lambda: load_table(self, self.boolean_colums, self.dosis,  "aceleradorlineal_600"))
@@ -378,9 +357,9 @@ class PruebaDiaria600(PruebaBasico):
         self.graficar[1].setCurrentIndex(0)
         self.graficar[2].hide()
         self.graficar[2].setCurrentIndex(0)
-        
+
         selection = self.menu_graficar.currentIndex()
-        
+
         if selection == 1:
             self.graficar[0].show()
             self.graficar[1].hide()
@@ -388,8 +367,8 @@ class PruebaDiaria600(PruebaBasico):
         elif selection == 2:
             self.graficar[0].hide()
             self.graficar[1].show()
-            self.graficar[2].hide() 
-        elif selection == 3:    
+            self.graficar[2].hide()
+        elif selection == 3:
             self.graficar[0].hide()
             self.graficar[1].hide()
             self.graficar[2].show()
@@ -401,7 +380,7 @@ class PruebaDiaria600(PruebaBasico):
     def plotter(self, menu):
         self.figure.clear()
         ax = self.figure.add_subplot(111)
-        
+
         db = self.opeenDatabase()
         selected_chart = menu.currentText()  # QComboBox con tipos de gráfica
         if selected_chart == "Seleccione...":
@@ -411,13 +390,13 @@ class PruebaDiaria600(PruebaBasico):
         #print(start_date)
         end_date = self.limit2.date().toString('yyyy-MM-dd')
         #print(end_date)
-        
+
         selected_column1 = self.graficos_mapeo1.get(selected_chart, None)
         selected_column2 = self.graficos_mapeo2.get(selected_chart, None)
-        
+
         limite = self.diccionario_invertido.get(selected_column2, None)
         limite = limite[1] if limite else None
-        
+
         if selected_column1 in [
             "luces_consola",
             "luces_puerta",
@@ -432,12 +411,12 @@ class PruebaDiaria600(PruebaBasico):
             "movimiento_colimador",
             "movimientos_camilla"
             ]:
-            
+
             query = QSqlQuery(db)
-            
-            graficarvstiempo(self, query, ax, 'aceleradorlineal_600', selected_column1, selected_chart, start_date, end_date, True) 
-            
-        elif selected_column2 in [   
+
+            graficarvstiempo(self, query, ax, 'aceleradorlineal_600', selected_column1, selected_chart, start_date, end_date, True)
+
+        elif selected_column2 in [
             "laseres",
             "telemetro",
             "tamano_campo",
@@ -445,11 +424,10 @@ class PruebaDiaria600(PruebaBasico):
             'dosis_referencia'
         ]:
             query = QSqlQuery(db)
-            
+
             graficarvstiempo(self, query, ax, 'aceleradorlineal_600', selected_column2, selected_chart, start_date, end_date, False, limite)
-        
+
         # Redibuja en el canvas
         self.canvas.draw()
-    
-        db.close()
 
+        db.close()

@@ -149,7 +149,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
         "mensual 600/iX. La rama hermana (UPDATE SET activo=0) es la que "
         "corre para cualquier tabla del bloque de QC -- ver el propio "
         "comentario del archivo, 'fuera de alcance de este plan'.",
-    ("ui/paginasControles/PruebasDiarias/PruebasDiarias.py", 854):
+    ("ui/paginasControles/PruebasDiarias/PruebasDiarias.py", 882):
         "edición directa de UNA celda ya identificada por su id físico "
         "(QtSql, DA-08) -- gemelo Qt del mecanismo genérico de "
         "guardarEdicion (load.py:4201, más abajo en OPACOS). Tabla y "

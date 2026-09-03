@@ -39,6 +39,7 @@ el proceso para siempre, y estas rutas abren diálogos de verdad.
 """
 import ast
 import datetime
+import importlib
 import io
 import math
 import os
@@ -402,9 +403,29 @@ RUTA_DIARIAS = pathlib.Path(__file__).resolve().parent.parent / "ui" / \
     "paginasControles" / "PruebasDiarias"
 
 
+def _resolver_clase(ruta, nombre_clase):
+    """I0 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): `_limpiar_widgets_diaria`
+    subió de `PruebaDiariaBraq`/`IX`/`600` a la clase base `PruebaBasico` --
+    las 3 clases siguen TENIÉNDOLA (heredada), pero un censo que solo mira
+    `nodo.body` (el AST de la clase, sin resolver herencia) deja de verla
+    en cuanto se movió. Se importa el módulo real y se resuelve la clase
+    para poder preguntar con `hasattr` (que SÍ ve herencia) -- el censo
+    sigue siendo automático (nada escrito a mano por nombre de clase)."""
+    try:
+        modulo = importlib.import_module(
+            f"ui.paginasControles.PruebasDiarias.{ruta.stem}")
+    except Exception:
+        return None
+    return getattr(modulo, nombre_clase, None)
+
+
 def _clases_diarias():
-    """Censo AST de TODA clase diaria que declare limpieza al cambiar de
-    fecha -- no una lista escrita a mano que se quede atrás."""
+    """Censo de TODA clase diaria que declare limpieza al cambiar de
+    fecha -- no una lista escrita a mano que se quede atrás. El AST ubica
+    las clases y `CAMPOS_DERIVADOS_DIARIA`; la presencia de
+    `_limpiar_widgets_diaria` se confirma con la clase REAL (`hasattr`,
+    que ve herencia) para no quedar ciego si la limpieza vive en una
+    clase base -- ver `_resolver_clase`."""
     encontradas = []
     for ruta in sorted(RUTA_DIARIAS.glob("*.py")):
         arbol = ast.parse(io.open(ruta, encoding="utf-8").read(), str(ruta))
@@ -414,7 +435,9 @@ def _clases_diarias():
             metodos = {n.name: n for n in nodo.body
                        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
             if "_limpiar_widgets_diaria" not in metodos:
-                continue
+                cls_obj = _resolver_clase(ruta, nodo.name)
+                if cls_obj is None or not hasattr(cls_obj, "_limpiar_widgets_diaria"):
+                    continue
             derivados = None
             for n in nodo.body:
                 if (isinstance(n, ast.Assign)
