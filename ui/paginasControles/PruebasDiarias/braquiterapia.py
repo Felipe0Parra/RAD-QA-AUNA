@@ -550,6 +550,14 @@ class PruebaDiariaBraq(PruebaBasico):
                             _valor_o_none('distancia_minima')
                             if record.indexOf('distancia_minima') != -1 else None)
                         self._recargar_perfil_intensidad(umbral_guardado, distancia_guardada)
+                        # P3 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): repone
+                        # los spins con los MISMOS parámetros -- si
+                        # quedaran en su valor de fábrica (o el widget ni
+                        # existiera), un "Añadir" sin volver a analizar
+                        # reescribiría `umbral_relativo`/`distancia_minima`
+                        # encima de los 6 números ya guardados, dejando la
+                        # fila auto-inconsistente.
+                        self._reponer_parametros_analisis(umbral_guardado, distancia_guardada)
 
                 # 4. Actualizar el date_box con la fecha Y HORA cargadas
                 # (sin disparar señal). T8 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_
@@ -1560,6 +1568,35 @@ class PruebaDiariaBraq(PruebaBasico):
                 self.canvas.draw()
             aviso.setText("No fue posible reconstruir el perfil de esta imagen.")
             aviso.show()
+
+    def _reponer_parametros_analisis(self, umbral_guardado, distancia_guardada):
+        """P3 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): repone `spin_umbral`/
+        `spin_dist` con los parámetros GUARDADOS (`P1`) al cargar un
+        registro -- sin esto, "Añadir" sin volver a analizar reescribiría
+        `umbral_relativo`/`distancia_minima` con lo que el spin tuviera en
+        ESE momento (`1.0`/`40` de fábrica si la interfaz ni se había
+        creado) encima de los 6 números ya guardados, dejando la fila
+        auto-inconsistente -- los parámetros no producirían esos números,
+        el mismo daño de la fila 447 (`DP-63`), ahora en las columnas
+        nuevas. Crea la interfaz si `resetear_imagen_ui` (arriba) la
+        desarmó, como hace `analizar_imagen()` la primera vez.
+
+        `blockSignals` obligatorio: `spin_umbral.valueChanged`/`spin_dist.
+        valueChanged` están conectados a `analizar_imagen_con_debouncing`
+        (`_crear_parametros`) -- reponerlos sin bloquear señales lanzaría
+        un re-análisis real en cada cambio de día, pisando el informe
+        reconstruido que `P2` preserva con tanto cuidado (la carrera de
+        `DP-56`/`G4`, ahora por este widget)."""
+        if getattr(self, 'parametros_layout', None) is None:
+            self._crear_interfaz_parametros()
+        umbral = float(umbral_guardado) if umbral_guardado is not None else 1.0
+        distancia = int(distancia_guardada) if distancia_guardada is not None else 40
+        self.spin_umbral.blockSignals(True)
+        self.spin_dist.blockSignals(True)
+        self.spin_umbral.setValue(umbral)
+        self.spin_dist.setValue(distancia)
+        self.spin_umbral.blockSignals(False)
+        self.spin_dist.blockSignals(False)
 
     def verificar_columna_pelicula(self, item):
         col_pelicula = self.table.columnCount() - 1
