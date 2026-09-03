@@ -1,7 +1,7 @@
 from data.GraficasyTablas.tablas import load_table
 from data.ManejoDatos.conection import Conexion
 import sqlite3, re, traceback, sys
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QGridLayout, QDialog, 
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QGridLayout, QDialog,
                             QTableWidgetItem, QPushButton, QTabWidget, QTextBrowser )
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMessageBox
@@ -82,7 +82,8 @@ def _confirmar_reemplazo_reporte_diario(self, nombre_tabla, fecha):
 def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             distancias=None, promedio=None, desviacion=None,
             desplazamientos=None, promedio_des=None, desviacion_des=None,
-            formato_fecha='yyyy-MM-dd'):
+            formato_fecha='yyyy-MM-dd', umbral_relativo=None,
+            distancia_minima=None):
     """H6 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): `add_info` es genérica
     -- la comparten las 4 diarias -- así que la excepción (guardar la hora)
     se declara en el PARÁMETRO, con el comportamiento de hoy como valor por
@@ -91,7 +92,13 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
     que pasa 'yyyy-MM-dd HH:mm:ss'; los demás no cambian. `.dateTime()` en
     vez de `.date()` es seguro para todos: cuando `formato_fecha` no lleva
     componente de hora, el valor de hora dentro del QDateTime no afecta el
-    texto resultante."""
+    texto resultante.
+
+    P1 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): mismo criterio para
+    `umbral_relativo`/`distancia_minima` -- viajan como argumentos
+    OPCIONALES (`None` por defecto) porque `add_info` es compartida por
+    las 4 diarias y solo braqui tiene `spin_umbral`/`spin_dist`; el
+    llamador de braqui los pasa, los demás nunca los tocan."""
     print(f"Entra a la función add_info en load.py con tabla: {nombre_tabla}")
     try:
         columnas_str, placeholders = encontrar_columnas(nombre_tabla, delete=0)
@@ -157,6 +164,11 @@ def add_info(self, nombre_tabla, boolean_columns, imagenes=None,
             lista.append(desplazamientos)
             lista.append(promedio_des)
             lista.append(desviacion_des)
+            # P1 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): los parámetros con
+            # los que se generó el análisis -- sin ellos, P2 no puede
+            # recargar el perfil de intensidad fielmente.
+            lista.append(umbral_relativo)
+            lista.append(distancia_minima)
         fecha_actual = self.date_box.date().toString("yyyy-MM-dd")
 
         # H2.2 (auditoría 2026-07-14): antes, un reporte existente para esta
@@ -243,7 +255,7 @@ def abrir_pelicula(self, id_registro):
 
         layout = QVBoxLayout(visor)
         label = QLabel()
-        label.setPixmap(pixmap.scaled( 
+        label.setPixmap(pixmap.scaled(
             780, 580,
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation
@@ -289,7 +301,7 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
             # Determinar tipo y fecha según si es anual o mensual
             es_anual = hasattr(self, 'esiX_images') and self.esiX_images or (hasattr(self, 'esHC_images') and self.esHC_images)
             tipo_control = "Anual" if es_anual else "Mensual"
-        
+
 
             # F2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): la identidad de un
             # control mensual es (equipo, mes, anio, tipo) -- el dia NUNCA es
@@ -520,7 +532,7 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
     #print(f"Argumentos para encontrar_columnas: nombre_tabla={nombre_tabla}, delete=0, id={id}")
     columnas_str, placeholders = encontrar_columnas(nombre_tabla, delete = 0, id = id_)
     #print(columnas_str, placeholders)
-    
+
     ref = reference
     datos = []
 
@@ -571,13 +583,13 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
     # INSERT en la base de datos
     # conn = Conexion().conectar()
     # cursor = conn.cursor()
-    
+
     #revisar que no exista ya una fila con esa info
-    
-    
+
+
     # Ejecutar la inserción
     sql = f"INSERT INTO {nombre_tabla} ({columnas_str}) VALUES ({placeholders})"
-    
+
     try:
         conn = Conexion().conectar()
         cursor = conn.cursor()
@@ -651,8 +663,8 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
     finally:
         cursor.close()
         conn.close()
-            
-        
+
+
 
 ENERGIAS = {"6mv", "15mv", "6mev", "9mev", "12mev", "15mev", "9mv"}  # energías
 
@@ -916,15 +928,27 @@ def encontrar_columnas(nombre_tabla, id = True, delete = 1):
         conn.close()
 
     # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11): `activo` es metadato de
-    # anulación, agregado SIEMPRE al final por `_asegurar_activo_bloque_qc`
-    # -- se excluye ANTES del recorte por `delete` para que ese recorte
-    # (tuneado por cada llamador contra el esquema previo a E7) siga
-    # quitando las MISMAS columnas de siempre, no la nueva columna de
-    # metadato. Acotado a TABLAS_ANULABLES: `equipos` también tiene una
-    # columna `activo` propia (anterior a E7, con otro significado) y no
-    # debe verse afectada.
-    if nombre_tabla in TABLAS_ANULABLES and columnas and columnas[-1] == "activo":
-        columnas.pop()
+    # anulación, agregado por `_asegurar_activo_bloque_qc` -- se excluye
+    # ANTES del recorte por `delete` para que ese recorte (tuneado por cada
+    # llamador contra el esquema previo a E7) siga quitando las MISMAS
+    # columnas de siempre, no la columna de metadato. Acotado a
+    # TABLAS_ANULABLES: `equipos` también tiene una columna `activo` propia
+    # (anterior a E7, con otro significado) y no debe verse afectada.
+    #
+    # P1 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): exclusión por NOMBRE, no
+    # por posición. Hasta aquí `activo` SIEMPRE había sido la última
+    # columna física (ALTER TABLE ADD COLUMN la deja al final, y nada se
+    # le agregaba después) -- `columnas[-1] == "activo"` bastaba. Al
+    # agregar `umbral_relativo`/`distancia_minima` a `braqui` DESPUÉS de
+    # `activo` (misma migración aditiva, mismo orden de arranque),
+    # `activo` deja de ser la última: el chequeo posicional habría dejado
+    # de excluirla, y `add_info` (que nunca aporta un valor para `activo`)
+    # habría escrito una columna de menos para el INSERT. Filtrar por
+    # nombre es correcto siempre, sea cual sea la posición de `activo`, y
+    # cierra la clase de error para cualquier tabla anulable que gane una
+    # columna nueva en el futuro -- no solo para `braqui` hoy.
+    if nombre_tabla in TABLAS_ANULABLES and "activo" in columnas:
+        columnas = [c for c in columnas if c != "activo"]
 
     for _  in range(delete):
         columnas.pop(-1)
@@ -992,7 +1016,7 @@ def conectarfueradeservicio(self, nombre_tabla):
 
 def guardar_resultado_CambioFuente(
     user, fecha, tipo, serie, certificado, fecha_cer, intensidad, conversion,
-    modelo, serie_cp, calibracion, modelo_elec, serie_ele, 
+    modelo, serie_cp, calibracion, modelo_elec, serie_ele,
     electrometro, t0, p0, h0, t, p, h,
     posiciones, medida1, medida2, promedios,
     voltaje, V_300, V_150, Vn_300, promediosV,
@@ -1098,7 +1122,7 @@ def mostrar_db_CambioFuente(self, tabla_a_mostrar="ResultadosActividad"):
         conn = Conexion().conectar()
         if conn is None:
             raise Exception("No se pudo obtener conexión con la base de datos.")
-            
+
 
         cursor = conn.cursor()
         cursor.execute(f"PRAGMA table_info({tabla_a_mostrar})")
@@ -1233,8 +1257,8 @@ def mostrar_db_linealidad(self):
 
 def mostrar_db_mensualBraqui(self):
     self.table.clear()
-    headers = [ "ID", "Fecha", "Usuario", "Tipo", "Serie Fuente", "#Certificado", "Fecha_cer", "Actividad", "Factor Conversión","Modelo CP", 
-                "Serie CP", "Calibración CP", "Modelo Elec", "Serie Ele","Electrómetro", "t0", "p0", "h0", "t", "p", "h", 
+    headers = [ "ID", "Fecha", "Usuario", "Tipo", "Serie Fuente", "#Certificado", "Fecha_cer", "Actividad", "Factor Conversión","Modelo CP",
+                "Serie CP", "Calibración CP", "Modelo Elec", "Serie Ele","Electrómetro", "t0", "p0", "h0", "t", "p", "h",
                 "Desp. Inicial", "Observaciones", "Máximos", "Lecturas","Ks", "Kp", "Ktp", "Act. Monitor", "Act. Calculada", "Act. Decaimiento"]
 
     self.table.setColumnCount(len(headers))
@@ -1250,12 +1274,12 @@ def mostrar_db_mensualBraqui(self):
         22: None,   # Botón Máximos
         23: None,   # Botón Lecturas
         24: None,   # Ks     ─────────>  Nacen de un calculo
-        25: None,   # Kpol   ───────────────────┘          ↑ 
+        25: None,   # Kpol   ───────────────────┘          ↑
         26: None,   # Ktp    ───────────────────┘          |
         27: ("ResultadosActividad", "actividad_monitor"),# |
         28: None,   # Actividad calculada──────────────────┘
         29: None,   # Actividad de decaimiento ────────────┘
-        
+
     }
 
     conn = Conexion().conectar()
@@ -1613,7 +1637,7 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
     conn.close()
 
     if equipo_filtrar == "Halcyon":
-        headers = [ 
+        headers = [
             ("Fecha", ("controles", "fecha")),
             ("Usuario", None),
             ("Equipo", None),
@@ -1629,7 +1653,7 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
             ("Reporte PDF", None)
         ]
     else:
-        headers = [ 
+        headers = [
             ("Fecha", ("controles", "fecha")),
             ("Usuario", None),
             ("Equipo", None),
@@ -1713,8 +1737,8 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
         #     tableWidget.setCellWidget(row_idx, 5, crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_indc_brazo_HC(parent, r)))
         # else:
         #     tableWidget.setCellWidget(row_idx, 5, crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_indc_angulares(parent, r)))
-            
-            
+
+
         if equipo_filtrar!="Halcyon":
             ####################################################################################
             ix_arg = True if equipo_filtrar == "Clinac ix" else False
@@ -1803,24 +1827,24 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
             tableWidget.setCellWidget(row_idx, 22, crear_boton_tabla("Ver reporte", lambda _, r=id_ref, f=row_data[1]: _generar_reporte_desde_tabla(parent, f, equipo_filtrar)))
         else:
             tableWidget.setCellWidget(row_idx, 4, crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_laseres(parent, r)))
-            
+
             tableWidget.setCellWidget(row_idx, 5, crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_indc_brazo_HC(parent, r)))
 
             tableWidget.setCellWidget(row_idx, 6, crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_indicadores_camilla(parent, r)))
-            
+
             tableWidget.setCellWidget(
                 row_idx,
                 7,
                 crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_des_isoc(parent, r))
             )
-            
+
             tableWidget.setCellWidget(
                 row_idx,
                 8,
                 crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_tam_campos_HC(parent, r))
             )
 
-           
+
             tableWidget.setCellWidget(row_idx, 9, crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_analisis_franjas(parent, r)))
 
 
@@ -1850,13 +1874,13 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
 
             # Col 22: Reporte
             tableWidget.setCellWidget(row_idx, 12, crear_boton_tabla("Reporte", lambda _, r=id_ref, f=row_data[1]: _generar_reporte_desde_tabla(parent, f, equipo_filtrar)))
-            
+
     def _generar_reporte_desde_tabla(parent, fecha, maquina):
         if parent is None:
             QMessageBox.warning(None, "Error", "No hay contexto disponible para generar el reporte.")
             return
         from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual, obtener_diccionario_600, obtener_diccionario_ix, obtener_diccionario_halcyon
-        
+
         if equipo_filtrar == 'Clinac 600':
             diccionario = obtener_diccionario_600()
         if equipo_filtrar == 'Clinac ix':
@@ -1868,7 +1892,7 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
 
 "------------------------------------------------------------------------------------------------------------------"
 def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=None):
-    
+
     conn = Conexion().conectar()
     cursor = conn.cursor()
 
@@ -1919,7 +1943,7 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
     conn.close()
     # ... resto igual
 
-    headers = [ 
+    headers = [
         ("Fecha", None),
         ("Usuario", None),
         ("Equipo", None),
@@ -1969,7 +1993,7 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
         id_prueba = row_data[9]
         mes_control = row_data[1]
         mes_control = mes_control.replace('/', '-')
-        
+
         equipo = row_data[3]
         id_session = row_data[0]
 
@@ -2040,22 +2064,22 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
         item.setTextAlignment(Qt.AlignCenter)
         tableWidget.setItem(row_idx, 14, item)
-        
+
         # Col 15: reporte
         tableWidget.setCellWidget(row_idx, 15, crear_boton_tabla("Reporte", lambda _, m=mes_control, e=equipo ,s= id_session: _generar_reporte_desde_tabla(parent, m, equipo, s)))
         print("Equipo seleccionado para reporte ")
         print(equipo)
-        
+
     def _generar_reporte_desde_tabla(parent, fecha, maquina, id_sesion):
-        
+
         if parent is None:
             QMessageBox.warning(None, "Error", "No hay contexto disponible para generar el reporte.")
             return
-        
-        
-       
+
+
+
         from models.PDF.Imagenes.reportes_control_sistema_imagenes import generar_reporte_sistema_imagenes
-    
+
           # O el atributo que corresponda a tu usuario
         generar_reporte_sistema_imagenes(parent, fecha, maquina, usuario, id_sesion, sistema_imagenes=True)
 def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
@@ -2120,7 +2144,7 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
         rows = cursor.fetchall()
         conn.commit()
 
-    headers = [ 
+    headers = [
         ("Fecha", None),
         ("Usuario", None),
         ("Equipo", None),
@@ -2171,11 +2195,11 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
         mes_control = row_data[1]
         mes_control = row_data[1].replace('/', '-')          # "04-2026" para queries... pero aun así el orden es mes/año
         # convierte a año-mes para que coincida con mes_control en pruebas
-        partes = row_data[1].split('/')                      
+        partes = row_data[1].split('/')
         mes_control = f"{partes[1]}-{partes[0]}" if len(partes) == 2 else row_data[1]  # "2026-04"
         equipo = row_data[3]
         id_session = row_data[0]
- 
+
         # Col 0: Fecha
         item = QTableWidgetItem(valor_a_texto(row_data[1], 0))
         item.setData(Qt.UserRole, id_session)
@@ -2243,29 +2267,29 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
         item.setTextAlignment(Qt.AlignCenter)
         tableWidget.setItem(row_idx, 14, item)
-        
+
         # Col 15: reporte
         tableWidget.setCellWidget(row_idx, 15, crear_boton_tabla("Reporte", lambda _, m=mes_control, e=equipo ,s= id_session: _generar_reporte_desde_tabla(parent, m, equipo, s)))
         print("Equipo seleccionado para reporte ")
         print(equipo)
-        
+
     def _generar_reporte_desde_tabla(parent, fecha, maquina, id_sesion):
         if parent is None:
             QMessageBox.warning(None, "Error", "No hay contexto disponible para generar el reporte.")
             return
-        
-        
-       
+
+
+
         from models.PDF.Imagenes.reportes_control_sistema_imagenes import generar_reporte_sistema_imagenes
-    
+
           # O el atributo que corresponda a tu usuario
         generar_reporte_sistema_imagenes(parent, fecha, maquina, usuario, id_sesion, sistema_imagenes=True)
-        
- 
- 
-        
+
+
+
+
 def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=None):
-    
+
     conn = Conexion().conectar()
     cursor = conn.cursor()
 
@@ -2305,7 +2329,7 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
     GROUP BY c.id, c.fecha, c.equipo
     ORDER BY c.fecha DESC
     """
-    
+
 
     cursor.execute(query)
     rows = cursor.fetchall()
@@ -2313,7 +2337,7 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
     conn.close()
     # ... resto igual
 
-    headers = [ 
+    headers = [
         ("Fecha", None),
         ("Usuario", None),
         ("Equipo", None),
@@ -2363,7 +2387,7 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
         id_prueba = row_data[9]
         mes_control = row_data[1]
         mes_control = mes_control.replace('/', '-')
-        
+
         equipo = row_data[3]
         id_session = row_data[0]
 
@@ -2434,31 +2458,31 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
         item.setTextAlignment(Qt.AlignCenter)
         tableWidget.setItem(row_idx, 14, item)
-        
+
         # Col 15: reporte
         tableWidget.setCellWidget(row_idx, 15, crear_boton_tabla("Reporte", lambda _, m=mes_control, e=equipo ,s= id_session: _generar_reporte_desde_tabla(parent, m, equipo, s)))
         print("Equipo seleccionado para reporte ")
         print(equipo)
-        
+
     def _generar_reporte_desde_tabla(parent, fecha, maquina, id_sesion):
-        
+
         if parent is None:
             QMessageBox.warning(None, "Error", "No hay contexto disponible para generar el reporte.")
             return
-        
-        
-       
+
+
+
         from models.PDF.Imagenes.reportes_control_sistema_imagenes import generar_reporte_sistema_imagenes
-    
+
           # O el atributo que corresponda a tu usuario
-        generar_reporte_sistema_imagenes(parent, fecha, maquina, usuario, id_sesion, sistema_imagenes=True)      
-        
-        
+        generar_reporte_sistema_imagenes(parent, fecha, maquina, usuario, id_sesion, sistema_imagenes=True)
+
+
 def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
-    
+
     print("Entra a imagenes HC")
     with Conexion().conectar() as conn:
-    
+
         cursor = conn.cursor()
         tableWidget.clearContents()
         tableWidget.setRowCount(0)
@@ -2516,7 +2540,7 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
         rows = cursor.fetchall()
         conn.commit()
 
-    headers = [ 
+    headers = [
         ("Fecha", None),
         ("Usuario", None),
         ("Equipo", None),
@@ -2567,11 +2591,11 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
         mes_control = row_data[1]
         mes_control = row_data[1].replace('/', '-')          # "04-2026" para queries... pero aun así el orden es mes/año
         # convierte a año-mes para que coincida con mes_control en pruebas
-        partes = row_data[1].split('/')                      
+        partes = row_data[1].split('/')
         mes_control = f"{partes[1]}-{partes[0]}" if len(partes) == 2 else row_data[1]  # "2026-04"
         equipo = row_data[3]
         id_session = row_data[0]
- 
+
         # Col 0: Fecha
         item = QTableWidgetItem(valor_a_texto(row_data[1], 0))
         item.setData(Qt.UserRole, id_session)
@@ -2639,24 +2663,24 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
         item.setTextAlignment(Qt.AlignCenter)
         tableWidget.setItem(row_idx, 14, item)
-        
+
         # Col 15: reporte
         tableWidget.setCellWidget(row_idx, 15, crear_boton_tabla("Reporte", lambda _, m=mes_control, e=equipo ,s= id_session: _generar_reporte_desde_tabla(parent, m, equipo, s)))
         print("Equipo seleccionado para reporte ")
         print(equipo)
-        
+
     def _generar_reporte_desde_tabla(parent, fecha, maquina, id_sesion):
         if parent is None:
             QMessageBox.warning(None, "Error", "No hay contexto disponible para generar el reporte.")
             return
-        
-        
-       
+
+
+
         from models.PDF.Imagenes.reportes_control_sistema_imagenes import generar_reporte_sistema_imagenes
-    
+
           # O el atributo que corresponda a tu usuario
         generar_reporte_sistema_imagenes(parent, fecha, maquina, usuario, id_sesion, sistema_imagenes=True)
-              
+
 def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
     with Conexion().conectar() as conn:
         cursor = conn.cursor()
@@ -2716,7 +2740,7 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
         rows = cursor.fetchall()
         conn.commit()
 
-    headers = [ 
+    headers = [
         ("Fecha", None),
         ("Usuario", None),
         ("Equipo", None),
@@ -2767,7 +2791,7 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
         mes_control = row_data[1]
         mes_control = row_data[1].replace('/', '-')          # "04-2026" para queries... pero aun así el orden es mes/año
         # convierte a año-mes para que coincida con mes_control en pruebas
-        partes = row_data[1].split('/')                      
+        partes = row_data[1].split('/')
         mes_control = f"{partes[1]}-{partes[0]}" if len(partes) == 2 else row_data[1]  # "2026-04"
         equipo = row_data[3]
         id_session = row_data[0]
@@ -2839,21 +2863,21 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
         item.setFlags(item.flags() & ~Qt.ItemIsEditable)
         item.setTextAlignment(Qt.AlignCenter)
         tableWidget.setItem(row_idx, 14, item)
-        
+
         # Col 15: reporte
         tableWidget.setCellWidget(row_idx, 15, crear_boton_tabla("Reporte", lambda _, m=mes_control, e=equipo ,s= id_session: _generar_reporte_desde_tabla(parent, m, equipo, s)))
         print("Equipo seleccionado para reporte ")
         print(equipo)
-        
+
     def _generar_reporte_desde_tabla(parent, fecha, maquina, id_sesion):
         if parent is None:
             QMessageBox.warning(None, "Error", "No hay contexto disponible para generar el reporte.")
             return
-        
-        
-       
+
+
+
         from models.PDF.Imagenes.reportes_control_sistema_imagenes import generar_reporte_sistema_imagenes
-    
+
           # O el atributo que corresponda a tu usuario
         generar_reporte_sistema_imagenes(parent, fecha, maquina, usuario, id_sesion, sistema_imagenes=True)
 def _mostrar_tabla_generica(parent, mes_control, config):
@@ -3066,7 +3090,7 @@ def mostrar_equipos(parent, id_ref):
     data = cursor.fetchall()
 
     # Lista de tuplas, cada tupla corresponde al titulo del campo en la base de datos y el titulo bonito pata la tabla
-    headers = [("id", "ID"), ("equip_type", "Equipo"), ("model", "Modelo"), ("serie", "Serie"), ("calibr_fact", "Factor Cal."), 
+    headers = [("id", "ID"), ("equip_type", "Equipo"), ("model", "Modelo"), ("serie", "Serie"), ("calibr_fact", "Factor Cal."),
                 ("fecha_calibr", "Fecha. Cal")]
     conn.close()
     _mostrar_dialogo(parent, headers, data, 650, 250, "equipos_medicion", id_ref)
@@ -3102,9 +3126,9 @@ def mostrar_seguridad(parent, id_ref, ix=False):
                 if valor in (0, 1):  # 0/1 -> botón
                     btn = QPushButton("Funciona" if valor == 1 else "No Funciona")
                     if valor == 1:
-                        btn.setObjectName("boton_funciona") 
+                        btn.setObjectName("boton_funciona")
                     else:
-                        btn.setObjectName("boton_nofunciona") 
+                        btn.setObjectName("boton_nofunciona")
                     btn.setEnabled(False)
                     nueva_fila.append(btn)
                 else:
@@ -3115,7 +3139,7 @@ def mostrar_seguridad(parent, id_ref, ix=False):
     cunas_transformadas = transformar_filas(cunas)
     conos_transformados = transformar_filas(conos)
 
-    headers_cunas = [("angulo", "Ángulo (°)"), ("in_val", "In"), ("out_val", "Out"), ("right_val", "Right"), ("left_val", "Left"), 
+    headers_cunas = [("angulo", "Ángulo (°)"), ("in_val", "In"), ("out_val", "Out"), ("right_val", "Right"), ("left_val", "Left"),
                     ("observaciones", "Obs.")]
 
     headers_conos = [("medida", "Medida"), ("valor", "Valor")]
@@ -3150,7 +3174,7 @@ def mostrar_seguridad(parent, id_ref, ix=False):
                     else:
                         item = QTableWidgetItem(str(value))
                         item.setTextAlignment(Qt.AlignCenter)
-                        table.setItem(row_idx, col_idx, item)        
+                        table.setItem(row_idx, col_idx, item)
             return table
 
         tabs.addTab(crear_tab(headers_cunas, cunas_transformadas), "Cunas")
@@ -3189,7 +3213,7 @@ def mostrar_indc_angulares(parent, id_ref):
             datos_limpios[nivel_int] = (cons, equi)
 
         return [datos_limpios.get(n, ("", "")) for n in [0, 90, 180, 270]]
-    
+
 
     datos_brazo = cargar_datos("indicadores_brazo")
     datos_colimador = cargar_datos("indicadores_angulares_colimador")
@@ -3202,12 +3226,12 @@ def mostrar_indc_angulares(parent, id_ref):
 
     niveles = ["0", "90", "180", "270"]
     niveles_colimador = ["0","90", "180" ,"270"]
-    
+
     # Brazo
     table.setSpan(0, 0, 4, 1)
     table.setItem(0, 0, QTableWidgetItem("Brazo"))
     for i, nivel in enumerate(niveles):
-        
+
         table.setItem(i, 1, QTableWidgetItem(nivel))
         table.setItem(i, 2, QTableWidgetItem(str(datos_brazo[i][0])))
         table.setItem(i, 3, QTableWidgetItem(str(datos_brazo[i][1])))
@@ -3283,7 +3307,7 @@ def mostrar_dosimetria(parent, id_ref):
     conn = Conexion().conectar()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT 
+        SELECT
             energia,
             dosis_ref_cgy_um, discrepancia_dosis, tolerancia_dosis,
             calidad_pdd20_10, discrepancia_calidad, tolerancia_calidad,
@@ -3405,7 +3429,7 @@ def mostrar_dosimetria(parent, id_ref):
         grid_layout.addWidget(table, row_grid, col_grid)
 
     # ------------------ Botones ------------------
-    dlg.btn_delete = QPushButton('Eliminar')    
+    dlg.btn_delete = QPushButton('Eliminar')
     dlg.edit_table = QPushButton('Editar')
     dlg.accept_edit = QPushButton('Aceptar')
     dlg.accept_edit.hide()
@@ -3460,9 +3484,9 @@ def mostrar_dosimetria(parent, id_ref):
     qss_file = base_path / "resources" / "estilo.qss"
     dlg.setStyleSheet(qss_file.read_text(encoding="utf-8"))
     dlg.exec_()
-    
-    
-"--------------------------------------TABLAS DEL HALYCION---------------------------------------------------------------------------------" 
+
+
+"--------------------------------------TABLAS DEL HALYCION---------------------------------------------------------------------------------"
 
 def mostrar_tam_campos_HC(parent, id_ref):
     dlg = QDialog(parent)
@@ -3480,7 +3504,7 @@ def mostrar_tam_campos_HC(parent, id_ref):
         """, (id_ref,))
         datos = cursor.fetchall()
 
-       
+
 
         return datos
 
@@ -3504,11 +3528,11 @@ def mostrar_tam_campos_HC(parent, id_ref):
         table.setItem(i, 3, QTableWidgetItem(str(ind_cross)))
         table.setItem(i, 4, QTableWidgetItem(str(med_in)))
         table.setItem(i, 5, QTableWidgetItem(str(med_cross)))
-       
-     
-        
 
-   
+
+
+
+
     # Ajustar ancho según headers
     font_metrics = table.fontMetrics()
     for col in range(table.columnCount()):
@@ -3528,9 +3552,9 @@ def mostrar_tam_campos_HC(parent, id_ref):
     qss_file = base_path / "resources" / "estilo.qss"
     dlg.setStyleSheet(qss_file.read_text(encoding="utf-8"))
     dlg.exec_()
-    
 
-    
+
+
 
 def mostrar_des_isoc(parent, id_ref):
     dlg = QDialog(parent)
@@ -3577,9 +3601,9 @@ def mostrar_des_isoc(parent, id_ref):
         table.setItem(i, 2, QTableWidgetItem(str(datos_brazo[i][0])))
         table.setItem(i, 3, QTableWidgetItem(str(datos_brazo[i][1])))
         table.setItem(i, 4, QTableWidgetItem(str(datos_brazo[i][2])))
-        
 
-   
+
+
     # Ajustar ancho según headers
     font_metrics = table.fontMetrics()
     for col in range(table.columnCount()):
@@ -3599,7 +3623,7 @@ def mostrar_des_isoc(parent, id_ref):
     qss_file = base_path / "resources" / "estilo.qss"
     dlg.setStyleSheet(qss_file.read_text(encoding="utf-8"))
     dlg.exec_()
-    
+
 
 def mostrar_indicadores_camilla(parent, id_ref):
     dlg = QDialog(parent)
@@ -3636,7 +3660,7 @@ def mostrar_indicadores_camilla(parent, id_ref):
     table.setHorizontalHeaderLabels(["", "Desplazamiento", "Medido", "Diferencia (%)"])
 
     niveles = ["1", "5", "20"]
-    
+
     secciones = [
         ("Longitudinal", 0),
         ("Vertical",     3),
@@ -3653,9 +3677,9 @@ def mostrar_indicadores_camilla(parent, id_ref):
             table.setItem(fila, 2, QTableWidgetItem(str(med)))
             table.setItem(fila, 3, QTableWidgetItem(str(dif)))
 
-   
 
-   
+
+
     # Ajustar ancho según headers
     font_metrics = table.fontMetrics()
     for col in range(table.columnCount()):
@@ -3721,7 +3745,7 @@ def mostrar_laseres(parent, id_ref):
         table.setItem(i, 2, QTableWidgetItem(str(datos_brazo[i][0])))
         table.setItem(i, 3, QTableWidgetItem(str(datos_brazo[i][1])))
 
-   
+
     # Ajustar ancho según headers
     font_metrics = table.fontMetrics()
     for col in range(table.columnCount()):
@@ -3741,7 +3765,7 @@ def mostrar_laseres(parent, id_ref):
     qss_file = base_path / "resources" / "estilo.qss"
     dlg.setStyleSheet(qss_file.read_text(encoding="utf-8"))
     dlg.exec_()
-    
+
 
 def mostrar_indc_brazo_HC(parent, id_ref):
     dlg = QDialog(parent)
@@ -3841,9 +3865,9 @@ def _mostrar_dialogo(parent, headers, data, w, h, tabla_db=None, id_ref=None):
     table = QTableWidget()
     table.setColumnCount(len(headers))
     # headers es una lista de tuplas (db_name, alias)
-    for idx, (db_name, alias) in enumerate(headers):  
-        item = QTableWidgetItem(alias)          # lo que ve el usuario  
-        item.setData(Qt.UserRole, db_name)      # nombre real de BD  
+    for idx, (db_name, alias) in enumerate(headers):
+        item = QTableWidgetItem(alias)          # lo que ve el usuario
+        item.setData(Qt.UserRole, db_name)      # nombre real de BD
         table.setHorizontalHeaderItem(idx, item)
 
     table.setRowCount(len(data))
@@ -3858,13 +3882,13 @@ def _mostrar_dialogo(parent, headers, data, w, h, tabla_db=None, id_ref=None):
                 item = QTableWidgetItem(str(value))
                 item.setTextAlignment(Qt.AlignCenter)
                 if col_idx == 0:
-                    item.setData(Qt.UserRole, row_data[0])  
+                    item.setData(Qt.UserRole, row_data[0])
                 table.setItem(row_idx, col_idx, item)
     layout.addWidget(table)
 
     # ------------------ Botones ------------------
     if tabla_db != "analisis_placa_franjas":
-        dlg.btn_delete = QPushButton('Eliminar')    
+        dlg.btn_delete = QPushButton('Eliminar')
         dlg.edit_table = QPushButton('Editar')
         dlg.accept_edit = QPushButton('Aceptar')
         dlg.accept_edit.hide()
@@ -4448,31 +4472,31 @@ def cancelarEdicion(dlg):
     dlg.edit_table.show()
 
 def verificar_eliminar(self, tabla_widget, nombre_tabla, id_ref=None):
-    
+
 
     selected_row = tabla_widget.currentRow()  # Revisa qué fila está seleccionada
 
     if selected_row == -1:
         QMessageBox.warning(self, 'Error', 'Por favor elija una fila para eliminar')
-        return  
-    
+        return
+
     dialogo = DialogAdminPermisoEliminar(self.user_id)
     respuesta = dialogo.exec()
     eliminarRegistro(self, tabla_widget, nombre_tabla, id_ref) if respuesta == QDialog.DialogCode.Accepted else None
 "------------------------------------------------PARA REGISTROS DEL CATPHAN-----------------------------------------------------"
 def verificar_eliminarCT(self, tabla_widget, nombre_tabla, id_ref=None):
-    
+
 
     selected_row = tabla_widget.currentRow()  # Revisa qué fila está seleccionada
 
     if selected_row == -1:
         QMessageBox.warning(self, 'Error', 'Por favor elija una fila para eliminar')
-        return  
-    
+        return
+
     dialogo = DialogAdminPermisoEliminar(self.user_id)
     respuesta = dialogo.exec()
     eliminarRegistroCT(self, tabla_widget) if respuesta == QDialog.DialogCode.Accepted else None
-    
+
 def _serializar_fila_actual(query):
     """Texto 'col=valor; col=valor; ...' de la fila actual de `query` (tras
     next()) -- A2 (PLAN_AUDITORIA_DOS_EJES_21-07.md): el DELETE aquí es
@@ -4548,18 +4572,18 @@ def eliminarRegistroCT(dlg, tabla_widget):
 
 
 def verificar_eliminarCT_anual(self, tabla_widget, nombre_tabla, id_ref=None):
-    
+
 
     selected_row = tabla_widget.currentRow()  # Revisa qué fila está seleccionada
 
     if selected_row == -1:
         QMessageBox.warning(self, 'Error', 'Por favor elija una fila para eliminar')
-        return  
-    
+        return
+
     dialogo = DialogAdminPermisoEliminar(self.user_id)
     respuesta = dialogo.exec()
     eliminarRegistroCT_anual(self, tabla_widget) if respuesta == QDialog.DialogCode.Accepted else None
-    
+
 def eliminarRegistroCT_anual(dlg, tabla_widget):
     from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 
@@ -4782,7 +4806,7 @@ def consulta_mesualBraq(self, id):
         datos_iniciales["t"], datos_iniciales["p"] = row
     else:
         raise Exception(f"No se encontraron condiciones de medición con ref={id}")
-    
+
     # --- SistemasMedicion ---
     cursor.execute(f"""
         SELECT t0, p0, calibracion, electrometro
@@ -4809,7 +4833,7 @@ def consulta_mesualBraq(self, id):
     # Convertimos a diccionario {voltaje: promediosV}
     lecturas = {
         str(voltaje): float(prom) if prom is not None else None
-        for voltaje, prom in rows   
+        for voltaje, prom in rows
         }
     datos_iniciales["lecturas"] = lecturas
 
@@ -4829,5 +4853,5 @@ def consulta_mesualBraq(self, id):
         raise Exception(f"No se encontraron datos de calibración con id={id}")
     conn.close()
 
-    print(f"\n  ● Datos de consulta_mesualBraq: {datos_iniciales}, en la ref = {id}") 
+    print(f"\n  ● Datos de consulta_mesualBraq: {datos_iniciales}, en la ref = {id}")
     return datos_iniciales

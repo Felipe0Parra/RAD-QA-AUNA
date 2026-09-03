@@ -76,20 +76,20 @@ CENSO_RAICES = {
         (LISTA, "catálogo de controles anuales, todos los equipos"),
 
     # -- data/ManejoDatos/load.py ---------------------------------------
-    ("data/ManejoDatos/load.py", 231, "braqui"):
+    ("data/ManejoDatos/load.py", 243, "braqui"):
         (IDENTIDAD, "abrir_pelicula: WHERE id = ? -- la fila ya elegida en "
                     "la tabla; filtrar la haría desaparecer del visor"),
-    ("data/ManejoDatos/load.py", 313, "controles"):
+    ("data/ManejoDatos/load.py", 325, "controles"):
         (LISTA, "create_control -- reclasificado por LR7 (DA-49): hasta "
                 "entonces era CENSO (leía activo como dato para ofrecer "
                 "reactivar, N1/DA-34). Con la reactivación retirada, esta "
                 "lectura vuelve a ser una lectura de bloque cualquiera -- "
                 "filtra, y un control anulado del mes se ignora sin más; "
                 "create_control crea uno nuevo al lado"),
-    ("data/ManejoDatos/load.py", 329, "controles"):
+    ("data/ManejoDatos/load.py", 341, "controles"):
         (IDENTIDAD, "UPDATE de los físicos sobre el control ya localizado, "
                     "WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 1013, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 1037, "TipoCalibracion"):
         (LISTA, "guardar_resultado_CambioFuente: busca por (fecha, tipo) -- "
                 "sin filtro, una calibración ANULADA de esa fecha se "
                 "reutilizaría como bloque a superar. EB2b (24-08): ahora "
@@ -99,20 +99,20 @@ CENSO_RAICES = {
                 "reemplazado por `reemplazar_bloque` (services/"
                 "anulacion.py, opaco para este censo -- SQL armado detrás "
                 "de un ast.Call)"),
-    ("data/ManejoDatos/load.py", 1164, "LinealidadBraquiterapia"):
+    ("data/ManejoDatos/load.py", 1188, "LinealidadBraquiterapia"):
         (LISTA, "catálogo completo de linealidades de braquiterapia"),
-    ("data/ManejoDatos/load.py", 1265, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 1289, "TipoCalibracion"):
         (LISTA, "catálogo completo de calibraciones (el sitio que ya "
                 "filtraba bien y que hizo decidible DP-31)"),
-    ("data/ManejoDatos/load.py", 1607, "controles"):
+    ("data/ManejoDatos/load.py", 1631, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama con equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1610, "controles"):
+    ("data/ManejoDatos/load.py", 1634, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama sin equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1882, "controles"):
+    ("data/ManejoDatos/load.py", 1906, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 1916, "controles"):
+    ("data/ManejoDatos/load.py", 1940, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2071, "controles"):
+    ("data/ManejoDatos/load.py", 2095, "controles"):
         (LISTA, "mostrar_controles_imgIX: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A9, PLAN_FUGA_CONEXIONES_01-09.md §9): vivía
     # aquí como ("data/ManejoDatos/load.py", 2119, "controles"), LISTA,
@@ -124,35 +124,35 @@ CENSO_RAICES = {
     # que A7). El sitio SIGUE ahí y sigue filtrando -- solo el analizador
     # de este archivo perdió visibilidad; ver test_eb5/test_le4 para la
     # entrada equivalente, movida a su lista de OPACOS en vez de borrada.
-    ("data/ManejoDatos/load.py", 2276, "controles"):
+    ("data/ManejoDatos/load.py", 2300, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2310, "controles"):
+    ("data/ManejoDatos/load.py", 2334, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2467, "controles"):
+    ("data/ManejoDatos/load.py", 2491, "controles"):
         (LISTA, "mostrar_controles_imgHC: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A10, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
     # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2515,
     # "controles"), LISTA, "mostrar_controles_imgHC: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 2667, "controles"):
+    ("data/ManejoDatos/load.py", 2691, "controles"):
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A11, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
     # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2715,
     # "controles"), LISTA, "mostrar_controles_tac: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 4517, "controles"):
+    ("data/ManejoDatos/load.py", 4541, "controles"):
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4531, "controles"):
+    ("data/ManejoDatos/load.py", 4555, "controles"):
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4594, "controles"):
+    ("data/ManejoDatos/load.py", 4618, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4604, "controles"):
+    ("data/ManejoDatos/load.py", 4628, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4817, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4841, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
 
     # -- Halcyon ---------------------------------------------------------
@@ -566,7 +566,7 @@ def test_la_reactivacion_quedo_retirada_por_lr7():
     assert not any(c[0] == "services/reactivacion.py" for c in CENSO_RAICES), (
         "services/reactivacion.py fue retirado por LR7 -- no debería "
         "aparecer ningún sitio censado ahí")
-    clave_create_control = ("data/ManejoDatos/load.py", 313, "controles")
+    clave_create_control = ("data/ManejoDatos/load.py", 325, "controles")
     assert CENSO_RAICES[clave_create_control][0] == LISTA
     estado = {(a, l, t): filtra for a, l, t, _al, filtra, _i, _s in censar_raices()}
     assert estado[clave_create_control], (

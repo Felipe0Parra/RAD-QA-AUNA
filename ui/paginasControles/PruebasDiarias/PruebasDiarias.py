@@ -631,10 +631,20 @@ class PruebaBasico(QWidget):
                     # excluye por nombre, no por accidente de que hoy ningún
                     # botón la alcance.
                     kwargs_fecha["formato_fecha"] = "yyyy-MM-dd HH:mm:ss"
+                # P1 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): spin_umbral/
+                # spin_dist se crean TARDE (recién al analizar la primera
+                # imagen, _crear_interfaz_parametros) -- un guardado sin
+                # ningún análisis en esta sesión (día nuevo sin película,
+                # o "Mensual Braquiterapia", que no tiene estos widgets)
+                # no debe reventar. hasattr, no getattr con default: un
+                # QDoubleSpinBox/QSpinBox nunca es falsy por su valor.
+                umbral_relativo = self.spin_umbral.value() if hasattr(self, "spin_umbral") else None
+                distancia_minima = self.spin_dist.value() if hasattr(self, "spin_dist") else None
                 add_info(
                     self, 'braqui', [self.boolean_colums, self.actividad_ciclos], imagenes=self.archivo,
                     distancias=distancias, promedio=promedio, desviacion=desviacion,
                     desplazamientos=desplazamientos, promedio_des=promedio_des, desviacion_des=desviacion_des,
+                    umbral_relativo=umbral_relativo, distancia_minima=distancia_minima,
                     **kwargs_fecha
                 )
                 #print("Después del add_info función ordenar_botones")

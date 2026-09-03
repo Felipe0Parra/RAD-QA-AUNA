@@ -130,12 +130,12 @@ SITIOS_CENSALES_PERMITIDOS = {
         "censo (OB1, censo.total): el observador necesita el total SIN "
         "filtrar para poder calcular `anuladas = total - activas`; la "
         "consulta de al lado (línea 146) sí filtra, y es la que compara.",
-    ("data/ManejoDatos/conection.py", 593):
+    ("data/ManejoDatos/conection.py", 594):
         "migración (E10, _asegurar_fk_on_delete_restrict): "
         "`INSERT INTO \"{temporal}\" SELECT * FROM \"{nombre}\"` copia la "
         "tabla ENTERA al reconstruirla para cambiar sus FK. Filtrar aquí "
         "no sería una lectura más estricta: BORRARÍA el histórico.",
-    ("data/ManejoDatos/conection.py", 693):
+    ("data/ManejoDatos/conection.py", 694):
         "migración (EB2d, DA-57, _asegurar_angulo_starshot_sin_unique_de_tabla): "
         "mismo patrón que E10 arriba -- copia la tabla ENTERA al "
         "reconstruirla para retirar el UNIQUE(ref, spoke_index) de tabla "
@@ -175,13 +175,13 @@ SITIOS_CENSALES_PERMITIDOS = {
     # completa/agregación (`load.py:3038`/`3890`, ver
     # SITIOS_CLAVE_INCOMPLETA_PERMITIDOS en test_le4). RT1 los ve porque los
     # tests ejercitan de verdad `mostrar_controles_img*`/`mostrar_controles_tac`.
-    ("data/ManejoDatos/load.py", 1882):
+    ("data/ManejoDatos/load.py", 1906):
         "mostrar_controles_imgIX_anual -- COUNT(p.id_prueba) GROUP BY c.id: "
         "cuenta TODAS las pruebas de la sesión, no elige una.",
-    ("data/ManejoDatos/load.py", 1916):
+    ("data/ManejoDatos/load.py", 1940):
         "mostrar_controles_imgIX_anual -- MAX/MIN GROUP BY c.id: agregación "
         "sobre todas las pruebas de la sesión.",
-    ("data/ManejoDatos/load.py", 2071):
+    ("data/ManejoDatos/load.py", 2095):
         "mostrar_controles_imgIX -- gemelo mensual del COUNT anterior.",
     # CORRECCIÓN 01-09 (A9/A10/A11, PLAN_FUGA_CONEXIONES_01-09.md §9): las
     # tres entradas de esta familia (2119/2515/2715) se retiraron por error
@@ -200,19 +200,19 @@ SITIOS_CENSALES_PERMITIDOS = {
     # estas líneas). test_rt1_no_hereda_los_sitios_opacos_de_es1 permite
     # este solape puntual porque está documentado como independiente, no
     # heredado -- ver EXCEPCIONES_INDEPENDIENTES en test_rt1_interceptor_sql.py.
-    ("data/ManejoDatos/load.py", 2119):
+    ("data/ManejoDatos/load.py", 2143):
         "mostrar_controles_imgIX -- gemelo mensual del MAX/MIN anterior.",
-    ("data/ManejoDatos/load.py", 2276):
+    ("data/ManejoDatos/load.py", 2300):
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del COUNT.",
-    ("data/ManejoDatos/load.py", 2310):
+    ("data/ManejoDatos/load.py", 2334):
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2467):
+    ("data/ManejoDatos/load.py", 2491):
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del COUNT.",
-    ("data/ManejoDatos/load.py", 2515):
+    ("data/ManejoDatos/load.py", 2539):
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2667):
+    ("data/ManejoDatos/load.py", 2691):
         "mostrar_controles_tac -- gemelo TAC del COUNT.",
-    ("data/ManejoDatos/load.py", 2715):
+    ("data/ManejoDatos/load.py", 2739):
         "mostrar_controles_tac -- gemelo TAC del MAX/MIN.",
     ("scripts/observador_contrato.py", 158):
         "_censo_y_vigente -- COUNT(*) sobre TODA la tabla (censo total, sin "

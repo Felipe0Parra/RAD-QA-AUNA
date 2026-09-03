@@ -180,16 +180,16 @@ USUARIO_RESPALDO_MIGRACION = None
 
 class Conexion():
     _instance = None  # Variable de clase para almacenar una única instancia de la conexión
-    
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:  # Si no hay una instancia, la crea
             cls._instance = super(Conexion, cls).__new__(cls)
             cls._instance.__init_connection()  # Llama a un nuevo método de inicialización
         return cls._instance  # Devuelve la única instancia existente
-    
+
     def __init_connection(self):
         #print("Conexion               __init__ called")
-        
+
         #print("Inicialización de la base de datos (Archivo: conection.py)")
         try:
             self.con = sqlite3.connect(ruta_base_datos(), check_same_thread=False)  # Evita errores de hilos
@@ -222,6 +222,7 @@ class Conexion():
             self._asegurar_catalogos_base()
             self._asegurar_roles_de_sistema()
             self._asegurar_activo_bloque_qc()
+            self._asegurar_parametros_analisis_braqui()
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -761,6 +762,32 @@ class Conexion():
         self.con.commit()
         cur.close()
 
+    def _asegurar_parametros_analisis_braqui(self):
+        """P1 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): `umbral_relativo REAL`
+        / `distancia_minima INTEGER` en `braqui` -- los dos parámetros con
+        los que se generó el análisis de placa (`spin_umbral`/`spin_dist`
+        del diario). Sin ellos, recargar el perfil de intensidad al abrir
+        un registro (`P2`) solo puede hacerse con los valores POR DEFECTO,
+        que **[medido]** no reproducen lo guardado en 3 de cada 8 días
+        reales del físico -- una curva con picos que el texto de al lado
+        no lista, la misma clase de incoherencia que la fila 447 de
+        `DP-63`. `NULL` para todo el histórico (no se puede reconstruir
+        qué parámetros usó un análisis ya guardado).
+
+        Aditiva y sin pérdida de fila posible (`ALTER TABLE ADD COLUMN`,
+        mismo criterio que justifica correr `_asegurar_activo_bloque_qc`
+        aquí en vez de en la herramienta de migración manual, DA-69) --
+        corre SIEMPRE después de esa función, así que en cualquier BD ya
+        migrada estas 2 columnas quedan DESPUÉS de `activo` en el orden
+        físico. `encontrar_columnas` (`data/ManejoDatos/load.py`) excluye
+        `activo` por NOMBRE, no por posición, precisamente para que este
+        corrimiento no rompa el conteo de columnas que `add_info` arma."""
+        cur = self.con.cursor()
+        _asegurar_columna(cur, "braqui", "umbral_relativo", "REAL")
+        _asegurar_columna(cur, "braqui", "distancia_minima", "INTEGER")
+        self.con.commit()
+        cur.close()
+
     def _asegurar_roles_de_sistema(self):
         """E6 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §10): modelo de roles
         real en `users.rol_sistema` ('admin' / 'jefe' / 'fisico').
@@ -932,7 +959,7 @@ class Conexion():
             cur.close()
         except Exception as ex:
             print("Error asegurando migraciones ad-hoc al arranque:", ex)
-            
+
     # A6.0 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.5): fetchone(sql, params) se
     # borró -- cero llamadores en producción. Recibía el SQL por parámetro,
     # así que era invisible para el detector estático de A6.1 (cualquier
@@ -977,7 +1004,7 @@ class Conexion():
             dosis_referencia INTEGER,
             observaciones TEXT,
             FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE
-        )  
+        )
         """
         # Control diario del ix
         sql_create_table3 = """
@@ -1009,7 +1036,7 @@ class Conexion():
             tol_ele_15mev INTEGER,
             observaciones TEXT,
             FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE
-        )  
+        )
         """
         # Control diario de braqui
         sql_create_table4 = """
@@ -1052,7 +1079,7 @@ class Conexion():
             user_id TEXT,
             IsoCenterSize_name2 INTEGER,
             IsoCenterMVOffset INTEGER,
-            IsoCenterKVOffset INTEGER, 
+            IsoCenterKVOffset INTEGER,
             BeamOutputChange INTEGER,
             BeamUniformityChange INTEGER,
             BeamMu1GainChange INTEGER,
@@ -1071,11 +1098,11 @@ class Conexion():
             MVImagerCalibrationGain INTEGER,
             MVImagerCalibrationUniformity INTEGER,
             FOREIGN KEY (user_id) REFERENCES users(fullname) ON DELETE RESTRICT ON UPDATE CASCADE
-        )  
+        )
         """
-        # Tabla de equipos, las unidades están: 
-        #       Factores de Calibración cámara de inización: 1x10^9 (Gy/C) 
-        #       Factores de Calibración cámara de pozo: 1x10^1 (Gy·m²/h·A) 
+        # Tabla de equipos, las unidades están:
+        #       Factores de Calibración cámara de inización: 1x10^9 (Gy/C)
+        #       Factores de Calibración cámara de pozo: 1x10^1 (Gy·m²/h·A)
         #       Temperatura de calibración: °C
         #       Presión de calibración: kPa
         #       Humedad de calibración: %
@@ -1105,7 +1132,7 @@ class Conexion():
         #ALTER TABLE equipos ADD COLUMN h_cal TEXT;
         #"""
         #-----------------------------------------------------------------------------------------------
-        # Información general del control (equipo, fecha, usuario)        
+        # Información general del control (equipo, fecha, usuario)
         sql_create_tableMENSUAL = """
         CREATE TABLE IF NOT EXISTS controles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1126,7 +1153,7 @@ class Conexion():
             indicador_luminoso_consola TEXT,
             indicador_luminoso_equipo TEXT,
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
-        )  
+        )
         """
         # Tabla de datos de los indicadores del colimador
         sql_create_table8 = """
@@ -1134,9 +1161,9 @@ class Conexion():
             ref INTEGER,
             nivel TEXT,
             indicador_luminoso_consola TEXT,
-            indicador_luminoso_equipo TEXT, 
+            indicador_luminoso_equipo TEXT,
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
-        )  
+        )
         """
         # Tabla de tamaños de campo
         sql_create_table9 = """
@@ -1152,7 +1179,7 @@ class Conexion():
             ic_anchox1 TEXT,
             ic_anchox2 TEXT,
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
-        )  
+        )
         """
         # Tabla de datos del funcionamiento mecánico del dispositivo
         sql_create_table10 = """
@@ -1188,7 +1215,7 @@ class Conexion():
             calibr_fact INTEGER,
             fecha_calibr INTEGER,
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
-        )  
+        )
         """
         # Tabla de datos relacionados con la dosis.
         # H2.7: el DDL decía `val_teo_discrepancia`, pero la BD de PRODUCCIÓN
@@ -1228,10 +1255,10 @@ class Conexion():
             out_val INTEGER CHECK(out_val IN (0,1)),
             right_val INTEGER CHECK(right_val IN (0,1)),
             left_val INTEGER CHECK(left_val IN (0,1)),
-            observaciones TEXT, 
+            observaciones TEXT,
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )"""
-        
+
         sql_create_table14 = """CREATE TABLE IF NOT EXISTS control_conos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ref INTEGER,         -- referencia o identificador del equipo/paciente
@@ -1434,8 +1461,8 @@ class Conexion():
     def crearTablaAnalisis600(self):
         resultados_franja = """
             CREATE TABLE IF NOT EXISTS analisis_placa_franjas (
-            ref INTEGER,                  
-            franja TEXT NOT NULL,          
+            ref INTEGER,
+            franja TEXT NOT NULL,
             ancho_media_h REAL,
             ancho_media_v REAL,
             penumbra_izq_h REAL,
@@ -1506,7 +1533,7 @@ class Conexion():
         );"""
 
         # Tabla principal de pruebas individuales
-        pruebas = """   
+        pruebas = """
         CREATE TABLE IF NOT EXISTS pruebas (
             id_prueba INTEGER PRIMARY KEY AUTOINCREMENT,    -- Identificador único de cada prueba
             id_sesion INTEGER NOT NULL,                     -- Referencia a la sesión de prueba
@@ -1527,7 +1554,7 @@ class Conexion():
         CREATE TABLE IF NOT EXISTS espesor_corte (
             id_prueba INTEGER PRIMARY KEY,                  -- Referencia a la prueba en la tabla principal
             espesor_promedio_mm REAL NOT NULL,              -- Espesor promedio medido en mm
-            espesor_teorico_mm REAL NOT NULL,               -- Espesor teórico en mm    
+            espesor_teorico_mm REAL NOT NULL,               -- Espesor teórico en mm
             diferencia_mm REAL NOT NULL,                    -- Diferencia entre espesor medido y teórico en mm
             error_pct REAL NOT NULL,                        -- Error porcentual
             FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT ON UPDATE CASCADE
@@ -1544,7 +1571,7 @@ class Conexion():
                 diferencia_y REAL,                          -- |promedio_y - teorico|
                 FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
             );"""
-        
+
         # Tabla para detalles por ROI en RESOLUCIÓN DE CONTRASTE
         rois_contraste = """
         CREATE TABLE IF NOT EXISTS resolucion_contraste_rois (
@@ -1557,7 +1584,7 @@ class Conexion():
             background_promedio_hu REAL,
             contraste_michelson REAL,                   -- Métrica principal
             cnr REAL,                                   -- Contrast-to-Noise Ratio
-            snr REAL,                                   -- Signal-to-Noise Ratio  
+            snr REAL,                                   -- Signal-to-Noise Ratio
             visibilidad_lim REAL,                       -- Criterio de Rose
             pasa_cnr BOOLEAN,
             pasa_visibilidad_lim BOOLEAN,               -- Criterio recomendado
@@ -1608,7 +1635,7 @@ class Conexion():
                 status VARCHAR(50),                        -- "OK", "Picos insuficientes", etc.
                 FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
             );"""
-        
+
         # Catálogo de materiales para pruebas CT
         materiales_ct = """
         CREATE TABLE IF NOT EXISTS materiales_ct (
@@ -1635,7 +1662,7 @@ class Conexion():
 
         # Catálogo de regiones para uniformidad
         regiones_uniformidad = """
-        CREATE TABLE IF NOT EXISTS regiones_uniformidad ( 
+        CREATE TABLE IF NOT EXISTS regiones_uniformidad (
             id_region INTEGER PRIMARY KEY,                 -- Identificador único de la región
             nombre_region VARCHAR(20) NOT NULL UNIQUE,     -- Nombre descriptivo de la región (Centro, Superior, Derecha, Inferior, Izquierda)
             angulo INTEGER NOT NULL                        -- Ángulo asociado a la región (0, 90, 180, 270)
@@ -1666,7 +1693,7 @@ class Conexion():
             integral_non_uniformity REAL,             -- INU (fracción)
             integral_non_uniformity_pct REAL,         -- INU (%)
             pasa_ui BOOLEAN NOT NULL,                 -- UI <= threshold
-            pasa_inu BOOLEAN NOT NULL,                -- INU <= threshold  
+            pasa_inu BOOLEAN NOT NULL,                -- INU <= threshold
             pasa_global BOOLEAN NOT NULL,             -- Ambos criterios
             ui_threshold_pct REAL,                    -- Umbral UI usado (2.0%)
             inu_threshold_pct REAL,                   -- Umbral INU usado (2.0%)
@@ -1718,7 +1745,7 @@ class Conexion():
         tabla_factor_campo = """
             CREATE TABLE IF NOT EXISTS tabla_factor_campo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ref INTEGER, 
+                ref INTEGER,
                 id_energia INTEGER,
                 tamano_campo TEXT,
                 factor_campo REAL,
@@ -1743,7 +1770,7 @@ class Conexion():
                 ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (id_energia) REFERENCES energias(id)
             )"""
-        
+
         tabla_factores_sobre_eje = """
             CREATE TABLE IF NOT EXISTS tabla_factores_sobre_eje (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1758,7 +1785,7 @@ class Conexion():
                 ON DELETE RESTRICT ON UPDATE CASCADE,
                 FOREIGN KEY (id_energia) REFERENCES energias(id)
             )"""
-        
+
         tabla_control_camaras_monitoras = """
             CREATE TABLE IF NOT EXISTS tabla_control_camaras_monitoras (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1894,7 +1921,7 @@ class Conexion():
             ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
         )"""
-        
+
         tabla_indi_laser = """
         CREATE TABLE IF NOT EXISTS HC_indicadores_laser (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1920,7 +1947,7 @@ class Conexion():
             FOREIGN KEY (ref) REFERENCES controles(id)
             ON DELETE RESTRICT ON UPDATE CASCADE,
             FOREIGN KEY (id_energia) REFERENCES energias(id)
-        )"""    
+        )"""
 
         tabla_desplazamiento_iso = """
         CREATE TABLE IF NOT EXISTS HC_desplazamiento_isocentro_mensual (
@@ -2050,14 +2077,14 @@ class Conexion():
         cursor.execute(tabla_tamanos_campo_radiacion)
         cursor.execute(tabla_imagen_perfil_mlc)
         self.con.commit()
-        
+
     def crearTablasMLCs(self):
-        
-        configuracion_picketfence=""" 
+
+        configuracion_picketfence="""
         CREATE TABLE IF NOT EXISTS configuracion_picketfence (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ref INTEGER NOT NULL ,
-            fecha TEXT, 
+            fecha TEXT,
             equipo TEXT,
             fisico_1 TEXT,
             fisico_2 TEXT,
@@ -2066,7 +2093,7 @@ class Conexion():
             imagen_mlc BLOB,
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
             )"""
-        error_picket = """ 
+        error_picket = """
         CREATE TABLE IF NOT EXISTS error_picket (
             id  INTEGER PRIMARY KEY AUTOINCREMENT,
             ref INTEGER NOT NULL,
@@ -2074,10 +2101,10 @@ class Conexion():
             picket_mean_error REAL NOT NULL,
             picket_max_error REAL NOT NULL,
             FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE RESTRICT ON UPDATE CASCADE
-            
+
         )
         """
-        leaf_error = """ 
+        leaf_error = """
         CREATE TABLE IF NOT EXISTS leaf_error (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ref INTEGER NOT NULL,
@@ -2086,7 +2113,7 @@ class Conexion():
             FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
-        highest_leaf_errors = """ 
+        highest_leaf_errors = """
         CREATE TABLE IF NOT EXISTS highest_leaf_errors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ref integer NOT NULL,
@@ -2096,10 +2123,10 @@ class Conexion():
             FOREIGN KEY (ref) REFERENCES configuracion_picketfence(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
-        
-        # STARSHOT 
-        
-        configurar_starshot = """ 
+
+        # STARSHOT
+
+        configurar_starshot = """
         CREATE TABLE IF NOT EXISTS configuracion_starshot (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ref integer NOT NULL,
@@ -2113,7 +2140,7 @@ class Conexion():
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
-      
+
         # EB2d (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2d, DA-57, 24-08): el
         # `UNIQUE(ref, spoke_index)` de tabla se retira -- NO es partial
         # (a diferencia del índice que crea CL1/`crear_indices()` sobre la
@@ -2133,19 +2160,19 @@ class Conexion():
         FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
-        
-        estadisticas_starshot = """ 
+
+        estadisticas_starshot = """
         CREATE TABLE IF NOT EXISTS estadisticas_starshot (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ref integer NOT NULL,
-            std_mm REAL, 
+            std_mm REAL,
             rms_mm REAL,
             pm_95 REAL,
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
         """
-        
-        angulos_entre_lineas_starshot = """ 
+
+        angulos_entre_lineas_starshot = """
         CREATE TABLE IF NOT EXISTS angulos_entre_lineas_starshot (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ref INTEGER NOT NULL,
@@ -2153,7 +2180,7 @@ class Conexion():
             error_separacion REAL,
             FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
         )
-        """   
+        """
         uniformidad_angular_starshot ="""
             CREATE TABLE IF NOT EXISTS uniformidad_angular_starshot (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2168,22 +2195,22 @@ class Conexion():
             ON DELETE RESTRICT
             ON UPDATE CASCADE
     )"""
-        
+
         cursor = self.con.cursor()
-        
+
         tablas = [configuracion_picketfence, error_picket, leaf_error, highest_leaf_errors, configurar_starshot, angulos_starshot, estadisticas_starshot, uniformidad_angular_starshot, angulos_entre_lineas_starshot]
-        
+
         for tabla in tablas:
             cursor.execute(tabla)
         self.con.commit()
-        
 
-        
-            
-        
-        
-            
-        
+
+
+
+
+
+
+
 
     "Aqui solo se está llenando la tabla de los usuarios"
     def createAdmin(self):
