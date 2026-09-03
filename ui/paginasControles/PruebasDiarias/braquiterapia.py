@@ -732,6 +732,17 @@ class PruebaDiariaBraq(PruebaBasico):
             #self.label_imagen.setAlignment(Qt.AlignCenter)
             #self.label_imagen.setScaledContents(True)
             self.label_imagen.setPixmap(pix)
+            # I3 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): sin esto, hacer
+            # zoom sobre una película recién cargada de la BD repintaba la
+            # de OTRO día -- `actualizar_imagen()` siempre parte de
+            # `pixmap_original`, y nada la reponía al cargar desde el BLOB.
+            # Va DESPUÉS de `setPixmap`, que ya demostró que `pix` es
+            # válido -- el `except` de esta función traga cualquier error,
+            # y no se quiere que una asignación nueva quede oculta ahí.
+            # `pix` viene del PNG recodificado en memoria (arriba); el BLOB
+            # que se reguarda sigue siendo `self.archivo` (bytes originales
+            # sin recodificar, H2) -- esto afecta solo a lo que se VE.
+            self.pixmap_original = pix
             if not self.parametros_creados:
                 # H5 (PLAN_BRAQUI_DIARIO_HORA_IMAGEN_28-08.md): `_crear_
                 # interfaz_parametros()` ya llama a `_crear_parametros()`
@@ -1029,16 +1040,30 @@ class PruebaDiariaBraq(PruebaBasico):
             # versiones, ahora una sola correcta.
             self.canvas.draw()
 
-        # --- RESTAURAR UPLOADER ---
-        self.label_imagen.clear()
-
-        # self.analizar.hide()
-        # self.boton_guardar.hide()
-        # self.spin_umbral.hide()
-        # self.spin_dist.hide()
-        # self.label_umbral.hide()
-        # self.label_dist.hide()
-        #self.parametros_creados=False
+        # --- RESTAURAR UPLOADER --- I3 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md):
+        # antes esto solo lo hacía `cancelarbraqui` -- sin ello, tras un
+        # cambio de día el uploader quedaba con "Aceptar"/"Cancelar"
+        # visibles y "Seleccionar Imagen" oculto, como si aún hubiera una
+        # imagen pendiente de aceptar. `hasattr` en cada widget (antes
+        # `self.label_imagen.clear()` iba sin protección, inconsistente
+        # con el `hasattr` de `self.figure` arriba) -- si el atributo
+        # faltara, la excepción la traga el `except` de `cargar_
+        # dailytest_desde_db` y el día se carga a medias sin aviso.
+        if hasattr(self, 'label_imagen'):
+            self.label_imagen.clear()
+            self.label_imagen.setText("Subir imagen")
+        if hasattr(self, 'boton_subir'):
+            self.boton_subir.show()
+        if hasattr(self, 'boton_aceptar'):
+            self.boton_aceptar.hide()
+        if hasattr(self, 'boton_cancel'):
+            self.boton_cancel.hide()
+        if hasattr(self, 'boton_zoom_mas'):
+            self.boton_zoom_mas.setEnabled(False)
+            self.boton_zoom_mas.hide()
+        if hasattr(self, 'boton_zoom_menos'):
+            self.boton_zoom_menos.setEnabled(False)
+            self.boton_zoom_menos.hide()
 
         self.imagen_path = None
         # H1: self.archivo es el BLOB (o la ruta) que `add_info` persiste --
@@ -1052,6 +1077,37 @@ class PruebaDiariaBraq(PruebaBasico):
             # imagen (`mostrar_texto`), de ahí el hasattr.
             self.resultado_label.clear()
 
+        # I3: `pixmap_original` es lo que `actualizar_imagen()` repinta en
+        # cada zoom -- [medido] sin limpiarlo, la placa del día anterior
+        # reaparecía con solo mover la rueda del mouse, aunque
+        # `imagen_path` ya estuviera en None. `zoom_factor` vuelve al 1.0
+        # de `imagenUpLoader` (el 0.5 es el que pone `subir_imagen` al
+        # cargar una imagen nueva, no el valor "sin nada cargado").
+        self.pixmap_original = QPixmap()
+        self.zoom_factor = 1.0
+
+        # I3: la interfaz de análisis (spin_umbral/spin_dist/analizar/
+        # boton_ayuda) -- si solo se ocultara sin desarmar `parametros_
+        # layout`, la próxima vez que se analice (`parametros_creados=
+        # False` dispara `_crear_interfaz_parametros()` otra vez) el
+        # conjunto nuevo se crearía ENCIMA del viejo, huérfano -- misma
+        # clase de bug que H5 ya corrigió para el doble-click.
+        # `self.analizar`/`self.boton_ayuda` viven fuera de
+        # `parametros_layout` (el primero en un layout anidado que
+        # `takeAt` no alcanza, el segundo en `botones_layout`) -- se
+        # desprenden aparte, explícitamente.
+        if hasattr(self, 'parametros_layout') and self.parametros_layout is not None:
+            while self.parametros_layout.count():
+                item = self.parametros_layout.takeAt(0)
+                widget = item.widget()
+                if widget:
+                    widget.setParent(None)
+            self.parametros_layout = None
+        if hasattr(self, 'analizar'):
+            self.analizar.setParent(None)
+        if hasattr(self, 'boton_ayuda'):
+            self.boton_ayuda.setParent(None)
+        self.parametros_creados = False
 
     def mostrar_submenu(self):
 

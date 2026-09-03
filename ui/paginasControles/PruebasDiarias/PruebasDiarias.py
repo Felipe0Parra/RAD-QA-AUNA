@@ -1054,18 +1054,37 @@ class PruebaBasico(QWidget):
 
 
     def cancelarbraqui(self):
+        """I3 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): delega en
+        `resetear_imagen_ui()` cuando la clase la tiene (`PruebaDiariaBraq`)
+        -- antes tenía su PROPIO conjunto, distinto e incompleto (no tocaba
+        `zoom_factor`/`parametros_creados`/`imagen_path`/`resultado_label`/
+        `figure`), una de las dos pilas de limpieza de imagen que
+        discrepaban [medido, §0 del plan].
+
+        `PosicionamientoInicial` (otra clase, con su PROPIA maquinaria de
+        análisis -- `resultado_label_ini`, `_crear_parametros` propio) NO
+        tiene `resetear_imagen_ui`; conserva el reseteo mínimo de siempre,
+        sin cambio de comportamiento -- fuera del alcance de este plan
+        (que es sobre el diario de braqui, no sobre posicionamiento
+        inicial)."""
+        if hasattr(self, 'resetear_imagen_ui'):
+            self.resetear_imagen_ui()
+            return
+
         self.archivo = None
         self.pixmap_original = QPixmap()
-
-        atributos  = ["label_imagen", "boton_aceptar", "boton_cancel", "boton_zoom_mas", "boton_zoom_menos", "boton_seubir"]
-
-        if any(hasattr(self, attr) for attr in atributos) and self.label_imagen is not None:
+        if hasattr(self, 'label_imagen'):
             self.label_imagen.clear()
             self.label_imagen.setText("Subir imagen")
+        if hasattr(self, 'boton_aceptar'):
             self.boton_aceptar.hide()
+        if hasattr(self, 'boton_cancel'):
             self.boton_cancel.hide()
+        if hasattr(self, 'boton_zoom_mas'):
             self.boton_zoom_mas.hide()
+        if hasattr(self, 'boton_zoom_menos'):
             self.boton_zoom_menos.hide()
+        if hasattr(self, 'boton_subir'):
             self.boton_subir.show()
         if hasattr(self, 'parametros_layout') and self.parametros_layout is not None:
             # Elimina widgets del layout
