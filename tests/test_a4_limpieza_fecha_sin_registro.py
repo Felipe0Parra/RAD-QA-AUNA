@@ -163,7 +163,14 @@ class TestLimpiarWidgetsDiariaUnitario:
         for nombre in ("btn_a_fun", "btn_a_nofun", "btn_b_fun", "btn_b_nofun"):
             boton = getattr(obj, nombre)
             assert boton.isChecked() is False
-            assert boton.property("estado") == "noselected"
+            # I1 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): "" y no
+            # "noselected" -- ese valor es el color de "descartado", que
+            # cambiar_estilo le pone al botón NO elegido cuando el otro SÍ
+            # se eligió; ponerlo a los dos a la vez (sin responder) pintaba
+            # la pregunta como ya respondida en negativo. Ver
+            # test_i1_botones_color_por_defecto.py para la verificación
+            # sobre el COLOR efectivo, no solo la propiedad.
+            assert boton.property("estado") == ""
         assert obj.line_a.text() == ""
         assert obj.line_b.text() == ""
         assert obj.observaciones.text() == ""

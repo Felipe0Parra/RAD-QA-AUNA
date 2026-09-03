@@ -728,7 +728,18 @@ class PruebaBasico(QWidget):
                 btn_fun.setChecked(False)
                 btn_nofun.setChecked(False)
                 for boton in (btn_fun, btn_nofun):
-                    boton.setProperty("estado", "noselected")
+                    # I1 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): "noselected"
+                    # -- #ced876/#e69696 en estilo.qss, comentado ahí mismo
+                    # como "para disabled" -- es el color que cambiar_estilo
+                    # le pone al botón NO elegido cuando el otro SÍ se
+                    # eligió. Ponérselo a los DOS botones (ninguno elegido
+                    # todavía) pintaba la pregunta como "ya respondida, en
+                    # negativo" -- [medido] el físico lo describió como
+                    # "quedan como si ambos estuvieran desactivados". "" no
+                    # casa ninguna regla [estado] de estilo.qss y cae a la
+                    # base (colores vivos) -- [medido] IDÉNTICO al color de
+                    # un botón recién creado, sin la propiedad asignada.
+                    boton.setProperty("estado", "")
                     boton.style().unpolish(boton)
                     boton.style().polish(boton)
                     boton.update()
