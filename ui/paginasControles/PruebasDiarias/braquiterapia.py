@@ -375,6 +375,12 @@ class PruebaDiariaBraq(PruebaBasico):
             return
 
         try:
+            # P2: se oculta incondicionalmente al empezar a cargar -- se
+            # vuelve a mostrar más abajo SOLO si el día que se está
+            # cargando de verdad usó parámetros por defecto. Sin este
+            # reseteo, el aviso de un día anterior podía sobrevivir
+            # visualmente a un cambio de día que no lo justificaba.
+            self._asegurar_aviso_perfil_default().hide()
             query = QSqlQuery(db)
             print("consultando db")
             # Preparar la consulta
@@ -527,6 +533,23 @@ class PruebaDiariaBraq(PruebaBasico):
                     })
                     if informe is not None:
                         self.mostrar_texto(informe)
+
+                    # P2 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): `G1` (arriba)
+                    # repone el TEXTO del informe; el canvas seguía vacío --
+                    # `resetear_imagen_ui` (H1) ya lo deja limpio con
+                    # `canvas.draw()`, así que un día con análisis guardado
+                    # mostraba un recuadro vacío junto a números, sugiriendo
+                    # que no había análisis cuando sí lo había. Solo se
+                    # repinta si hay película Y análisis -- sin imagen no
+                    # hay nada que darle a `analizar_lineas`.
+                    if self.imagen_path and informe is not None:
+                        umbral_guardado = (
+                            _valor_o_none('umbral_relativo')
+                            if record.indexOf('umbral_relativo') != -1 else None)
+                        distancia_guardada = (
+                            _valor_o_none('distancia_minima')
+                            if record.indexOf('distancia_minima') != -1 else None)
+                        self._recargar_perfil_intensidad(umbral_guardado, distancia_guardada)
 
                 # 4. Actualizar el date_box con la fecha Y HORA cargadas
                 # (sin disparar señal). T8 (PLAN_BRAQUI_ACTIVIDAD_CONFIABLE_
@@ -1456,6 +1479,87 @@ class PruebaDiariaBraq(PruebaBasico):
             reporte.append("&nbsp;&nbsp;<b>No hay diferencias detectadas.</b><br>")
 
         return "".join(reporte)
+
+    def _asegurar_aviso_perfil_default(self):
+        """P2 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): crea, una sola vez,
+        el aviso bajo el gráfico que dice cuándo el perfil mostrado se
+        recalculó con los valores por defecto de los spins (o que no se
+        pudo reconstruir). Vive en `botones_layout`, no en
+        `parametros_layout` -- `resetear_imagen_ui` desarma este último en
+        cada cambio de día (I3); un widget ahí quedaría destruido antes de
+        poder mostrar nada.
+
+        Nunca devuelve `None`: si `botones_layout` no existe todavía --
+        el patrón de test `Clase.__new__(Clase)` + `QWidget.__init__(obj)`
+        (varios tests unitarios sobre `cargar_dailytest_desde_db`, p. ej.
+        `test_a4_limpieza_fecha_sin_registro.py`, construyen el objeto SIN
+        pasar por `initUI`) -- el QLabel se crea igual, huérfano
+        (`hide()`/`show()`/`setText()` funcionan sin padre), y se agrega
+        al layout más tarde si `botones_layout` llega a existir."""
+        if not hasattr(self, 'aviso_perfil_default'):
+            self.aviso_perfil_default = QLabel("")
+            self.aviso_perfil_default.setWordWrap(True)
+            self.aviso_perfil_default.setStyleSheet("color: #7a5c00; font-style: italic;")
+            self.aviso_perfil_default.hide()
+        if hasattr(self, 'botones_layout') and self.botones_layout.indexOf(self.aviso_perfil_default) == -1:
+            self.botones_layout.addWidget(self.aviso_perfil_default)
+        return self.aviso_perfil_default
+
+    def _recargar_perfil_intensidad(self, umbral_guardado, distancia_guardada):
+        """P2 (PLAN_BRAQUI_IMAGEN_Y_PERFIL_02-09.md): repinta la CURVA del
+        perfil de intensidad al cargar un día con película y análisis
+        guardados -- `G1` ya reconstruye el TEXTO del informe
+        (`_informe_desde_columnas`); esto solo repone el gráfico que
+        `H1` deja vacío (`resetear_imagen_ui` hace `canvas.draw()` sobre
+        una figura recién limpiada).
+
+        Recalcula con los parámetros GUARDADOS (`P1`) -- o, si la fila es
+        histórica y no los registró, con los valores por defecto de los
+        spins ([medido] `umbral=1.0`/`distancia=40`, los mismos con los
+        que `DP-80` midió 5/8 vs 3/8), avisando en pantalla que son por
+        defecto para no reintroducir por la puerta de atrás la
+        incoherencia que `P1` vino a evitar. El texto en pantalla NO
+        cambia: sigue siendo el reconstruido desde las columnas -- este
+        método descarta el reporte que `analizar_lineas` devuelve, solo
+        usa lo que dibuja en `self.canvas`.
+
+        `IMG-1` sigue vivo (`metadata()`/la detección de picos fallan con
+        DPI fuera de 200/300/600): en `try/except` propio para que una
+        placa afectada deje el canvas vacío con un aviso, sin abortar el
+        resto de la carga del día -- antes de este método eso solo podía
+        ocurrir al pulsar "Analizar"; con la recarga en cada cambio de
+        día se vuelve alcanzable en cualquier navegación del calendario."""
+        aviso = self._asegurar_aviso_perfil_default()
+        tiene_parametros_guardados = umbral_guardado is not None or distancia_guardada is not None
+        umbral = float(umbral_guardado) if umbral_guardado is not None else 1.0
+        distancia = int(distancia_guardada) if distancia_guardada is not None else 40
+        try:
+            analizar_lineas(
+                imagen_path=self.imagen_path,
+                metodo=True,
+                fila_especifica=None,
+                umbral_relativo=umbral,
+                distancia_minima=distancia,
+                mostrar=True,
+                filtro="clahe",
+                canvas=self.canvas
+            )
+            if tiene_parametros_guardados:
+                aviso.hide()
+            else:
+                aviso.setText(
+                    "Perfil reconstruido con parámetros por defecto -- "
+                    "este control no los registró.")
+                aviso.show()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Error recargando el perfil de intensidad: {e}")
+            if hasattr(self, 'figure'):
+                self.figure.clear()
+                self.canvas.draw()
+            aviso.setText("No fue posible reconstruir el perfil de esta imagen.")
+            aviso.show()
 
     def verificar_columna_pelicula(self, item):
         col_pelicula = self.table.columnCount() - 1
