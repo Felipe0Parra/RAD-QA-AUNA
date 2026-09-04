@@ -16,8 +16,10 @@ su soft-delete es la columna `active` que ya existe desde antes de este
 plan, no el mecanismo de anular+insertar de `services/anulacion.py`.
 """
 from data.ManejoDatos.conection import Conexion
+from data.ManejoDatos.user import Usuario
+from data.ManejoDatos.usuariosManager import UsuarioData
 from services.audit_minimo import (
-    ACCION_ANULAR, ACCION_REACTIVAR, registrar as _registrar_auditoria)
+    ACCION_ANULAR, ACCION_GUARDAR, ACCION_REACTIVAR, registrar as _registrar_auditoria)
 from services.permisos import ROLES_GESTION_USUARIOS, es_fisico_jefe
 
 DENEGADO_SIN_PERMISO = "denegado: sin permiso de gestión de usuarios"
@@ -120,3 +122,61 @@ def reactivar(username_objetivo, username_solicitante):
         _registrar_auditoria(nombre_solicitante, ACCION_REACTIVAR, "users",
                               ref=username_objetivo, detalle="reactivado")
         return True
+
+
+# U4: motivos que `crear_usuario` distingue -- `add_user` (usuariosManager.py)
+# colapsa "ya existe" / "fullname vacío" / "error de BD" en un solo `None`;
+# sin distinguirlos aquí, la pestaña solo podría decir "no se pudo crear",
+# sin que el físico sepa por qué (O-5).
+MOTIVO_CREADO = "creado"
+MOTIVO_SIN_PERMISO = "sin_permiso"
+MOTIVO_FULLNAME_VACIO = "fullname_vacio"
+MOTIVO_USUARIO_DUPLICADO = "usuario_duplicado"
+MOTIVO_ERROR_BD = "error_bd"
+
+
+def crear_usuario(datos, username_solicitante):
+    """Alta desde la pestaña -- delega en `UsuarioData.add_user`, la MISMA
+    operación que ya usa el registro público (E6, F3, A6.2), en vez de
+    reescribir el cifrado de la contraseña, la validación de `fullname` o
+    la auditoría (O-5).
+
+    `datos`: dict con `user`, `password`, `fullname` y, opcionales,
+    `active` (default 1), `idreal` (default ""), `role` (cargo mostrado,
+    default "Físico Médico") y `firma` (BLOB, default b"").
+
+    El `rol_sistema` del usuario nuevo SIEMPRE nace 'fisico' -- igual que
+    el registro público; ascender a 'jefe' es `U4-bis`, una operación
+    aparte y deliberada, nunca un campo más de este formulario.
+
+    Devuelve `(True, MOTIVO_CREADO)` o `(False, <uno de los MOTIVO_*>)` --
+    nunca un `None` mudo que deje al físico sin saber qué pasó."""
+    with Conexion().conectar() as db:
+        cursor = db.cursor()
+        nombre_solicitante = _nombre_completo(cursor, username_solicitante)
+
+        if not es_fisico_jefe(username_solicitante):
+            _registrar_auditoria(nombre_solicitante, ACCION_GUARDAR, "users",
+                                  ref=datos.get("user"), detalle=DENEGADO_SIN_PERMISO)
+            return False, MOTIVO_SIN_PERMISO
+
+        fullname = (datos.get("fullname") or "").strip()
+        if not fullname:
+            return False, MOTIVO_FULLNAME_VACIO
+
+        cursor.execute("SELECT COUNT(*) FROM users WHERE user=?", (datos.get("user"),))
+        if cursor.fetchone()[0] > 0:
+            return False, MOTIVO_USUARIO_DUPLICADO
+
+    # `add_user` abre y cierra SU PROPIA conexión (usuariosManager.py) --
+    # fuera del `with` de arriba para no anidar dos conexiones de escritura
+    # sobre el mismo archivo.
+    nuevo = Usuario(
+        username=datos.get("user"), password=datos.get("password"),
+        fullname=fullname, active=datos.get("active", 1),
+        identificacion=datos.get("idreal", ""),
+        role=datos.get("role", "Físico Médico"), firma=datos.get("firma", b""))
+    resultado = UsuarioData().add_user(nuevo)
+    if resultado is None:
+        return False, MOTIVO_ERROR_BD
+    return True, MOTIVO_CREADO
