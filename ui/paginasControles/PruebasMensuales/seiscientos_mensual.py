@@ -32,21 +32,21 @@ from services.vigencia_equipo import es_vigente_en_fecha
 from services.etiqueta_equipo import etiqueta_equipo
 from services.equipos_service import EquiposService
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
-from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert
 from services.MLCs_calibration_service import (
     _error_color,
     _style_ax,
-    _COL_OK,     
-    _COL_WARN,    
-    _COL_FAIL,   
-    _COL_BG,    
-    _COL_GRID,   
-    _COL_TEXT,   
-    _COL_SUBTEXT, 
-    _COL_LINE,   
+    _COL_OK,
+    _COL_WARN,
+    _COL_FAIL,
+    _COL_BG,
+    _COL_GRID,
+    _COL_TEXT,
+    _COL_SUBTEXT,
+    _COL_LINE,
     _COL_A,         # azul banco A
     _COL_B,        # naranja banco B
-    _COL_ZERO   
+    _COL_ZERO
     )
 import numpy as np
 # P1 (PLAN_P1_POOL_CONEXIONES_27-07.md): la clase con estado a nivel de
@@ -70,7 +70,7 @@ class PruebaMensual600(PruebaBasico):
         fecha = fecha.toString("MM/yyyy")
         """Consulta los físicos disponibles en la base de datos"""
         try:
-            
+
             if hasattr(self, 'equipo_f') and (self.equipo_f != 'Tomógrafo'):
                 _gestor_conn = self.db_manager.obtener_conexion()
             else:
@@ -78,7 +78,17 @@ class PruebaMensual600(PruebaBasico):
 
             with _gestor_conn as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, fullname FROM users WHERE role = 'Físico Médico'")
+                # U2 (PLAN_PESTANA_USUARIOS_02-09.md, O-1/O-2): solo se
+                # OFRECEN como candidatos nuevos los físicos activos --
+                # `COALESCE(active,1)=1` para que un NULL histórico no
+                # oculte a nadie. Reabrir un control YA firmado por alguien
+                # que hoy está inactivo es responsabilidad de
+                # `actualizar_fisicos` (U2-bis, más abajo): ese camino
+                # agrega el nombre guardado al combo aunque esta consulta
+                # no lo traiga, para no perder la identidad del responsable.
+                cursor.execute(
+                    "SELECT id, fullname FROM users "
+                    "WHERE role = 'Físico Médico' AND COALESCE(active,1)=1")
                 fisicos = cursor.fetchall()
 
 
@@ -102,16 +112,16 @@ class PruebaMensual600(PruebaBasico):
                 return fisicos, nombre_f1
         except Exception as e:
             print(f"Error al consultar físicos: {e}")
-          
+
             print(e)
-            
+
             return None, []
 
     def __init__(self, user_id, equipo_f=None):
-        
+
         #print("PruebaMensual600       __init__ called")
         super(PruebaMensual600, self).__init__()
-        
+
         # Inicialización de componentes principales
         self.equipo_f = equipo_f if equipo_f else self.EQUIPO_NAME
         print(equipo_f)
@@ -120,11 +130,11 @@ class PruebaMensual600(PruebaBasico):
 
         # Referencias débiles para evitar referencias circulares
         self._cleanup_refs = []
-        
+
         # Estados y caché
         self._widget_cache = {}
         self._calculation_cache = {}
-        
+
         # Debouncing timers
         self._debounce_timers = {}
         if self.equipo_f == "Clinac 600":
@@ -136,32 +146,32 @@ class PruebaMensual600(PruebaBasico):
         elif self.equipo_f == "Halcyon":
             if hasattr(self, 'anual') and self.anual:
                 lista_maquina=['encabezado_anual_Halcyon', 'Control anual', 'Iniciar control anual', 'Halcyon', 'preguntas_anual_Halcyon']
-                
+
             elif hasattr(self, 'anual') and self.anual and self.img_analysis:
 
                 lista_maquina=['encabezado_images_ix', 'Control anual', 'Control mensual', 'Iniciar Imagenes anual', 'Halcyon', 'preguntas_mensu_TAC']
-                
+
             else:
                 lista_maquina=['encabezado_mensu_Halcyon', 'Control mensual', 'Iniciar control mensual', 'Halcyon', 'preguntas_mensu_Halcyon']
 
         elif self.equipo_f == "Clinac ix":
             if hasattr(self, 'anual') and self.anual:
-                
+
                 lista_maquina=['encabezado_anual_ix', 'Control anual', 'Iniciar control anual', 'Clinac ix', 'preguntas_anual_ix']
             elif hasattr(self, 'anual') and self.anual and self.img_analysis:
 
                 lista_maquina=['encabezado_images_ix', 'Control anual', 'Control mensual', 'Iniciar Imagenes anual', 'Clinac ix', 'preguntas_mensu_TAC']
-                
+
             else:
                 lista_maquina=['encabezado_mensu_IX', 'Control mensual', 'Iniciar control mensual', 'Clinac ix', 'preguntas_mensu_ix']
-                
-        
-            
+
+
+
 
         elif self.equipo_f == "Tomógrafo":
             lista_maquina=['encabezado_mensu_TAC', 'Control mensual', 'Iniciar control mensual', 'Tomógrafo', 'preguntas_mensu_TAC']
         self.preINIGI(user_id, lista_maquina)
-    
+
     def limpiar_recursos(self):
         """Limpia recursos para evitar memory leaks"""
         try:
@@ -178,18 +188,18 @@ class PruebaMensual600(PruebaBasico):
             # Limpiar caché de modelos
             if hasattr(self, '_model_cache'):
                 self._model_cache.clear()
-            
+
             # Limpiar caché de cálculos
             if hasattr(self, '_calculation_cache'):
                 self._calculation_cache.clear()
-            
+
             # Limpiar tabs dinámicas
             if hasattr(self, 'dynamic_tabs'):
                 for tab in self.dynamic_tabs.values():
                     if tab:
                         tab.deleteLater()
                 self.dynamic_tabs.clear()
-            
+
             # P1.3 (PLAN_P1_POOL_CONEXIONES_27-07.md): antes se llamaba aquí
             # self.db_manager.cerrar_conexiones() -- con el pool viejo (con
             # estado a nivel de CLASE, compartido entre TODAS las vistas)
@@ -201,28 +211,28 @@ class PruebaMensual600(PruebaBasico):
             # como no-op.
 
             print("Recursos limpiados correctamente")
-            
+
         except Exception as e:
             print(f"Error al limpiar recursos: {e}")
-            
-            
+
+
     def __del__(self):
         """Destructor optimizado"""
         self.limpiar_recursos()
-    
+
     @property
     def es_control_anual(self):
         """Retorna True si es un control anual"""
         return hasattr(self, 'anual') and self.anual
-    
+
     def _actualizar_tabla_despues_subida(self):
         """Actualiza la tabla principal según si es control mensual o anual"""
         # Determinar el nombre del atributo de tabla (puede ser 'tabla' o 'tabla_widget')
         tabla_widget = getattr(self, 'tabla_widget', None) or getattr(self, 'tabla', None)
-        
+
         if not tabla_widget:
             return
-        
+
         # Verificar si es control anual
         if hasattr(self, 'anual') and self.anual:
             print(f"Actualizando tabla de controles anuales para {self.equipo_f}")
@@ -230,7 +240,7 @@ class PruebaMensual600(PruebaBasico):
         else:
             print(f"Actualizando tabla de controles mensuales para {self.equipo_f}")
             mostrar_controles_mensuales(self, tabla_widget, equipo_filtrar=self.equipo_f)
-    
+
     def actualizar_fisicos(self):
         # F2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): mismo criterio que
         # create_control -- la identidad es (equipo, mes, anio), nunca la
@@ -259,39 +269,56 @@ class PruebaMensual600(PruebaBasico):
                     # (AttributeError garantizado, atrapado en silencio por el
                     # except de abajo). Se seleccionan por texto, mismo patrón
                     # que el resto del archivo (líneas ~287-289, ~527-530).
+                    #
+                    # U2-bis (PLAN_PESTANA_USUARIOS_02-09.md, O-7): U2 filtró
+                    # `consultar_fisicos_bd` por `active` -- el combo ya NO
+                    # trae a un físico inactivo como candidato para un
+                    # control nuevo (correcto), pero eso mismo dejaba
+                    # `findText` en -1 al reabrir un control YA FIRMADO por
+                    # alguien que hoy está inactivo, y el combo se quedaba
+                    # mostrando a OTRA persona -- en silencio, atribuyendo el
+                    # control a quien no corresponde (contradice DA-47: una
+                    # lectura de IDENTIDAD -- "quién firmó este control" --
+                    # no se filtra). Si el nombre guardado no está entre las
+                    # opciones, se agrega antes de buscarlo: reabrir SIEMPRE
+                    # muestra al responsable real, esté o no activo hoy.
                     if resultado[0]:
+                        if self.fisico1.findText(resultado[0]) < 0:
+                            self.fisico1.addItem(resultado[0])
                         indice_f1 = self.fisico1.findText(resultado[0])
                         if indice_f1 >= 0:
                             self.fisico1.setCurrentIndex(indice_f1)
                     if resultado[1]:
+                        if self.fisico2.findText(resultado[1]) < 0:
+                            self.fisico2.addItem(resultado[1])
                         indice_f2 = self.fisico2.findText(resultado[1])
                         if indice_f2 >= 0:
                             self.fisico2.setCurrentIndex(indice_f2)
         except Exception as e:
             print(f"Error al actualizar el físico seleccionado: {e}")
-           
-                
-    
+
+
+
     def actualizar_user_id_f2(self, fisicos_disponibles=None):
         self.user_id_f2 = self.fisico2.currentData()
         print(f"Físico 2 seleccionado: {self.fisico2.currentText()}, ID: {self.user_id_f2}")
-        
+
     def actualizar_user_id_f1(self):
         self.user_id_f1 = self.fisico1.currentData()  # userData = id del físico
-    # Inicializa la interfaz para el control mensual 
+    # Inicializa la interfaz para el control mensual
     def preINIGI(self, user_id, inputs_maquina):
         # Define el archivo Excel que contiene la configuración de widgets
         archivo = 'widgets.xlsx'
-        
+
         # Configura el encabezado general para el control mensual y descarta el valor retornado
         _ = self.setupBox(archivo, inputs_maquina[0])
-        
+
         # Crea el layout principal para la interfaz
         if not self.layout():
             self.main_layout = QVBoxLayout(self)
         else:
             self.main_layout = self.layout()
-        
+
         # Configuración de la caja de selección de fecha:
         # F3 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): se muestra y guarda
         # el día real -- antes solo mes/año, lo que forzaba a la calculadora
@@ -308,13 +335,13 @@ class PruebaMensual600(PruebaBasico):
         try:
             for fisico in fisicos_disponibles:
                 self.fisico1.addItem(fisico[1], fisico[0])  # texto=nombre, userData=id
-            
+
             # Preseleccionar el usuario actual
             if nombre_f1:
                 index = self.fisico1.findText(nombre_f1[0])
                 if index >= 0:
                     self.fisico1.setCurrentIndex(index)
-            
+
             for fisico in fisicos_disponibles:
                 self.fisico2.addItem(fisico[1], fisico[0])  # también guardar userData en fisico2
 
@@ -330,20 +357,20 @@ class PruebaMensual600(PruebaBasico):
         self.user_id_f2 = None
         self.fisico2.currentIndexChanged.connect(lambda: self.actualizar_user_id_f2(fisicos_disponibles))
 
-        
+
         # Crea un QGroupBox para contener los controles del "Control mensual"
         # y lo agrega al layout principal
         self.group_box = QGroupBox(inputs_maquina[1])
         self.group_box.setLayout(self.general_layout)
         self.main_layout.addWidget(self.group_box)
-        
+
         # Crea un botón para iniciar el control mensual y lo agrega al layout general
         self.iniciar = QPushButton(inputs_maquina[2])
         self.general_layout.addWidget(self.iniciar)
-        self.iniciar.clicked.connect(lambda: print("Fecha seleccionada:", self.date_box.date().toString("dd/MM/yyyy"))) 
+        self.iniciar.clicked.connect(lambda: print("Fecha seleccionada:", self.date_box.date().toString("dd/MM/yyyy")))
         # Agrega un stretch al layout principal para alinear los widgets hacia la parte superior
         self.main_layout.addStretch()
-        
+
         # Conecta las señales del botón 'Iniciar' a las funciones correspondientes:
         # 1. Limpia los layouts para reiniciar la interfaz de control.
 
@@ -359,14 +386,14 @@ class PruebaMensual600(PruebaBasico):
         # 3. Ejecuta la función adicional para manipulación del botón.
         self.iniciar.clicked.connect(self.button_click)
         ''' '''
-        
+
         self.tabla = QTableWidget()
         self.tabla.setAlternatingRowColors(True)
         if hasattr(self, 'anual') and self.anual:
             mostrar_controles_anuales(self, self.tabla, equipo_filtrar=self.equipo_f)
         else:
             mostrar_controles_mensuales(self, self.tabla, equipo_filtrar=self.equipo_f)
-        
+
         if hasattr(self, 'esTAC') and self.esTAC:
             mostrar_controles_tac(self, self.tabla, self.user_id, self.equipo_f)
         if hasattr(self, 'esiX_images') and self.esiX_images:
@@ -380,24 +407,24 @@ class PruebaMensual600(PruebaBasico):
             mostrar_controles_imgHC(self, self.tabla, self.user_id, self.equipo_f)
         if hasattr(self, 'esHC_images') and self.esHC_images:
             mostrar_controles_imgHC_anual(self, self.tabla, self.user_id, self.equipo_f)
-        
-       
-        
+
+
+
         self.search_bar = QLineEdit()
         self.search_bar.setPlaceholderText("Buscar")
         self.search_bar.textChanged.connect(self.filtrarTabla)
-        
+
         # Container temporal para preview
         preview_container = QWidget()
         preview_layout = QVBoxLayout(preview_container)
         preview_layout.addWidget(self.search_bar)
         preview_layout.addWidget(self.tabla)
-        
+
         self.main_layout.addWidget(preview_container)
         self.main_layout.addStretch()
-        
+
         # Guardar referencia al container
-        
+
         preview_toolbar = QHBoxLayout()
 
         self.btn_delete_preview = QPushButton('Eliminar')
@@ -428,17 +455,17 @@ class PruebaMensual600(PruebaBasico):
         elif hasattr(self, 'esHC_images') and self.esHC_images:
             self.btn_delete_preview.clicked.connect(lambda: verificar_eliminarCT_anual(self, self.tabla, "controles", None))
             print("Verificar eliminar ANUAL WASCALL")
-           
-      
+
+
         else:
             self.edit_table_preview.clicked.connect(lambda: verificar_editar(self, self.tabla, "controles", "ref", None))
             self.accept_edit_preview.clicked.connect(lambda: guardarEdicion(self, self.tabla, "controles", None))
             self.cancel_edit_preview.clicked.connect(lambda: cancelarEdicion(self))
             self.btn_delete_preview.clicked.connect(lambda: verificar_eliminar(self, self.tabla, "controles", None))
-        
-            
+
+
         self._preview_container = preview_container
-        
+
         # Modificar iniciar para MOVER (no destruir)
         self.iniciar.clicked.disconnect()
         self.iniciar.clicked.connect(lambda: self._iniciar_moviendo_tabla(inputs_maquina))
@@ -526,10 +553,10 @@ class PruebaMensual600(PruebaBasico):
         QFileDialog los interpreta como separador de ruta, no como texto."""
         return (self.fecha_control or "").replace("/", "-")
 
-        
+
         #print(f"ID Sesión: {self.ref}")
-    
-    # Inicializa la interfaz gráfica de usuario (GUI) principal de la aplicación 
+
+    # Inicializa la interfaz gráfica de usuario (GUI) principal de la aplicación
     def iniGUI(self, inputs_maquina = None):
         """
         Inicializa la interfaz gráfica de usuario (GUI) principal de la aplicación.
@@ -547,10 +574,10 @@ class PruebaMensual600(PruebaBasico):
         #self.main_layout = QVBoxLayout(self)
         #self.main_layout = self.main_layout.layout()
         finalizar_proceso = QPushButton('Finalizar proceso')
-        
+
         # Crear un separador horizontal que divide la ventana en dos columnas (controles y gráficos)
         splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(3)  # Ancho del divisor 
+        splitter.setHandleWidth(3)  # Ancho del divisor
 
         # Crear layout izquierdo con el formulario de control
         test_control_layout = QWidget()
@@ -581,14 +608,14 @@ class PruebaMensual600(PruebaBasico):
             index = self.fisico1.findText(self.nombre_fisico1)
             if index >= 0:
                 self.fisico1.setCurrentIndex(index)
-            self.fisico1.setEnabled(False) 
+            self.fisico1.setEnabled(False)
         if hasattr(self, 'nombre_fisico2'):
             self.fisico2.setItemText(0, self.nombre_fisico2)  # Forzar actualización del texto
             self.fisico2.setEnabled(False)
-    
+
 
         #self.general_layout.addWidget(self.date_box)  # Agregar caja de fecha al layout general
-        
+
         # Crear layout derecho con los gráficos u otros elementos visuales
         graphics_layout = self.graphicsWindow()
 
@@ -608,69 +635,69 @@ class PruebaMensual600(PruebaBasico):
         self.main_layout.addWidget(splitter)
         #self.main_layout.addWidget(btn_volver)
         # Agregar botón de finalizar al layout principal
-                                                                                                                                                                                                                                                                                                               
-        
-        # Reconectar señales                                                                                                           
-       
+
+
+        # Reconectar señales
+
     # Crear la ventana de control para pruebas mensuales cargando widgets desde un archivo Excel
     def controlTestWindow(self, sheet_name, lista_maquina = None):
         """
         Crea ventana de control optimizada dividida en submétodos
-        
+
         Parámetros:
             sheet_name (str): Nombre de la hoja de Excel con la definición de widgets
         """
         #print(f"\nCreando ventana de control optimizada para {sheet_name}")
-        
+
         try:
             # Inicialización básica
             toolbox = self._inicializar_toolbox(sheet_name, inputs_maquina=lista_maquina)
-            
+
             # Configurar categorías
             self._configurar_categorias()
-            
+
             # Configurar widgets de seguridad
             self._configurar_widgets_seguridad(sheet_name)
-            
+
             # Configurar menús de equipos y seguridad
             self._configurar_menus_equipos_seguridad()
-            
+
             # Configurar aspectos mecánicos y dosimétricos
             self._configurar_aspectos_mecanicos_dosimetricos()
-            
+
             # Crear y configurar subtoolbox
             self._configurar_subtoolbox()
-            
+
             # Configurar toolbox principal
             self._configurar_toolbox_principal(toolbox)
-            
+
             # Configuraciones finales
-            
+
             self._configuraciones_finales()
             #self._configurar_mlcs()
-            
-            
+
+
             # Retornar toolbox, comboboxes y combo_menu como esperaba el código original
             return toolbox, getattr(self, 'comboboxe', []), getattr(self, 'combo_menu', [])
-            
+
         except Exception as e:
             print(f"Error en controlTestWindow: {e}")
             traceback.print_exc()
-           
+
             return QToolBox(), [], []
 
     def _inicializar_toolbox(self, sheet_name, inputs_maquina = None):
         """Inicializa el toolbox y configuraciones básicas"""
         archivo = 'data/widgets.xlsx'
         toolbox = QToolBox()
-        
+
         #print(f"Inicializando toolbox con archivo: {archivo} y hoja: {sheet_name}")
 
         try:
             # Encabezado general
             encabezado_result = self.setupBox(archivo, inputs_maquina[0])
             #print(f"Encabezado configurado: {type(encabezado_result)}")
-            
+
             # Configurar fecha (F3: ver preINIGI, mismo formato con día)
             # nea = self.date_box.date().toString('MM/yyyy')
             # nueva_fecha = QDate.fromString(nea, 'MM/yyyy')
@@ -682,7 +709,7 @@ class PruebaMensual600(PruebaBasico):
             # Cargar widgets de la hoja correspondiente
             print(f"Cargando widgets desde hoja: {sheet_name}")
             result = self.setupBox(archivo, sheet_name, main=False)
-            
+
             if result and len(result) < 6:
                 self.df, self.n, self.layouts, self.comboboxe = result
                 #print(f"✓ Carga exitosa:")
@@ -692,14 +719,14 @@ class PruebaMensual600(PruebaBasico):
             else:
                 print(f"✗ Error en setupBox: resultado inesperado {result}")
                 self.df, self.n, self.layouts, self.comboboxe = None, 0, [], []
-            
+
         except Exception as e:
             print(f"✗ Error al inicializar toolbox: {e}")
             import traceback
             traceback.print_exc()
-           
+
             self.df, self.n, self.layouts, self.comboboxe = None, 0, [], []
-        
+
         return toolbox
 
     def _configurar_categorias(self):
@@ -749,14 +776,14 @@ class PruebaMensual600(PruebaBasico):
                             #print(f"Verificando observaciones en {nombre}: '{texto}'")
                             pass
                         return verificar_observacion
-                    
+
                     verificador = crear_verificador(line)
                     # Usar el método de configuración de eventos directo
                     widget.textChanged.connect(lambda text, verificador=verificador: verificador(text))
-                    
+
         except Exception as e:
-            
-        
+
+
             print(f"Error configurando widgets de seguridad: {e}")
 
     def _configurar_menus_equipos_seguridad(self):
@@ -792,14 +819,14 @@ class PruebaMensual600(PruebaBasico):
             self.combos_seguridad = self._diccionario_combos_seguridad()
 
             #print(f"Configurados {len(self.combo_menu)} widgets de equipos y {len(self.combo_menu_seguridad)} de seguridad")
-            
+
         except Exception as e:
-            
+
             print(f"Error configurando menús: {e}")
             self.combo_menu = []
             self.combo_menu_seguridad = []
             self.combos_seguridad = {}
-            
+
 #############################################################################################
 
     # def _configurar_mlcs(self):
@@ -811,31 +838,31 @@ class PruebaMensual600(PruebaBasico):
     #             ((self.df.widget_type == 'QLineEdit'))
     #         ]['nombres']
 
-           
-       
-           
+
+
+
     #     except Exception as e:
     #         print(f"Error configurando menús: {e}")
-           
+
     #         self.mlc_data = []
 
-############################################################################################################      
+############################################################################################################
 
     def _diccionario_combos_seguridad(self):
         """Crea diccionario de combos de seguridad de manera segura"""
         try:
             return {
-                15: {   "in"    : getattr(self, 'cuna_15_in', None), "out"  : getattr(self, 'cuna_15_out', None), 
+                15: {   "in"    : getattr(self, 'cuna_15_in', None), "out"  : getattr(self, 'cuna_15_out', None),
                         "right" : getattr(self, 'cuna_15_ri', None), "left" : getattr(self, 'cuna_15_le' , None)},
-                30: {   "in"    : getattr(self, 'cuna_30_in', None), "out"  : getattr(self, 'cuna_30_out', None), 
+                30: {   "in"    : getattr(self, 'cuna_30_in', None), "out"  : getattr(self, 'cuna_30_out', None),
                         "right" : getattr(self, 'cuna_30_ri', None), "left" : getattr(self, 'cuna_30_le' , None)},
-                45: {   "in"    : getattr(self, 'cuna_45_in', None), "out"  : getattr(self, 'cuna_45_out', None), 
+                45: {   "in"    : getattr(self, 'cuna_45_in', None), "out"  : getattr(self, 'cuna_45_out', None),
                         "right" : getattr(self, 'cuna_45_ri', None), "left" : getattr(self, 'cuna_45_le' , None)},
-                60: {   "in"    : getattr(self, 'cuna_60_in', None), "out"  : getattr(self, 'cuna_60_out', None), 
+                60: {   "in"    : getattr(self, 'cuna_60_in', None), "out"  : getattr(self, 'cuna_60_out', None),
                         "right" : getattr(self, 'cuna_60_ri', None), "left" : getattr(self, 'cuna_60_le' , None)}
             }
         except Exception as e:
-            
+
             print(f"Error creando combos de seguridad: {e}")
             return {}
 
@@ -869,14 +896,14 @@ class PruebaMensual600(PruebaBasico):
             else:
                 self.addsomething(self.category4, self.df, "dosimetria",
                                 "dosimetriaMen", 0, ref=self.ref)
-                
-               
-            
+
+
+
             self.generar_reporte_btn = QPushButton('Generar reporte PDF')
             self.general_layout.addWidget(self.generar_reporte_btn)
 
         except Exception as e:
-            
+
             print(f"Error configurando aspectos mecánicos/dosimétricos: {e}")
 
     def _configurar_subtoolbox(self):
@@ -884,15 +911,15 @@ class PruebaMensual600(PruebaBasico):
         try:
             # Crear subtoolbox para aspectos mecánicos
             self.subtool = QToolBox()
-            
+
             # Configurar tablas de indicadores
             self._crear_tablas_indicadores()
-            
+
             # Añadir preguntas, tamaño de campo e imagen
             self._configurar_elementos_adicionales()
-            
+
         except Exception as e:
-            
+
             print(f"Error configurando subtoolbox: {e}")
             self.subtool = QWidget()
 
@@ -900,7 +927,7 @@ class PruebaMensual600(PruebaBasico):
         """Crea las tablas de indicadores angulares"""
         try:
             headers = ["Nivel", "Indicador luminoso consola", "Indicador luminoso equipo"]
-            
+
             # Indicadores angulares del brazo
             datos_brazo = [["0°", "", ""], ["90°", "", ""], ["180°", "", ""], ["270°", "", ""]]
             widget1, _ = self.createSimpleTable1(4, 3, headers, datos_brazo, "indicadores_brazo", self.ref)
@@ -912,10 +939,10 @@ class PruebaMensual600(PruebaBasico):
             datos_colimador = [["0°", "", ""], ["90°", "", ""], ["180°", "", ""], ["270°", "", ""]]
             widget2, _ = self.createSimpleTable1(4, 3, headers, datos_colimador, "indicadores_angulares_colimador", self.ref)
             self.subtool.addItem(widget2, "Indicadores angulares del colimador")
-            
+
         except Exception as e:
-            
-            
+
+
             print(f"Error creando tablas de indicadores: {e}")
 
     def _configurar_elementos_adicionales(self):
@@ -996,9 +1023,9 @@ class PruebaMensual600(PruebaBasico):
             toolbox.addItem(self.subtool, "ASPECTOS MECÁNICOS")
             toolbox.addItem(self.category4, "ASPECTOS DOSIMÉTRICOS")
             toolbox.addItem(self.category5, "MLCS")
-            
+
         except Exception as e:
-           
+
             print(f"Error configurando toolbox principal: {e}")
 
     def _configuraciones_finales(self):
@@ -1012,45 +1039,45 @@ class PruebaMensual600(PruebaBasico):
             self._configurar_mlcs()
             self._configurar_starshot()
         except Exception as e:
-           
+
             print(f"Error en configuraciones finales: {e}")
 
     def _configurar_eventos(self, widget, callback, timer_id):
         """Configura evento con debouncing para mejorar rendimiento de UI"""
         if not hasattr(self, '_debounce_timers'):
             self._debounce_timers = {}
-            
+
         def debounced_callback():
             if timer_id in self._debounce_timers:
                 self._debounce_timers[timer_id].stop()
-            
+
             timer = QTimer()
             timer.timeout.connect(callback)
             timer.setSingleShot(True)
             timer.start(300)  # 300ms delay
             self._debounce_timers[timer_id] = timer
-            
+
         widget.textChanged.connect(debounced_callback)
         return debounced_callback
     def _configurar_mlcs(self):
         try:
             self._mlc_analyzer = MLC_MEASSUREMENT()
-            
+
             self._dcm_mlc_path = None
-            
+
             btn_analizar = QPushButton("Analizar Picketfence")
             btn_analizar.setEnabled(True)
             self.category5.layout().addWidget(btn_analizar)
-          
-            
+
+
             self._btn_analizar_mlc = btn_analizar
-            
+
             self.BotonSubir.clicked.connect(self._seleccionar_dcm)
             btn_analizar.clicked.connect(self._ejecutar_analisis_mlc)
         except Exception as e:
-          
+
             print(e)
-            
+
     def _seleccionar_dcm(self):
         path, _ = QFileDialog.getOpenFileName(self, "Seleccionar imagen DICOM", "", "DICOM (*.dcm)")
         if path:
@@ -1062,8 +1089,8 @@ class PruebaMensual600(PruebaBasico):
         try:
             tolerance = float(self.ln_tolerance_mlc.text())
             action_tolerance = float(self.ln_action_tolerance.text())
-            
-            
+
+
             from pylinac.core.image_generator import generate_picketfence, GaussianFilterLayer, PerfectFieldLayer, RandomNoiseLayer, AS1200Image
             from pylinac.picketfence import Orientation
             pf_file = "erroneous_leaves.dcm"
@@ -1088,9 +1115,9 @@ class PruebaMensual600(PruebaBasico):
             print("dist2cax:", p.dist2cax)
             print("orientation:", p.orientation)
             imagen_mlc = (self._dcm_mlc_path)
-           
+
             pf_db_insertion(self.ref, self.fecha_control, self.equipo_f , action_tolerance, tolerance, self.nombre_fisico1, self.nombre_fisico2, imagen_mlc)
-            
+
             m = p.mlc_meas[0]
             z = p.mlc_meas[1]
             print("leaf_num:", m.leaf_num)
@@ -1101,7 +1128,7 @@ class PruebaMensual600(PruebaBasico):
             print("passed:", m.passed)
             print("leaf_width_px:", m.leaf_width_px)
             print("picket_num:", m.picket_num)
-            
+
             self._mostrar_resultados_mlc(data, tolerance, action_tolerance)
            # print(data)
             # A6.8 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): una sola
@@ -1113,13 +1140,13 @@ class PruebaMensual600(PruebaBasico):
         except Exception as e:
 
             print(e)
-        
+
     def _procesar_data_mlc(self, data, tolerance, action_tolerance):
         results = data.results_data()
-        errors_by_leaf = results.mlc_errors_by_leaf 
+        errors_by_leaf = results.mlc_errors_by_leaf
         positions_by_leaf = results.mlc_positions_by_leaf
         n_pickets = results.number_of_pickets
-        
+
         leafs = []
         for leaf_str, errors in errors_by_leaf.items():
             if len(errors) != n_pickets:
@@ -1153,7 +1180,7 @@ class PruebaMensual600(PruebaBasico):
         for row_i, hoja in enumerate(leafs):
             hoja["leaf_error"] = float(np.nanstd(error_matrix[row_i, :]))
         return {
-            "leafs": leafs, "n_pickets": n_pickets, 
+            "leafs": leafs, "n_pickets": n_pickets,
             "tolerance": tolerance, "action_tolerance": action_tolerance,
             "offsets_cax":     results.offsets_from_cax_mm,
             "max_error_mm":    results.max_error_mm,
@@ -1166,13 +1193,13 @@ class PruebaMensual600(PruebaBasico):
             "cax": results.cax if hasattr(results, 'cax') else None,
             "picket_stats": picket_stats,
             }
-        
+
     def _mostrar_resultados_mlc(self, data, tolerance, action_tolerance):
         processed = self._procesar_data_mlc(data, tolerance, action_tolerance)
- 
+
         tab = QWidget()
         tab_layout = QHBoxLayout(tab)
- 
+
         nombre_tab = f"MLC {QDate.currentDate().toString('MM/yyyy')}"
         self.tab_widget.addTab(tab, nombre_tab)
         self.tab_widget.setCurrentWidget(tab)
@@ -1184,30 +1211,30 @@ class PruebaMensual600(PruebaBasico):
         layout_izq = QVBoxLayout(panel_izq)
         layout_izq.setContentsMargins(0, 0, 0, 0)
         layout_izq.setSpacing(4)
- 
+
         mpl = get_matplotlib_components()
         FigureCanvas      = mpl['FigureCanvas']
         NavigationToolbar = mpl['NavigationToolbar']
- 
+
         fig    = Figure(figsize=(6, 8))
         canvas = FigureCanvas(fig)
         toolbar = NavigationToolbar(canvas, panel_izq)
         toolbar.setFixedHeight(28)
- 
+
         layout_izq.addWidget(toolbar)
         layout_izq.addWidget(canvas)
- 
+
         # ── Panel derecho (resumen + tabla) ──────────────────────────────────
         panel_der = QWidget()
         panel_der.setMaximumWidth(320)
-        layout_der = QVBoxLayout(panel_der) 
- 
+        layout_der = QVBoxLayout(panel_der)
+
         lbl_estado = QLabel("Aprobado" if processed["passed"] else "Fallido")
         lbl_estado.setProperty("mlc_estado", "passed" if processed["passed"] else "failed")
         lbl_estado.setAlignment(Qt.AlignCenter)
         lbl_estado.style().unpolish(lbl_estado)
         lbl_estado.style().polish(lbl_estado)
- 
+
         lbl_resumen = QLabel(
             f"Láminas {processed['percent_passing']:.1f}%\n"
             f"Error máximo: {processed['max_error_mm']:.4f} mm\n"
@@ -1220,12 +1247,12 @@ class PruebaMensual600(PruebaBasico):
         lbl_resumen.setObjectName("lbl_resumen_mlc")
         lbl_resumen.setWordWrap(True)
         lbl_resumen.setAlignment(Qt.AlignTop | Qt.AlignLeft)
- 
+
         criticas        = [h for h in processed["leafs"] if h["over_tol"]]
         criticas_sorted = sorted(criticas, key=lambda x: x["max_error"], reverse=True)
- 
+
         lbl_tabla_titulo = QLabel(f"Láminas fuera de tolerancia: {len(criticas)}")
- 
+
         tabla = QTableWidget(max(len(criticas), 1), 3)
         tabla.setObjectName("tabla_criticas")
         tabla.setHorizontalHeaderLabels(["Lámina", "Max error (mm)", "Picket"])
@@ -1234,7 +1261,7 @@ class PruebaMensual600(PruebaBasico):
         tabla.setEditTriggers(QAbstractItemView.NoEditTriggers)
         tabla.setAlternatingRowColors(True)
         tabla.setMaximumHeight(220)
- 
+
         if criticas_sorted:
             for row, hoja in enumerate(criticas_sorted):
                 worst_picket = hoja["errors"].index(max(hoja["errors"], key=abs))
@@ -1251,8 +1278,8 @@ class PruebaMensual600(PruebaBasico):
             item.setTextAlignment(Qt.AlignCenter)
             tabla.setItem(0, 0, item)
             tabla.setSpan(0, 0, 1, 3)
-        
-        
+
+
         layout_der.addWidget(lbl_estado)
         layout_der.addSpacing(6)
         layout_der.addWidget(lbl_resumen)
@@ -1282,14 +1309,14 @@ class PruebaMensual600(PruebaBasico):
                 QMessageBox.critical(self, "Error", str(e))
 
         btn_pdf.clicked.connect(_on_generar_pdf)
- 
+
         # ── Ensamblar layout ──────────────────────────────────────────────────
         tab_layout.addWidget(panel_izq, stretch=3)
         tab_layout.addWidget(panel_der, stretch=1)
- 
+
         # ── Conectar interactividad (peine + detalle por picket) ──────────────
         # Debe ir DESPUÉS de addWidget para que el canvas tenga tamaño de Qt
-        
+
         btn_toggle = QPushButton("Ver imagen DICOM")
         btn_toggle.setCheckable(True)
         layout_izq.addWidget(btn_toggle)
@@ -1303,7 +1330,7 @@ class PruebaMensual600(PruebaBasico):
                 _dibujar_peine(fig, canvas, processed)
 
         btn_toggle.clicked.connect(_toggle_vista)
-        
+
         tab_perfiles = QWidget()
         layout_perfiles = QVBoxLayout(tab_perfiles)
         fig_p = Figure(figsize=(12, 5))
@@ -1323,7 +1350,7 @@ class PruebaMensual600(PruebaBasico):
         layout_bancos.addWidget(canvas_b)
         #self.tab_widget.addTab(tab_bancos, f"Bancos A/B {QDate.currentDate().toString('MM/yyyy')}")
         #_dibujar_asimetria_bancos(fig_b, canvas_b, processed)
-    
+
         # ── Tab varianza inter-picket ─────────────────────────────────────────
         tab_var = QWidget()
         layout_var = QVBoxLayout(tab_var)
@@ -1334,8 +1361,8 @@ class PruebaMensual600(PruebaBasico):
         layout_var.addWidget(canvas_v)
         self.tab_widget.addTab(tab_var, f"Varianza {QDate.currentDate().toString('MM/yyyy')}")
         _dibujar_varianza_interpicket(fig_v, canvas_v, processed)
-        
-        
+
+
         # Ventana de analisis estadistico:
         tab_analisis = QWidget()
         layout_analisis = QVBoxLayout(tab_analisis)
@@ -1346,20 +1373,20 @@ class PruebaMensual600(PruebaBasico):
         layout_analisis.addWidget(canvas_a)
         self.tab_widget.addTab(tab_analisis, f"Análisis {QDate.currentDate().toString('MM/yyyy')}")
         _dibujar_analisis_estadistico(fig_a, canvas_a, processed)
-        
+
         #leaf_stats(processed)
         self._estado_viz_mlc = _conectar_interactividad(fig, canvas, data, processed)
-        
-        
-        
+
+
+
         ###### INSERCIÓN DE DATOS ############
-        
+
         pf_picket_error_insertion(self.ref, processed)
         pf_leaf_error_insertion(self.ref, processed)
         pf_highest_leaf_errors_insertion(self.ref, processed, 10)
     def _dibujar_mlc_imagen(self, fig, canvas, pf_obj, processed):
         from matplotlib.patches import FancyArrowPatch
-        
+
 
         fig.clear()
         ax = fig.add_subplot(111)
@@ -1432,7 +1459,7 @@ class PruebaMensual600(PruebaBasico):
 
         # ── Leyenda ──────────────────────────────────────────────────
         import matplotlib.patches as mpatches
-        
+
         legend_patches = [
             mpatches.Patch(color=_COL_OK,   label="Dentro de tol."),
             mpatches.Patch(color=_COL_WARN, label=f">{tol*0.8:.2f} mm"),
@@ -1447,11 +1474,11 @@ class PruebaMensual600(PruebaBasico):
                     fontsize=11, fontweight='bold')
         fig.tight_layout()
         canvas.draw()
-        
-        
-        
+
+
+
     def _dibujar_mlc(self, fig, canvas, processed):
-        
+
         from matplotlib.patches import Rectangle
 
         fig.clear()
@@ -1507,7 +1534,7 @@ class PruebaMensual600(PruebaBasico):
     """Todo lo anterior es exclusivamente para el analisis de pylinac de picket fence, es decir, para colimadores en esa disposición y el QA ajustado a 50mm de cada uno """
 
     #################################################################################################                                               ANALISIS SPOKE SHOT (ANGULAR)
-    
+
 
     def _configurar_starshot(self):
         """
@@ -1518,25 +1545,25 @@ class PruebaMensual600(PruebaBasico):
         try:
             self._starshot_analyzer = STARSHOT_MEASUREMENT()
             self._dcm_mlc_path = None
-    
+
             btn_analizar_ss = QPushButton("Analizar Spoke Shot")
             btn_analizar_ss.setEnabled(False)
             # Agrega el botón al layout de la categoría correspondiente
             # Ajusta 'self.category_starshot' al widget correcto de tu UI
             self.category5.layout().addWidget(btn_analizar_ss)
-    
+
             self._btn_analizar_starshot = btn_analizar_ss
-    
+
             # Reutiliza un botón de subida independiente o crea uno nuevo
             # Si ya tienes self.BotonSubirStarshot en tu .ui:
-            
+
             self._btn_analizar_starshot.setEnabled(True)
             btn_analizar_ss.clicked.connect(self._ejecutar_analisis_starshot)
-    
+
         except Exception as e:
             print(f"[_configurar_starshot] {e}")
-    
-    
+
+
     def _seleccionar_dcm_starshot(self):
         """Abre diálogo para elegir el .dcm del spoke shot."""
         path, _ = QFileDialog.getOpenFileName(
@@ -1546,13 +1573,13 @@ class PruebaMensual600(PruebaBasico):
             self._dcm_starshot_path = path
             self._btn_analizar_starshot.setEnabled(True)
             self.BotonSubirStarshot.setText(path.split("/")[-1])
-    
-    
+
+
     def _ejecutar_analisis_starshot(self):
         """Lee la tolerancia del campo de texto, corre el análisis y muestra resultados."""
         print("[Starshot] Ejecutando análisis...")
-        
-        
+
+
         try:
             print("Datos dicom: ", pydicom.dcmread(self._dcm_mlc_path))
             tolerance = float(self.ln_tolerance_starshot.text())
@@ -1568,7 +1595,7 @@ class PruebaMensual600(PruebaBasico):
                 tolerance=tolerance,
                 sid=sid,
             )
-            rd           = ss_obj.results_data() 
+            rd           = ss_obj.results_data()
             processed    = procesar_data_starshot(ss_obj, tolerance)
             starshot_insert(self.ref, self.fecha_control, self.equipo_f, sid, tolerance, self.nombre_fisico1, self.nombre_fisico2, self._dcm_mlc_path)
             print("Datos calculados")
@@ -1576,7 +1603,7 @@ class PruebaMensual600(PruebaBasico):
             estadisticas = analisis_profundo_starshot(ss_obj, rd)
             print("Diccionario con estadisticas")
             print(estadisticas)
-            
+
             self._mostrar_resultados_starshot(ss_obj, tolerance)
 
             # A6.8 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): una sola
@@ -1594,11 +1621,11 @@ class PruebaMensual600(PruebaBasico):
                     "Ingresa el SID en mm (ej: 1000).")
             else:
                 QMessageBox.critical(self, "Error en análisis", str(e))
-    
+
     def _mostrar_resultados_starshot(self, ss_obj, tolerance: float):
         processed    = procesar_data_starshot(ss_obj, tolerance)
         rd           = ss_obj.results_data()
-        
+
         estadisticas = analisis_profundo_starshot(ss_obj, rd)
 
         starshot_residual_statistics_insert(self.ref, estadisticas)
@@ -1763,10 +1790,10 @@ class PruebaMensual600(PruebaBasico):
         layout_uni.addWidget(canvas_u)
         self.tab_widget.addTab(tab_uni, f"Uniformidad {QDate.currentDate().toString('MM/yyyy')}")
         _dibujar_uniformidad_angular(fig_u, canvas_u, estadisticas)
-        
-            
-    
-    
+
+
+
+
     # Añade widgets de tipo QLineEdit a un layout específico, con funcionalidad de carga y guardado de datos
     def addsomething(self, layout, df, typee, nombre_tabla, datos_eliminar, ref, usarid=False, anual=False):
         """Añade los QLineEdit de una prueba y los conecta al guardado en BD.
@@ -1820,7 +1847,7 @@ class PruebaMensual600(PruebaBasico):
         dialogo = DialogCalculadoraDosis(
             self.ENERGIAS, self, fecha_inicial=self.date_box.date())
         dialogo.dosis_asignada.connect(self._mapear_dosis_a_energia)
-        dialogo.setModal(False) 
+        dialogo.setModal(False)
         dialogo.show()
         dialogo.raise_()
         dialogo.activateWindow()
@@ -1837,9 +1864,9 @@ class PruebaMensual600(PruebaBasico):
             return
 
         mapping[energia].setText(f"{valor:.4f}")
-        
 
-    
+
+
     def _cargar_de_bd(self, df_lines, nombre_tabla, ref):
         print("DF LINES: ")
         print(df_lines)
@@ -2138,7 +2165,7 @@ class PruebaMensual600(PruebaBasico):
         def debounced_callback():
             if timer_key in self._debounce_timers:
                 self._debounce_timers[timer_key].stop()
-            
+
             timer = QTimer()
             timer.setSingleShot(True)
             timer.timeout.connect(callback)
@@ -2170,9 +2197,9 @@ class PruebaMensual600(PruebaBasico):
             self._actualizar_tabla_despues_subida()
             print("Datos subidos correctamente")
             QMessageBox.information(self, "", "Datos cargados correctamente")
-            
+
         except ConnectionError as e:
-           
+
             print(f"Error de conexión al subir datos: {e}")
             QMessageBox.warning(self, "Error de Conexión", "No se pudo conectar a la base de datos.")
         except ValueError as e:
@@ -2188,7 +2215,7 @@ class PruebaMensual600(PruebaBasico):
                             id_energia=None, id=False):
         """Crea tabla simple optimizada con lazy loading y mejor manejo de datos"""
         #print(f"\nCreando tabla optimizada: {nombre_tabla}")
-        
+
         try:
             #print(f"Creando tabla {nombre_tabla} con {rows} filas y {cols} columnas")
             widget = QWidget()
@@ -2200,15 +2227,15 @@ class PruebaMensual600(PruebaBasico):
             table.setColumnCount(cols)
             table.setHorizontalHeaderLabels(headers)
             table.verticalHeader().setVisible(False)
-            
+
             # Optimizaciones de rendimiento
             table.setAlternatingRowColors(True)
             table.setSortingEnabled(False)  # Desactivar mientras se cargan datos
-            
+
             # Intentar cargar datos desde BD primero
             datos_tabla = self._cargar_datos_tabla(nombre_tabla, ref, datos, pdd=pdd, id_energia=id_energia, id=id)
             readonly_mode = False
-            
+
             if datos_tabla['source'] == 'database':
                 readonly_mode = False
                 self._llenar_tabla_bd(table, datos_tabla['data'], nombre_tabla)
@@ -2230,7 +2257,7 @@ class PruebaMensual600(PruebaBasico):
                 self._llenar_tabla_defaults(
                     table, datos_tabla['data'] if not es_multilaminas_posicion else datos,
                     editar_primera_columna=es_multilaminas_posicion)
-            
+
             # Configuración final de tabla|
             table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -2238,19 +2265,19 @@ class PruebaMensual600(PruebaBasico):
             for i in range(table.columnCount()):
                 table.horizontalHeaderItem(i).setTextAlignment(Qt.AlignCenter)
             layout.addWidget(table)
-            
+
             # Si los datos están en BD, no agregar botones
             if readonly_mode:
                 return widget, table
-            
+
             if not botones:
                 return widget, table
 
             # Agregar botones solo si es necesario
             self._agregar_botones_tabla(layout, table, nombre_tabla, ref, id=id, id_energia=id_energia)
-            
+
             return widget, table
-            
+
         except Exception as e:
             print(f"Error creando tabla {nombre_tabla}: {e}")
             traceback.print_exc()
@@ -2315,7 +2342,7 @@ class PruebaMensual600(PruebaBasico):
                         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
                     table.setItem(fila, columna, item)
         except Exception as e:
-           
+
             print(f"Error llenando tabla desde BD: {e}")
 
     def _llenar_tabla_defaults(self, table, datos_default, editar_primera_columna=False):
@@ -2331,7 +2358,7 @@ class PruebaMensual600(PruebaBasico):
                         item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                     table.setItem(fila, columna, item)
         except Exception as e:
-           
+
             print(f"Error llenando tabla con defaults: {e}")
 
     def _agregar_botones_tabla(self, layout, table, nombre_tabla, ref, id=None, id_energia=None):
@@ -2354,20 +2381,20 @@ class PruebaMensual600(PruebaBasico):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         table = QTableWidget()
-        
+
         table.setRowCount(rows)
         table.setColumnCount(cols)
         table.setHorizontalHeaderLabels(headers)
-        
+
         layout.addWidget(table)
         return widget, table
-    
+
     def _subir_tabla_optimizada(self, table, nombre_tabla, ref, id=False, id_energia=None):
         """Sube datos de tabla a BD de manera optimizada"""
         try:
             datos = []
             anual = getattr(self, "anual", False)
-            
+
             if anual:
                 for group in [getattr(self, 'tablas_fc', []), getattr(self, 'tablas_fta', []), getattr(self, 'tablas_fse', []), getattr(self, 'tablas_ccm', [])]:
                     for entry in group:
@@ -2415,12 +2442,12 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error subiendo tabla {nombre_tabla}: {e}")
             traceback.print_exc()
             QMessageBox.critical(self, "Error", f"Error al subir tabla: {str(e)}")
-    
+
     @property
     def es_control_anual(self):
         """Retorna True si es un control anual"""
         return hasattr(self, 'anual') and self.anual
-    
+
     def fieldSize(self, nombre_tabla, ref):
         reference = ref
         widget = QWidget()
@@ -2434,14 +2461,14 @@ class PruebaMensual600(PruebaBasico):
 
         # Ocultar encabezados predeterminados
         table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setVisible(False) 
+        table.horizontalHeader().setVisible(False)
 
         # Encabezados principales (fila 0)
         table.setSpan(0, 1, 1, 4)  # Indicador del equipo
         table.setSpan(0, 5, 1, 4)  # Indicador de la consola
         table.setItem(0, 1, QTableWidgetItem("Indicador del equipo"))
         table.setItem(0, 5, QTableWidgetItem("Indicador de la consola"))
-        
+
         # Encabezados principales (fila 0)
         table.setSpan(0, 0, 3, 1)  # Indicador del equipo
         table.setItem(0, 0, QTableWidgetItem("Campo nominal (cm x cm)"))
@@ -2456,7 +2483,7 @@ class PruebaMensual600(PruebaBasico):
         table.setItem(1, 3, QTableWidgetItem("Ancho"))
         table.setItem(1, 5, QTableWidgetItem("Largo"))
         table.setItem(1, 7, QTableWidgetItem("Ancho"))
-        
+
         table.setItem(2, 1, QTableWidgetItem("Y1"))
         table.setItem(2, 2, QTableWidgetItem("Y2"))
         table.setItem(2, 3, QTableWidgetItem("X1"))
@@ -2464,8 +2491,8 @@ class PruebaMensual600(PruebaBasico):
         table.setItem(2, 5, QTableWidgetItem("Y1"))
         table.setItem(2, 6, QTableWidgetItem("Y2"))
         table.setItem(2, 7, QTableWidgetItem("X1"))
-        table.setItem(2, 8, QTableWidgetItem("X2"))        
-        
+        table.setItem(2, 8, QTableWidgetItem("X2"))
+
         # Rellenar datos en la tabla (H1.3, auditoría 2026-07-14: solo el
         # "Campo nominal" nace prellenado -- las 8 columnas de MEDICIÓN
         # nacían con el valor nominal repetido, como si ya se hubiera
@@ -2476,7 +2503,7 @@ class PruebaMensual600(PruebaBasico):
             ["15 x 15", "", "", "", "", "", "", "", ""],
             ["20 x 20", "", "", "", "", "", "", "", ""]
         ]
-        
+
         prueba1 = self.pruebatalas(nombre_tabla, reference)
         #print(f'Prueba1 en {nombre_tabla} es: {prueba1}')
 
@@ -2488,23 +2515,23 @@ class PruebaMensual600(PruebaBasico):
 
         for fila, fila_datos in enumerate(datos, start=3):
             for columna, dato in enumerate(fila_datos):
-                item = QTableWidgetItem(str(dato)) 
-                
+                item = QTableWidgetItem(str(dato))
+
                 if columna == 0:
                     item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-                
+
                 table.setItem(fila, columna, item)
-                
+
         # Agregar la tabla al layout
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(table)
-        
+
         # if prueba1 is not None and prueba1 != []:
         #     table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         #     widget.setLayout(layout)
         #     return widget
-        
+
         # Botón de subida a BD (H2.7: el "Guardar" de borrador JSON local se
         # eliminó -- Subir es la única forma de persistir, y hace
         # DELETE+INSERT por ref vía loadtablacomplex).
@@ -2536,22 +2563,22 @@ class PruebaMensual600(PruebaBasico):
 
         widget.setLayout(layout)
         return widget
-    
+
     def graphicsWindow(self):
         # Columna derecha: QTabWidget (ventana con pestañas)
         self.tab_widget = QTabWidget() #crea el tab
         self.tab_widget.setTabsClosable(True)  # Habilita el cierre de pestañas
         self.tab_widget.tabCloseRequested.connect(self.closeTab)  # Conecta la señal de cerrar
-        
+
         self.tab1 = QWidget()
         self.tab_widget.addTab(self.tab1, "Graficos")
-        
+
         self.setupTap1()
-        
+
         self.dynamic_tabs = {}
-        
+
         return self.tab_widget
-    
+
     def closeTab(self, index):
         # No permite cerrar la pestaña principal
         if index == 0:
@@ -2559,8 +2586,8 @@ class PruebaMensual600(PruebaBasico):
         tab_text = self.tab_widget.tabText(index)
         if tab_text in self.dynamic_tabs:
             del self.dynamic_tabs[tab_text]
-        self.tab_widget.removeTab(index)    
-    
+        self.tab_widget.removeTab(index)
+
     def limpiar_canvas(self, canvas):
         canvas.figure.clf()
         canvas.draw()
@@ -2568,7 +2595,7 @@ class PruebaMensual600(PruebaBasico):
     def setupTap1(self):
         # Combo de selección de gráfica
         self.graficar = QComboBox()
-        
+
         # Canvas para gráficas
         mpl = get_matplotlib_components()
         FigureCanvas = mpl['FigureCanvas']
@@ -2609,13 +2636,13 @@ class PruebaMensual600(PruebaBasico):
         #------------------------------------------------------
         #        Botones para la barra de herramientas
         #------------------------------------------------------
-        self.btn_delete = QPushButton('Eliminar')    
+        self.btn_delete = QPushButton('Eliminar')
         self.edit_table = QPushButton('Editar')
         self.accept_edit = QPushButton('Aceptar')
         self.accept_edit.hide()
         self.cancel_edit = QPushButton('Cancelar')
         self.cancel_edit.hide()
-        
+
         # Barra de búsqueda
         self.search_bar = QLineEdit()
         self.search_bar.setPlaceholderText("Buscar en la tabla...")
@@ -2651,7 +2678,7 @@ class PruebaMensual600(PruebaBasico):
     def analizar_imagen(self):
         self.boton_siguiente.show()
         self.boton_anterior.show()
-         
+
         print("Analizando imagen...")
         try:
             if not self.imagen_path:
@@ -2934,18 +2961,18 @@ class PruebaMensual600(PruebaBasico):
                 posibles_series = self.buscarModeloActivo(filter_column='model', selected_column='serie', valor_ref=model)
                 series_1.append(posibles_series)
             series.append(series_1)
-            
+
             posibles_modelos = list(posibles_modelos)
             posibles_modelos.insert(0, 'Seleccionar...')
-            
+
             grupo[0].clear()
             grupo[0].addItems(posibles_modelos)
-            
+
             grupo[1].setEnabled(True)
             grupo[2].setReadOnly(False)
-        
+
         #### conecto a la creacion de combobox fin
-        
+
         #si cp seleccionada, hago lo mismo con los modelos de cp
         '''equipo_widgets = [widget for widget, tipo in comboboxe if tipo == 'equipo']
             self.setEquipo(equipo_widgets)'''
@@ -2957,16 +2984,16 @@ class PruebaMensual600(PruebaBasico):
         Versión optimizada de buscarModelo que solo devuelve equipos activos con caché
         """
         cache_key = f"{filter_column}_{selected_column}_{valor_ref}"
-        
+
         # Verificar caché local primero
         if hasattr(self, '_model_cache') and cache_key in self._model_cache:
             return self._model_cache[cache_key]
-        
+
         try:
             with self.db_manager.obtener_conexion() as conn:
                 cursor = conn.cursor()
                 modelos = set()
-            
+
                 # Query optimizada con índices
                 cursor.execute(f"""
                 SELECT DISTINCT {selected_column}
@@ -2974,19 +3001,19 @@ class PruebaMensual600(PruebaBasico):
                 WHERE {filter_column} = ? AND activo = 1
                 ORDER BY {selected_column}
                 """, (valor_ref,))
-            
+
                 rows = cursor.fetchall()
                 for row in rows:
                     if row[0]:  # Verificar que no sea None
                         modelos.add(row[0])
-            
+
                 # Guardar en caché local
                 if not hasattr(self, '_model_cache'):
                     self._model_cache = {}
                 self._model_cache[cache_key] = modelos
-            
+
                 return modelos
-            
+
         except sqlite3.Error as e:
             print(f"Error de base de datos en buscarModeloActivo: {e}")
             return set()
@@ -3049,27 +3076,27 @@ class PruebaMensual600(PruebaBasico):
             traceback.print_exc()
             return []
 
-    def button_click(self):  
+    def button_click(self):
 
         for combo in range(0, len(self.commenu), 3):
             self.commenu[combo].currentTextChanged.connect(self.setEquipoSeleccionado)
         for idx in range(1, len(self.commenu)+1, 3):
             self.commenu[idx].currentTextChanged.connect(self.setCalibracion)
-        
+
         if hasattr(self, "esHc") and self.esHc:
                 pass
- 
-                
-        
+
+
+
 
         self.edit_table.clicked.connect(lambda: verificar_editar(self, self.tabla, "controles", "ref", self.ref))
 
         self.accept_edit.clicked.connect(lambda: guardarEdicion(self, self.tabla, "controles", self.ref))
-        
+
         self.cancel_edit.clicked.connect(lambda: cancelarEdicion(self))
 
-        self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.tabla, "controles", self.ref)) 
-        self.table = self.tabla 
+        self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.tabla, "controles", self.ref))
+        self.table = self.tabla
         self.search_bar.textChanged.connect(self.filtrarTabla)
 
     def dbImagen(self, ref, imagen):
@@ -3080,26 +3107,26 @@ class PruebaMensual600(PruebaBasico):
         self.boton_cancel.hide()
         #print(ref)
         return crear_algo(self, ref, imagen)
-    
+
     def createTab(self, text):
         print(f'\nEntro a createTab con {text} en la clase {self.__class__.__name__}')
         if text == 'Seleccionar...' or text == 'Ver resultados de...':
             return
-        
+
         if text in self.dynamic_tabs:
             index = self.tab_widget.indexOf(self.dynamic_tabs[text]) #Returns the index position of the page occupied by the widget w , or -1 if the widget cannot be found.
             self.tab_widget.setCurrentIndex(index)
-            
+
         else:
             new_tab = QWidget() #creo la ventana
             new_tab_layout = QVBoxLayout() #su estructura
             new_tab.setLayout(new_tab_layout) #se mete la estructura a la ventana
             new_tab_layout.addWidget(QLabel(f'Holi, esta es la gráfica de {text}')) #le meto un label a la ventana
             self.tab_widget.addTab(new_tab, text) #y la ventana a eso
-            
+
             self.dynamic_tabs[text] = new_tab
-            self.tab_widget.setCurrentWidget(new_tab) 
-    
+            self.tab_widget.setCurrentWidget(new_tab)
+
     def _poblar_combo_series(self, modelo, combo_serie, fecha_referencia):
         """E2 (PLAN_CONOS_MENSUAL_12-08.md §4-E2): fuente única para poblar
         un combo de series con una entrada por CALIBRACIÓN activa del
@@ -3158,7 +3185,7 @@ class PruebaMensual600(PruebaBasico):
 
         # Configurar el QLineEdit siguiente
         self.commenu[index + 2].setReadOnly(True)
-    
+
     def setCalibracion(self):
         # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9, R3): el factor se
         # resuelve por el ID del equipo guardado en `currentData()`, nunca
@@ -3179,7 +3206,7 @@ class PruebaMensual600(PruebaBasico):
         if equipo is None:
             return
         self.commenu[index + 1].setText(str(equipo["calibr_fact"]))
-    
+
     def botonescombobox(self, categoria, combobox=None, combos_seguridad=None):
         #print(f"\n ~~~~~~ Entra a botonescombobox en la clase: {self.__class__.__name__}~~~~~~")
 
@@ -3331,16 +3358,16 @@ class PruebaMensual600(PruebaBasico):
         if not datos or len(datos) < n:
             print("Datos insuficientes para procesar equipos")
             return
-        
+
         try:
             with self.db_manager.obtener_conexion() as conn:
                 cursor = conn.cursor()
-            
+
                 # Usar transacción para mejor rendimiento
                 cursor.execute("BEGIN TRANSACTION")
-            
+
                 filas_a_insertar = []
-            
+
                 # Procesar grupos de 3 elementos
                 tipos_camara = self._tipos_camara()
                 grupos = [0, 3, 6, 9] if hasattr(self, "esIX") and self.esIX else [0, 3, 6]
@@ -3404,7 +3431,7 @@ class PruebaMensual600(PruebaBasico):
                         INSERT INTO equipos_medicion (ref, tipo_camara, equip_type, model, serie, calibr_fact, fecha_calibr, equipo_id)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, filas_a_insertar)
-                
+
                     cursor.execute("COMMIT")
                     print(f"Insertados {len(filas_a_insertar)} registros de equipos correctamente")
                     # A6.3: equipos de medición del mensual (600/iX/Halcyon).
@@ -3417,14 +3444,14 @@ class PruebaMensual600(PruebaBasico):
                 else:
                     cursor.execute("ROLLBACK")
                     print("No se insertaron registros - datos insuficientes")
-                
+
         except sqlite3.Error as e:
             try:
                 cursor.execute("ROLLBACK")
             except:
                 pass
             print(f"Error de BD al insertar equipos: {e}")
-            QMessageBox.critical(self, "Error de Base de Datos", 
+            QMessageBox.critical(self, "Error de Base de Datos",
                                 f"No se pudieron guardar los equipos: {str(e)}")
         except Exception as e:
             try:
@@ -3441,7 +3468,7 @@ class PruebaMensual600(PruebaBasico):
             print("Observaciones:", texto)
             return texto
         return None
-    
+
     def subir_control_cunas(self, combos_seguridad, df_lines=None, auditar=True,
                              mostrar_mensaje=True):
         """
@@ -3551,7 +3578,7 @@ class PruebaMensual600(PruebaBasico):
                 if posiciones[pos].currentText() not in ("Funciona", "No funciona"):
                     faltantes.append((angulo, pos))
         return faltantes
-    
+
     def Traerinfo(self, combenu):
         """E2+E3 (PLAN_CONOS_MENSUAL_12-08.md §4): selecciona sobre una
         lista de modelos YA COMPLETA (poblada por `conectarDB` antes de
@@ -3687,7 +3714,7 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error inesperado en Traerinfo: {e}")
             traceback.print_exc()
             return False
-    
+
     def Traerinfo_cunas(self):
         """
         Función optimizada para leer datos de cuñas desde BD
@@ -3736,21 +3763,21 @@ class PruebaMensual600(PruebaBasico):
 
                 # Mapeo optimizado de ángulos a widgets
                 combo_dict = {
-                    15: {"in": getattr(self, 'cuna_15_in', None), "out": getattr(self, 'cuna_15_out', None), 
+                    15: {"in": getattr(self, 'cuna_15_in', None), "out": getattr(self, 'cuna_15_out', None),
                          "right": getattr(self, 'cuna_15_ri', None), "le": getattr(self, 'cuna_15_le', None)},
-                    30: {"in": getattr(self, 'cuna_30_in', None), "out": getattr(self, 'cuna_30_out', None), 
+                    30: {"in": getattr(self, 'cuna_30_in', None), "out": getattr(self, 'cuna_30_out', None),
                          "right": getattr(self, 'cuna_30_ri', None), "le": getattr(self, 'cuna_30_le', None)},
-                    45: {"in": getattr(self, 'cuna_45_in', None), "out": getattr(self, 'cuna_45_out', None), 
+                    45: {"in": getattr(self, 'cuna_45_in', None), "out": getattr(self, 'cuna_45_out', None),
                          "right": getattr(self, 'cuna_45_ri', None), "le": getattr(self, 'cuna_45_le', None)},
-                    60: {"in": getattr(self, 'cuna_60_in', None), "out": getattr(self, 'cuna_60_out', None), 
+                    60: {"in": getattr(self, 'cuna_60_in', None), "out": getattr(self, 'cuna_60_out', None),
                          "right": getattr(self, 'cuna_60_ri', None), "le": getattr(self, 'cuna_60_le', None)},
                 }
 
                 # Mapeo de valores a textos
                 valor_a_texto = {1: "Funciona", 0: "No funciona"}
-            
+
                 registros_procesados = 0
-            
+
                 for row in results:
                     try:
                         angulo, in_val, out_val, right_val, left_val = row
@@ -3773,31 +3800,31 @@ class PruebaMensual600(PruebaBasico):
                             if combo is not None and isinstance(combo, QComboBox):
                                 combo.blockSignals(False)
                                 texto = valor_a_texto.get(val, "Seleccionar...")
-                            
+
                                 # Buscar el texto en el combo o agregarlo
                                 if combo.findText(texto) != -1:
                                     combo.setCurrentText(texto)
                                 else:
                                     combo.addItem(texto)
                                     combo.setCurrentText(texto)
-                            
+
                                 combo.setEnabled(True)  # Bloquear edición
                                 combo.blockSignals(False)
-                            
+
                                 # Aplicar color según estado
                                 self.actualizar_color(combo, texto)
                             else:
                                 print(f"Widget no encontrado: cuna_{angulo}_{pos}")
 
                         registros_procesados += 1
-                    
+
                     except (ValueError, TypeError) as e:
                         print(f"Error procesando registro de cuña: {e}")
                         continue
 
                 #print(f"Datos de cuñas cargados: {registros_procesados} registros")
                 return registros_procesados > 0
-            
+
         except sqlite3.Error as e:
             print(f"Error de BD en Traerinfo_cunas: {e}")
             return False
@@ -3894,9 +3921,9 @@ class PruebaMensual600(PruebaBasico):
                         return [row[2:] for row in results] if results else []
                 else:
                     return results if results else []
-            
-        
-            
+
+
+
         except sqlite3.Error as e:
             print(f"Error de BD en pruebatalas ({nombre_tabla}): {e}")
             return []
@@ -3904,31 +3931,31 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error inesperado en pruebatalas ({nombre_tabla}): {e}")
             traceback.print_exc()
             return []
-    
+
     def discrepancias(self):
         """Calcula discrepancias de dosis y calidad con optimización y caché"""
         #print("..... Calculando discrepancias de dosis y calidad .....")
-        
+
         try:
             # Configurar tolerancias desde constantes
             tolerancias = {
                 'fotones': self.TOLERANCIA_FOTONES,
                 'electrones': self.TOLERANCIA_ELECTRONES
             }
-            
+
             # Procesar discrepancias de dosis y calidad
             self._procesar_discrepancias_dosis_calidad(tolerancias)
             self._procesar_discrepancias_simetria_planicidad(tolerancias)
-            
+
             #print("Cálculo de discrepancias completado.")
-            
+
         except Exception as e:
             print(f"Error en cálculo de discrepancias: {e}")
             traceback.print_exc()
 
     def _procesar_discrepancias_dosis_calidad(self, tolerancias):
         """Procesa discrepancias de dosis y calidad de manera optimizada"""
-        
+
         @lru_cache(maxsize=100)
         def operacion_dosis_optimizada(dato_str):
             """Calcula discrepancia de dosis con caché y validación mejorada"""
@@ -3938,7 +3965,7 @@ class PruebaMensual600(PruebaBasico):
             try:
                 dato_float = float(dato_str)
                 if dato_float == 0.0:
-                    return 0.0                                                                                                            
+                    return 0.0
                 return abs(100 * (1 - dato_float) )
             except (ValueError, TypeError, ZeroDivisionError):
                 return 0.0
@@ -3965,10 +3992,10 @@ class PruebaMensual600(PruebaBasico):
                 out_widget.setText("0.0")
                 out_widget.setStyleSheet("border: 1px solid rgb(51, 142, 158);")
                 return
-            
+
             texto = f"{valor:.2f}"
             out_widget.setText(texto)
-            
+
             # Aplicar estilo según tolerancia
             if valor > tolerancia:
                 out_widget.setStyleSheet("border: 1px solid #ff4d4d; color: #ff4d4d;")
@@ -4005,12 +4032,12 @@ class PruebaMensual600(PruebaBasico):
                 widgets = self._obtener_widgets_discrepancia(dosis_attr, calidad_attr, salida_dosis_attr, salida_calidad_attr, val_teo_attr)
                 if not widgets:
                     continue
-                
+
                 dosis_ref, calidad, salida_dosis, salida_calidad, val_teo = widgets
-                
+
                 # Determinar tolerancia según tipo de energía
                 tolerancia = tolerancias['electrones'] if energia.endswith('mev') else tolerancias['fotones']
-                
+
 
                 # Calcular y mostrar discrepancia inicial de dosis
                 self._calcular_mostrar_discrepancia(
@@ -4049,7 +4076,7 @@ class PruebaMensual600(PruebaBasico):
                 self._conectar_eventos_discrepancia(
                     dosis_ref, salida_dosis, tolerancia, operacion_dosis_optimizada, mostrar_resultado_optimizado
                 )
-                
+
             except Exception as e:
                 print(f"Error procesando energía {energia}: {e}")
                 continue
@@ -4058,7 +4085,7 @@ class PruebaMensual600(PruebaBasico):
         widgets = []
         for attr_name in attr_names:
             widget = getattr(self, attr_name, None)
-            
+
             #print(f"Buscando widget '{attr_name}': {widget}")
             if not widget:
                 print(f"Widget '{attr_name}' no encontrado")
@@ -4082,12 +4109,12 @@ class PruebaMensual600(PruebaBasico):
             self._calcular_mostrar_discrepancia(
                 widget_entrada.text(), widget_salida, tolerancia, funcion_calculo, funcion_mostrar
             )
-        
+
         self._configurar_eventos(widget_entrada, actualizar_discrepancia, f"discrepancy_{id(widget_entrada)}")
 
     def _procesar_discrepancias_simetria_planicidad(self, tolerancias):
         """Procesa discrepancias de simetría y planicidad de manera optimizada"""
-        
+
         @lru_cache(maxsize=100)
         def valor_2cifras_cached(valor_str):
             """Convierte texto a float con caché"""
@@ -4099,7 +4126,7 @@ class PruebaMensual600(PruebaBasico):
         def mostrar_resultado_sim_plan_optimizado(valor, widget, tolerancia_simetria, tolerancia_planicidad, es_simetria=True):
             """Muestra resultado de simetría/planicidad con optimización"""
             tolerancia = tolerancia_simetria if es_simetria else tolerancia_planicidad
-            
+
             if valor is None or valor == 0.0:
                 widget.setText("")
                 widget.setStyleSheet("border: 1px solid rgb(51, 142, 158);")
@@ -4107,7 +4134,7 @@ class PruebaMensual600(PruebaBasico):
 
             # Formatear a 4 decimales
             widget.setText(f"{valor:.4f}")
-            
+
             if valor > tolerancia:
                 widget.setStyleSheet("border: 1px solid #ff4d4d; color: #ff4d4d;")
             else:
@@ -4128,7 +4155,7 @@ class PruebaMensual600(PruebaBasico):
             "15mev": ("ln_simetria_inplane_15mev", "ln_simetria_crossplane_15mev",
                         "ln_planicidad_inplane_15mev", "ln_planicidad_crossplane_15mev"),
         }
-        
+
         for energia, (sim_in_attr, sim_cros_attr, plan_in_attr, plan_cros_attr) in mapping_simetria_planicidad.items():
             try:
                 # Obtener widgets
@@ -4136,7 +4163,7 @@ class PruebaMensual600(PruebaBasico):
                 sim_cros = getattr(self, sim_cros_attr, None)
                 plan_in = getattr(self, plan_in_attr, None)
                 plan_cros = getattr(self, plan_cros_attr, None)
-                
+
                 # Determinar tolerancias
                 if energia.endswith('mev'):
                     tol_simetria = tolerancias['electrones']
@@ -4144,36 +4171,36 @@ class PruebaMensual600(PruebaBasico):
                 else:
                     tol_simetria = tolerancias['fotones']
                     tol_planicidad = 3.0
-                
+
                 # Procesar widgets de simetría
                 for widget in [sim_in, sim_cros]:
                     if widget:
                         valor_inicial = valor_2cifras_cached(widget.text())
                         mostrar_resultado_sim_plan_optimizado(valor_inicial, widget, tol_simetria, tol_planicidad, True)
-                        
+
                         # Conectar evento con debouncing
                         def crear_callback_simetria(w, tol_s, tol_p):
                             def actualizar():
                                 valor = valor_2cifras_cached(w.text())
                                 mostrar_resultado_sim_plan_optimizado(valor, w, tol_s, tol_p, True)
                             return actualizar
-                        
+
                         callback = crear_callback_simetria(widget, tol_simetria, tol_planicidad)
                         self._configurar_eventos(widget, callback, f"symmetry_{id(widget)}")
-                
+
                 # Procesar widgets de planicidad
                 for widget in [plan_in, plan_cros]:
                     if widget:
                         valor_inicial = valor_2cifras_cached(widget.text())
                         mostrar_resultado_sim_plan_optimizado(valor_inicial, widget, tol_simetria, tol_planicidad, False)
-                        
+
                         # Conectar evento con debouncing
                         def crear_callback_planicidad(w, tol_s, tol_p):
                             def actualizar():
                                 valor = valor_2cifras_cached(w.text())
                                 mostrar_resultado_sim_plan_optimizado(valor, w, tol_s, tol_p, False)
                             return actualizar
-                        
+
                         callback = crear_callback_planicidad(widget, tol_simetria, tol_planicidad)
                         self._configurar_eventos(widget, callback, f"planarity_{id(widget)}")
 
@@ -4193,5 +4220,3 @@ class PruebaMensual600(PruebaBasico):
         maquina = self.equipo_f  # O el atributo que corresponda a tu máquina
         diccionario = obtener_diccionario_600()  # O el que corresponda
         guardarPDF_mensual(self, fecha, maquina, diccionario=diccionario)
-
-    

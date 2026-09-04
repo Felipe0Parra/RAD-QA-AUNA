@@ -51,11 +51,11 @@ SELECT_STAR = re.compile(r'select\s+\*\s+from\s+"?\{?(\w*)\}?"?', re.IGNORECASE)
 # NO es del bloque de QC (fuera del alcance de este plan por completo) --
 # análogo a SITIOS_DINAMICOS_PERMITIDOS de test_le4_lecturas_filtran_activo.py.
 SITIOS_FUERA_DE_QC_PERMITIDOS = {
-    ("data/ManejoDatos/usuariosManager.py", 31): "tabla 'users', no es del bloque de QC",
-    ("data/ManejoDatos/usuariosManager.py", 40): "tabla 'users', no es del bloque de QC",
-    ("data/ManejoDatos/usuariosManager.py", 41): "tabla 'users', no es del bloque de QC",
-    ("data/ManejoDatos/usuariosManager.py", 128): "tabla 'users', no es del bloque de QC",
-    ("data/ManejoDatos/usuariosManager.py", 130): "tabla 'users', no es del bloque de QC",
+    ("data/ManejoDatos/usuariosManager.py", 42): "tabla 'users', no es del bloque de QC",
+    ("data/ManejoDatos/usuariosManager.py", 51): "tabla 'users', no es del bloque de QC",
+    ("data/ManejoDatos/usuariosManager.py", 52): "tabla 'users', no es del bloque de QC",
+    ("data/ManejoDatos/usuariosManager.py", 161): "tabla 'users', no es del bloque de QC",
+    ("data/ManejoDatos/usuariosManager.py", 163): "tabla 'users', no es del bloque de QC",
 }
 
 

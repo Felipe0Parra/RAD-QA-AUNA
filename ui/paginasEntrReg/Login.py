@@ -25,18 +25,18 @@ import os
 import sys
 
 class LoginPage(QMainWindow):
-    
+
     login_successful = pyqtSignal(object)  # user_id como entero
-    
+
     def __init__(self):
         #print("---------------------------------------------------------------------------------------------")
         #print("LoginPage              __init__ called")
         super().__init__()
         self.iniGUI()
 
-    
+
     def iniGUI(self):
-        
+
         # Rutas
         #print(f'la ruta actual es la siguiente:{ruta_actual}')
         fondo = resource_path('resources/images/FondoColor.png')
@@ -44,22 +44,22 @@ class LoginPage(QMainWindow):
         user = resource_path('resources/icons/user.jpg')
         contra = resource_path('resources/icons/password.jpg')
         icono = resource_path('resources/icons/icono.png')
-        
+
         self.setWindowTitle("Login")
         self.setWindowIcon(QIcon(icono))
-        ancho = 800 
+        ancho = 800
         alto = 500
         self.setFixedSize(ancho, alto) # Establece el tamaño fijo de la ventana
         self.setWindowTitle('Inicio sesión RAD-QA') # Agregamos un título a la ventan
-        
+
         #poner fondo
         self.background_label = QLabel(self)
         self.background_label.setPixmap(QPixmap(fondo).scaled(self.size(), Qt.KeepAspectRatioByExpanding))
         self.background_label.setGeometry(0, 0, ancho, alto)
-        self.background_label.setStyleSheet("border: none;")        
+        self.background_label.setStyleSheet("border: none;")
         # Crear el recuadro para la información
         self.info_frame = QFrame(self)
-        self.info_frame.setGeometry(264, 40, 272, 380) 
+        self.info_frame.setGeometry(264, 40, 272, 380)
         self.info_frame.setStyleSheet("""
             background-color: rgba(255, 255, 255, 0.8);
             border-radius: 20px;
@@ -68,7 +68,7 @@ class LoginPage(QMainWindow):
         self.label = QLabel(self)
         self.label.setGeometry(342, 60, 115, 84)
         pixmap = QPixmap(logo)
-        scaled_pixmap = pixmap.scaled(115, 84) 
+        scaled_pixmap = pixmap.scaled(115, 84)
         self.label.setPixmap(scaled_pixmap)
         '''--------------------------------------------------------------
         ----------------------- Label de Mensaje  -----------------------
@@ -79,7 +79,7 @@ class LoginPage(QMainWindow):
         self.labelwarnign.setStyleSheet("""
             QLabel {
                 color: #ff0000;                     /* Texto blanco */
-                
+
             }""")
         '''--------------------------------------------------------------
         ----------------------- Cajita de usuario -----------------------
@@ -96,7 +96,7 @@ class LoginPage(QMainWindow):
                 border-radius: 18px;             /* Bordes redondeados */
                 background-color: #f4f4f4;
             }
-            
+
             QLineEdit:focus {
                 border: 1px solid #c1df08; /* Borde azul */
             }
@@ -106,7 +106,7 @@ class LoginPage(QMainWindow):
                 border: 1px solid #ff4d4d; /* Borde rojo */
                 color: #ff0000; /* Texto rojo */
             }
-            
+
         """)
         '''--------------------------------------------------------------
         ----------------------- Cajita de contraseña --------------------
@@ -127,7 +127,7 @@ class LoginPage(QMainWindow):
                 border-radius: 18px;             /* Bordes redondeados */
                 background-color: #f4f4f4;
             }
-            
+
             QLineEdit:focus {
                 border: 1px solid #c1df08; /* Borde azul */
             }
@@ -137,11 +137,11 @@ class LoginPage(QMainWindow):
                 border: 1px solid #ff4d4d; /* Borde rojo */
                 color: #ff0000; /* Texto rojo */
             }
-            
+
         """)
         self.contraseña.setObjectName("contraseña_ini")
-        
-        
+
+
         '''--------------------------------------------------------------
         -------------------  Olvidó su contraseña   ---------------------
         -------------------------------------------------------------'''
@@ -163,7 +163,7 @@ class LoginPage(QMainWindow):
                 background-color: #c1df08;  /* Fondo cuando el botón es presionado */
                 color: white;               /* Texto blanco */
                 border-radius: 18px;        /* Bordes redondeados */
-                
+
             }
             QPushButton:hover {
                 background-color:rgb(153, 176, 6);  /* Cambia el fondo cuando el mouse pasa por encima */
@@ -181,31 +181,31 @@ class LoginPage(QMainWindow):
         self.registro.setOpenExternalLinks(False)  # Evita abrir en navegador
         self.registro.setCursor(QCursor(Qt.PointingHandCursor))  # Cambia el cursor a una mano
         self.registro.linkActivated.connect(self.displayAdminDialog)
-        
+
         # ----------- triggers -----------
-        
+
         self.login_btn.clicked.connect(self.authenticateUser)
         self.contraseña.returnPressed.connect(self.authenticateUser)
-        
-         
-    
+
+
+
     def displayAdminDialog(self):
         # Crear y mostrar el diálogo
-        
+
         self.usuario.clear()
         self.contraseña.clear()
         self.labelwarnign.clear()
         dialogo = DialogAdminPermiso()
         respuesta = dialogo.exec_()  # Bloquea la ejecución hasta que el usuario cierre la ventana
         self.openRegistration(respuesta)
-    
+
     def openRegistration(self, respuesta):
         if respuesta == QDialog.Accepted:
             self.window = RegistrationPage()
-            self.window.show()            
+            self.window.show()
         else:
             print("El usuario canceló o cerró la ventana")
-    
+
     def resetLoginFields(self):
         self.usuario.clear()
         self.contraseña.clear()
@@ -213,14 +213,14 @@ class LoginPage(QMainWindow):
         dialogo = DialogAdminPermiso2()
         respuesta = dialogo.exec_()  # Bloquea la ejecución hasta que el usuario cierre la ventana
         self.opencambio(respuesta)
-    
+
     def opencambio(self, respuesta):
         if respuesta == QDialog.Accepted:
             self.window = ForgotPasswordPage()
-            self.window.show()            
+            self.window.show()
         else:
             print("El usuario canceló o cerró la ventana")
-    
+
     def authenticateUser(self):
         # A9 (§8.1 H4, PLAN_AUDITORIA_DOS_EJES_21-07): antes se llamaba
         # self.verify() DOS veces -- una en el `if` y otra para asignar
@@ -232,11 +232,11 @@ class LoginPage(QMainWindow):
         if user_id:
             #print(f"Usuario autenticado con ID: {user_id}")
             self.login_successful.emit(user_id)
-            
-           
+
+
         else:
             print("Credenciales inválidas")
-    
+
     def verify(self):
         if not self.usuario.text():
             self.labelwarnign.setText('Por favor introducir el usuario')
@@ -250,13 +250,21 @@ class LoginPage(QMainWindow):
             user = Usuario(self.usuario.text(), self.contraseña.text())
             usuData = UsuarioData()
             res = usuData.login(user)
-        
-            
+
+
             if res:
                 self.labelwarnign.setText('Ok')
                 return res
             else:
-                self.labelwarnign.setText('Verifique el usuario y contraseña')
+                # U2 (PLAN_PESTANA_USUARIOS_02-09.md): sin esto, una cuenta
+                # dada de baja veía "Verifique el usuario y contraseña" --
+                # el físico llamaría a soporte por una contraseña que sí
+                # era correcta. `cuenta_esta_activa` no audita (login() ya
+                # lo hizo); `None` (usuario inexistente / fallo de BD) usa
+                # el mensaje genérico de siempre.
+                if usuData.cuenta_esta_activa(self.usuario.text()) is False:
+                    self.labelwarnign.setText('Esta cuenta está inactiva. Contacte al físico médico en jefe.')
+                else:
+                    self.labelwarnign.setText('Verifique el usuario y contraseña')
                 self.usuario.setFocus()
         return False
-

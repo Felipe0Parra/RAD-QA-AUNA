@@ -27,6 +27,17 @@ class UsuarioData():
                 fila = cursor.fetchone()
 
                 if fila:
+                    # U2 (PLAN_PESTANA_USUARIOS_02-09.md, O-1/O-2): una
+                    # cuenta dada de baja (active=0) no debe abrir sesión,
+                    # ANTES de mirar la contraseña -- no se debe revelar por
+                    # el rastro de auditoría si la clave intentada era
+                    # correcta. `COALESCE(active,1)` para que un NULL
+                    # histórico (cuenta nunca tocada por la migración de
+                    # `active`) no cierre la aplicación -- solo `active=0`
+                    # explícito bloquea.
+                    if (fila[4] if fila[4] is not None else 1) != 1:
+                        _registrar_auditoria(fila[3], accion, detalle="cuenta inactiva")
+                        return None
                     # Desencriptar la contraseña almacenada
                     stored_password = decrypt_data(fila[2])
                     print(stored_password)
@@ -60,10 +71,32 @@ class UsuarioData():
             print("Error en login:", e)
             return None
 
+    def cuenta_esta_activa(self, nombre_usuario):
+        """U2 (PLAN_PESTANA_USUARIOS_02-09.md): lectura pasiva, sin auditar
+        -- `login()` ya audita la causa real cuando bloquea. Existe solo
+        para que la pantalla de login pueda distinguir el mensaje ("cuenta
+        inactiva" vs. "verifique usuario y contraseña"); sin esto, un
+        físico dado de baja llamaría a soporte creyendo que su contraseña
+        dejó de funcionar. Devuelve True si la cuenta existe y está activa,
+        False si existe y está inactiva, None si no se puede resolver
+        (usuario inexistente o fallo de BD) -- en ese caso la pantalla debe
+        mostrar el mensaje genérico de siempre, no inventar una causa."""
+        try:
+            with con.Conexion().conectar() as db:
+                cursor = db.cursor()
+                cursor.execute("SELECT active FROM users WHERE user=?", (nombre_usuario,))
+                fila = cursor.fetchone()
+        except Exception as e:
+            print(f"Error consultando active para '{nombre_usuario}': {e}")
+            return None
+        if fila is None:
+            return None
+        return (fila[0] if fila[0] is not None else 1) == 1
+
     def logout(self, nombre_usuario):
         """Deja rastro de cierre de sesión (A4, PLAN_AUDITORIA_DOS_EJES_21-07.md)."""
         _registrar_auditoria(nombre_usuario, ACCION_LOGOUT)
-    
+
     def add_user(self, username: Usuario):
         # F3 (PLAN_F_CIERRE_ESTANDAR_29-07.md): `fullname` es TEXT UNIQUE,
         # NO NOT NULL -- admite vacío. Es el destino de 6 FK y la identidad
@@ -115,7 +148,7 @@ class UsuarioData():
         except Exception as e:
             print("Error al agregar usuario:", e)
             return None
-        
+
     def get_user(self, usuario, idreal, role):
         """Verifica si existe un usuario con los datos ingresados."""
         try:
@@ -126,7 +159,7 @@ class UsuarioData():
                 if fila:
                     # Desencriptar la contraseña antes de retornarla
                     decrypted_pass = decrypt_data(fila[2])
-                    
+
                     return (fila[0], fila[1], decrypted_pass, fila[3], fila[4], fila[5], fila[6])
                 return None
         except Exception as e:
