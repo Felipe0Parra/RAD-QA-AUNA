@@ -19,10 +19,17 @@ from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.user import Usuario
 from data.ManejoDatos.usuariosManager import UsuarioData
 from services.audit_minimo import (
-    ACCION_ANULAR, ACCION_GUARDAR, ACCION_REACTIVAR, registrar as _registrar_auditoria)
+    ACCION_ACTUALIZAR, ACCION_ANULAR, ACCION_GUARDAR, ACCION_REACTIVAR,
+    registrar as _registrar_auditoria)
 from services.permisos import ROLES_GESTION_USUARIOS, es_fisico_jefe
 
 DENEGADO_SIN_PERMISO = "denegado: sin permiso de gestión de usuarios"
+
+# U4-bis: lo único que se puede ASIGNAR desde la pestaña -- 'admin' NUNCA
+# se concede desde la UI (es la cuenta de instalación, la crea la
+# migración del arranque). Deliberadamente distinto de
+# ROLES_GESTION_USUARIOS (quién puede ADMINISTRAR, incluye 'admin').
+ROLES_ASIGNABLES_DESDE_UI = {"fisico", "jefe"}
 
 
 def _nombre_completo(cursor, username):
@@ -180,3 +187,58 @@ def crear_usuario(datos, username_solicitante):
     if resultado is None:
         return False, MOTIVO_ERROR_BD
     return True, MOTIVO_CREADO
+
+
+def cambiar_rol_sistema(username_objetivo, rol_nuevo, username_solicitante):
+    """U4-bis: promueve o degrada una cuenta entre 'fisico' y 'jefe'.
+
+    Operación de GOBIERNO, deliberadamente SEPARADA del alta (`U4`): un
+    campo más en el formulario de alta habría convertido el registro
+    rutinario en el sitio donde por descuido se reparten permisos.
+    `rol_nuevo` acotado a `ROLES_ASIGNABLES_DESDE_UI` -- 'admin' no se
+    concede JAMÁS desde aquí, ni pedido por el propio jefe.
+
+    Reusa `_quedaria_sin_jefes` -- la MISMA guarda de `dar_de_baja` -- en
+    vez de una copia propia: dos copias de "no te quedes sin nadie que
+    administre" es exactamente el patrón que produjo DP-79. Solo se
+    evalúa al DEGRADAR (`rol_nuevo == 'fisico'`): promover nunca reduce
+    el grupo que puede administrar, así que degradar al único jefe activo
+    se rechaza -- incluido degradarse a sí mismo -- pero degradar a uno
+    de DOS jefes activos se permite (el otro sigue pudiendo administrar).
+
+    Audita con los DOS valores (`rol_sistema: fisico -> jefe`) -- sin
+    ambos, el rastro no permite reconstruir la historia de permisos."""
+    with Conexion().conectar() as db:
+        cursor = db.cursor()
+        nombre_solicitante = _nombre_completo(cursor, username_solicitante)
+
+        if not es_fisico_jefe(username_solicitante):
+            _registrar_auditoria(nombre_solicitante, ACCION_ACTUALIZAR, "users",
+                                  ref=username_objetivo, detalle=DENEGADO_SIN_PERMISO)
+            return False
+
+        if rol_nuevo not in ROLES_ASIGNABLES_DESDE_UI:
+            _registrar_auditoria(
+                nombre_solicitante, ACCION_ACTUALIZAR, "users", ref=username_objetivo,
+                detalle=f"denegado: rol_nuevo '{rol_nuevo}' no permitido (solo fisico/jefe)")
+            return False
+
+        cursor.execute("SELECT rol_sistema FROM users WHERE user=?", (username_objetivo,))
+        fila = cursor.fetchone()
+        if fila is None:
+            return False
+        rol_anterior = fila[0]
+
+        if rol_nuevo == "fisico" and _quedaria_sin_jefes(cursor, username_objetivo):
+            _registrar_auditoria(
+                nombre_solicitante, ACCION_ACTUALIZAR, "users", ref=username_objetivo,
+                detalle="denegado: quedaría sin nadie que administre usuarios")
+            return False
+
+        cursor.execute("UPDATE users SET rol_sistema=? WHERE user=?",
+                        (rol_nuevo, username_objetivo))
+        db.commit()
+        _registrar_auditoria(
+            nombre_solicitante, ACCION_ACTUALIZAR, "users", ref=username_objetivo,
+            detalle=f"rol_sistema: {rol_anterior} -> {rol_nuevo}")
+        return True
