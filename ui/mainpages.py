@@ -29,23 +29,23 @@ class Menuu(QWidget):
         super(Menuu, self).__init__()
         self.maquina = maquina
         self.user_id = user_id
-        
+
         # Cache para clases importadas dinámicamente
         self._imported_classes = {}
         self.iniGUI()
 
-        
-        
+
+
 
     def _importar_clase(self, nombre_modulo, nombre_clase):
         """
         Importa una clase dinámicamente desde un módulo.
         Utiliza cache para evitar reimportar módulos ya cargados.
-        
+
         Args:
             nombre_modulo (str): Ruta completa del módulo (ej: 'ui.paginasControles.PruebasDiarias.halcyon')
             nombre_clase (str): Nombre de la clase a importar (ej: 'PruebaDiariaHc')
-        
+
         Returns:
             class: La clase importada, o None si falla la importación
         """
@@ -275,7 +275,7 @@ class Menuu(QWidget):
                     return PruebaMensualTAC(self.user_id)
             return None
 
-        if clave == "anual":    
+        if clave == "anual":
             if self.maquina == "600":
                 PruebaAnual600 = self._importar_clase(
                     "ui.paginasControles.PruebasAnuales.seiscientos_anual",
@@ -323,7 +323,7 @@ class Menuu(QWidget):
                 ref = getattr(self, "_pagina_anual_hc", None)
                 ref_val = ref.ref if ref is not None else None
                 #print("Creando PruebaImagenesHalcyon con ref:", ref_val)
-                
+
                 PruebaImagenesHalcyon = self._importar_clase(
                     "ui.paginasControles.PruebasAnuales.halcyon_anual",
                     "PruebaImagenesHalcyon"
@@ -434,6 +434,14 @@ class MainWindow(QMainWindow):
             # un registro anulado. Visible para cualquier usuario logueado,
             # mismo criterio que la pestaña de auditoría de arriba.
             ("Visor BD", lambda: self.VisorBD()),
+            # U6 (PLAN_PESTANA_USUARIOS_02-09.md §6-U6): va AL FINAL a
+            # propósito -- _cargar_pestania_diferida indexa
+            # _tab_definiciones por posición, y block() referencia índices
+            # comentados (setTabEnabled(2/4)); insertar en medio los habría
+            # movido. La pestaña es visible para TODOS (la lista no es
+            # secreta); lo que restringe es la UI misma, por rol, dentro de
+            # Usuarios() -- ver su docstring.
+            ("Usuarios", lambda: self.Usuarios()),
         ]
         self._tab_instancias = {}
 
@@ -449,7 +457,7 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self._cargar_pestania_diferida)
         self._cargar_pestania_diferida(0)
 
-    def block(self):    
+    def block(self):
         # Deshabilitar la segunda pestaña (índice 1)
         #self.tabs.setTabEnabled(2, False)
         #self.tabs.setTabEnabled(4, False)
@@ -471,14 +479,14 @@ class MainWindow(QMainWindow):
             return QWidget()  # Widget vacío como fallback
     def ExportarExcel(self):
         """Importa y crea la vista de exportación a Excel."""
-        try: 
+        try:
             modulo = importlib.import_module("ui.paginasGuia.SQLtoEXCEL")
             ExportarExcel = getattr(modulo, "ExportarExcel")
             return ExportarExcel()
         except Exception as e:
             print(f"✗ Error importando ExportarExcel: {e}")
             return QWidget()  # Widget vacío como fallback
-        
+
     def Registros(self):
         """Importa y crea el visor de audit_log (A7 lo dejó correcto; A11 lo
         habilita en la UI, PLAN_AUDITORIA_DOS_EJES_21-07 §8.1 H6)."""
@@ -499,6 +507,21 @@ class MainWindow(QMainWindow):
             return VisorAnulados()
         except Exception as e:
             print(f"✗ Error visor de anulados: {e}")
+            return QWidget()  # Widget vacío como fallback
+
+    def Usuarios(self):
+        """Importa y crea la pestaña de usuarios registrados (U5/U6,
+        PLAN_PESTANA_USUARIOS_02-09.md). Visible para CUALQUIER usuario
+        logueado -- la lista no es secreta (son sus compañeros de turno,
+        mismo criterio que A11/LR6); lo que restringe la pantalla misma
+        (`es_fisico_jefe`) son las ACCIONES de alta/baja/cambio de rol,
+        no la visibilidad de quién tiene cuenta."""
+        try:
+            modulo = importlib.import_module("ui.paginasGuia.usuarios")
+            Usuarios = getattr(modulo, "Usuarios")
+            return Usuarios(self.user_id)
+        except Exception as e:
+            print(f"✗ Error pestaña de usuarios: {e}")
             return QWidget()  # Widget vacío como fallback
 
     def _cargar_pestania_diferida(self, indice):
@@ -551,7 +574,7 @@ class MainWindow(QMainWindow):
         self.barra_superior.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed) #sabra jesus de donde sale eso
         #self.barra_superior.setStyleSheet("background-color: white; color:black;")
         #self.barra_superior.setContentsMargins(0, 0, 0, 0)
-        #layout_barra.setSpacing(0)   
+        #layout_barra.setSpacing(0)
 
         layout_barra = QHBoxLayout(self.barra_superior)
         layout_barra.setContentsMargins(0, 0, 0, 0)
@@ -615,5 +638,5 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
     #init_db_CambioFuente()
-    window = MainWindow("JADIAZ") 
+    window = MainWindow("JADIAZ")
     sys.exit(app.exec_())
