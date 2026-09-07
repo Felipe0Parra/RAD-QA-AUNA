@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (QHBoxLayout, QVBoxLayout, QWidget, QToolBox, QPushB
                             QTableWidgetItem, QMessageBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout, QDialog,
                             QDateEdit, QSplitter)
 from PyQt5.QtSql import QSqlQuery
-from PyQt5.QtCore import pyqtSignal, Qt, QDate, QDateTime, QTimer
+from PyQt5.QtCore import pyqtSignal, Qt, QDate, QDateTime, QTime, QTimer
 from PyQt5.QtGui import QFont, QColor
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from data.GraficasyTablas.unovsuno import graficarvstiempo
@@ -227,6 +227,13 @@ class PruebaDiariaBraq(PruebaBasico):
             # widget cambió el DÍA (hay que releer la BD) o solo la HORA
             # (basta recalcular lo derivado).
             self._fecha_mostrada = self.date_box.date()
+            # E4 (PLAN_BRAQUI_HORA_EDITABLE_07-09.md): la hora que el
+            # formulario muestra al abrirse -- `_al_mover_el_date_box` la
+            # compara contra la nueva para saber si la hora "vino de paseo"
+            # (arrastrada por un cambio de día) o fue elegida por el físico
+            # en ese mismo movimiento. Solo la primera se reemplaza por el
+            # reloj al aterrizar en un día sin registro.
+            self._hora_mostrada = self.date_box.time()
             # R-2: `avisar=False` -- esta llamada corre dentro de `__init__`,
             # antes de que la ventana esté construida y visible. Un diálogo
             # modal aquí aparecería "suelto", sin su pantalla detrás. Si no
@@ -357,7 +364,7 @@ class PruebaDiariaBraq(PruebaBasico):
 
 
     """ Crea los botones y conecta las acciones de los botones a sus respectivas funciones                                                                                                        """
-    def cargar_dailytest_desde_db(self, fecha=None):
+    def cargar_dailytest_desde_db(self, fecha=None, hora_al_reloj=False):
         """
         Carga datos de pruebas diarias desde la base de datos y los mapea a los widgets de la GUI.
 
@@ -602,10 +609,26 @@ class PruebaDiariaBraq(PruebaBasico):
                 # la señal `dateTimeChanged` (que también dispara este
                 # cálculo) se emita antes o después de esta -- Qt no lo
                 # garantiza y no está escrito en ningún sitio del código.
-                self._recalcular_campos_derivados_diaria(fecha)
+                #
+                # E4 (PLAN_BRAQUI_HORA_EDITABLE_07-09.md), decisión del
+                # físico (07-09): al aterrizar en un día SIN registro, la
+                # hora pasa a ser la ACTUAL -- "se nota mejor si se
+                # actualiza a la actual" que heredar en silencio la hora
+                # del último día visitado (T8, correcta cuando la hora era
+                # inalcanzable; ahora que E1 la vuelve real, heredarla
+                # sería indistinguible de un dato tecleado). `hora_al_reloj`
+                # llega de `_al_mover_el_date_box`: solo es True si la hora
+                # "venía arrastrada" -- si alguien la había elegido en este
+                # mismo movimiento, NO se pisa (R-4/H6, la garantía titular
+                # de este plan). El instante se fija ANTES de recalcular:
+                # con el orden inverso la pantalla mostraría la hora nueva
+                # junto a la actividad del instante viejo.
+                momento = (QDateTime(fecha, QTime.currentTime())
+                           if hora_al_reloj else self._instante_del_date_box(fecha))
                 self.date_box.blockSignals(True)
-                self.date_box.setDate(fecha)
+                self.date_box.setDateTime(momento)
                 self.date_box.blockSignals(False)
+                self._recalcular_campos_derivados_diaria(momento)
                 self.checkBotonesFinales()
 
         except Exception as ex:
@@ -664,10 +687,20 @@ class PruebaDiariaBraq(PruebaBasico):
             los campos derivados al nuevo instante.
         """
         fecha = momento.date()
+        # E4: la hora "venía arrastrada" si es la MISMA que ya se mostraba
+        # -- el físico movió el día (u otra cosa) y la hora vino de paseo,
+        # sin que nadie la tocara en este mismo evento. Si difiere, alguien
+        # la eligió (a mano, o el propio cargador en un salto anterior) y
+        # no se debe pisar con el reloj.
+        hora_arrastrada = momento.time() == getattr(self, '_hora_mostrada', None)
         if fecha != getattr(self, '_fecha_mostrada', None):
             self._fecha_mostrada = fecha
-            self.cargar_dailytest_desde_db(fecha)
+            self.cargar_dailytest_desde_db(fecha, hora_al_reloj=hora_arrastrada)
+            # El cargador puede haber movido el date_box (blockSignals) --
+            # releer la hora real, o la próxima comparación quedaría rancia.
+            self._hora_mostrada = self.date_box.time()
         else:
+            self._hora_mostrada = momento.time()
             self._recalcular_campos_derivados_diaria(momento)
 
     def _cargar_imagen_pelicula(self, imagen_blob):
@@ -3536,6 +3569,14 @@ class PosicionamientoInicial(PruebaBasico):
         archivo = 'widgets.xlsx'
         _ = self.setupBox(archivo, 'encabezado_braq')
         self.date_box.setDisplayFormat("yyyy/MM/dd")
+        # E5 (PLAN_BRAQUI_HORA_EDITABLE_07-09.md): mismo arreglo que T5/DP-68
+        # aplicó a `PruebaDiariaBraq` -- efecto colateral real de `E1`
+        # (`encabezado_braq/date_box` pasó a `QDateTimeEdit`): el piso de
+        # ancho que `createInterface` calculó al crear el widget (para
+        # `"yyyy-MM-dd HH:mm:ss"`, 19 caracteres) sigue puesto cuando el
+        # formato cambia aquí a uno CORTO -- sin reaplicar, el widget pide
+        # 71 px más de los que su propio formato necesita.
+        self.date_box.setMinimumWidth(ancho_minimo_fecha(self.date_box))
 
         # df, n, layouts, _ = self.setupBox(archivo, '', main=False)
 

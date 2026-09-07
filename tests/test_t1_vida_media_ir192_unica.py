@@ -2,8 +2,10 @@
 media, y la correcta".
 
 Antes del arreglo la app usaba DOS vidas medias distintas para la misma
-fuente de Ir-192: el diario (`braquiterapia.py:798`) pasaba
-`vida_media_dias=73.83`; el mensual (`braq_mensual.py:977`),
+fuente de Ir-192: el diario (`braquiterapia.py:844`, número reubicado por
+`E4`/`E5` de `PLAN_BRAQUI_HORA_EDITABLE_07-09.md` -- la línea citada aquí
+es una prosa histórica, no un censo, así que solo se corrige por
+completitud) pasaba `vida_media_dias=73.83`; el mensual (`braq_mensual.py:977`),
 `CalcularActividad` (`ActividadFuente.py:112`) y `load.py:4373` pasaban
 `vida_media_dias=74.2`. Divergían hasta 1.416% a 300 días contra una
 tolerancia del 3%. `74.2` no corresponde a ningún valor aceptado (NNDC/IAEA

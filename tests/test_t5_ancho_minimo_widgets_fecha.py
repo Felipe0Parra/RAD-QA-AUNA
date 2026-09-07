@@ -27,7 +27,17 @@ una pantalla que nunca la tuvo).
 
 `H1` (PLAN_FUGA_CONEXIONES_01-09.md §5) cierra esa deuda: Halcyon gana el
 mismo `setDisplayFormat`/`setMinimumWidth` en `iniGUI`, así que se suma
-`PruebaDiariaHc` al censo de abajo -- las 4 diarias quedan cubiertas."""
+`PruebaDiariaHc` al censo de abajo -- las 4 diarias quedan cubiertas.
+
+`E5` (PLAN_BRAQUI_HORA_EDITABLE_07-09.md): efecto colateral real de `E1`
+sobre `PosicionamientoInicial` (comparte la hoja `encabezado_braq`, ahora
+`QDateTimeEdit`) -- `createInterface` calcula el piso para el formato
+LARGO (19 caracteres) que esa rama fija, y `PosicionamientoInicial` lo
+cambia después a `"yyyy/MM/dd"` (10 caracteres) SIN reaplicar: mismo
+olvido que `T5` corrigió para `PruebaDiariaBraq`. **Esta clase exige
+IGUALDAD, no `>=`**: `TestT5AnchoMinimoCubreElFormatoReal` (arriba) no lo
+habría detectado -- 203 px `>=` 132 px pasa igual de bien que 132 px `>=`
+132 px."""
 import os
 
 import pytest
@@ -39,7 +49,8 @@ from PyQt5.QtWidgets import QApplication, QMessageBox
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
 from ui.util_fechas import ancho_minimo_fecha
-from ui.paginasControles.PruebasDiarias.braquiterapia import PruebaDiariaBraq
+from ui.paginasControles.PruebasDiarias.braquiterapia import (
+    PruebaDiariaBraq, PosicionamientoInicial)
 from ui.paginasControles.PruebasDiarias.seiscientos import PruebaDiaria600
 from ui.paginasControles.PruebasDiarias.IX import PruebaDiariaIX
 from ui.paginasControles.PruebasDiarias.halcyon import PruebaDiariaHc
@@ -110,3 +121,53 @@ class TestT5RojoAntesQueVerdeSintetico:
             "precondición del defecto: cambiar a un formato más largo sin "
             "reaplicar el piso debe dejarlo corto -- si esto no fuera "
             "cierto, el test de arriba no discriminaría nada")
+
+
+class TestE5PosicionamientoInicialPideExactamenteSuFormato:
+    """E5 (PLAN_BRAQUI_HORA_EDITABLE_07-09.md): a diferencia de
+    `TestT5AnchoMinimoCubreElFormatoReal` (que exige `>=`, suficiente para
+    braqui/600/iX/Halcyon, cuyo formato final es el LARGO), aquí el
+    formato final es CORTO (`"yyyy/MM/dd"`) -- un `>=` no habría detectado
+    que el widget pedía 71 px de más (203 en vez de 132), regresión real
+    introducida por `E1` sobre esta clase.
+
+    **Obstáculo real, encontrado corriendo la SUITE COMPLETA (no en
+    aislamiento)**: `ancho_minimo_fecha()` usa `fontMetrics()`, que Qt
+    resuelve de forma PEREZOSA -- un widget recién creado y uno ya
+    "pulido" (`ensurePolished()`, disparado por un `.show()` en CUALQUIER
+    parte del proceso, incluida otra clase de otro archivo de test que
+    corrió antes) pueden reportar métricas DISTINTAS para el MISMO
+    formato ([medido]: 132 px sin pulir, 116 px pulido, con
+    `resources/estilo.qss` activo -- Segoe UI no está instalado en este
+    entorno y el sustituto mide distinto). Recalcular "esperado" sobre
+    `p.date_box` DESPUÉS de que el constructor completo de
+    `PosicionamientoInicial` terminó (que puede haber pulido el widget
+    por otro camino, p. ej. `imagenUpLoader()`) no es la misma condición
+    bajo la que `initUI` calculó `minimumWidth()` -- la producción lo
+    calcula INMEDIATAMENTE tras `setDisplayFormat`, sobre un widget
+    recién creado, sin pulir. La aserción compara contra un widget
+    STANDALONE creado ahora mismo (misma condición que la producción),
+    no contra una segunda lectura del mismo `date_box` ya construido."""
+
+    def test_minimumwidth_es_exactamente_el_de_su_formato(
+            self, app, bd_temporal):
+        p = PosicionamientoInicial(_UsuarioFalso())
+        assert p.date_box.displayFormat() == "yyyy/MM/dd"
+
+        # "Esperado" se mide en la MISMA condición que la producción usa
+        # dentro de initUI (widget recién creado, sin pulir) -- no
+        # releyendo `p.date_box`, cuyo estado de "pulido" pudo cambiar
+        # por el resto de la construcción de la pantalla.
+        from PyQt5.QtWidgets import QDateTimeEdit
+        referencia = QDateTimeEdit()
+        referencia.setDisplayFormat("yyyy/MM/dd")
+        esperado = ancho_minimo_fecha(referencia)
+
+        assert p.date_box.minimumWidth() == esperado, (
+            f"PosicionamientoInicial.date_box con formato "
+            f"{p.date_box.displayFormat()!r} debe pedir EXACTAMENTE "
+            f"{esperado} px, no {p.date_box.minimumWidth()} -- si es "
+            f"mayor, el piso calculado para el formato LARGO "
+            f"('yyyy-MM-dd HH:mm:ss', que `createInterface` fija primero "
+            f"por compartir la hoja `encabezado_braq` con braqui) sigue "
+            f"puesto sin reaplicar tras el `setDisplayFormat` corto")

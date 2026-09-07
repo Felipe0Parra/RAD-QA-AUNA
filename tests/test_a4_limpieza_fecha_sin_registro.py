@@ -303,9 +303,22 @@ class TestCargarDailytestLimpiaSoloSiNoHayRegistro:
 
         obj.cargar_dailytest_desde_db(QDate(2026, 5, 10))
 
-        assert llamadas == ["limpio", ("recalculo", QDate(2026, 5, 10))], (
-            "A4 debe seguir limpiando, y B1 debe recalcular DESPUÉS de "
-            "limpiar (si recalculara antes, la limpieza borraría el valor)")
+        # E4 (PLAN_BRAQUI_HORA_EDITABLE_07-09.md): el cargador ahora fija
+        # un INSTANTE (QDateTime, vía `_instante_del_date_box`) antes de
+        # recalcular -- no ya el QDate crudo. La aserción pasa a comprobar
+        # lo que este test protege de verdad: el ORDEN (limpiar antes que
+        # recalcular, para que la limpieza no borre el valor recién
+        # calculado) y la FECHA del instante -- no su tipo exacto.
+        assert llamadas[0] == "limpio"
+        assert len(llamadas) == 2 and llamadas[1][0] == "recalculo", (
+            f"A4 debe seguir limpiando, y B1 debe recalcular DESPUÉS de "
+            f"limpiar (si recalculara antes, la limpieza borraría el "
+            f"valor): {llamadas}")
+        instante = llamadas[1][1]
+        fecha_del_instante = instante.date() if hasattr(instante, "date") and callable(instante.date) else instante
+        assert fecha_del_instante == QDate(2026, 5, 10), (
+            f"el recálculo debe ser para la fecha nueva navegada, no otra: "
+            f"{instante!r}")
 
     def test_linealidad_sin_registro_limpia(self, app, monkeypatch):
         obj = Linealidad.__new__(Linealidad)
