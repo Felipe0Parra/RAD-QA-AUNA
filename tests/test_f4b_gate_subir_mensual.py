@@ -6,10 +6,29 @@ load.py, usado por 600/Halcyon vía `_subir_optimizado`, y
 categorías del mensual (aspectos mecánicos, tamaños de campo, MLC, vía
 `loadtablacomplex`) NO quedan cubiertos por esta tarea -- residual
 documentado, no un olvido silencioso.
-"""
+
+F0 (PLAN_BRAQUI_HORA_EDITABLE_07-09.md, 07-09-2026): el caso "dentro de la
+ventana" anclaba el control en un timestamp LITERAL ("2026-07-05"), y la
+ventana son 2 meses CALENDARIO desde el ancla -- ese literal caducó el
+2026-09-05 y el test se puso rojo solo, por el paso del calendario, sin que
+nadie tocara nada. Censo de los archivos que tocan
+`puede_editarse`/`motivo_bloqueo`/`limite_edicion`/`ventana_edicion`, uno
+por uno: `test_f4b_ventana_edicion.py` pasa `hoy=date(...)` explícito en
+cada aserción -- inmune por diseño; `test_lr2_filas_anuladas_sinteticas.py`
+solo CITA `services/ventana_edicion.py:100` en un censo de lecturas SQL por
+línea (LR2), sin ejercitar la ventana -- fuera de este problema;
+`test_fuga_a7_subirlineasmensuales.py` ancla con `datetime.now()` (no un
+literal): se mueve con el reloj y por eso nunca caduca, aunque sigue
+dependiendo de la hora real; `test_w1_no_escribir_sobre_control_eliminado.py`
+prueba la extensión a "existe y está activo", no la ventana temporal. Este
+archivo era el ÚNICO que afirmaba "dentro de la ventana" con una fecha
+literal fija (`subirlineasmensuales` consulta la puerta sin recibir `hoy`,
+así que usa la fecha del día real). El ancla de
+`test_dentro_de_ventana_permite_escribir` pasa a calcularse relativa a HOY
+-- ver el comentario en esa función."""
 import os
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -108,7 +127,14 @@ class TestGateSubirLineasMensuales600:
         assert _filas_dosimetria(bd_temporal, control_id) == 0
 
     def test_dentro_de_ventana_permite_escribir(self, app, bd_temporal, monkeypatch):
-        control_id = _crear_control_con_ancla(bd_temporal, "2026-07-05 10:00:00")
+        # F0: ancla RELATIVA a hoy, no un literal -- un literal caduca sin
+        # avisar en cuanto pasan los 2 meses de ventana (ya ocurrió una
+        # vez, ver el docstring del módulo). 15 días queda lejos de
+        # cualquier borde de la ventana (que se cuenta en MESES
+        # calendario, no en días), así que no hay riesgo de aterrizar
+        # justo en el límite por el propio desfase elegido.
+        ancla = (date.today() - timedelta(days=15)).strftime("%Y-%m-%d 10:00:00")
+        control_id = _crear_control_con_ancla(bd_temporal, ancla)
         monkeypatch.setattr(load_mod.QMessageBox, "warning",
                              staticmethod(lambda *a, **k: (_ for _ in ()).throw(
                                  AssertionError("no debía bloquear -- está dentro de la ventana"))))
