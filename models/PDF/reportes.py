@@ -20,25 +20,77 @@ except Exception:
 from models.PDF.pdf import generar_reporte_pdf
 from models.PDF.PDFWindow import PdfViewer
 from services.anulacion import filtro_activo
+from services.unidades_qc import unidad_de
+# R2: la declaración vive en `clasificacion_diario.py` (que `pdf.py`
+# también necesita leer) y se re-exporta aquí porque el plan la nombra
+# como "la declaración en `models/PDF/reportes.py`" -- ver el docstring
+# de ese módulo para el porqué de la separación (import circular).
+from models.PDF.clasificacion_diario import (
+    COLUMNAS_IDENTIFICACION, COLUMNAS_MOVIDAS_A_OTRA_TABLA, COLUMNAS_RETIRADAS)
 
 
-def guardarPDF(self, fecha, maquina = "", id_maquina = "", 
+def _campos_booleanos(diccionario):
+    """R1 (PLAN_REPORTES_LEGIBLES_08-09.md): deriva qué claves son
+    booleanas directamente del `diccionario_invertido` que cada pantalla
+    ya declara -- `v[2] == "scatter"` es la marca que las 4 pantallas usan
+    para armar sus propios menús de gráfica (`graficos_mapeo1`), así que
+    ya es la fuente de verdad; leerla aquí es no inventar una segunda.
+
+    Antes se leía `self.boolean_columns` -- 3 de las 4 pantallas declaran
+    `boolean_colums` (sin la "n"), así que `hasattr` daba False y la
+    conversión no corría nunca en 600/iX/braqui; en Halcyon SÍ existe el
+    atributo, pero `Halcyon.diccionario_invertido` no tiene marca
+    "scatter" en absoluto (sus valores son `[label, umbral]`, 2
+    elementos) -- por eso el resultado correcto para Halcyon es un
+    conjunto VACÍO, no una lista de sus 20 métricas numéricas."""
+    return {
+        clave for clave, valores in diccionario.items()
+        if len(valores) > 2 and valores[2] == "scatter"
+    }
+
+
+def _valor_booleano(valor):
+    """Normaliza `valor` a 1, 0 o None antes de decidir el veredicto.
+
+    `QSqlQuery.value()` puede devolver int, float o str según cómo SQLite
+    tipó la columna en ese registro concreto; la comparación estricta
+    `== 1` de antes solo cazaba el caso int. Un valor no reconociblemente
+    1 ni 0 (None, '', texto) NO es un campo que falló: se deja sin
+    veredicto -- "sin dato" y "no funciona" son cosas distintas."""
+    if isinstance(valor, bool):
+        return int(valor)
+    if isinstance(valor, (int, float)):
+        if valor == 1:
+            return 1
+        if valor == 0:
+            return 0
+        return None
+    if isinstance(valor, str):
+        texto = valor.strip()
+        if texto in ("1", "1.0"):
+            return 1
+        if texto in ("0", "0.0"):
+            return 0
+    return None
+
+
+def guardarPDF(self, fecha, maquina = "", id_maquina = "",
         tipo_reporte = '', diccionario = {}, umbrales = None):
     file_name, _ = QFileDialog.getSaveFileName(
-        self, "Guardar PDF Mensual", 
-        f"Control_{maquina}_{fecha}.pdf", 
+        self, "Guardar PDF Mensual",
+        f"Control_{maquina}_{fecha}.pdf",
         "Archivos PDF (*.pdf)"
     )
     #nea = QFileDialog.getSaveFileName()
     if file_name:
         # Crear un DataFrame de ejemplo
-        reporte(self, fecha, maquina, id_maquina, tipo_reporte, 
+        reporte(self, fecha, maquina, id_maquina, tipo_reporte,
             diccionario, umbrales, file_name)
 
-def reporte(self, fecha, maquina = "", id_maquina = "", 
-            tipo_reporte = '', diccionario = {}, 
+def reporte(self, fecha, maquina = "", id_maquina = "",
+            tipo_reporte = '', diccionario = {},
             umbrales = None, file_name = ""):
-    
+
     #Reconoce la amaquina
     maquinas_dict = {
         'Clinac 600': 'aceleradorlineal_600',
@@ -47,11 +99,11 @@ def reporte(self, fecha, maquina = "", id_maquina = "",
         'HALCYON': 'halcyon'
     }
     loto = maquinas_dict.get(maquina, None)
-    
+
     if loto is None:
         print("Máquina no reconocida")
         return
-        
+
     #busque en la base de datos de esa maquina
     db = self.opeenDatabase()
     query = QSqlQuery(db)
@@ -90,14 +142,14 @@ def reporte(self, fecha, maquina = "", id_maquina = "",
         print("Error ejecutando la consulta SQL.")
         db.close()
         return
-    
+
     #print(df)
     #Use el diccionario para buscar los Valores CORRESPONDIENTES A la descripcion
-    usuario = df.loc[df[df.columns[0]]=='user_id', df.columns[2]].values[0]    
-    
+    usuario = df.loc[df[df.columns[0]]=='user_id', df.columns[2]].values[0]
+
     temp_image_path = None
     rol = None
-    
+
     query2 = QSqlQuery(db)
     query2.prepare("SELECT firma, role FROM users WHERE fullname = ?")
     query2.addBindValue(usuario)
@@ -120,7 +172,7 @@ def reporte(self, fecha, maquina = "", id_maquina = "",
                     else:
                         # Asumir que es bytes o similar
                         firma_bytes = bytes(firma) if firma else None
-                    
+
                     if firma_bytes:
                         pixmap = QPixmap()
                         if pixmap.loadFromData(firma_bytes):
@@ -134,39 +186,68 @@ def reporte(self, fecha, maquina = "", id_maquina = "",
             print("No se encontró 'firma' para el usuario.")
     else:
         print("Error ejecutando la consulta en la tabla users.")
-    
+
     # Cerrar la base de datos una vez que ya no se necesita
     db.close()
-    
-    # Reemplazando los Valores booleanos en la columna "Valores" para las filas correspondientes
-    if hasattr(self, 'boolean_columns'):
-        for key in self.boolean_columns:
-            mask = df[df.columns[0]] == key
-            df.loc[mask & (df['Valores'] == 1), 'Evaluación'] = 'Funciona'
-            df.loc[mask & (df['Valores'] == 1), 'Valores'] = ''
-            df.loc[mask & (df['Valores'] == 0), 'Evaluación'] = 'No funciona'
-            df.loc[mask & (df['Valores'] == 0), 'Valores'] = ''
-    
-    
+
+    # R1: el veredicto "Funciona"/"No funciona" se deriva de la propia
+    # declaración (`v[2] == "scatter"`), no de un atributo de la UI leído
+    # por su nombre -- ver `_campos_booleanos`.
+    col0 = df.columns[0]
+    for key in _campos_booleanos(diccionario):
+        mask = df[col0] == key
+        for idx in df.index[mask]:
+            veredicto = _valor_booleano(df.at[idx, 'Valores'])
+            if veredicto == 1:
+                df.at[idx, 'Evaluación'] = 'Funciona'
+                df.at[idx, 'Valores'] = ''
+            elif veredicto == 0:
+                df.at[idx, 'Evaluación'] = 'No funciona'
+                df.at[idx, 'Valores'] = ''
+
+    # R3: la columna "Umbrales" queda SIEMPRE presente cuando `umbrales`
+    # no es None (antes braqui llamaba con `umbrales=None` y se quedaba
+    # sin columna) y ninguna celda queda vacía: número si lo hay, "No
+    # aplica" si la prueba no tiene umbral -- una celda vacía no permite
+    # distinguir "no aplica" de "nadie lo llenó".
+    #
+    # Se declara con dtype `object` desde el principio (no dejar que
+    # pandas la infiera float64 del primer número que reciba): esa
+    # columna termina con texto ("No aplica") mezclado con números, y
+    # asignar texto sobre una columna que pandas cree numérica es un
+    # `FutureWarning` hoy y un error en versiones futuras.
+    if umbrales is not None:
+        df['Umbrales'] = pd.Series([None] * len(df), dtype=object)
+
     for key, values in diccionario.items():
-        df.replace(key, values[0], inplace=True)
+        # R4: la unidad va en corchetes junto al identificador, en la
+        # MISMA celda del texto -- nunca en la de "Valores" (que debe
+        # seguir siendo un número puro). `df[col0].replace` en vez de
+        # `df.replace`: acotado a la columna de identificadores, para no
+        # tocar por accidente un valor que coincidiera con `key`.
+        etiqueta = values[0] + unidad_de(key)
+        df[col0] = df[col0].replace(key, etiqueta)
         if not umbrales is None:
-            df.loc[df[df.columns[0]] == values[0], 'Umbrales'] = values[1]
-            #print(f"Valor: {df.loc[df[df.columns[0]] == values[0], 'Valores'].values[0]}\nUmbral : {values[1]}")
-            if isinstance(values[1], (int, float)):
-                
-                if df.loc[df[df.columns[0]] == values[0], 'Valores'].values[0] == '':
-                    df.loc[df[df.columns[0]] == values[0], 'Evaluación'] = 'No aplica'
-                elif df.loc[df[df.columns[0]] == values[0], 'Valores'].values[0] > values[1]:
-                    df.loc[df[df.columns[0]] == values[0], 'Evaluación'] = 'Fuera del umbral'
+            umbral = values[1]
+            fila = df[col0] == etiqueta
+            if isinstance(umbral, (int, float)):
+                df.loc[fila, 'Umbrales'] = umbral
+                valor_fila = df.loc[fila, 'Valores'].values[0]
+                if valor_fila == '':
+                    df.loc[fila, 'Evaluación'] = 'No aplica'
+                elif valor_fila > umbral:
+                    df.loc[fila, 'Evaluación'] = 'Fuera del umbral'
                 else:
-                    df.loc[df[df.columns[0]] == values[0], 'Evaluación'] = 'Dentro del umbral'
-    
+                    df.loc[fila, 'Evaluación'] = 'Dentro del umbral'
+            else:
+                df.loc[fila, 'Umbrales'] = 'No aplica'
+
     #haga el reporte
     ICONO =  resource_path('resources/icons/iconoPDF.png')
 
-    buffer = generar_reporte_pdf(df=df, fecha=fecha, user=usuario, tipo_reporte=tipo_reporte, maquina=maquina, 
-                                id_maquina=id_maquina, logo_path=ICONO, firma=temp_image_path, role=rol, temp=True)
+    buffer = generar_reporte_pdf(df=df, fecha=fecha, user=usuario, tipo_reporte=tipo_reporte, maquina=maquina,
+                                id_maquina=id_maquina, logo_path=ICONO, firma=temp_image_path, role=rol, temp=True,
+                                es_diario_qc=True)
 
     if isinstance(buffer, bytes):
         pdf_bytes = buffer

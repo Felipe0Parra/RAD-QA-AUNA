@@ -987,7 +987,7 @@ class PruebaDiariaBraq(PruebaBasico):
             lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
                 reporte(self, fecha=self.date_box.date().toString('yyyy-MM-dd'),
                         maquina=maquina, id_maquina=id_maquina, tipo_reporte='diario',
-                        diccionario=self.diccionario_invertido, umbrales=None)
+                        diccionario=self.diccionario_invertido, umbrales="si")
         )
 
         self.boton_aceptar.clicked.connect(self.subirlisto)
@@ -3626,7 +3626,7 @@ class PosicionamientoInicial(PruebaBasico):
             lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
                 reporte(self, fecha=self.date_box.date().toString('yyyy-MM-dd'),
                         maquina=maquina, id_maquina=id_maquina, tipo_reporte='diario',
-                        diccionario=self.diccionario_invertido, umbrales=None)
+                        diccionario=self.diccionario_invertido, umbrales="si")
         )
 
         self.boton_aceptar.clicked.connect(self.subirlisto)
