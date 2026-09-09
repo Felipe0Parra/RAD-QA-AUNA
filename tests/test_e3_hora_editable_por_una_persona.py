@@ -126,7 +126,7 @@ class TestE3LaCadenaCompletaQueViveElFisico:
         # Punto de partida conocido: un día con una hora central (evita
         # desbordar el día al sumar unas pocas horas -- P-3 de este
         # protocolo, obstáculo previsto).
-        d.date_box.setDateTime(QDateTime(QDate(2026, 9, 7), QTime(8, 0, 0)))
+        d.date_box.setDateTime(QDateTime(QDate(2026, 2, 7), QTime(8, 0, 0)))
         actividad_a_las_8 = d.line_1_exp_act_ci.text()
 
         # 1. El físico se para en la sección de la hora.
@@ -138,7 +138,7 @@ class TestE3LaCadenaCompletaQueViveElFisico:
         # 2. Mueve la flecha 7 veces: 08:00 -> 15:00.
         for _ in range(7):
             d.date_box.stepBy(1)
-        assert d.date_box.date() == QDate(2026, 9, 7), (
+        assert d.date_box.date() == QDate(2026, 2, 7), (
             "el DÍA no debía moverse -- si se movió, la flecha sigue "
             "cayendo sobre otra sección (la trampa de DP-87 §0.1)")
         assert d.date_box.time() == QTime(15, 0, 0), (
@@ -160,11 +160,11 @@ class TestE3LaCadenaCompletaQueViveElFisico:
         _llenar_campos_numericos(d)
         d.ordenar_botones('braqui', False, "Diario")
 
-        filas = _filas_braqui(d, "2026-09-07%")
+        filas = _filas_braqui(d, "2026-02-07%")
         activas = [f for f in filas if f[3] == 1]
         assert len(activas) == 1, f"se esperaba 1 fila activa, hay {len(activas)}: {filas}"
         _id, fecha_guardada, tol_exp_guardado, _activo = activas[0]
-        assert fecha_guardada == "2026-09-07 15:00:00", (
+        assert fecha_guardada == "2026-02-07 15:00:00", (
             f"la hora TECLEADA (vía flecha) debe guardarse tal cual, se "
             f"guardó {fecha_guardada!r}")
         assert float(tol_exp_guardado) == pytest.approx(float(actividad_a_las_15), rel=1e-9), (
@@ -174,10 +174,10 @@ class TestE3LaCadenaCompletaQueViveElFisico:
         # 5. Navega a otro día y vuelve: se repone fecha Y hora exactas,
         #    y la actividad mostrada es la GUARDADA (no una recalculada
         #    de nuevo contra "ahora").
-        d.date_box.setDate(QDate(2026, 9, 10))  # otro día, sin registro
-        d.date_box.setDate(QDate(2026, 9, 7))   # vuelve
+        d.date_box.setDate(QDate(2026, 2, 10))  # otro día, sin registro
+        d.date_box.setDate(QDate(2026, 2, 7))   # vuelve
 
-        assert d.date_box.dateTime().toString("yyyy-MM-dd HH:mm:ss") == "2026-09-07 15:00:00", (
+        assert d.date_box.dateTime().toString("yyyy-MM-dd HH:mm:ss") == "2026-02-07 15:00:00", (
             f"al volver, date_box debía reponer fecha Y hora exactas del "
             f"registro guardado, quedó "
             f"{d.date_box.dateTime().toString('yyyy-MM-dd HH:mm:ss')!r}")
@@ -217,7 +217,7 @@ class TestE3RojoAntesQueVerdeContraElXlsxSinE1:
             lambda r: str(copia) if str(r).endswith("widgets.xlsx") else _orig(r))
 
         d = PruebaDiariaBraq(_UsuarioFalso())
-        d.date_box.setDateTime(QDateTime(QDate(2026, 9, 7), QTime(8, 0, 0)))
+        d.date_box.setDateTime(QDateTime(QDate(2026, 2, 7), QTime(8, 0, 0)))
         d.date_box.setCurrentSection(QDateTimeEdit.HourSection)
         assert d.date_box.currentSection() != QDateTimeEdit.HourSection, (
             "sin E1 el widget sigue siendo un QDateEdit -- si esto pasa, "

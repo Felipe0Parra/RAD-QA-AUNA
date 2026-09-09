@@ -68,7 +68,7 @@ def bd_temporal(monkeypatch, tmp_path):
         "lum_puerta, tub_guia, visual_sys, intercom, mon_rad_port, "
         "tol_rep_act_ci, tol_exp_act, tol_cyc_dummy, tol_cyc_rad, "
         "observaciones, activo) VALUES "
-        "('2026-09-10 18:45:00', 'Físico de Prueba', 1,1,1,1,1,1,1,1,1,1,1,1, "
+        "('2026-03-10 18:45:00', 'Físico de Prueba', 1,1,1,1,1,1,1,1,1,1,1,1, "
         "5.4604,5.4604,10.0,10.0, '', 1)")
     # histórico SIN hora (anterior a H6, como los 449 reales)
     conexion.con.execute(
@@ -94,12 +94,12 @@ class TestT8ReponerHoraAlAbrirUnControlGuardado:
             self, app, bd_temporal):
         d = PruebaDiariaBraq(_UsuarioFalso())
 
-        d.date_box.setDate(QDate(2026, 9, 11))  # navega a otro día, sin registro
+        d.date_box.setDate(QDate(2026, 3, 11))  # navega a otro día, sin registro
         valor_exp_otro_dia = d.line_1_exp_act_ci.text()
 
-        d.date_box.setDate(QDate(2026, 9, 10))  # vuelve al día guardado
+        d.date_box.setDate(QDate(2026, 3, 10))  # vuelve al día guardado
 
-        assert d.date_box.dateTime().toString("yyyy-MM-dd HH:mm:ss") == "2026-09-10 18:45:00", (
+        assert d.date_box.dateTime().toString("yyyy-MM-dd HH:mm:ss") == "2026-03-10 18:45:00", (
             "el date_box debe reponer la hora GUARDADA, no quedarse en la "
             "que tenía puesta al navegar")
         assert d.line_1_exp_act_ci.text() == "5.4604", (
@@ -114,7 +114,7 @@ class TestT8ReponerHoraAlAbrirUnControlGuardado:
             self, app, bd_temporal):
         d = PruebaDiariaBraq(_UsuarioFalso())
 
-        d.date_box.setDate(QDate(2026, 9, 5))  # otro día, sin registro
+        d.date_box.setDate(QDate(2026, 3, 5))  # otro día, sin registro
         hora_antes = d.date_box.time()
 
         d.date_box.setDate(QDate(2020, 1, 1))  # histórico, `date` sin hora

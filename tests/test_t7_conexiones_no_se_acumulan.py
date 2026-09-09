@@ -112,7 +112,7 @@ class TestT7CincoGuardadosSeguidosNoAcumulanConexiones:
         for n, (dia, hora) in enumerate(
                 ((10, QTime(7, 15)), (11, QTime(9, 30)), (12, QTime(16, 5)),
                  (13, QTime(11, 0)), (14, QTime(20, 0))), 1):
-            d.date_box.setDate(QDate(2026, 9, dia))
+            d.date_box.setDate(QDate(2026, 4, dia))  # NUNCA hoy: DP-94/F1
             d.date_box.setTime(hora)
             for campo in ("line_1_rep_act_ci", "line_1_cyc_dummy", "line_1_cyc_rad"):
                 getattr(d, campo).setText("6.0")
@@ -141,7 +141,7 @@ class TestT7CincoGuardadosSeguidosNoAcumulanConexiones:
         from PyQt5.QtSql import QSqlQuery
 
         d = PruebaDiariaBraq(_UsuarioFalso())
-        d.date_box.setDate(QDate(2026, 10, 1))
+        d.date_box.setDate(QDate(2026, 4, 20))  # NUNCA hoy: DP-94/F1
         for campo in ("line_1_rep_act_ci", "line_1_cyc_dummy", "line_1_cyc_rad"):
             getattr(d, campo).setText("6.0")
         d.ordenar_botones('braqui', False, "Diario")

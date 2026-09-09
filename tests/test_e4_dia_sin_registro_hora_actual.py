@@ -97,11 +97,11 @@ class TestE4CasoA_LaHoraSePonalAlReloj:
     def test_dia_sin_registro_hora_al_reloj(self, app, bd_temporal):
         d = PruebaDiariaBraq(_UsuarioFalso())
         # Deja el widget con una hora vieja, claramente distinta de "ahora".
-        d.date_box.setDateTime(QDateTime(QDate(2026, 9, 6), QTime(3, 0, 0)))
+        d.date_box.setDateTime(QDateTime(QDate(2026, 4, 6), QTime(3, 0, 0)))
 
         # Navega SOLO el día (mismo patrón que el físico usando el
         # calendario) a un día sin registro.
-        d.date_box.setDate(QDate(2026, 9, 8))
+        d.date_box.setDate(QDate(2026, 4, 8))
 
         ahora = QTime.currentTime()
         hora_widget = d.date_box.time()
@@ -117,12 +117,12 @@ class TestE4CasoA_LaHoraSePonalAlReloj:
 class TestE4CasoB_UnaHoraElegidaEnElMismoCambioSeRespeta:
     def test_setdatetime_con_hora_elegida_no_se_pisa(self, app, bd_temporal):
         d = PruebaDiariaBraq(_UsuarioFalso())
-        d.date_box.setDateTime(QDateTime(QDate(2026, 9, 6), QTime(3, 0, 0)))
+        d.date_box.setDateTime(QDateTime(QDate(2026, 4, 6), QTime(3, 0, 0)))
 
         # El físico (o un llamador directo) elige DÍA Y HORA en el MISMO
         # evento -- una hora que casi seguro no coincide con "ahora".
         hora_elegida = QTime(22, 17, 5)
-        d.date_box.setDateTime(QDateTime(QDate(2026, 9, 9), hora_elegida))
+        d.date_box.setDateTime(QDateTime(QDate(2026, 4, 9), hora_elegida))
 
         assert d.date_box.time() == hora_elegida, (
             f"una hora ELEGIDA en el mismo cambio de día NO debe pisarse "
@@ -135,9 +135,9 @@ class TestE4CasoB_UnaHoraElegidaEnElMismoCambioSeRespeta:
 class TestE4CasoC_LaActividadCorrespondeAlInstanteQueQuedoEnElWidget:
     def test_actividad_coincide_con_el_instante_final(self, app, bd_temporal):
         d = PruebaDiariaBraq(_UsuarioFalso())
-        d.date_box.setDateTime(QDateTime(QDate(2026, 9, 6), QTime(3, 0, 0)))
+        d.date_box.setDateTime(QDateTime(QDate(2026, 4, 6), QTime(3, 0, 0)))
 
-        d.date_box.setDate(QDate(2026, 9, 8))  # sin registro -> hora al reloj
+        d.date_box.setDate(QDate(2026, 4, 8))  # sin registro -> hora al reloj
 
         instante_widget = d.date_box.dateTime()
         esperado = _actividad_esperada_independiente(instante_widget)
@@ -162,10 +162,10 @@ class TestE4RojoDirigidoContraLaVarianteSinReorden:
 
     def test_variante_sin_reorden_falla_en_c(self, app, bd_temporal):
         d = PruebaDiariaBraq(_UsuarioFalso())
-        d.date_box.setDateTime(QDateTime(QDate(2026, 9, 6), QTime(3, 0, 0)))
+        d.date_box.setDateTime(QDateTime(QDate(2026, 4, 6), QTime(3, 0, 0)))
         instante_viejo = d.date_box.dateTime()
 
-        momento_nuevo = QDateTime(QDate(2026, 9, 8), QTime.currentTime())
+        momento_nuevo = QDateTime(QDate(2026, 4, 8), QTime.currentTime())
 
         # La variante mala: recalcular ANTES de fijar el instante nuevo en
         # el widget (el orden de HOY, antes de E4) -- usa el instante VIEJO.
@@ -237,7 +237,7 @@ class TestE4NoSeFueDeRama:
         conn.con.commit()
 
         d = PruebaDiariaBraq(_UsuarioFalso())
-        d.date_box.setDateTime(QDateTime(QDate(2026, 9, 6), QTime(3, 0, 0)))
+        d.date_box.setDateTime(QDateTime(QDate(2026, 4, 6), QTime(3, 0, 0)))
         d.date_box.setDate(QDate(2020, 1, 1))  # registro histórico, sin hora
 
         assert d.date_box.time() == QTime(3, 0, 0), (

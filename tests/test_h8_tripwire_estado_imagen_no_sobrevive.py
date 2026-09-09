@@ -270,7 +270,7 @@ class TestH8NingunEstadoDeImagenSobreviveARotarDeDia:
         assert d.guardar_datos() != ("", None, None, "", None, None), (
             "precondición: debe haber algo real que perder")
 
-        d.date_box.setDate(QDate(2026, 9, 9))  # día sin registro
+        d.date_box.setDate(QDate(2026, 4, 9))  # día sin registro -- NUNCA hoy: DP-94/F1
 
         for atributo in ATRIBUTOS_ESTADO_IMAGEN:
             assert _esta_vacio(d, atributo), (
@@ -297,14 +297,14 @@ class TestH8NingunEstadoDeImagenSobreviveARotarDeDia:
             "lum_puerta, tub_guia, visual_sys, intercom, mon_rad_port, "
             "tol_rep_act_ci, tol_exp_act, tol_cyc_dummy, tol_cyc_rad, "
             "observaciones, pelicula, activo) VALUES "
-            "('2026-09-10', 'Físico de Prueba', 1,1,1,1,1,1,1,1,1,1,1,1, "
+            "('2026-04-10', 'Físico de Prueba', 1,1,1,1,1,1,1,1,1,1,1,1, "
             "1.0,1.0,1.0,1.0, '', NULL, 1)")
         conexion.con.commit()
 
         d = PruebaDiariaBraq(_UsuarioFalso())
         _poblar_estado_de_imagen(d, tmp_path)
 
-        d.date_box.setDate(QDate(2026, 9, 10))  # registro real, sin imagen
+        d.date_box.setDate(QDate(2026, 4, 10))  # registro real, sin imagen
 
         for atributo in ATRIBUTOS_ESTADO_IMAGEN:
             assert _esta_vacio(d, atributo), (
