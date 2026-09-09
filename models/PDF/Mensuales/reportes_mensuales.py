@@ -799,6 +799,33 @@ def __crear_tabla_tamanos_campo_dosis_halcyon(tamano_data):
     # print("Columnas:", columnas, "->", len(columnas), "columnas")
     return pd.DataFrame(tabla, columns=columnas)
 
+# R11 (PLAN_REPORTES_LEGIBLES_08-09.md): la convención de ejes, DICHA en el
+# encabezado de la tabla en vez de DIBUJADA sobre la placa. Decisión del físico
+# (09-09): *"poner cualquier imagen sobre el BLOB es de cierta forma
+# contaminarla un poco visualmente al momento de una inspección visual"* -- la
+# película es evidencia, y superponerle cualquier cosa la vuelve un poco menos
+# evidencia.
+#
+# Dice SOLO el sentido del eje, que es una propiedad del sistema de coordenadas
+# (vale para todo control, no depende de ningún dato guardado) -- por eso se
+# puede afirmar sin el origen en píxeles (`centro_teorico`), que no se persiste
+# en ninguna tabla y que bloqueó la versión dibujada. **[medido]** el sentido
+# está fijado en dos sitios independientes del código: `delta_cruz_y =
+# (cruz[1] - centro_teorico[1])` (`Analisis_PlacaRC.py:924`) y `dibujar_excesos`,
+# que para pintar "hacia arriba" RESTA en Y (`Analisis_PlacaCuadrada.py:40`).
+#
+# NO dice el origen ni la operación de resta: `analisis_placa_correcciones`
+# guarda correcciones de FORMA por vértice (suman cero, no son un
+# desplazamiento) y el desfase real (`delta_cruz`) no se persiste -- ver `R12`,
+# diferida, y `DP-92`.
+#
+# Va en el encabezado, que es una fila que YA existe: no añade filas, así que no
+# puede empujar una página; queda pegada a las cifras que gobierna; y se
+# revierte en una línea el día que la convención se invierta.
+ENCABEZADO_ANALISIS_IMAGEN = (
+    'Análisis de imagen — coordenadas de imagen: el eje Y crece hacia ABAJO')
+
+
 def _crear_tabla_analisis_imagen(datos_completos):
     """Crea la Tabla 6: Análisis de imagen"""
     import re
@@ -859,7 +886,7 @@ def _crear_tabla_analisis_imagen(datos_completos):
 
     # Crear DataFrame con columnas apropiadas
     columnas = ['Característica'] + [f'Franja_{i+1}' for i in range(len(franja_labels))]
-    return pd.DataFrame(tabla, columns=['Análisis de imagen'] + [''] * (len(columnas) - 1))
+    return pd.DataFrame(tabla, columns=[ENCABEZADO_ANALISIS_IMAGEN] + [''] * (len(columnas) - 1))
 
 def _crear_espacio_imagen(preguntas_data):
     """Crea un espacio reservado para imágenes en el reporte"""
