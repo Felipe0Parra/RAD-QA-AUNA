@@ -118,19 +118,32 @@ class TestA12EliminarEquipoCierraSiempre:
             "el with debe invocar __exit__ exactamente una vez, incluso "
             f"cuando el SELECT revienta -- se registró: {_ConexionUnaVezEspia.llamadas}")
 
-    def test_camino_normal_sigue_anulando_igual(self, app, bd_temporal, monkeypatch):
+    def test_camino_normal_sigue_cerrando_la_conexion(self, app, bd_temporal, monkeypatch):
+        # CORRECCIÓN 10-09 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md SS2,
+        # DA-74): este test se llamaba "sigue_anulando_igual" y afirmaba
+        # `fila == ("Clinac iX", "SN-123", 0)` -- la fila SOBREVIVIENDO con
+        # activo=0. Q.1 revierte el soft-delete (E2/DA-02): "Eliminar" borra
+        # la fila de verdad. El §0.9 del plan decía que "ninguno de los
+        # otros 5 archivos afirma el soft-delete" -- era incompleto, este
+        # SÍ lo hacía. Lo que A12 vino a probar (el `with` cierra la
+        # conexión siempre) no depende de si el resultado final es anular o
+        # borrar -- se conserva intacto, solo se corrige la aserción del
+        # resultado y se añade el mock de `.question` que Q.1 introdujo
+        # (Trampa 2: sin él, este test cuelga bajo offscreen).
         id_equipo = _preparar_equipo(bd_temporal)
         _mock_dialogo_aceptado(monkeypatch)
         monkeypatch.setattr(equipos_mod.QMessageBox, "information",
                              staticmethod(lambda *a, **k: None))
+        monkeypatch.setattr(equipos_mod.QMessageBox, "question",
+                             staticmethod(lambda *a, **k: equipos_mod.QMessageBox.Yes))
         obj = _widget_con_fila_seleccionada(id_equipo)
 
         Config.eliminarEquipo(obj)
 
         con = sqlite3.connect(bd_temporal)
         fila = con.execute(
-            "SELECT model, serie, activo FROM equipos WHERE id = ?", (id_equipo,)).fetchone()
+            "SELECT model, serie FROM equipos WHERE id = ?", (id_equipo,)).fetchone()
         n_audit = con.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
         con.close()
-        assert fila == ("Clinac iX", "SN-123", 0)
+        assert fila is None, "la fila debe desaparecer por completo (DA-74)"
         assert n_audit == 1

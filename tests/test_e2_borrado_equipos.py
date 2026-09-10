@@ -1,13 +1,28 @@
 """E2 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §3): el catálogo de equipos ya
 no se borra sin permiso y sin vuelta atrás.
 
-Antes, `Config.eliminarEquipo` solo tenía un `QMessageBox.question` (sin
-diálogo de autorización -- el ÚNICO borrado de la app sin barrera) y hacía
-`DELETE FROM equipos` físico sobre el catálogo curado a mano en H2.6/H2.10.
-Ahora exige `DialogAdminPermisoEliminar` (admin o física jefe, E6) y anula
-con `activo = 0` en vez de borrar.
+Antes de E2, `Config.eliminarEquipo` solo tenía un `QMessageBox.question`
+(sin diálogo de autorización -- el ÚNICO borrado de la app sin barrera) y
+hacía `DELETE FROM equipos` físico sobre el catálogo curado a mano en
+H2.6/H2.10. E2 exigió `DialogAdminPermisoEliminar` (admin o física jefe,
+E6) y cambió el borrado por un soft-delete (`activo = 0`).
+
+CORRECCIÓN 10-09 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md §2, DA-74): el
+soft-delete SE REVIERTE -- "Eliminar" vuelve a borrar la fila de verdad.
+La reversión es legítima porque la premisa que motivó el soft-delete (que
+un control histórico necesitaba la fila del catálogo para no perder nada)
+resultó FALSA al medirla: los controles guardan una COPIA del equipo
+(equipos_medicion/SistemaMedicion/calculadora_dosimetrica), nunca una
+referencia -- 0 FK declaradas hacia `equipos` en las 72 tablas de la BD.
+La puerta de admin (E2/E6) SE CONSERVA sin cambios; lo que cambia es qué
+hace el botón una vez autorizado, y se añade una segunda puerta -- un
+aviso de confirmación que cuenta las referencias y permite retroceder de
+verdad (DA-74).
 """
+import os
 import sqlite3
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
 from PyQt5.QtCore import Qt
@@ -22,6 +37,17 @@ from ui.paginasGuia.equipos import Config
 @pytest.fixture(scope="module")
 def app():
     return QApplication.instance() or QApplication([])
+
+
+@pytest.fixture(autouse=True)
+def _sin_dialogos_bloqueantes(monkeypatch):
+    """Trampa 2 (CLAUDE.md): DA-74 añadió un QMessageBox.question real a
+    eliminarEquipo -- sin mockearlo, cualquier test que llegue hasta ahí
+    cuelga bajo offscreen. information/warning/critical se mockean siempre
+    (no hacía falta antes de DA-74, porque el `.information` final era lo
+    único que había); cada test controla `.question` con `_mock_confirmar`."""
+    for tipo in ("warning", "information", "critical"):
+        monkeypatch.setattr(equipos_mod.QMessageBox, tipo, staticmethod(lambda *a, **k: None))
 
 
 @pytest.fixture
@@ -84,6 +110,14 @@ def _mock_dialogo(monkeypatch, aceptado):
     return _DialogoFalso
 
 
+def _mock_confirmar(monkeypatch, respuesta=QMessageBox.Yes):
+    """DA-74: segunda puerta, el aviso de borrado real. Por defecto
+    confirma (Yes) -- los tests que necesitan probar "cancelar" pasan
+    otra `respuesta` explícitamente."""
+    monkeypatch.setattr(equipos_mod.QMessageBox, "question",
+                        staticmethod(lambda *a, **k: respuesta))
+
+
 def _audit_log(ruta):
     con = sqlite3.connect(ruta)
     filas = con.execute(
@@ -92,7 +126,7 @@ def _audit_log(ruta):
     return filas
 
 
-class TestSinAutorizacionNoBorraNiAnula:
+class TestSinAutorizacionNoBorra:
     def test_dialogo_rechazado_no_toca_la_fila(self, app, bd_temporal, monkeypatch):
         id_equipo = _preparar_equipo(bd_temporal)
         _mock_dialogo(monkeypatch, aceptado=False)
@@ -119,42 +153,70 @@ class TestSinAutorizacionNoBorraNiAnula:
         assert dialogo_cls.instancias[0].user is obj.user_id
 
 
-class TestConAutorizacionAnulaSinBorrar:
-    def test_la_fila_sigue_existiendo_con_activo_cero(self, app, bd_temporal, monkeypatch):
+class TestConAutorizacionYConfirmacionBorraDeVerdad:
+    """DA-74: la fila desaparece por completo -- ya no sobrevive con
+    activo=0. Dos puertas, las dos autorizadas, para que el borrado
+    ocurra."""
+
+    def test_la_fila_desaparece_por_completo(self, app, bd_temporal, monkeypatch):
         id_equipo = _preparar_equipo(bd_temporal)
         _mock_dialogo(monkeypatch, aceptado=True)
-        monkeypatch.setattr(equipos_mod.QMessageBox, "information",
-                            staticmethod(lambda *a, **k: None))
+        _mock_confirmar(monkeypatch)
         obj = _widget_con_fila_seleccionada(id_equipo)
 
         Config.eliminarEquipo(obj)
 
         con = sqlite3.connect(bd_temporal)
-        fila = con.execute(
-            "SELECT model, serie, activo FROM equipos WHERE id = ?", (id_equipo,)).fetchone()
+        n = con.execute("SELECT COUNT(*) FROM equipos WHERE id = ?", (id_equipo,)).fetchone()[0]
         con.close()
-        assert fila == ("Clinac iX", "SN-123", 0)  # NUNCA desaparece
+        assert n == 0  # NUNCA sobrevive, ni con activo=0
 
-    def test_audita_anular_con_modelo_y_serie(self, app, bd_temporal, monkeypatch):
+    def test_audita_eliminar_con_modelo_y_serie(self, app, bd_temporal, monkeypatch):
         id_equipo = _preparar_equipo(bd_temporal)
         _mock_dialogo(monkeypatch, aceptado=True)
-        monkeypatch.setattr(equipos_mod.QMessageBox, "information",
-                            staticmethod(lambda *a, **k: None))
+        _mock_confirmar(monkeypatch)
         obj = _widget_con_fila_seleccionada(id_equipo)
 
         Config.eliminarEquipo(obj)
 
-        assert _audit_log(bd_temporal) == [
-            ("Físico de Prueba", "anular", "equipos", "Clinac iX/SN-123", "tipo: Acelerador")]
+        filas = _audit_log(bd_temporal)
+        assert len(filas) == 1
+        usuario, accion, tabla, ref, detalle = filas[0]
+        assert (usuario, accion, tabla, ref) == (
+            "Físico de Prueba", "eliminar", "equipos", "Clinac iX/SN-123")
+        # DA-74: sin la fila, el detalle es lo único que la reconstruye --
+        # ya no basta "tipo: Acelerador" (E2 original), hace falta el resto
+        # de los campos clínicos.
+        assert "equip_type=Acelerador" in detalle
 
 
-class TestEquipoAnuladoDesapareceDeSelectoresPeroResuelveHistorico:
+class TestElAvisoDeBorradoPermiteRetroceder:
+    """Exigencia explícita del físico (10-09): cancelar el aviso NO debe
+    ejecutar el borrado -- de ninguna de las formas en que Qt reporta un
+    diálogo cerrado sin aceptar."""
+
+    def test_confirmacion_no_la_fila_sigue_activa(self, app, bd_temporal, monkeypatch):
+        id_equipo = _preparar_equipo(bd_temporal)
+        _mock_dialogo(monkeypatch, aceptado=True)
+        _mock_confirmar(monkeypatch, respuesta=QMessageBox.No)
+        obj = _widget_con_fila_seleccionada(id_equipo)
+
+        Config.eliminarEquipo(obj)
+
+        con = sqlite3.connect(bd_temporal)
+        activo = con.execute(
+            "SELECT activo FROM equipos WHERE id = ?", (id_equipo,)).fetchone()[0]
+        con.close()
+        assert activo == 1
+        assert _audit_log(bd_temporal) == []
+
+
+class TestEquipoBorradoDesapareceDeSelectores:
     def test_no_aparece_en_series_del_modelo(self, app, bd_temporal, monkeypatch):
         from services.equipos_service import EquiposService
         id_equipo = _preparar_equipo(bd_temporal, model="TN31010", serie="1822")
         _mock_dialogo(monkeypatch, aceptado=True)
-        monkeypatch.setattr(equipos_mod.QMessageBox, "information",
-                            staticmethod(lambda *a, **k: None))
+        _mock_confirmar(monkeypatch)
         obj = _widget_con_fila_seleccionada(id_equipo)
 
         Config.eliminarEquipo(obj)
@@ -162,18 +224,36 @@ class TestEquipoAnuladoDesapareceDeSelectoresPeroResuelveHistorico:
         series = EquiposService.obtener_series_por_modelo("TN31010")
         assert series == []
 
-    def test_control_historico_sigue_resolviendo_modelo_y_serie(self, app, bd_temporal, monkeypatch):
-        """Un control mensual/anual que referencia el equipo por su id lo
-        sigue encontrando -- anular no es borrar."""
+    def test_control_historico_no_necesita_resolver_contra_el_catalogo(
+            self, app, bd_temporal, monkeypatch):
+        """CORRECCIÓN 10-09 (DA-74): antes esta prueba afirmaba que un
+        control histórico "sigue encontrando" el equipo en el catálogo por
+        su id -- eso era la garantía del SOFT-delete y ya no es cierta (la
+        fila desaparece). La garantía nueva es otra, y más fuerte: un
+        control histórico NO NECESITA resolver nada contra el catálogo,
+        porque guarda su PROPIA copia (equipos_medicion) -- 0 FK
+        declaradas hacia `equipos`, medido en el plan (§0.1)."""
         id_equipo = _preparar_equipo(bd_temporal, model="TN31010", serie="1822")
+        con = sqlite3.connect(bd_temporal)
+        con.execute(
+            "INSERT INTO equipos_medicion (ref, tipo_camara, equip_type, model, serie,"
+            " calibr_fact, equipo_id) VALUES (1, 'Principal', 'Acelerador',"
+            " 'TN31010', '1822', 0.3, ?)", (id_equipo,))
+        con.commit()
+        con.close()
+
         _mock_dialogo(monkeypatch, aceptado=True)
-        monkeypatch.setattr(equipos_mod.QMessageBox, "information",
-                            staticmethod(lambda *a, **k: None))
+        _mock_confirmar(monkeypatch)
         obj = _widget_con_fila_seleccionada(id_equipo)
         Config.eliminarEquipo(obj)
 
         con = sqlite3.connect(bd_temporal)
-        fila = con.execute(
+        # el catálogo ya NO resuelve -- eso es exactamente lo que cambia
+        fila_catalogo = con.execute(
             "SELECT model, serie FROM equipos WHERE id = ?", (id_equipo,)).fetchone()
+        # pero el control ya guardó su propia copia, y esa SÍ sigue intacta
+        fila_control = con.execute(
+            "SELECT model, serie, calibr_fact FROM equipos_medicion WHERE ref = 1").fetchone()
         con.close()
-        assert fila == ("TN31010", "1822")
+        assert fila_catalogo is None
+        assert fila_control == ("TN31010", "1822", 0.3)

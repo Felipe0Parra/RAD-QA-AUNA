@@ -222,6 +222,17 @@ SITIOS_CENSALES_PERMITIDOS = {
         "buscar_datos_db -- función GENÉRICA reusada por muchas tablas "
         "anuales; fetchall() sin ORDER BY/LIMIT, trae la LISTA completa de "
         "filas activas de ese ref, no elige una.",
+    # Q.1 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md SS2, DA-74): mismo
+    # criterio que el COUNT(*) sobre `pruebas` ya documentado en ES1
+    # (SITIOS_CLAVE_INCOMPLETA_PERMITIDOS de test_le4) -- un COUNT no elige
+    # fila, cuenta todas. Aquí cuenta cuántos registros de equipos_medicion
+    # (de CUALQUIER control) referencian este equipo, para el aviso previo
+    # al borrado real del catálogo.
+    ("ui/paginasGuia/equipos.py", 1035):
+        "eliminarEquipo -- COUNT(*) sobre equipos_medicion WHERE "
+        "equipo_id = ?: cuenta las referencias de ESTE equipo cruzando "
+        "todos los refs que lo usaron, no selecciona el bloque vigente de "
+        "un ref concreto.",
 }
 
 # Acumulador de la sesión completa de pytest -- una lista de

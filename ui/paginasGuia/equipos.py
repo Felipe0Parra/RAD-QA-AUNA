@@ -3,8 +3,9 @@ from data.ManejoDatos.load import encontrar_columnas
 from data.ManejoDatos.conection import Conexion
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
-from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR, ACCION_ANULAR
+from services.audit_minimo import ACCION_GUARDAR, ACCION_ACTUALIZAR, ACCION_ANULAR, ACCION_ELIMINAR
 from services.vigencia_equipo import es_vigente_en_fecha
+from services.anulacion import filtro_activo
 from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar
 from PyQt5.QtWidgets import (QMessageBox, QGridLayout, QWidget, QSplitter, QHeaderView, QSizePolicy, QTableWidget, QTableWidgetItem,
                             QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QDialog, QLineEdit, QComboBox)
@@ -996,26 +997,104 @@ class Config(PruebaBasico):
         if respuesta != QDialog.DialogCode.Accepted:
             return
 
-        # E2: soft-delete -- la columna `activo` ya existe y guardarCambios
-        # ya la usa. El catálogo nunca pierde una fila: un equipo anulado
-        # deja de ofrecerse en los selectores (equipos_service.py ya filtra
-        # activo=1) pero un control histórico que lo referencia sigue
-        # resolviendo su modelo/serie.
+        # DA-74 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md §2, Q.1): "Eliminar"
+        # ahora borra la fila DE VERDAD -- revierte E2/DA-02 (soft-delete),
+        # porque su premisa (que un control histórico necesitaba la fila del
+        # catálogo para no perder nada) resultó FALSA al medirla: los
+        # controles guardan una COPIA del equipo (equipos_medicion,
+        # SistemaMedicion, calculadora_dosimetrica), nunca una referencia --
+        # 0 FK declaradas hacia `equipos` en las 72 tablas de la BD. Lo que
+        # DA-02 protegía ya está protegido en otro sitio. Anular (sin
+        # borrar) sigue disponible desde "Editar" -> desmarcar "Activo"
+        # (guardarCambios, F7) -- ese camino no cambia, solo cambia lo que
+        # hace este botón.
         with Conexion().conectar() as conn:
             cursor = conn.cursor()
-            # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): identificación ANTES
-            # de anular -- mismo patrón de ref que guardarCambios (f"{modelo}/{serie}").
-            cursor.execute("SELECT equip_type, model, serie FROM equipos WHERE id = ?", (id_equipo,))
+            # A6.2 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): identificación
+            # ANTES de escribir -- ahora se leen los 12 campos de datos (no
+            # solo tipo/modelo/serie), porque sin la fila la auditoría es
+            # lo único que permite reconstruirla.
+            cursor.execute("""
+                SELECT equip_type, model, serie, calibr_fact, calibr_fact2,
+                       fecha_calibr, fabricante, t_cal, p_cal, h_cal, v1, activo
+                FROM equipos WHERE id = ?
+            """, (id_equipo,))
             fila_equipo = cursor.fetchone()
-            cursor.execute("UPDATE equipos SET activo = 0 WHERE id = ?", (id_equipo,))
+            if fila_equipo is None:
+                QMessageBox.warning(self, "Advertencia", "El equipo ya no existe en la base de datos.")
+                return
+
+            (equip_type, modelo, serie, calibr_fact, calibr_fact2, fecha_calibr,
+             fabricante, t_cal, p_cal, h_cal, v1, activo) = fila_equipo
+
+            # RT1 (services/anulacion.py::filtro_activo, DA-47): sin este
+            # filtro el conteo incluiría filas ya ANULADAS por reguardados
+            # previos del mismo control (M2, reemplazo de bloque) -- un
+            # control guardado 3 veces dejaría 2 filas históricas más la
+            # vigente, e infla el número que ve el físico en el aviso.
+            n_equipos_medicion = cursor.execute(
+                f"SELECT COUNT(*) FROM equipos_medicion WHERE equipo_id = ?"
+                f"{filtro_activo('equipos_medicion')}",
+                (id_equipo,)).fetchone()[0]
+            n_calculos = cursor.execute(
+                "SELECT COUNT(*) FROM calculadora_dosimetrica WHERE equipo_id = ?",
+                (id_equipo,)).fetchone()[0]
+
+            # El aviso CUENTA las referencias y dice qué se pierde con
+            # ellas (§0.3/§0.10 del plan) -- avisa, no bloquea (DA-22: la
+            # decisión sobre un equipo es del físico, no del código).
+            texto = (
+                "Eliminar definitivamente este equipo del catálogo\n"
+                f"{equip_type} · {modelo} · serie {serie} · calibrado "
+                f"{fecha_calibr} · factor {calibr_fact}\n\n"
+                "La fila se borra de la base de datos y no se puede recuperar.\n\n"
+                "Los controles ya guardados no pierden nada: guardan su propia "
+                "copia del modelo, la serie y el factor de calibración, y así "
+                "se siguen viendo y reportando."
+            )
+            if n_equipos_medicion or n_calculos:
+                texto += (
+                    f"\n\nEste equipo está referenciado por {n_equipos_medicion} "
+                    "registro(s) de equipos de medición y "
+                    f"{n_calculos} cálculo(s) de dosis guardados. En esos "
+                    "cálculos, el reporte PDF dejará de mostrar la fila "
+                    "\"Número de serie\". Si vuelve a pulsar \"Subir\" en la "
+                    "sección de Equipos de un control mensual antiguo que lo "
+                    "use, esa cámara se caerá del control."
+                )
+            texto += "\n\n¿Eliminar de todas formas?"
+
+            # Exigencia explícita del físico: "asegurarse de que el aviso
+            # permita retroceder, y no que si le doy cancelar igual ejecute
+            # la acción". Por eso "!= Yes", nunca "== No": cerrar el
+            # diálogo con la X o con Escape NO devuelve No -- devuelve el
+            # botón de escape o NoButton, y un "== No" dejaría pasar esos
+            # dos caminos hacia el borrado. El cuarto argumento (No como
+            # botón por defecto) evita que un Enter sin leer borre algo.
+            if QMessageBox.question(
+                    self, "Eliminar equipo", texto,
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No) != QMessageBox.Yes:
+                return
+
+            cursor.execute("DELETE FROM equipos WHERE id = ?", (id_equipo,))
             conn.commit()
 
-        if fila_equipo:
-            equip_type, modelo, serie = fila_equipo
-            _registrar_auditoria(_usuario_actual(self), ACCION_ANULAR, "equipos",
-                                 ref=f"{modelo}/{serie}", detalle=f"tipo: {equip_type}")
+        # A6.2/H2.4: sin la fila, el rastro de auditoría es lo único que
+        # queda -- lleva los 12 campos (no solo modelo/serie) para que la
+        # fila sea reconstruible desde audit_log.
+        detalle = (
+            f"equip_type={equip_type}; model={modelo}; serie={serie}; "
+            f"calibr_fact={calibr_fact}; calibr_fact2={calibr_fact2}; "
+            f"fecha_calibr={fecha_calibr}; fabricante={fabricante}; "
+            f"t_cal={t_cal}; p_cal={p_cal}; h_cal={h_cal}; v1={v1}; "
+            f"activo={activo} | referencias: equipos_medicion={n_equipos_medicion}, "
+            f"calculos={n_calculos}"
+        )
+        _registrar_auditoria(_usuario_actual(self), ACCION_ELIMINAR, "equipos",
+                             ref=f"{modelo}/{serie}", detalle=detalle)
 
-        QMessageBox.information(self, "Éxito", "El equipo ha sido anulado correctamente.")
+        QMessageBox.information(self, "Éxito", "El equipo ha sido eliminado del catálogo.")
 
         # Actualizar la tabla
         self.cargartabla()

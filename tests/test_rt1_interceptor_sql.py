@@ -316,12 +316,17 @@ class TestDenominadorDeCobertura:
         #             superficie ya escrita: hasta ahora la imagen se
         #             guardaba y no se volvía a ver nunca desde el
         #             formulario, solo en el PDF.
+        #   98 -> 99  Q.1 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md SS2,
+        #             [[DA-74]], 10-09): `eliminarEquipo` (equipos.py) gana
+        #             un COUNT(*) sobre `equipos_medicion` para el aviso
+        #             previo al borrado real del catálogo -- una lectura
+        #             nueva, real, sobre una tabla del bloque de QC.
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 98, (
-            f"IM4 (DA-66) sumó una lectora nueva -- 98 funciones "
+        assert len(lectoras) == 99, (
+            f"Q.1 (DA-74) sumó una lectora nueva -- 99 funciones "
             f"esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "

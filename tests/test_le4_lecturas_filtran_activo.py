@@ -286,6 +286,15 @@ SITIOS_CLAVE_INCOMPLETA_PERMITIDOS = {
         "pruebas -- COUNT(*): solo pregunta '¿existe al menos una prueba "
         "para esta sesión?', sin importar id_tipo -- un COUNT no elige "
         "fila, cuenta todas.",
+    ("ui/paginasGuia/equipos.py", 1035):
+        "Q.1 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md SS2, DA-74) -- "
+        "equipos_medicion (eliminarEquipo): COUNT(*) WHERE equipo_id = ? -- "
+        "pregunta '¿a cuántos registros de equipos de medición (de "
+        "CUALQUIER control) referencia este equipo?', para el aviso previo "
+        "al borrado real. No selecciona el bloque vigente de UN ref: cuenta "
+        "cruzando todos los refs que lo usaron, exactamente el mismo "
+        "criterio que el COUNT(*) de la entrada anterior -- un COUNT no "
+        "elige fila.",
     ("models/PDF/Mensuales/reportes_mensuales.py", 199):
         "TipoCalibracion -- fallback DELIBERADO y documentado en el propio "
         "código: el intento anterior YA busca por (fecha, tipo) exacto y "
