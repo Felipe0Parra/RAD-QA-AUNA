@@ -33,18 +33,31 @@ _ETIQUETAS_PROTOCOLO_TRS398 = {
 
 
 def datos_a_dataframe(datos: dict) -> pd.DataFrame:
-    # Z3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): "Numero_serie" guarda
+    # Z3 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): "Numero_serie" guardaba
     # el id interno del combo de series (F1, 2026-07-10), no la serie física
     # grabada en la cámara -- el reporte imprimía ese id bajo la fila
     # "Numero_serie", presentándolo como si fuera la serie del equipo.
     # Se resuelve la serie REAL desde equipo_id (services/equipos_service.py)
     # -- correcto también para registros ya guardados, sin reescribir ningún
     # dato histórico (Numero_serie se queda como está en la BD, DA-02/DA-28).
-    # Sin equipo_id resoluble (p.ej. la fila legacy id=1, anterior a B3), la
-    # fila se omite en vez de imprimir un id sin significado para el físico.
+    #
+    # Q.4 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md SS4-bis): C1 (11-08,
+    # PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md) cambió lo que se GUARDA en
+    # "Numero_serie" -- desde entonces ya es la serie real de la cámara, no
+    # el id (Z3/F1 solo describía el estado ANTERIOR a C1). Este bloque
+    # seguía sobrescribiendo la columna incondicionalmente desde el
+    # catálogo, así que si el equipo ya no resolvía (DA-74, borrado real)
+    # se borraba la fila entera -- tirando la serie correcta que C1 ya
+    # había guardado. Ahora, sin resolución del catálogo, se usa la copia
+    # guardada SIEMPRE que no sea el id crudo (formato anterior a C1: la
+    # guarda por igualdad distingue las dos épocas sin columna de versión,
+    # verificado en el plan que ninguna serie real del catálogo coincide
+    # con ningún id existente). Solo se omite la fila cuando lo único
+    # disponible es un id sin significado para el físico.
     datos = dict(datos)
     if "Numero_serie" in datos:
         equipo_id = datos.get("equipo_id")
+        numero_serie = datos.get("Numero_serie")
         serie_real = None
         if equipo_id:
             from services.equipos_service import EquiposService
@@ -53,6 +66,8 @@ def datos_a_dataframe(datos: dict) -> pd.DataFrame:
                 serie_real = equipo.get("serie")
         if serie_real:
             datos["Numero_serie"] = serie_real
+        elif numero_serie and str(numero_serie) != str(equipo_id):
+            datos["Numero_serie"] = numero_serie
         else:
             del datos["Numero_serie"]
 
