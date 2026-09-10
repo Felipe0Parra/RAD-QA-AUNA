@@ -574,43 +574,42 @@ class Config(PruebaBasico):
             # referencia que tiene sentido para el catálogo de equipos.
             es_vigente = self.verificar_vigencia_equipo(fecha_calibracion, tipo_equipo)
 
-            # Determinar colores según el estado
-            if not es_activo:
-                bg_color = QColor(255, 100, 100)  # Rojo claro - Equipo inactivo
-                text_color = QColor(139, 0, 0)    # Rojo oscuro
-                estado_bg = QColor(255, 99, 71)   # Rojo más intenso
-                estado_text = QColor(255, 100, 100)  #
-            elif not es_vigente:
-                bg_color = QColor(255, 215, 0)    # Amarillo - Calibración vencida
-                text_color = QColor(184, 134, 11) # Amarillo oscuro
-                estado_bg = QColor(144, 238, 144) # Verde para estado activo
-                estado_text = QColor(0, 100, 0)   # Verde oscuro
-            else:
-                bg_color = QColor(144, 238, 144)  # Verde claro - Todo bien
-                text_color = QColor(0, 100, 0)    # Verde oscuro
-                estado_bg = QColor(144, 238, 144) # Verde
-                estado_text = QColor(0, 100, 0)   # Verde oscuro
+            # Q.5 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md SS4-ter): antes el
+            # color contestaba DOS preguntas a la vez (¿activo? ¿vigente?),
+            # con tres estados -- rojo/amarillo/verde -- y la columna
+            # "Activo" tenía su PROPIO par de colores (rojo sobre rojo,
+            # casi ilegible, cuando estaba inactiva). Pedido del físico:
+            # "el color del texto para cada fila debería ser solo uno de
+            # dos colores, verde o rojo, verde si está dentro de la fecha
+            # de calibración o rojo si no" -- una sola señal. La pregunta
+            # "¿está activo?" ya la contesta la columna "Activo" con su
+            # propio texto ("Sí"/"No"), sin necesidad de un color aparte.
+            # Sin fondo pintado: el color es el texto, no un halo detrás.
+            text_color = QColor(0, 100, 0) if es_vigente else QColor(178, 34, 34)
+            bg_color = None
 
             # Insertar el ID en la columna 0
             id_item = ColoredTableWidgetItem(str(id_equipo), bg_color, text_color)
             id_item.setData(Qt.UserRole, id_equipo)
             self.table.setItem(row, 0, id_item)
 
-            # Insertar el resto de los datos con colores de alerta (excluyendo activo, imagen_certificado y vigente)
+            # Insertar el resto de los datos (excluyendo activo, imagen_certificado y vigente)
             for col, value in enumerate(r[1:11], start=1):  # r[1:11] son las columnas desde equip_type hasta v1
-                # Color especial para la fecha de calibración si está vencida
+                item = ColoredTableWidgetItem(str(value) if value else "NA", bg_color, text_color)
+                # Q.5: se retira el color especial que tenía esta celda --
+                # con la fila entera en rojo era un cuarto color redundante.
+                # El tooltip se conserva: es la única explicación del color
+                # y no compite con él.
                 if col == 5 and not es_vigente and fecha_calibracion:
-                    item = ColoredTableWidgetItem(str(value) if value else "NA",
-                                                QColor(255, 99, 71), QColor(255, 100, 100))
                     item.setToolTip("Calibración vencida - Requiere actualización")
-                else:
-                    item = ColoredTableWidgetItem(str(value) if value else "NA", bg_color, text_color)
 
                 item.setData(Qt.UserRole, id_equipo)
                 self.table.setItem(row, col, item)
 
-            # Insertar el estado del equipo (columna activo)
-            activo_item = ColoredTableWidgetItem("Sí" if es_activo else "No", estado_bg, estado_text)
+            # Insertar el estado del equipo (columna activo) -- mismo color
+            # que el resto de la fila (Q.5): su TEXTO ("Sí"/"No") es quien
+            # contesta "¿está activo?", el color solo dice "¿vigente?".
+            activo_item = ColoredTableWidgetItem("Sí" if es_activo else "No", bg_color, text_color)
             activo_item.setFlags(activo_item.flags() & ~Qt.ItemIsEditable)
             activo_item.setData(Qt.UserRole, id_equipo)
 
