@@ -69,10 +69,10 @@ class Config(PruebaBasico):
         self.iniGUI()
         self.cargartabla()
         self.button_click()
-        
+
         # Conectar la señal de doble clic una sola vez después de la inicialización
-        self.table.itemDoubleClicked.connect(self.abrir_certificado)   
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers) 
+        self.table.itemDoubleClicked.connect(self.abrir_certificado)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
 
     def iniGUI(self):
         #print("iniGUI en equipos.py")
@@ -84,44 +84,44 @@ class Config(PruebaBasico):
         title_label = QLabel("Configuración de equipos", self)
         title_label.setAlignment(Qt.AlignCenter)
         self.main_layout.addWidget(title_label, 0, 0, 1, 1)  # Ocupa la primera fila y dos columnas
-        
+
         # Grupo de control
         self.group_box = QGroupBox("Control de creación de equipos")
         group_layout = QHBoxLayout()
         self.group_box.setLayout(group_layout)  # Asigna el layout al QGroupBox
-        
+
         # Crear tabla
         self.table = self.tabla()
         table, label2 = self.panelEdicion(self.table)
         # Crear panel de edición
-        
+
         # Agregar elementos al grupo
         splitter.addWidget(table)
         splitter.setStretchFactor(0, 3)  # La tabla ocupa 2 partes
         splitter.addWidget(label2)
         splitter.setStretchFactor(1, 1)  # El panel de edición ocupa 1 parte
         group_layout.addWidget(splitter)
-        
+
         # Agregar el grupo al layout principal
         self.main_layout.addWidget(self.group_box, 1, 0, 10, 2)
         #self.main_layout.rowStretch()
 
         # **IMPORTANTE:** Establecer el layout principal de la ventana
         self.setLayout(self.main_layout)
-        
+
         # Cargar datos de DB
-    
-    def button_click(self):    
+
+    def button_click(self):
         # Aquí puedes manejar el evento del botón
         self.tios5.clicked.connect(self.habilitar1)
-        
+
         self.tios6.clicked.connect(self.habilitar2)
-        
+
         self.tios7.clicked.connect(self.eliminarEquipo)
-    
+
     def tabla(self):
         #print("Función tabla en equipos.py")
-        
+
         columnas_str, placeholders = encontrar_columnas('equipos', id = True, delete = 0)
 
         headers = ["ID", "Tipo de equipo", "Modelo", "Serie", "Factor de calibración", "Fecha de calibración", "Fabricante","Temperatura (°C)", "Presión (kPa)", "Humedad (%)","V Cal.", "Activo", "Certificado", "Vigente"]
@@ -143,13 +143,13 @@ class Config(PruebaBasico):
         table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        
+
         return table
-    
+
     def panelEdicion(self, table):
         #print("Función panelEdición en equips.py")
         layout = QVBoxLayout() # Para meter el panel de edición
-        
+
         archivo = 'widgets.xlsx'
         df, n, layouts, _ = self.setupBox(archivo, 'edit_tabla', main = False)
         #print(f"{df}, {n}, {len(layouts)}")
@@ -161,24 +161,24 @@ class Config(PruebaBasico):
         self.tabla_equipo.setLayout(QVBoxLayout())
         self.tabla_equipo.layout().addWidget(table)
         self.tabla_equipo.layout().addWidget(self.canson3)
-        
+
         i = 1
-        for layout in layouts: 
+        for layout in layouts:
             name = f'canson{i}'
             getattr(self, name).setLayout(layout)
             i+=1
-        
+
         for i in range(self.canson1.layout().count()):
             item = self.canson1.layout().itemAt(i).widget()
 
             if item is not None:
                 item.setDisabled(True)
-        
+
         self.tios.hide()
         self.tios2.hide()
         self.tios3.hide()
         self.tios4.hide()
-        
+
         self.general_layout.addWidget(self.canson1)
         self.general_layout.addStretch()
         self.general_layout.addWidget(self.canson2)
@@ -190,7 +190,7 @@ class Config(PruebaBasico):
                 Electrómetro (en externa):               (nC)\n
                 Electrómetro (en braquiterapia):     (nA)\n
                 Detector Rad.:                                  (nC/Gy)\n""")
-        
+
         self.info_unidades = QLabel(texto_info_unidades)
         self.info_unidades.setStyleSheet("color: #686666; font-size: 15px; font-weight: normal;")
         self.general_layout.addWidget(self.info_unidades)
@@ -223,16 +223,16 @@ class Config(PruebaBasico):
             error.append(datos)
             with open(console_log, "w") as f:
                 json.dump(error, f, indent=4)
-            
+
             pass
         return self.tabla_equipo, self.panelEdicion
-    
+
     def cargarDatos(self, lista):
         print("Función cargarDatos en equipos.py")
         with Conexion().conectar() as conn:
             cursor = conn.cursor()
             # Calcular vigencia usando función existente
-        
+
             # E3: fabricante en la MISMA posición relativa que usa guardarCambios
             # (tras fecha_calibr) -- antes el alta lo omitía y quedaba NULL ("NA").
             cursor.execute("""
@@ -257,8 +257,17 @@ class Config(PruebaBasico):
             self.calib_factor.setPlaceholderText("Unidades:  1 x 10⁹ Gy/C → (Gy/nC)")
             self.calib_factor.setStyleSheet("color: #FF0000;")
         elif tipo == "Cámara de pozo":
-            print("    - Equipo: Cámara de pozo, Unidades:  1 x 10⁵ Gy·m²/h·A")
-            self.calib_factor.setPlaceholderText("Unidades:  1 x 10⁵ Gy·m²/h·A")
+            # Q.2 (PLAN_EQUIPOS_BORRADO_Y_VIGENCIA_10-09.md SS3): antes decia
+            # "1 x 10^5 Gy*m^2/h*A", que se lee como "la unidad es 10^5" --
+            # es decir "teclee la mantisa" (4.647), lo contrario de lo que
+            # necesita la formula real (confirmado 15/15 en SS0.7: el
+            # calculo de actividad de la fuente reproduce lo archivado SOLO
+            # con el numero completo, 464700 -- con la mantisa el error es
+            # de un factor ~100000). Cuatro filas del catalogo (17/57/63/71)
+            # ya tienen la escala mal por seguir esta instruccion (DA-28/
+            # DP-24); el texto deja de sugerirla.
+            print("    - Equipo: Cámara de pozo, Unidades:  Gy·m²/h·A")
+            self.calib_factor.setPlaceholderText("Unidades:  Gy·m²/h·A")
             self.calib_factor.setStyleSheet("color: #FF0000;")
         elif tipo == "Electrómetro":
             print("    - Unidades: nC")
@@ -379,7 +388,7 @@ class Config(PruebaBasico):
                     if isinstance(item, QLineEdit) and hasattr(item, "setText"):  # Evitar limpiar QLabel y QPushButton
                         item.setText("")
                     elif isinstance(item, QComboBox) and hasattr(item, "setItemText"):  # QComboBox
-                        item.setCurrentIndex(0)  # Resetear al primer ítem  
+                        item.setCurrentIndex(0)  # Resetear al primer ítem
                     elif hasattr(item, "setCurrentDate"):  # QDateEdit
                         item.setCurrentDate("dd/MM/yyyy")  # Poner solo el formato de fecha sin una fecha específica
                         self.calib_date.setStyleSheet("border: 1px solid #ccc;")  # Resetear estilo
@@ -413,7 +422,7 @@ class Config(PruebaBasico):
                 self.boton_cancel.clicked.connect(lambda: visor.close())
                 self.boton_aceptar.clicked.connect(lambda: visor.close())
 
-                
+
                 layout.addWidget(widget_imagen)
 
                 visor.exec_()
@@ -442,7 +451,7 @@ class Config(PruebaBasico):
         self.tios.show()
         self.tios2.show()
         self.info_unidades.hide()
-        
+
         # Limpiar la variable imagen_path para que no interfiera con la conservación de imagen original
         if hasattr(self, "imagen_path"):
             self.imagen_path = None
@@ -504,7 +513,7 @@ class Config(PruebaBasico):
                 print(f"El campo {item.objectName()} está vacío.")
                 return False
         return True
-    
+
     def verificar_vigencia_equipo(self, fecha_calibracion, tipo_equipo):
         """Verifica si la calibración de un equipo está vigente HOY.
 
@@ -542,14 +551,14 @@ class Config(PruebaBasico):
         rows = cursor.fetchall()
         conn.close()
 
-        headers = ["ID", "Tipo", "Modelo", "Serie", "Fac. Cal.", "Fecha Cal.", "Fabricante", "Temp. (°C)", "Pres. (kPa)", "Hum. (%)", "V Cal.", 
+        headers = ["ID", "Tipo", "Modelo", "Serie", "Fac. Cal.", "Fecha Cal.", "Fabricante", "Temp. (°C)", "Pres. (kPa)", "Hum. (%)", "V Cal.",
                     "Activo", "Certificado"]
         self.table.setColumnHidden(0, True)  # Oculta la columna del ID
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
 
         self.table.setRowCount(0)                                           # Limpia la tabla antes de cargar nuevos datos
-        
+
         # Desactivar temporalmente el QSS para que los colores de fondo se vean
         self.table.setStyleSheet("")
 
@@ -570,7 +579,7 @@ class Config(PruebaBasico):
                 bg_color = QColor(255, 100, 100)  # Rojo claro - Equipo inactivo
                 text_color = QColor(139, 0, 0)    # Rojo oscuro
                 estado_bg = QColor(255, 99, 71)   # Rojo más intenso
-                estado_text = QColor(255, 100, 100)  # 
+                estado_text = QColor(255, 100, 100)  #
             elif not es_vigente:
                 bg_color = QColor(255, 215, 0)    # Amarillo - Calibración vencida
                 text_color = QColor(184, 134, 11) # Amarillo oscuro
@@ -591,12 +600,12 @@ class Config(PruebaBasico):
             for col, value in enumerate(r[1:11], start=1):  # r[1:11] son las columnas desde equip_type hasta v1
                 # Color especial para la fecha de calibración si está vencida
                 if col == 5 and not es_vigente and fecha_calibracion:
-                    item = ColoredTableWidgetItem(str(value) if value else "NA", 
+                    item = ColoredTableWidgetItem(str(value) if value else "NA",
                                                 QColor(255, 99, 71), QColor(255, 100, 100))
                     item.setToolTip("Calibración vencida - Requiere actualización")
                 else:
                     item = ColoredTableWidgetItem(str(value) if value else "NA", bg_color, text_color)
-                
+
                 item.setData(Qt.UserRole, id_equipo)
                 self.table.setItem(row, col, item)
 
@@ -604,12 +613,12 @@ class Config(PruebaBasico):
             activo_item = ColoredTableWidgetItem("Sí" if es_activo else "No", estado_bg, estado_text)
             activo_item.setFlags(activo_item.flags() & ~Qt.ItemIsEditable)
             activo_item.setData(Qt.UserRole, id_equipo)
-            
+
             if not es_activo:
                 activo_item.setToolTip("⚠️ Equipo inactivo")
             else:
                 activo_item.setToolTip("✅ Equipo activo")
-            
+
             self.table.setItem(row, self.table.columnCount() - 2, activo_item)
 
             # Insertar el estado del certificado
@@ -689,7 +698,7 @@ class Config(PruebaBasico):
         if row < 0:
             QMessageBox.warning(self, "Advertencia", "Selecciona un equipo para editar.")
             return
-        
+
         # Recuperar el ID del equipo desde la columna oculta
         item = self.table.item(row, 0)
         if item is None:
@@ -703,7 +712,7 @@ class Config(PruebaBasico):
         with Conexion().conectar() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, 
+                SELECT equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr,
                         fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado
                 FROM equipos
                 WHERE id = ?
@@ -770,7 +779,7 @@ class Config(PruebaBasico):
                 self.v1_cal.setText(str(equipo[10]) if equipo[10] is not None else "")
             if hasattr(self, "sel_activo"):
                 self.sel_activo.setChecked(bool(equipo[11]))
-            
+
             try:
                 self.btn_img_cert.clicked.disconnect(self.imagen_certificado)
             except TypeError:
@@ -784,17 +793,17 @@ class Config(PruebaBasico):
 
     def guardarCambios(self):
         print("Guardando cambios en el equipo...")
-        
+
         # Obtener el ID del equipo que se está editando
         row = self.table.currentRow()
         if row < 0:
             QMessageBox.warning(self, "Advertencia", "No hay equipo seleccionado.")
             return
-        
+
         item = self.table.item(row, 0)
         id_equipo = item.data(Qt.UserRole)
         print(f"ID del equipo a actualizar: {id_equipo}")
-        
+
         # Obtener datos actuales del formulario
         tipo = self.tipo.currentText()
         modelo = self.modelo.text()
@@ -848,11 +857,11 @@ class Config(PruebaBasico):
                 # Si uno es None y el otro no
                 if (nuevo is None or nuevo == "") != (original is None or original == ""):
                     return False
-            
+
                 # Convertir a string para comparación uniforme
                 nuevo_str = str(nuevo).strip()
                 original_str = str(original).strip() if original is not None else ""
-            
+
                 # Para fechas, normalizar formato (quitar ceros iniciales)
                 if "/" in nuevo_str and "/" in original_str:
                     try:
@@ -862,21 +871,21 @@ class Config(PruebaBasico):
                         return nuevo_partes == original_partes
                     except:
                         pass
-            
+
                 # Para números, comparar como float si es posible
                 try:
                     return float(nuevo_str) == float(original_str)
                 except:
                     pass
-            
+
                 # Comparación de strings normalizada
                 return nuevo_str == original_str
 
             # Comparar cada campo individualmente
-            datos_formulario = [tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion, 
+            datos_formulario = [tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion,
                                 fabricante, t_cal, p_cal, h_cal, v1]
             datos_originales_sin_activo = list(datos_originales[:11])  # Excluye activo e imagen
-        
+
             # Verificar si hay cambios reales
             hay_cambios = False
             cambios_detectados = []
@@ -885,14 +894,14 @@ class Config(PruebaBasico):
             if hay_nueva_imagen:
                 with open(self.imagen_path, "rb") as f:
                     nueva_imagen_blob = f.read()
-            nombres_campos = ["tipo", "modelo", "serie", "factor_calibracion", "segundo_factor", "fecha_calibracion", 
+            nombres_campos = ["tipo", "modelo", "serie", "factor_calibracion", "segundo_factor", "fecha_calibracion",
                                 "fabricante", "t_cal", "p_cal", "h_cal", "v1"]
-        
+
             for i, (nuevo, original, nombre) in enumerate(zip(datos_formulario, datos_originales_sin_activo, nombres_campos)):
                 if not valores_iguales(nuevo, original):
                     hay_cambios = True
                     cambios_detectados.append(f" - {nombre}: '{original}' → '{nuevo}'")
-        
+
             solo_cambio_activo = (not hay_cambios and not hay_nueva_imagen and activo != activo_original)
 
             # F7 punto 2: el detalle lleva los valores viejo->nuevo (mismo
@@ -940,7 +949,7 @@ class Config(PruebaBasico):
                     # (0/1/None) dentro de la columna BLOB de la imagen.
                     imagen_blob = nueva_imagen_blob if hay_nueva_imagen else datos_originales[13]
                     cursor.execute("""
-                        INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr, 
+                        INSERT INTO equipos (equip_type, model, serie, calibr_fact, calibr_fact2, fecha_calibr,
                                             fabricante, t_cal, p_cal, h_cal, v1, activo, vigente, imagen_certificado)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (tipo, modelo, serie, factor_calibracion, segundo_factor, fecha_calibracion,
@@ -1029,7 +1038,7 @@ class Config(PruebaBasico):
         tipo_equipo = self.table.item(row, 1).text()  # Columna 1 contiene el tipo de equipo
         #print(f"Tipo de equipo seleccionado: {tipo_equipo}")
         return id_equipo, tipo_equipo
-    
+
     def verificar_vigencia(self, equipo):
         """G4 (PLAN_G_EQUIPOS_PERMISOS_Y_FECHAS_31-07.md): sin lógica propia --
         el veredicto lo da la misma fuente única que usa la tabla del
@@ -1048,4 +1057,3 @@ class Config(PruebaBasico):
         else:
             self.calib_date.setStyleSheet("border: 1px solid red;")
         return vigente
-
