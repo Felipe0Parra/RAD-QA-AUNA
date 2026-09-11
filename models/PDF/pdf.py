@@ -20,6 +20,15 @@ from models.PDF.clasificacion_diario import (
 ANCHO_RECUADRO_IMAGEN_BRAQUI = 450
 ALTO_RECUADRO_IMAGEN_BRAQUI = 130
 
+# C.4 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §4): un solo tamaño de letra en
+# TODOS los reportes (diario, mensual, anual) -- antes convivían 12/7.5
+# (diario), 11/9 (diario, resumen de placa R6), 10/8 (mensual y anual).
+# El físico pidió "un solo tamaño"; se elige 10/8 porque ya era el que
+# usaban mensual y anual (0 cambio visual ahí), y el diario baja a esa
+# medida. Sustituye los 8 literales `FONTSIZE` sueltos del archivo.
+CABECERA_TABLA_PT = 10
+CUERPO_TABLA_PT = 8
+
 
 def _extraer_imagen_a_png_temporal(blob):
     """R6/G2: decodifica un BLOB de imagen (JPEG/PNG/TIFF) a un PNG
@@ -202,6 +211,18 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
 
     styles = getSampleStyleSheet()
     df["Valores"] = df["Valores"].apply(lambda text: Paragraph(str(text), styles["Normal"]))
+    if es_diario_qc:
+        # C.4 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §4, SS0.9): el
+        # identificador tambien se envuelve en Paragraph -- un string
+        # pelado en una Table de reportlab NO se ajusta, se desborda
+        # (4 filas del diario de iX se salian 7.7-11.9 pt de la celda).
+        # Gateado a es_diario_qc: la calculadora (segundo cliente de esta
+        # funcion, R5) no cambia -- su identificador nunca desbordo.
+        from reportlab.lib.styles import ParagraphStyle
+        estilo_identificador = ParagraphStyle(
+            'IdentificadorTablaDiario', parent=styles['Normal'],
+            fontSize=CUERPO_TABLA_PT, leading=CUERPO_TABLA_PT + 2)
+        df[col0] = df[col0].apply(lambda text: Paragraph(str(text), estilo_identificador))
     if not obs_rows.empty:
         obs_text = obs_rows.iloc[0, 2]
         obs = [obs_text]   # keep as raw text
@@ -236,10 +257,10 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
         ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('FONTSIZE', (0, 0), (-1, 0), CABECERA_TABLA_PT),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('FONTSIZE', (0, 1), (-1, -1), 7.5),
+        ('FONTSIZE', (0, 1), (-1, -1), CUERPO_TABLA_PT),
     ]))
 
     if es_diario_qc:
@@ -336,13 +357,13 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#01b0ca")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('FONTSIZE', (0, 0), (-1, 0), CABECERA_TABLA_PT),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('ALIGN', (0, 1), (0, -1), 'LEFT'),
             ('ALIGN', (1, 1), (1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), CUERPO_TABLA_PT),
         ]))
         tabla_resumen.wrapOn(c, width, height)
         alto_resumen = tabla_resumen._height
@@ -657,10 +678,10 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('FONTSIZE', (0, 0), (-1, 0), CABECERA_TABLA_PT),
                     ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
                     ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                    ('FONTSIZE', (0, 1), (-1, -1), 8),
+                    ('FONTSIZE', (0, 1), (-1, -1), CUERPO_TABLA_PT),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ]
 
@@ -1157,10 +1178,10 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 0), (-1, 0), CABECERA_TABLA_PT),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
         ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('FONTSIZE', (0, 1), (-1, -1), CUERPO_TABLA_PT),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
     ]
 
