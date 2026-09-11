@@ -158,14 +158,18 @@ class TestR9DosimetriaUnidadesYR14Tolerancias:
         'planicidad_crossplane': 2.1, 'tolerancia_planicidad': 3,
     }
 
-    def test_dosis_de_referencia_dice_gy_um_no_cgy_um(self, app):
-        """Rojo-antes-que-verde: la etiqueta decía "(cGy/UM)" con un
-        valor guardado en Gy/UM -- un factor 100 de diferencia, vivo hoy
-        en producción antes de este arreglo."""
+    def test_dosis_de_referencia_dice_cgy_um_no_gy_um(self, app):
+        """CORRECCIÓN 10-09 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §3-B.1,
+        DP-90(b)): R9 (08-09) se apoyó en el formato en papel
+        (`IDC-F-RT-119`, que dice "(Gy/UM)") por encima del dato medido --
+        el valor guardado está en cGy/UM (la calculadora computa en Gy/MU
+        y `emitir_dosis` hace ×100 antes de guardar). Esta aserción se
+        invierte a propósito: el "[Gy/UM]" que este test exigía ANTES de
+        hoy era el propio error que B.1 corrige."""
         df = _crear_tabla_dosimetria([self.FILA_600], 'si')
         texto = df.to_string()
-        assert "[Gy/UM]" in texto
-        assert "cGy/UM" not in texto
+        assert "[cGy/UM]" in texto
+        assert "[Gy/UM]" not in texto
 
     def test_calidad_es_adimensional(self, app):
         df = _crear_tabla_dosimetria([self.FILA_600], 'si')
@@ -229,7 +233,7 @@ class TestR9DosimetriaUnidadesYR14Tolerancias:
         fuente_ix = inspect.getsource(_crear_tabla_dosimetria_ix)
         for f in (fuente_600, fuente_ix):
             assert "_no_aplica_si_vacio" in f
-            assert "[Gy/UM]" in f
+            assert "[cGy/UM]" in f  # B.1 (10-09): revierte R9, ver más arriba
             assert "[1]" in f
 
 

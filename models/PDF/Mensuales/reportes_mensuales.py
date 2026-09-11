@@ -923,9 +923,11 @@ def _no_aplica_si_vacio(valor):
 def _crear_tabla_dosimetria(dosimetria_data, umbrales):
     """Crea la Tabla 7: Aspectos dosimétricos (600 y Halcyon).
 
-    R9/R14 (PLAN_REPORTES_LEGIBLES_08-09.md): unidades en corchetes
-    copiadas del formato oficial `IDC-F-RT-119` -- `[Gy/UM]` (antes decía
-    "(cGy/UM)", un factor 100 de diferencia con el valor real guardado),
+    R9/R14 (PLAN_REPORTES_LEGIBLES_08-09.md): unidades en corchetes.
+    B.1 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §3, DP-90(b)) revierte R9:
+    `[Gy/UM]` copiaba el formato oficial `IDC-F-RT-119` por encima del
+    dato medido -- el valor guardado está en `[cGy/UM]` (la calculadora
+    computa en Gy/MU y `emitir_dosis` hace ×100 antes de guardar).
     `[1]` para la calidad de haz (adimensional, convención del físico),
     `[%]` para simetría/planicidad/discrepancias/tolerancias. Las cuatro
     tolerancias salen de `dosimetriaMen.tolerancia_*`, no de un literal."""
@@ -944,7 +946,7 @@ def _crear_tabla_dosimetria(dosimetria_data, umbrales):
         disc_dosis = dosi.get('discrepancia_dosis', '')
         # Usar espacios no separables (\u00A0) para mantener el espaciado
         tol_dosis = _no_aplica_si_vacio(dosi.get('tolerancia_dosis'))
-        tabla.append([f'Dosis de referencia medida [Gy/UM]: {dosis_ref}\u00A0\u00A0\u00A0\u00A0Discrepancia [%]: {disc_dosis}\u00A0\u00A0\u00A0\u00A0Tolerancia [%]: {tol_dosis}'])
+        tabla.append([f'Dosis de referencia medida [cGy/UM]: {dosis_ref}\u00A0\u00A0\u00A0\u00A0Discrepancia [%]: {disc_dosis}\u00A0\u00A0\u00A0\u00A0Tolerancia [%]: {tol_dosis}'])
 
         # Calidad
         calidad = dosi.get('calidad_pdd20_10', '')
@@ -985,7 +987,7 @@ def _crear_tabla_dosimetria_ix(dosimetria_data, umbrales):
             dosis_ref = datos_energia.get('dosis_ref_cgy_um', '')
             disc_dosis = datos_energia.get('discrepancia_dosis', '')
             tol_dosis = _no_aplica_si_vacio(datos_energia.get('tolerancia_dosis'))
-            tabla.append([f'Dosis de referencia medida [Gy/UM]: {dosis_ref}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0Discrepancia [%]: {disc_dosis}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0Tolerancia [%]: {tol_dosis}'])
+            tabla.append([f'Dosis de referencia medida [cGy/UM]: {dosis_ref}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0Discrepancia [%]: {disc_dosis}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0Tolerancia [%]: {tol_dosis}'])
 
             # Calidad
             calidad = datos_energia.get('calidad_pdd20_10', '')
@@ -1021,7 +1023,7 @@ def _crear_tabla_dosimetria_ix(dosimetria_data, umbrales):
             dosis_ref = datos_energia.get('dosis_ref_cgy_um', '')
             disc_dosis = datos_energia.get('discrepancia_dosis', '')
             tol_dosis = _no_aplica_si_vacio(datos_energia.get('tolerancia_dosis'))
-            tabla.append([f'Dosis de referencia medida [Gy/UM]: {dosis_ref}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0Discrepancia [%]: {disc_dosis}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0Tolerancia [%]: {tol_dosis}'])
+            tabla.append([f'Dosis de referencia medida [cGy/UM]: {dosis_ref}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0Discrepancia [%]: {disc_dosis}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0Tolerancia [%]: {tol_dosis}'])
 
             # Calidad (J2/J1 para electrones)
             calidad = datos_energia.get('calidad_j2_j1', datos_energia.get('calidad_pdd20_10', ''))
@@ -1257,7 +1259,11 @@ def _crear_tabla_tipo_calibracion(datos_completos):
     tabla.append(['Número de serie de la fuente', serie])
     tabla.append(['Número del certificado', certificado])
     tabla.append(['Fecha del certificado', fecha_cer])
-    tabla.append(['Intensidad de la fuente (GBq)', intensidad])
+    # B.3 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §3, DP-96-E3): R13 corrigió
+    # (U)/(U)/(GBq) -> [Ci] en _crear_tabla_resultados_actividad, pero esta
+    # función quedó fuera de ese alcance -- confirmado con el propio número
+    # de serie (...-13659-19 -> 13.659 Ci): factor 37.
+    tabla.append(['Intensidad de la fuente [Ci]', intensidad])
     tabla.append(['Factor de conversión', conversion])
 
     return pd.DataFrame(tabla, columns=['Tipo de calibración', ''])
@@ -1293,7 +1299,7 @@ def _crear_tabla_sistema_medicion(datos_completos):
         # Agregar filas
         tabla.append(['Modelo de la cámara de pozo', modelo])
         tabla.append(['Serie de la cámara de pozo', serie_cp])
-        tabla.append(['Factor de calibración (U/A)', calibracion])
+        tabla.append(['Factor de calibración [Gy·m²/h·A]', calibracion])
         tabla.append(['Modelo del electrómetro', modelo_elec])
         tabla.append(['Serie del electrómetro', serie_ele])
         tabla.append(['Factor de calibración electrómetro', electrometro])
@@ -1504,7 +1510,7 @@ def _crear_tabla_sistema_medicion_linealidad(datos_completos):
     tabla.append(['Campo', 'Valor'])
     tabla.append(['Modelo de la cámara de pozo', datos_completos.get('modelo', '')])
     tabla.append(['Serie de la cámara de pozo', datos_completos.get('serie_cp', '')])
-    tabla.append(['Factor de calibración (U/A)', datos_completos.get('calibracion', '')])
+    tabla.append(['Factor de calibración [Gy·m²/h·A]', datos_completos.get('calibracion', '')])
     tabla.append(['Modelo del electrómetro', datos_completos.get('modelo_elec', '')])
     tabla.append(['Serie del electrómetro', datos_completos.get('serie_ele', '')])
     tabla.append(['Factor de calibración electrómetro', datos_completos.get('electrometro', '')])

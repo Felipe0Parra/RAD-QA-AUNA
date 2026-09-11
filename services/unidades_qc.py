@@ -68,7 +68,13 @@ UNIDADES = {
     "laser_lateral9": "mm",
 
     # --- Mensual: dosimetría (600/iX) ---
-    "dosis_ref_cgy_um": "Gy/UM",  # hoy dice "(cGy/UM)": erra por 100 -- el valor guardado YA está en Gy/UM
+    # B.1 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §3, DP-90(b)): revierte R9.
+    # El valor guardado está en cGy/UM, no en Gy/UM -- [medido] la
+    # calculadora computa en Gy/MU (≈0.010), `dialogs.py::emitir_dosis`
+    # hace ×100 antes de escribir en el formulario, y esa BD guarda ≈1.0.
+    # Los otros 6 sitios de la app (Ver tabla, reportes_anuales,
+    # SQLtoEXCEL, tablas_anuales, la propia calculadora) ya dicen cGy/UM.
+    "dosis_ref_cgy_um": "cGy/UM",
     "discrepancia_dosis": "%",
     "simetria_inplane": "%",
     "simetria_crossplane": "%",
