@@ -1,9 +1,13 @@
 build/
 dist/
+# Archivos de Python cache y compilados
 __pycache__/
 *.pyc
 *.pyo
 *.spec
 .venv/
+# No subir las bases de datos o archivos confidenciales
 BaseDatosQA.db
 error_log.txt
+*.db
+HANDOFF_BUILD_WINDOWS*.md
