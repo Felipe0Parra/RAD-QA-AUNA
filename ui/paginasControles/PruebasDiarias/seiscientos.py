@@ -49,7 +49,7 @@ class PruebaDiaria600(PruebaBasico):
             "telemetro": ["Telemetro", 2.0, "line"],
             "tamano_campo": ["Tamano campo", 2.0, "line"],
             "centrado_reticulo": ["Centrado de reticulo", 2.0, "line"],
-            "dosis_referencia": ["Datos dosimetricos", 3, "line"],
+            "dosis_referencia": ["Constancia de dosis para 6MV", 3, "line"],
             "observaciones": ["Observaciones", "", "Na"]
         }
 
@@ -109,7 +109,7 @@ class PruebaDiaria600(PruebaBasico):
         graf_1.insert(0, 'Seleccione...')
         graf_2 = lista[9:16]
         graf_2.insert(0, 'Seleccione...')
-        graf_3 = ['Seleccione...', "Datos dosimetricos"]
+        graf_3 = ['Seleccione...', "Constancia de dosis para 6MV"]
         graficos = [graf_1, graf_2, graf_3]
 
         date_limit, self.canvas, self.menu_graficar, self.graficar = self.plotterSpaceEX(menu_graficas, graficos)
