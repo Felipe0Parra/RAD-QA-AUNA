@@ -405,11 +405,22 @@ class Menuu(QWidget):
                     return PruebaImagenesHC(self.user_id)
 
         if clave == "imagen_anual":
+            # A.5 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2, SS0.5b): `ref.ref`
+            # revienta con AttributeError si la pagina anual existe pero
+            # todavia no tiene `self.ref` (solo nace al pulsar "Iniciar",
+            # dentro de limpiar_layout) -- PyQt atrapa la excepcion y el
+            # boton se queda mudo. [medido] construir con ref=None no
+            # revienta en ninguna de las dos clases; se avisa en vez de
+            # quedarse callado.
             if self.maquina == "Halcyon":
                 # Usa el ref de la instancia anual si existe
                 ref = getattr(self, "_pagina_anual_hc", None)
-                ref_val = ref.ref if ref is not None else None
+                ref_val = getattr(ref, "ref", None)
                 #print("Creando PruebaImagenesHalcyon con ref:", ref_val)
+                if ref_val is None:
+                    QMessageBox.information(
+                        self, "Imágenes Anual",
+                        "Primero hay que iniciar el control anual.")
 
                 PruebaImagenesHalcyon = self._importar_clase(
                     "ui.paginasControles.PruebasAnuales.halcyon_anual",
@@ -420,8 +431,12 @@ class Menuu(QWidget):
 
             if self.maquina == "iX":
                 ref = getattr(self, "_pagina_anual_ix", None)
-                ref_val = ref.ref if ref is not None else None
+                ref_val = getattr(ref, "ref", None)
                 #print("Creando PruebaImagenesIX con ref:", ref_val)
+                if ref_val is None:
+                    QMessageBox.information(
+                        self, "Imágenes Anual",
+                        "Primero hay que iniciar el control anual.")
 
                 PruebaImagenesIX = self._importar_clase(
                     "ui.paginasControles.PruebasAnuales.ix_anual",
