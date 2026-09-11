@@ -486,7 +486,7 @@ class PruebaDiariaIX(PruebaBasico):
 
             self.figure.autofmt_xdate()
             ax.set_xlabel('Fecha')
-            ax.set_ylabel('Dosis')
+            ax.set_ylabel('Consistencia de dosis')
             ax.set_title('Datos dosimétricos vs tiempo')
             ax.grid(True)
             ax.legend()

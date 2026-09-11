@@ -1837,7 +1837,7 @@ class PruebaDiariaBraq(PruebaBasico):
 
             self.figure.autofmt_xdate()  # Rotar las fechas para mejor visualización
             ax.set_xlabel('Fecha')
-            ax.set_ylabel('Dosis')
+            ax.set_ylabel('Actividad')
             ax.set_title('Actividad reportada vs actividad esperada')
             ax.grid(True)
             ax.legend()
@@ -1877,7 +1877,7 @@ class PruebaDiariaBraq(PruebaBasico):
 
             self.figure.autofmt_xdate()  # Rotar las fechas para mejor visualización
             ax.set_xlabel('Fecha')
-            ax.set_ylabel('Dosis')
+            ax.set_ylabel('Ciclos')
             ax.set_title('Ciclos del dummy vs ciclos de la fuente')
             ax.grid(True)
             ax.legend()
@@ -4193,7 +4193,7 @@ class PosicionamientoInicial(PruebaBasico):
 
             self.figure.autofmt_xdate()  # Rotar las fechas para mejor visualización
             ax.set_xlabel('Fecha')
-            ax.set_ylabel('Dosis')
+            ax.set_ylabel('Actividad')
             ax.set_title('Actividad reportada vs actividad esperada')
             ax.grid(True)
             ax.legend()
@@ -4233,7 +4233,7 @@ class PosicionamientoInicial(PruebaBasico):
 
             self.figure.autofmt_xdate()  # Rotar las fechas para mejor visualización
             ax.set_xlabel('Fecha')
-            ax.set_ylabel('Dosis')
+            ax.set_ylabel('Ciclos')
             ax.set_title('Ciclos del dummy vs ciclos de la fuente')
             ax.grid(True)
             ax.legend()
