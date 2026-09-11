@@ -156,7 +156,7 @@ SITIOS_CENSALES_PERMITIDOS = {
         "migración (el UPDATE que normaliza ese centinela a NULL): misma "
         "razón que la cuenta de la línea 121, y la otra mitad de la misma "
         "operación -- filtrar una de las dos deja la migración a medias.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 54):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 55):
         "censo/migración (normalizar_fechas_db): reescribe el FORMATO de "
         "`fecha` (DD-MM-YYYY -> YYYY-MM-DD) en las 6 tablas de "
         "braquiterapia, TipoCalibracion incluida. Tiene que alcanzar también "
@@ -175,13 +175,13 @@ SITIOS_CENSALES_PERMITIDOS = {
     # completa/agregación (`load.py:3038`/`3890`, ver
     # SITIOS_CLAVE_INCOMPLETA_PERMITIDOS en test_le4). RT1 los ve porque los
     # tests ejercitan de verdad `mostrar_controles_img*`/`mostrar_controles_tac`.
-    ("data/ManejoDatos/load.py", 1906):
+    ("data/ManejoDatos/load.py", 1907):
         "mostrar_controles_imgIX_anual -- COUNT(p.id_prueba) GROUP BY c.id: "
         "cuenta TODAS las pruebas de la sesión, no elige una.",
-    ("data/ManejoDatos/load.py", 1940):
+    ("data/ManejoDatos/load.py", 1941):
         "mostrar_controles_imgIX_anual -- MAX/MIN GROUP BY c.id: agregación "
         "sobre todas las pruebas de la sesión.",
-    ("data/ManejoDatos/load.py", 2095):
+    ("data/ManejoDatos/load.py", 2096):
         "mostrar_controles_imgIX -- gemelo mensual del COUNT anterior.",
     # CORRECCIÓN 01-09 (A9/A10/A11, PLAN_FUGA_CONEXIONES_01-09.md §9): las
     # tres entradas de esta familia (2119/2515/2715) se retiraron por error
@@ -200,19 +200,19 @@ SITIOS_CENSALES_PERMITIDOS = {
     # estas líneas). test_rt1_no_hereda_los_sitios_opacos_de_es1 permite
     # este solape puntual porque está documentado como independiente, no
     # heredado -- ver EXCEPCIONES_INDEPENDIENTES en test_rt1_interceptor_sql.py.
-    ("data/ManejoDatos/load.py", 2143):
+    ("data/ManejoDatos/load.py", 2144):
         "mostrar_controles_imgIX -- gemelo mensual del MAX/MIN anterior.",
-    ("data/ManejoDatos/load.py", 2300):
+    ("data/ManejoDatos/load.py", 2301):
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del COUNT.",
-    ("data/ManejoDatos/load.py", 2334):
+    ("data/ManejoDatos/load.py", 2335):
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2491):
+    ("data/ManejoDatos/load.py", 2492):
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del COUNT.",
-    ("data/ManejoDatos/load.py", 2539):
+    ("data/ManejoDatos/load.py", 2540):
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2691):
+    ("data/ManejoDatos/load.py", 2692):
         "mostrar_controles_tac -- gemelo TAC del COUNT.",
-    ("data/ManejoDatos/load.py", 2739):
+    ("data/ManejoDatos/load.py", 2740):
         "mostrar_controles_tac -- gemelo TAC del MAX/MIN.",
     ("scripts/observador_contrato.py", 158):
         "_censo_y_vigente -- COUNT(*) sobre TODA la tabla (censo total, sin "

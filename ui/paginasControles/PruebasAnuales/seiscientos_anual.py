@@ -4,6 +4,7 @@ from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.load import loadtablacomplex
 from services.anulacion import filtro_activo
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
+from ui.util_formato import codigo_de_formato
 from PyQt5.QtWidgets import (QWidget, QToolBox, QMessageBox, QTableWidgetItem, QVBoxLayout, QHBoxLayout, QPushButton)
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
@@ -25,14 +26,14 @@ class PruebaAnual600(PruebaMensual600):
 
                 # La fecha entra como 'MM/YYYY', convertir a objeto QDate
                 fecha_formateada = fecha.split('/') # ['MM', 'YYYY']
-            
+
                 # Validar usuario
                 user_id = self.user_id._nombre
                 cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
                 if cursor.fetchone() is None:
                     QMessageBox.critical(self, "Error", f"El usuario '{user_id}' no existe en la base de datos.")
                     return
-            
+
                 # X1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md §8): sin esta
                 # inicialización, un control anual sin 2º físico (user_id_f2=None,
                 # el caso común) dejaba _nombre_fisico2 sin asignar -->
@@ -137,7 +138,7 @@ class PruebaAnual600(PruebaMensual600):
         # Crear categorías base
         self.category1 = QWidget()
         self.category2 = QWidget()
-        
+
         # Asignar layouts desde setupBox a las categorías
         if hasattr(self, 'layouts') and self.layouts:
             #print(f"Configurando {len(self.layouts)} layouts en categorías")
@@ -162,7 +163,7 @@ class PruebaAnual600(PruebaMensual600):
             # Añadir categorías al toolbox
             toolbox.addItem(self.category1, "EQUIPOS DE MEDICIÓN")
             toolbox.addItem(self.subtool, "ASPECTOS DOSIMÉTRICOS")
-            
+
         except Exception as e:
             print(f"Error configurando toolbox principal: {e}")
 
@@ -171,12 +172,12 @@ class PruebaAnual600(PruebaMensual600):
         try:
             # Crear subtoolbox para aspectos mecánicos
             self.subtool = QToolBox()
-            
+
             # Configurar tablas de indicadores
             tabla_fc, tabla_fta, tabla_fse, _ = self._crear_tablas_pruebas()
             tablas = [tabla_fc, tabla_fta]
             for tabla in tablas:
-                self._configurar_eventos(tabla, callback=self._calcular_discrepancias_tablas(tabla, 1, 2), 
+                self._configurar_eventos(tabla, callback=self._calcular_discrepancias_tablas(tabla, 1, 2),
                                         timer_key=f"debounce_{tabla.objectName()}", delay=300)
 
             for entry in tabla_fse:
@@ -433,7 +434,7 @@ class PruebaAnual600(PruebaMensual600):
             except Exception as e:
                 print(f"Error derivando el factor de transmisión: {e}")
         return calcular
-    
+
     def _agregar_botones_tabla(self, layout, table, nombre_tabla, ref, id = True, id_energia=False):
         """Agrega botones de acción a la tabla optimizadamente"""
         try:
@@ -509,14 +510,14 @@ class PruebaAnual600(PruebaMensual600):
             self.subtool.addItem(self.category2, 'Haces de fotones')
             self.subtool.addItem(self.category2, 'Factores de transmisión de accesorios')
             self.subtool.addItem(self.category2, 'Factores sobre el eje')
-            self.subtool.addItem(self.category2, 'Control de las cámaras monitoras')            
+            self.subtool.addItem(self.category2, 'Control de las cámaras monitoras')
         except Exception as e:
             print(f"Error configurando elementos adicionales: {e}")
 
     def controlTestWindow(self, sheet_name, lista_maquina = None):
         """
         Crea ventana de control optimizada dividida en submétodos
-        
+
         Parámetros:
             sheet_name (str): Nombre de la hoja de Excel con la definición de widgets
         """
@@ -524,29 +525,29 @@ class PruebaAnual600(PruebaMensual600):
             #print(f"controlTestWindow desde la clase {self.__class__.__name__} llamada")
             # Inicialización básica
             toolbox = PruebaMensual600._inicializar_toolbox(self, sheet_name, inputs_maquina=lista_maquina)
-            
+
             # Configurar categorías
             self._configurar_categorias()
-            
+
             # Configurar menús de equipos y seguridad
             self._configurar_menus_equipos_seguridad()
 
             # Configurar categoría de equipos
             self.botonescombobox(self.category1, self.combo_menu, None)
-            
+
             # Crear y configurar subtoolbox
             self._configurar_subtoolbox()
-            
+
             # Configurar toolbox principal
             self._configurar_toolbox_principal(toolbox)
 
             if hasattr(self, 'equipo_f') and self.equipo_f == 'Halcyon':
                 self.discrepancias()
                 self._configurar_categoria_fantomas()
-            
+
             # Retornar toolbox, comboboxes y combo_menu como esperaba el código original
             return toolbox, getattr(self, 'comboboxe', []), getattr(self, 'combo_menu', [])
-            
+
         except Exception as e:
             print(f"Error en controlTestWindow: {e}")
             traceback.print_exc()
@@ -563,7 +564,7 @@ class PruebaAnual600(PruebaMensual600):
 
             # Crear listas de widgets
             self.combo_menu = [getattr(self, combo, None) for combo in df_combo if getattr(self, combo, None)]
-    
+
         except Exception as e:
             print(f"Error configurando menús: {e}")
             self.combo_menu = []
@@ -580,7 +581,7 @@ class PruebaAnual600(PruebaMensual600):
         except Exception as e:
             print(f"Error configurando categoría de fantomas: {e}")
 
-    def button_click(self):  
+    def button_click(self):
         for combo in range(0, len(self.commenu), 3):
             self.commenu[combo].currentTextChanged.connect(self.setEquipoSeleccionado)
         for idx in range(1, len(self.commenu)+1, 3):
@@ -664,11 +665,11 @@ class PruebaAnual600(PruebaMensual600):
                 print(f"Error calculando discrepancias: {e}")
                 import traceback
                 traceback.print_exc()
-        
+
         return calcular
-    
+
     def generar_reporte_pdf(self):
         from models.PDF.Anual.reportes_anuales import guardarPDF_anual
         fecha = self.date_box.date().toString("MM/yyyy")  # O el formato de fecha que uses
         maquina = self.equipo_f  # O el atributo que corresponda a tu máquina
-        guardarPDF_anual(self, fecha, maquina, tipo_reporte="Control Anual", diccionario=None)
+        guardarPDF_anual(self, fecha, maquina, id_maquina=codigo_de_formato(self), tipo_reporte="Control Anual", diccionario=None)

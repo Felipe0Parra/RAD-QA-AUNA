@@ -28,6 +28,7 @@ from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR
 from services.fechas_control import mismo_mes as _mismo_mes
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
+from ui.util_formato import codigo_de_formato
 from services.vigencia_equipo import es_vigente_en_fecha
 from services.etiqueta_equipo import etiqueta_equipo
 from services.equipos_service import EquiposService
@@ -4216,4 +4217,4 @@ class PruebaMensual600(PruebaBasico):
         fecha = self.fecha_control if hasattr(self, 'fecha_control') else self.date_box.date().toString("dd/MM/yyyy")
         maquina = self.equipo_f  # O el atributo que corresponda a tu máquina
         diccionario = obtener_diccionario_600()  # O el que corresponda
-        guardarPDF_mensual(self, fecha, maquina, diccionario=diccionario)
+        guardarPDF_mensual(self, fecha, maquina, id_maquina=codigo_de_formato(self), diccionario=diccionario)

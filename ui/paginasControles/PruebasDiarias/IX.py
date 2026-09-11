@@ -1,4 +1,5 @@
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
+from ui.util_formato import codigo_de_formato
 from PyQt5.QtWidgets import QHBoxLayout, QWidget, QSplitter, QToolBox, QVBoxLayout, QLabel, QTableWidgetItem, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtSql import QSqlQuery
@@ -206,7 +207,7 @@ class PruebaDiariaIX(PruebaBasico):
             self.btn_clean.clicked.connect(lambda _: self.clean_info(imagenes=False))
 
         self.btn_submit.clicked.connect(
-            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
+            lambda _, maquina=self.mach_name2.text(), id_maquina=codigo_de_formato(self):
                 reporte(self, fecha = self.date_box.date().toString('yyyy-MM-dd'),
                         maquina = maquina, id_maquina=id_maquina, tipo_reporte='diario',
                         diccionario=self.diccionario_invertido, umbrales= "si")

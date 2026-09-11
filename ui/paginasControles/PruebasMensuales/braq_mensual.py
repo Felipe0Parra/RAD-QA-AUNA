@@ -1,10 +1,11 @@
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QGridLayout, QDialog, QTableWidgetItem, QPushButton, 
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QGridLayout, QDialog, QTableWidgetItem, QPushButton,
                             QToolBox, QSplitter, QLineEdit, QComboBox, QMessageBox, QDateTimeEdit, QDateEdit)
 from PyQt5.QtCore import Qt, QDate, QDateTime
 from PyQt5.QtGui import QColor
 from PyQt5.QtSql import QSqlQuery
 from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
+from ui.util_formato import codigo_de_formato
 from data.ManejoDatos.load import (mostrar_db_mensualBraqui, verificar_editar, verificar_eliminar, guardarEdicion,
                                     cancelarEdicion, guardar_resultado_CambioFuente, encontrar_columnas)
 from data.ManejoDatos.conection import Conexion
@@ -35,13 +36,13 @@ class PruebaMensualBraq(PruebaBasico):
         self.button_click()
         mostrar_db_mensualBraqui(self)
         self.normalizar_fechas_db()
-        
+
 
         from ui.paginasControles.PruebasDiarias.braquiterapia import PosicionamientoInicial
         # Crear instancia de PosicionamientoInicial
         self.posicionamiento = PosicionamientoInicial(self.user_id)
         self.posicionamiento.desplazamientoReady.connect(self.actualizar_desplazamiento)
-        
+
         #print(f"\n📌 Posicionamiento conectado desde: {id(self.posicionamiento)}")
 
     """ Conectar la señal de actualización de desplazamiento                                                                                                                                                       """
@@ -113,10 +114,10 @@ class PruebaMensualBraq(PruebaBasico):
             _registrar_auditoria(_usuario_actual(self), ACCION_ACTUALIZAR,
                                  "CondicionesMedicion", ref=self.ref_bd)
             QMessageBox.information(self, "Éxito", "El desplazamiento fue guardado correctamente en la base de datos.")
-            
+
 
         except Exception as e:
-            traceback.print_exc()   
+            traceback.print_exc()
             print("Error al actualizar desplazamiento:", e)
         finally:
             conn.close()
@@ -124,7 +125,7 @@ class PruebaMensualBraq(PruebaBasico):
     def actualizar_ref_bd(self, fecha=None):
         """Actualiza self.ref_bd cuando cambia la fecha"""
         fecha = self.date_box.date()
-        
+
         def consulta_db(fecha_consulta):
             # Pasar de el formato guardado "yyyy/MM/dd HH:mm:ss" a "yyyy/MM/dd"
             fecha_consulta = fecha_consulta.toString("yyyy-MM-dd")
@@ -145,21 +146,21 @@ class PruebaMensualBraq(PruebaBasico):
                 (fecha_consulta, tipo))
             result = cursor.fetchone()
             print(f"Consulta para fecha {fecha_consulta}: {result}")
-            
+
             if result:
                 ref_bd = result[0]
             else:
                 ref_bd = None
-                
+
             conn.close()
             return ref_bd
-        
+
         nuevo_ref_bd = consulta_db(fecha)
-      
+
         if nuevo_ref_bd != self.ref_bd:
             self.ref_bd = nuevo_ref_bd
             print(f"ref_bd actualizado a: {self.ref_bd}")
-            
+
             # Recargar los datos si hay un nuevo ref_bd
             if self.ref_bd is not None:
                 print("Nuevo ref_bd encontrado, recargando datos...")
@@ -171,8 +172,8 @@ class PruebaMensualBraq(PruebaBasico):
                 elif hasattr(self, 'datos_tabla') and hasattr(self, 'diccionario_invertido'):  # Para PruebaMensualBraq
                     # Necesitamos el df original, vamos a buscarlo
                     archivo = 'widgets.xlsx'
-                   
-                
+
+
                 if df_para_recargar is not None:
                     # Cargar cada tabla en su categoría correcta
                     self.addsomething(self.category1, df_para_recargar, "tipo", "TipoCalibracion", "id", self.ref_bd)
@@ -194,13 +195,13 @@ class PruebaMensualBraq(PruebaBasico):
             todos_los_campos = [
                 # Categoría 1 - TipoCalibracion
                 'serie', 'certificado', 'fecha_cer', 'intensidad', 'conversion',
-                # Categoría 2 - SistemaMedicion  
+                # Categoría 2 - SistemaMedicion
                 'modelo', 'serie_cp', 'calibracion', 'modelo_elec', 'serie_ele', 'electrometro',
                 't0', 'p0', 'h0',
                 # Categoría 3 - CondicionesMedicion
                 't', 'p', 'h'
             ]
-            
+
             for campo_nombre in todos_los_campos:
                 if hasattr(self, campo_nombre):
                     campo = getattr(self, campo_nombre)
@@ -209,7 +210,7 @@ class PruebaMensualBraq(PruebaBasico):
                         campo.setReadOnly(False)
                     elif hasattr(campo, 'setCurrentText'):  # QComboBox
                         campo.setCurrentIndex(0)
-            
+
             print("Todos los campos limpiados")
         except Exception as e:
             print(f"Error al limpiar campos: {e}")
@@ -220,7 +221,7 @@ class PruebaMensualBraq(PruebaBasico):
             'fecha_cal': ['Fecha del control', '', 'line'],
             'serie': ['Número de Serie de la fuente', '', 'line'],
             'certificado': ['Número del Cetficado de la fuente', '', 'line'],
-            'fecha_cer': ['Fecha del certificado', '', 'line'], 
+            'fecha_cer': ['Fecha del certificado', '', 'line'],
             'intensidad' : ['Intensidad de la Fuente', '', 'line'],
             'conversion' : ['Factor de conversión según el certificado', '', 'line'],
             'modelo' : ['Modeo de la cámara', '', 'line'],
@@ -239,9 +240,9 @@ class PruebaMensualBraq(PruebaBasico):
             'observaciones': ['Observaciones', '', 'line'],
 
         }
-        
+
         self.init_data(user_id, self.diccionario_invertido)
-        
+
 
     """ Crea la estructura visual general, usa QToolBox para organizar las secciones y prepara el area de gráficos                                                                                                      """
     def initUI(self):
@@ -252,7 +253,7 @@ class PruebaMensualBraq(PruebaBasico):
         archivo = 'widgets.xlsx'
         if hasattr(self, 'es_cambio_fuente') and self.es_calibracion_redundante:
             _ = self.setupBox(archivo, 'encabezado_ActividadBraqui')
-        else: 
+        else:
             _ = self.setupBox(archivo, 'encabezado_mensualBraqui')
 
         self.date_box.setDisplayFormat("dd/MM/yyyy")
@@ -287,7 +288,7 @@ class PruebaMensualBraq(PruebaBasico):
             self.category5.setLayout(self.layout_lecturas)
         else:
             self.layout_lecturas = self.category5.layout()
-            
+
         if self.category6.layout() is None:
             self.layout_observaciones = QVBoxLayout()
             self.category6.setLayout(self.layout_observaciones)
@@ -302,7 +303,7 @@ class PruebaMensualBraq(PruebaBasico):
         toolbox.addItem(self.category4, "MEDIDAS MÁXIMO DE LA CÁMARA")
         toolbox.addItem(self.category5, "LECTURAS DEL MÁXIMO")
         toolbox.addItem(self.category6, "OBSERVACIONES")
-        
+
 
         _ = self.setupBox(archivo, 'btn')
         self.btn_add.setObjectName("boton_nofunciona")
@@ -312,19 +313,19 @@ class PruebaMensualBraq(PruebaBasico):
         # ------------------------------ GRÁFICOS Y TABLA EDITABLE -------------------------------------------------
         # Crear gráficos específicos para mensual manualmente (sin usar init_ui)
         menu_graficas = ["Seleccionar...", "Máximos de la cámara", "Linealidad de la fuente"]
-        
+
         # Crear canvas y menús manualmente
         mpl = get_matplotlib_components()
         Figure = mpl['Figure']
         FigureCanvas = mpl['FigureCanvas']
         self.figure = Figure()
         self.canvas = FigureCanvas(self.figure)
-        
+
         # Crear menú principal
         self.menu_graficar = QComboBox()
         self.menu_graficar.addItems(menu_graficas)
         self.menu_graficar.setFixedWidth(100)
-        
+
         # Crear layout para menús
         caja_menu_graficas = QHBoxLayout()
 
@@ -346,7 +347,7 @@ class PruebaMensualBraq(PruebaBasico):
 
         # Añadir stretch al final para empujar todo hacia la izquierda
         #caja_menu_graficas.addStretch()
- 
+
         # Crear widget contenedor
         self.settfigure = QHBoxLayout()
         self.settfigure.addLayout(caja_menu_graficas)
@@ -355,8 +356,8 @@ class PruebaMensualBraq(PruebaBasico):
         self.col2 = QVBoxLayout()
         self.col2.addLayout(self.settfigure)
         self.col2.addWidget(self.canvas)
-        
-        # COLUMNA DERECHA - tabla editable 
+
+        # COLUMNA DERECHA - tabla editable
         self.edit_table_tools = self.createTable(df=df, headers=None)
         self.col2_1 = QVBoxLayout()
         self.col2_1.addWidget(self.table)
@@ -390,7 +391,7 @@ class PruebaMensualBraq(PruebaBasico):
             self.serie.textChanged.connect(lambda _: self.obtener_fecha_desde_serial(self.serie.text()))
         else:
             pass
-        
+
     def obtener_fecha_desde_serial(self, serie):
         try:
             datos_serie = serie.split("-")
@@ -406,9 +407,9 @@ class PruebaMensualBraq(PruebaBasico):
         except Exception as e:
             print(e)
             return
-        
-        
-        
+
+
+
     def comboBox_equipos(self):
         #print("comboBox_equipos de Mensual llamado")
         # ----------- CÁMARA DE POZO -----------
@@ -416,7 +417,7 @@ class PruebaMensualBraq(PruebaBasico):
         self.combo_serie  = self.widgets['serie_cp']      # QComboBox serie cámara de pozo
         self.line_cal     = self.widgets['calibracion']   # QLineEdit calibración
         self.line_cal_elec = self.widgets['electrometro']  # QLineEdit calibración electómetro
-        
+
         # Llenar modelos cámara de pozo (fila actual por vigente, H2.10)
         modelos_pozo = EquiposService.modelos_actuales('Cámara de pozo')
         self.combo_modelo.addItems(modelos_pozo)
@@ -527,7 +528,7 @@ class PruebaMensualBraq(PruebaBasico):
         try:
             ncam = 10
         except ValueError:
-            return  
+            return
 
         if hasattr(self, 'tabla_medidas_widget'):
             self.tabla_medidas_widget.setParent(None)
@@ -916,7 +917,7 @@ class PruebaMensualBraq(PruebaBasico):
             # Datos de calibración
             serie = self.serie.text()
             certificado = self.certificado.text()
-            
+
             fecha_cer = self.fecha_cer.text()
             intensidad = float(self.intensidad.text())
             conversion = float(self.conversion.text())
@@ -1017,30 +1018,30 @@ class PruebaMensualBraq(PruebaBasico):
         return texto.strip()
     def cargar_datos_equipos(self):
         #print("Entra a cargar_datos_equipos de la clase PruebaMensualBraq")
-        
+
         # Verificar que los widgets estén inicializados
         if not hasattr(self, 'widgets') or not self.widgets:
             print("Los widgets no están inicializados aún. Programando nueva ejecución...")
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(200, self.cargar_datos_equipos)  # Reintentar en 200ms
             return
-        
+
         # Verificar que los widgets necesarios estén disponibles
         campos_necesarios = ['serie', 'certificado', 'fecha_cer', 'intensidad', 'conversion']
         widgets_encontrados = 0
         for campo in campos_necesarios:
-            if (hasattr(self, campo) or 
+            if (hasattr(self, campo) or
                 (hasattr(self, 'widgets') and campo in self.widgets)):
                 widgets_encontrados += 1
-        
+
         if widgets_encontrados < len(campos_necesarios):
             print(f"Solo se encontraron {widgets_encontrados}/{len(campos_necesarios)} widgets necesarios. Reintentando...")
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(200, self.cargar_datos_equipos)  # Reintentar en 200ms
             return
-            
+
         try:
-            conn = Conexion().conectar() 
+            conn = Conexion().conectar()
             if conn is None:
                 print("No se pudo conectar a la base de datos.")
                 return
@@ -1057,7 +1058,7 @@ class PruebaMensualBraq(PruebaBasico):
             if not fila_fecha:
                 print("No se encontró calibración previa.")
                 return
-            
+
             ref_id = fila_fecha[0]
             fecha = fila_fecha[1]
 
@@ -1067,13 +1068,13 @@ class PruebaMensualBraq(PruebaBasico):
             if not tipo_data:
                 print("No se encontraron datos para el registro de calibración.")
                 return
-                
+
             #print(f"Datos obtenidos de la BD: {tipo_data}")
-            
+
             # Mapeo de campos y sus valores de la BD
             campos_bd = {
                 'serie': tipo_data[0],
-                'certificado': tipo_data[1], 
+                'certificado': tipo_data[1],
                 'fecha_cer': tipo_data[2],
                 'intensidad': tipo_data[3],
                 'conversion': tipo_data[4]
@@ -1095,25 +1096,25 @@ class PruebaMensualBraq(PruebaBasico):
                     try:
                         fecha_str = str(valor).strip()
                         #print(f"Fecha recibida de BD: '{fecha_str}'")
-                        
+
                         # Convertir directamente usando QDateTime con el formato correcto
                         fecha_dt = QDateTime.fromString(fecha_str, "yyyy-MM-dd HH:mm:ss")
-                        
+
                         if fecha_dt.isValid():
                             widget.setDateTime(fecha_dt)
                             #print(f"Fecha establecida correctamente: {fecha_dt.toString('yyyy-MM-dd HH:mm:ss')}")
                         else:
                             print(f"Fecha inválida: '{fecha_str}'. Usando fecha actual como fallback.")
                             widget.setDateTime(QDateTime.currentDateTime())
-                            
+
                     except Exception as e:
                         print(f"Error al convertir fecha '{valor}': {e}")
                         widget.setDateTime(QDateTime.currentDateTime())
                 else:
                     print(f"Tipo de widget no manejado para '{campo}': {type(widget)}")
-        
+
             #print("Proceso de carga de datos completado")
-            
+
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1122,8 +1123,8 @@ class PruebaMensualBraq(PruebaBasico):
         finally:
             if conn:
                 conn.close()
-    
-    """Muestra la tabla que es de varios campos en la base de datos, en una ventana emergente                                                                                                                      """                        
+
+    """Muestra la tabla que es de varios campos en la base de datos, en una ventana emergente                                                                                                                      """
     def mostrar_tabla_maximos(self, ref):
         conn = Conexion().conectar()
         cursor = conn.cursor()
@@ -1155,7 +1156,7 @@ class PruebaMensualBraq(PruebaBasico):
         dialog.setLayout(layout)
         dialog.exec_()
 
-    """Muestra la tabla que es de varios campos en la base de datos, en una ventana emergente                                                                                                                      """                        
+    """Muestra la tabla que es de varios campos en la base de datos, en una ventana emergente                                                                                                                      """
     def mostrar_tabla_lecturas(self, ref):
         conn = Conexion().conectar()
         cursor = conn.cursor()
@@ -1199,14 +1200,14 @@ class PruebaMensualBraq(PruebaBasico):
         self.btn_add.clicked.connect(self.guardar_DB)
         self.btn_add.clicked.connect(lambda: mostrar_db_mensualBraqui(self))
         self.btn_clean.clicked.connect(lambda: self.clean_info(imagenes=False))
-        
-   
-                        
+
+
+
         if hasattr(self, 'es_cambio_fuente') and self.es_calibracion_redundante:
             self.btn_submit.clicked.connect(
                 lambda _, :
-                    guardarPDF_mensual(self, fecha=self.date_box.date().toString('yyyy-MM-dd'), 
-                            maquina='Braquiterapia', tipo_reporte='Calibración Redundante', )
+                    guardarPDF_mensual(self, fecha=self.date_box.date().toString('yyyy-MM-dd'),
+                            maquina='Braquiterapia', id_maquina=codigo_de_formato(self), tipo_reporte='Calibración Redundante', )
                         )
         else:
             self.btn_submit.clicked.connect(
@@ -1214,19 +1215,20 @@ class PruebaMensualBraq(PruebaBasico):
                     self,
                     fecha=self.date_box.date().toString('yyyy-MM-dd'),
                     maquina='Braquiterapia',
+                    id_maquina=codigo_de_formato(self),
                     tipo_reporte='Cambio de fuente' if (hasattr(self, 'cambio_cal') and self.cambio_cal.isChecked()) else 'Control Mensual'
                 )
             )
 
         # Conexión ÚNICA para el menú de gráficas
         self.menu_graficar.currentTextChanged.connect(self.plotter_mensual_desde_menu)
-        
+
         self.edit_table.clicked.connect(lambda: verificar_editar(self, self.table, "TipoCalibracion", "id", None))
         self.accept_edit.clicked.connect(lambda: guardarEdicion(self, self.table, "TipoCalibracion", None))
         self.cancel_edit.clicked.connect(lambda: cancelarEdicion(self))
 
-        self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.table, "TipoCalibracion", None)) 
-        
+        self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.table, "TipoCalibracion", None))
+
         self.search_bar.textChanged.connect(self.filtrarTabla)
         if hasattr(self, 'date_box'):
             self.date_box.dateChanged.connect(self.cargar_monthtest_desde_db)
@@ -1236,30 +1238,30 @@ class PruebaMensualBraq(PruebaBasico):
             self.date_box.dateChanged.connect(self.mapear_tabla_maximos)
             self.date_box.dateChanged.connect(self.actualizar_ref_bd)
             self.date_box.dateChanged.connect(self.cargar_monthtest_desde_db_act)
-            
+
 
     def cargar_monthtest_desde_db(self, fecha=None):
-        """ 
-        
+        """
+
         Esta función accesa a las bases de datos asociadas con la prueba mensual, busca las lineas en las que está
-        cada uno de los widgets, compara si hay un valor en la base de datos y finalmente mapea este valor. 
+        cada uno de los widgets, compara si hay un valor en la base de datos y finalmente mapea este valor.
         Esto se hace con el fin de tener mayor control de los QA que se hacen mensualmente y si se requiere algún
         tipo de edición o validación.
-        
+
         """
-        
+
         if fecha is None:
             fecha = self.date_box.date()
-            
-        
+
+
         # Convertir QDate a string en formato compatible con la BD
         fecha_str = fecha.toString("yyyy-MM-dd")
-        
-        
+
+
         db = self.opeenDatabase()
         if not db:
             return
-        
+
         try:
             query = QSqlQuery(db)
             print("consultando db")
@@ -1289,8 +1291,8 @@ class PruebaMensualBraq(PruebaBasico):
                 print(f"Error en consulta: {query.lastError().text()}")
                 db.close()
                 return
-            
-                
+
+
             if query.next():
                 record = query.record()
                 print(str(query.value(record.indexOf('fecha'))))
@@ -1313,37 +1315,37 @@ class PruebaMensualBraq(PruebaBasico):
                         self.fecha_cer.setDateTime(qdatetime)
                 except Exception as e:
                     print("Error garrafal: ", e)
-                
-            
+
+
             print("consultando db")
             # Preparar la consulta
-           
-                                
-            
+
+
+
         except Exception as e:
             print(e)
             QMessageBox.warning(self, "Atencion", "No hay controles para la fecha especificada")
-    
-    
+
+
     def cargar_monthtest_desde_db_condiciones(self, fecha=None):
-        """   
+        """
         Esta función accesa a las bases de datos asociadas con la prueba mensual, busca las lineas en las que está
-        cada uno de los widgets, compara si hay un valor en la base de datos y finalmente mapea este valor. 
+        cada uno de los widgets, compara si hay un valor en la base de datos y finalmente mapea este valor.
         Esto se hace con el fin de tener mayor control de los QA que se hacen mensualmente y si se requiere algún
         tipo de edición o validación.
-        
+
         """
         if fecha is None:
             fecha = self.date_box.date()
-        
+
         # Convertir QDate a string en formato compatible con la BD
         fecha_str = fecha.toString("yyyy-MM-dd")
-        
-        
+
+
         db = self.opeenDatabase()
         if not db:
             return
-        
+
         try:
             query = QSqlQuery(db)
             print("consultando db")
@@ -1362,17 +1364,17 @@ class PruebaMensualBraq(PruebaBasico):
             print(fecha_str)
             if not query.exec():
                 print(f"Error en consulta: {query.lastError().text()}")
-              
+
                 return
-            
-                
+
+
             if query.next():
                 record = query.record()
-                
+
                 columnas_numericas = []
                 try:
                     if hasattr(self, 'combo_modelo'):
-    
+
                         self.combo_modelo.setCurrentText(str(query.value(record.indexOf('modelo'))))
                     if hasattr(self, 'combo_serie'):
                         self._set_combo_serie(self.combo_serie, query.value(record.indexOf('serie_cp')))
@@ -1385,14 +1387,14 @@ class PruebaMensualBraq(PruebaBasico):
                         print("La serie del electrometro es: ", query.value(record.indexOf('serie_ele')))
                 except Exception as e:
                     print("Error en equipos: ", e)
-               
+
             else:
                 raise ValueError("Error")
         except Exception as e:
             print(e)
         finally:
-            query.finish() 
-            
+            query.finish()
+
     """ Función para limpiar las series porque a alguien le dio por guardarlas en la db con un emoji y un texto decorador .|. """
     def _set_combo_serie(self, combo, serie_bd):
         serie_limpia = self._limpiar_serie(str(serie_bd))
@@ -1401,20 +1403,20 @@ class PruebaMensualBraq(PruebaBasico):
                 combo.setCurrentIndex(i)
                 return
         print(f"Serie '{serie_limpia}' no encontrada en el combo.")
-        
-        
+
+
     def cargar_monthtest_desde_db_parametros(self, fecha=None):
         if fecha is None:
             fecha = self.date_box.date()
-        
+
         # Convertir QDate a string en formato compatible con la BD
         fecha_str = fecha.toString("yyyy-MM-dd")
-        
-        
+
+
         db = self.opeenDatabase()
         if not db:
             return
-       
+
         query = QSqlQuery(db)
         query.prepare(f"""
             SELECT t,p,h FROM CondicionesMedicion
@@ -1425,9 +1427,9 @@ class PruebaMensualBraq(PruebaBasico):
         query.addBindValue((fecha_str))
         if not query.exec():
             print(f"Error en consulta parametros: {query.lastError().text()}")
-            
+
             return
-        
+
         if query.next():
             record = query.record()
             print("temperatura para tin")
@@ -1435,26 +1437,26 @@ class PruebaMensualBraq(PruebaBasico):
             print(f"widget t: {self.t}, visible: {self.t.isVisible()}, parent: {self.t.parent()}")
             self.t.setText(str(query.value(record.indexOf('t'))))
             print(f"texto después de set: {self.t.text()}")
-                    
-        
+
+
             self.p.setText(str(query.value(record.indexOf('p'))))
-            
-        
+
+
             self.h.setText(str(query.value(record.indexOf('h'))))
-            
-       
+
+
     def cargar_monthtest_desde_db_act(self, fecha=None):
         if fecha is None:
             fecha = self.date_box.date()
-        
+
         # Convertir QDate a string en formato compatible con la BD
         fecha_str = fecha.toString("yyyy-MM-dd")
-        
-        
+
+
         db = self.opeenDatabase()
         if not db:
             return
-       
+
         query = QSqlQuery(db)
         query.prepare(f"""
             SELECT actividad_monitor FROM ResultadosActividad
@@ -1464,23 +1466,23 @@ class PruebaMensualBraq(PruebaBasico):
         query.addBindValue((fecha_str))
         query.addBindValue((fecha_str))
         if not query.exec():
-            
+
             print(f"Error en consulta parametros: {query.lastError().text()}")
-            
+
             return
-        
+
         if query.next():
             record = query.record()
 
             self.ref.setText(str(query.value(record.indexOf('actividad_monitor'))))
-            
-        
-            
-                                    
-      
-    
+
+
+
+
+
+
     def cargar_medidas_desde_db(self, fecha_str):
-        
+
         db = self.opeenDatabase()
         if not db:
             return []
@@ -1494,8 +1496,8 @@ class PruebaMensualBraq(PruebaBasico):
         """)
         query.addBindValue((fecha_str))
         query.addBindValue((fecha_str))
-        
-        
+
+
 
         if not query.exec():
             print(f"Error en consulta mapeo: {query.lastError().text()}")
@@ -1510,10 +1512,10 @@ class PruebaMensualBraq(PruebaBasico):
                 query.value(2),
                 query.value(3)
             ))
-        
+
 
         return registros
-    
+
     def mapear_tabla_medidas(self, fecha=None):
         if fecha is None:
             fecha = self.date_box.date()
@@ -1532,10 +1534,10 @@ class PruebaMensualBraq(PruebaBasico):
             self.campos_maximos[fila][1].setText(str(m1))
             self.campos_maximos[fila][2].setText(str(m2))
             self.campos_maximos[fila][3].setText(str(prom))
-            
-    
+
+
     def cargar_maximos_desde_db(self, fecha_str):
-        
+
         db = self.opeenDatabase()
         if not db:
             return []
@@ -1550,7 +1552,7 @@ class PruebaMensualBraq(PruebaBasico):
         """)
         query.addBindValue((fecha_str))
         query.addBindValue((fecha_str))
-        
+
 
         if not query.exec():
             print(f"Error en consulta mapeo maximos: {query.lastError().text()}")
@@ -1559,8 +1561,8 @@ class PruebaMensualBraq(PruebaBasico):
 
         registros = []
         while query.next():
-            
-           
+
+
             registros.append((
                 query.value(0),
                 query.value(1),
@@ -1570,7 +1572,7 @@ class PruebaMensualBraq(PruebaBasico):
             ))
 
         return registros
-    
+
     def mapear_tabla_maximos(self, fecha=None):
         if fecha is None:
             fecha = self.date_box.date()
@@ -1590,13 +1592,13 @@ class PruebaMensualBraq(PruebaBasico):
             self.campos_lecturas[fila][2].setText(str(v150))
             self.campos_lecturas[fila][3].setText(str(vn300))
             self.campos_lecturas[fila][4].setText(str(prom))
-    
-    
+
+
     def plotter_mensual_desde_menu(self, selected_chart):
         """Método para graficar cuando se selecciona desde el menú"""
         if selected_chart == "Seleccionar...":
             return
-        
+
         # Usar solo la fecha actual seleccionada
         fecha_seleccionada = self.date_grafica.date().toString('yyyy-MM-dd')
         self._ejecutar_grafico_mensual(selected_chart, fecha_seleccionada)
@@ -1605,7 +1607,7 @@ class PruebaMensualBraq(PruebaBasico):
         """Método interno que ejecuta la gráfica"""
         # Limpiar el espacio para graficar
         self.figure.clear()
-        
+
         # Funcion para graficar los datos de máximos de cámara
         def graficar_maximos_camara(canvas, query, fecha):
             """Grafica los datos de máximos de cámara para una fecha específica"""
@@ -1622,11 +1624,11 @@ class PruebaMensualBraq(PruebaBasico):
             """)
             query.bindValue(0, fecha)
             query.exec_()
-            
+
             posiciones = []
             promedios = []
-            
-        
+
+
             while query.next():
                 # Convertir a float para evitar el error de numpy
                 posiciones.append(float(query.value(0)))
@@ -1658,19 +1660,19 @@ class PruebaMensualBraq(PruebaBasico):
             """)
             query.bindValue(0, fecha)
             query.exec_()
-            
+
             tiempo_parada = []    # Para valores _tp
             tiempo_efectivo = []  # Para valores _te
-            
+
             while query.next():
                 # Iterar por cada par tp/te (10 puntos total)
                 for i in range(10):  # 10 puntos de medición
                     tp_index = i * 2      # Índices pares: 0, 2, 4, 6, 8, 10, 12, 14, 16, 18
                     te_index = i * 2 + 1  # Índices impares: 1, 3, 5, 7, 9, 11, 13, 15, 17, 19
-                    
+
                     tp_value = query.value(tp_index)  # lin_tp_i
                     te_value = query.value(te_index)  # lin_te_i
-                    
+
                     if tp_value is not None:
                         tiempo_parada.append(float(tp_value))
                     if te_value is not None:
@@ -1678,11 +1680,11 @@ class PruebaMensualBraq(PruebaBasico):
 
             if tiempo_efectivo and tiempo_parada:
                 graficar_linealidad(canvas, tiempo_efectivo, tiempo_parada)
-        
+
         # Abrir la base de datos
         db = self.opeenDatabase()
         query = QSqlQuery(db)
-        
+
         if selected_chart == "Máximos de la cámara":
             graficar_maximos_camara(self.canvas, query, fecha)
         elif selected_chart == "Linealidad de la fuente":
@@ -1702,7 +1704,7 @@ class PruebaMensualBraq(PruebaBasico):
             pass  # La columna ya existe
         finally:
             conn.close()
-        
+
     # Añade widgets de tipo QLineEdit a un layout específico, con funcionalidad de carga y guardado de datos
     def addsomething(self, layout, df, prueba, nombre_tabla, uid, ref):
         """ [1] Filtra campos QLineEdit desde DataFrame
@@ -1777,7 +1779,6 @@ class PruebaMensualBraq(PruebaBasico):
 
     def generar_reporte_pdf(self):
         from models.PDF.Mensuales.reportes_mensuales import guardarPDF_mensual
-        fecha = self.date_box.date().toString("MM/yyyy")  # O el formato de fecha que uses 
+        fecha = self.date_box.date().toString("MM/yyyy")  # O el formato de fecha que uses
         print(fecha)
-        guardarPDF_mensual(self, fecha, maquina='Braquiterapia', diccionario=None)
-
+        guardarPDF_mensual(self, fecha, maquina='Braquiterapia', id_maquina=codigo_de_formato(self), diccionario=None)

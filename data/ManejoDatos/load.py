@@ -1887,7 +1887,8 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
             diccionario = obtener_diccionario_ix()
         if equipo_filtrar == "Halcyon":
             diccionario = obtener_diccionario_halcyon()
-        guardarPDF_mensual(parent, fecha, maquina, diccionario=diccionario)
+        from ui.util_formato import codigo_de_formato
+        guardarPDF_mensual(parent, fecha, maquina, id_maquina=codigo_de_formato(parent), diccionario=diccionario)
 
 
 "------------------------------------------------------------------------------------------------------------------"

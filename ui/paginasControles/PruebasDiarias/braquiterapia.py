@@ -12,6 +12,7 @@ except Exception:
 import tempfile
 import pandas as pd
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
+from ui.util_formato import codigo_de_formato
 from ui.paginasControles.PruebasMensuales.PruebasMensuales import PruebaMensualBraq
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
@@ -984,7 +985,7 @@ class PruebaDiariaBraq(PruebaBasico):
         self.btn_clean.clicked.connect(lambda _: self.clean_info(imagenes=True))
 
         self.btn_submit.clicked.connect(
-            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
+            lambda _, maquina=self.mach_name2.text(), id_maquina=codigo_de_formato(self):
                 reporte(self, fecha=self.date_box.date().toString('yyyy-MM-dd'),
                         maquina=maquina, id_maquina=id_maquina, tipo_reporte='diario',
                         diccionario=self.diccionario_invertido, umbrales="si")
@@ -2424,7 +2425,7 @@ class Linealidad(PruebaBasico):
         self.btn_add.clicked.connect(self.guardar_linealidad)
         print(self.date_box.date().toString('yyyy-MM-dd'))
         self.btn_submit.clicked.connect(
-            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
+            lambda _, maquina=self.mach_name2.text(), id_maquina=codigo_de_formato(self):
                 mostrar_db_linealidad(self))
 
         # ------------------------------ GRÁFICOS Y TABLA EDITABLE -------------------------------------------------
@@ -2926,7 +2927,7 @@ class Linealidad(PruebaBasico):
 
         fecha = self.date_box.date().toString('yyyy-MM-dd')
         maquina = self.mach_name2.text()
-        id_maquina = self.code_1.text()
+        id_maquina = codigo_de_formato(self)
         usuario = self.user_id._nombre
 
 
@@ -3623,7 +3624,7 @@ class PosicionamientoInicial(PruebaBasico):
         self.btn_clean.clicked.connect(lambda _: self.clean_info(imagenes=True))
 
         self.btn_submit.clicked.connect(
-            lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text():
+            lambda _, maquina=self.mach_name2.text(), id_maquina=codigo_de_formato(self):
                 reporte(self, fecha=self.date_box.date().toString('yyyy-MM-dd'),
                         maquina=maquina, id_maquina=id_maquina, tipo_reporte='diario',
                         diccionario=self.diccionario_invertido, umbrales="si")

@@ -108,11 +108,11 @@ CENSO_RAICES = {
         (LISTA, "mostrar_controles_mensuales, rama con equipo filtrado"),
     ("data/ManejoDatos/load.py", 1634, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama sin equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1906, "controles"):
+    ("data/ManejoDatos/load.py", 1907, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 1940, "controles"):
+    ("data/ManejoDatos/load.py", 1941, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2095, "controles"):
+    ("data/ManejoDatos/load.py", 2096, "controles"):
         (LISTA, "mostrar_controles_imgIX: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A9, PLAN_FUGA_CONEXIONES_01-09.md §9): vivía
     # aquí como ("data/ManejoDatos/load.py", 2119, "controles"), LISTA,
@@ -124,35 +124,35 @@ CENSO_RAICES = {
     # que A7). El sitio SIGUE ahí y sigue filtrando -- solo el analizador
     # de este archivo perdió visibilidad; ver test_eb5/test_le4 para la
     # entrada equivalente, movida a su lista de OPACOS en vez de borrada.
-    ("data/ManejoDatos/load.py", 2300, "controles"):
+    ("data/ManejoDatos/load.py", 2301, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2334, "controles"):
+    ("data/ManejoDatos/load.py", 2335, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2491, "controles"):
+    ("data/ManejoDatos/load.py", 2492, "controles"):
         (LISTA, "mostrar_controles_imgHC: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A10, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
     # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2515,
     # "controles"), LISTA, "mostrar_controles_imgHC: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 2691, "controles"):
+    ("data/ManejoDatos/load.py", 2692, "controles"):
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A11, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
     # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2715,
     # "controles"), LISTA, "mostrar_controles_tac: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 4541, "controles"):
+    ("data/ManejoDatos/load.py", 4542, "controles"):
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4555, "controles"):
+    ("data/ManejoDatos/load.py", 4556, "controles"):
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4618, "controles"):
+    ("data/ManejoDatos/load.py", 4619, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4628, "controles"):
+    ("data/ManejoDatos/load.py", 4629, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4841, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4842, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
 
     # -- Halcyon ---------------------------------------------------------
@@ -225,68 +225,68 @@ CENSO_RAICES = {
                     "función existe para hacer"),
 
     # -- ui/PruebasAnuales -----------------------------------------------
-    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 59, "controles"):
+    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 60, "controles"):
         (LISTA, "create_control anual: busca el control del año por "
                 "(fecha LIKE, equipo). Gemelo del mensual (load.py:296) sin "
                 "la clasificación de DA-34 -- ver DP-27"),
-    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 74, "controles"):
+    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 75, "controles"):
         (IDENTIDAD, "UPDATE de los físicos sobre el control ya localizado"),
 
     # -- ui/PruebasDiarias -----------------------------------------------
-    ("ui/paginasControles/PruebasDiarias/IX.py", 268, "aceleradorlineal_ix"):
+    ("ui/paginasControles/PruebasDiarias/IX.py", 269, "aceleradorlineal_ix"):
         (LISTA, "reporte diario del Clinac iX por fecha"),
-    ("ui/paginasControles/PruebasDiarias/IX.py", 447, "aceleradorlineal_ix"):
+    ("ui/paginasControles/PruebasDiarias/IX.py", 448, "aceleradorlineal_ix"):
         (LISTA, "serie temporal del Clinac iX por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 396, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 397, "braqui"):
         (LISTA, "reporte diario de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 870, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 871, "TipoCalibracion"):
         (LISTA, "última fuente instalada antes de una fecha dada"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1809, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1810, "braqui"):
         (LISTA, "serie temporal de actividad por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1848, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1849, "braqui"):
         (LISTA, "serie temporal de ciclos de braqui por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2071, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2072, "TipoCalibracion"):
         (LISTA, "última fecha registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2090, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2091, "TipoCalibracion"):
         (LISTA, "datos de la calibración de braquiterapia de esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2150, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2151, "TipoCalibracion"):
         (LISTA, "última fecha con tipo 'Cambio de fuente' (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2531, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2532, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2860, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2861, "LinealidadBraquiterapia"):
         (LISTA, "linealidad por fecha para el PDF -- ya filtraba (el sitio "
                 "que fijó el patrón: filtro + ORDER BY id DESC)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3370, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3371, "TipoCalibracion"):
         (LISTA, "JOIN a la calibración de una fecha para graficar máximos -- "
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3399, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3400, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3689, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3690, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4165, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4166, "braqui"):
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4204, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4205, "braqui"):
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/seiscientos.py", 186, "aceleradorlineal_600"):
+    ("ui/paginasControles/PruebasDiarias/seiscientos.py", 187, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),
 
     # -- ui/PruebasMensuales ---------------------------------------------
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 142, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 143, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1051, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1052, "TipoCalibracion"):
         (LISTA, "última calibración registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1065, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1066, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya localizada, WHERE id = ?"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1277, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1279, "TipoCalibracion"):
         (LISTA, "calibración por fecha, admitiendo los dos formatos (DP-32)"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1616, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1618, "TipoCalibracion"):
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3033"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1645, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1647, "LinealidadBraquiterapia"):
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3062"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 255, "controles"):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 256, "controles"):
         (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "
                 "Python -- un control anulado del mes prestaría sus físicos"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 543, "controles"):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 544, "controles"):
         (IDENTIDAD, "_fecha_real_del_control (F3): WHERE id = ?, fila ya elegida"),
     ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 164, "controles"):
         (IDENTIDAD, "_existe_ref: WHERE id = ? AND equipo = ? -- el id ya "

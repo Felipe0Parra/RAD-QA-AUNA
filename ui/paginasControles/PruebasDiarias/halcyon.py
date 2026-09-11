@@ -1,4 +1,5 @@
 from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
+from ui.util_formato import codigo_de_formato
 from PyQt5.QtWidgets import QVBoxLayout, QLabel, QHBoxLayout, QSplitter, QWidget, QToolBox, QLineEdit, QDateEdit
 from PyQt5.QtSql import QSqlQuery
 from PyQt5.QtCore import QDate, Qt
@@ -66,7 +67,7 @@ class PruebaDiariaHc(PruebaBasico):
             "Desviación longitudinal virtual al IsoCentro": 2,
             "Desviación vertical virtual al IsoCentro": 2
         }
-        
+
         self.diccionario_invertido = {
             "IsoCenterSize_name2": ["Tamaño del IsoCentro", 0.9],
             "IsoCenterMVOffset": ["Desviación MV del IsoCentro", 0.5],
@@ -89,7 +90,7 @@ class PruebaDiariaHc(PruebaBasico):
             "MVImagerCalibrationGain": ["Ganancia de calibración de imagen MV", ""],
             "MVImagerCalibrationUniformity": ["Uniformidad de calibración de imagen MV", ""]
         }
-        
+
     def convert_date_to_str(self):
         self.previsualizar_fecha_seleccionada()
 
@@ -136,16 +137,16 @@ class PruebaDiariaHc(PruebaBasico):
                     nuevo_valor = row['descripcion']  # Obtiene el nuevo valor
                     if pd.isna(nuevo_valor):  # Si el valor es NaN, lo sustituye
                         nuevo_valor = ""
-                    widget.setText(str(nuevo_valor))  # Actualiza el texto del QLineEdit    
-    
+                    widget.setText(str(nuevo_valor))  # Actualiza el texto del QLineEdit
+
     def iniGUI(self):
         self.main_layout = QHBoxLayout()
         archivo = 'widgets.xlsx'
-    
+
         ##ENCABEZADO
         self.mach_name2 = QLabel('HALCYON')
         self.code_1 = QLabel('HALCYON')
-        
+
         self.date_box = QDateEdit()
         self.date_box.setCalendarPopup(True)  # Muestra un calendario desplegable
         self.date_box.setDate(QDate.currentDate())  # Fecha inicial: hoy
@@ -158,24 +159,24 @@ class PruebaDiariaHc(PruebaBasico):
         self.date_box.setDisplayFormat("yyyy/MM/dd")
         self.date_box.setMinimumWidth(ancho_minimo_fecha(self.date_box))
         self.date_box.dateChanged.connect(self.convert_date_to_str)  # Conexión al método
-        
+
         #ingresar datos de encabezado
         self.general_layout.addWidget(self.date_box)
-        
+
         ## PREGUNTAS
         df, n, layouts, _ = self.setupBox(archivo, 'preguntas_hal', main = False)
-        
+
         #al usar toolbox no se pueden agregar directamente los grid, hay que meterlos en un widget
-        self.canson1 = QWidget()       
+        self.canson1 = QWidget()
         self.canson2 = QWidget()
         self.canson3 = QWidget()
         self.canson4 = QWidget()
         self.canson5 = QWidget()
 
         toolbox= QToolBox()
-        
+
         i = 1
-        for layout in layouts: 
+        for layout in layouts:
             name = f'canson{i}'
             getattr(self, name).setLayout(layout)
             i+=1
@@ -189,37 +190,37 @@ class PruebaDiariaHc(PruebaBasico):
         self.general_layout.addWidget(toolbox)
 
         #BOTONES
-        
+
         _ = self.setupBox(archivo, 'btn')
         self.btn_add.setText('Agregar')
         #self.btn_delete.setEnabled(False)
-        
+
         ## GRAFICOS
         # tabla
         self.createTable(df)
-        
+
         # Crear zona de graficas
-        
+
         menu_graficas = ['Seleccione...', 'Isocentro', 'Haz', 'Gantry', 'Camilla', 'Detector de imagen MV']
-        
+
         grafico1 = [
             'Seleccione...',
             "Tamaño del IsoCentro",
             "Desviación MV del IsoCentro",
             "Desviación KV del IsoCentro"]
-        
+
         grafico2 = [
             'Seleccione...',
             "Cambio en la salida del haz",
             "Cambio en la uniformidad del haz",
             "Cambio en la ganancia de MU1 del haz",
             "Cambio en la ganancia de MU2 del haz"]
-        
+
         gradico3 =[
             'Seleccione...',
             "Posición absoluta del gantry",
             "Posición relativa del gantry"]
-        
+
         grafico4 = [
             'Seleccione...',
             "Posición lateral de la mesa",
@@ -231,7 +232,7 @@ class PruebaDiariaHc(PruebaBasico):
             "Desviación lateral virtual al IsoCentro",
             "Desviación longitudinal virtual al IsoCentro",
             "Desviación vertical virtual al IsoCentro"]
-        
+
         grafico5 = [
             'Seleccione...',
             "Ganancia de calibración de imagen MV",
@@ -239,47 +240,47 @@ class PruebaDiariaHc(PruebaBasico):
         ]
 
         graficos = [grafico1, grafico2, gradico3, grafico4, grafico5]
-            
+
         date_limit, self.canvas, self.menu_graficar, self.graficar = self.plotterSpaceEX(menu_graficas, graficos)
         self.edit_table_tools = self.createTable(df=df, headers=None)
         caja_menu_graficas = QHBoxLayout()
         caja_menu_graficas.addWidget(self.menu_graficar)
-        for grafica in self.graficar: 
+        for grafica in self.graficar:
             caja_menu_graficas.addWidget(grafica)
-        
+
         self.settfigure = QHBoxLayout()
         self.settfigure.addLayout(caja_menu_graficas)
-        
+
         # Design Our Layout
         self.col2 = QVBoxLayout()
-        
+
         self.col2.addLayout(self.settfigure)
         self.col2.addLayout(date_limit)
         self.col2.addWidget(self.canvas)
-        
+
         self.col2_1 = QVBoxLayout()
         self.col2_1.addWidget(self.table)
-        
+
         self.wf2 = QSplitter(Qt.Vertical)
-        
+
         self.widgetgrafica = QWidget()
         self.widgetgrafica.setLayout(self.col2)
-        
+
         self.widgettabla = QWidget()
         self.widgettabla.setLayout(self.col2_1)
-        
+
         self.wf2.addWidget(self.widgetgrafica)
         self.wf2.addWidget(self.widgettabla)
-        
+
         self.wf = QWidget()
         self.wf.setLayout(self.general_layout)
-        
+
         self.splitter_principal = QSplitter(Qt.Horizontal)
         self.splitter_principal.addWidget(self.wf)
         self.splitter_principal.addWidget(self.wf2)
-        
+
         self.main_layout.addWidget(self.splitter_principal)
-        
+
         #self.general_layout.removeWidget(self.btn_add)
         #self.btn_add.deleteLater()  # Opcional para liberar memoria
         self.col2_1.addLayout(self.edit_table_tools)
@@ -288,26 +289,26 @@ class PruebaDiariaHc(PruebaBasico):
     def plotter(self, menu):
         self.figure.clear()
         ax = self.figure.add_subplot(111)
-        
+
         db = self.opeenDatabase()
         selected_chart = menu.currentText()  # QComboBox con tipos de gráfica
         if selected_chart == "Seleccione...":
             return
-        
+
         start_date = self.limit1.date().toString('yyyy-MM-dd')
         end_date = self.limit2.date().toString('yyyy-MM-dd')
-        
+
         selected_column1 = self.graficos_mapeo1.get(selected_chart, None)
         limite = self.valores_limite.get(selected_chart, None)
-        
+
         if selected_column1:
             query = QSqlQuery(db)
-            graficarvstiempo(self, query, ax, 'halcyon', selected_column1, selected_chart, start_date, end_date, False, limite)    
+            graficarvstiempo(self, query, ax, 'halcyon', selected_column1, selected_chart, start_date, end_date, False, limite)
         # Redibuja en el canvas
         self.canvas.draw()
-        
+
         db.close()
-    
+
     def button_click(self):
         #falta btn_clean
         #falta btn_delete (no se en que utilzarlo)
@@ -325,18 +326,18 @@ class PruebaDiariaHc(PruebaBasico):
 
         if self.btn_submit.clicked:
             self.btn_submit.clicked.connect(
-                lambda _, maquina=self.mach_name2.text(), id_maquina=self.code_1.text(): 
-                    reporte(self, fecha = self.date_box.date().toString('yyyy-MM-dd'), 
-                            maquina = maquina, id_maquina=id_maquina, tipo_reporte='diario', 
+                lambda _, maquina=self.mach_name2.text(), id_maquina=codigo_de_formato(self):
+                    reporte(self, fecha = self.date_box.date().toString('yyyy-MM-dd'),
+                            maquina = maquina, id_maquina=id_maquina, tipo_reporte='diario',
                             diccionario=self.diccionario_invertido, umbrales= "si")
             )
-        
+
         self.menu_graficar.currentIndexChanged.connect(self.mostrar_submenu)
         self.btn_delete.clicked.connect(lambda _, maquina='halcyon': self.verificar_eliminar(maquina, [self.boolean_columns, self.ganancia_cal]))
 
         for grafica in self.graficar:
             grafica.currentIndexChanged.connect(lambda _, grafica = grafica: self.plotter(grafica))
-            self.btn_submit.clicked.connect(lambda _, grafica = grafica: self.plotter(grafica)) 
+            self.btn_submit.clicked.connect(lambda _, grafica = grafica: self.plotter(grafica))
             self.limit1.dateChanged.connect(lambda _, grafica = grafica: self.plotter(grafica))
             self.limit2.dateChanged.connect(lambda _, grafica = grafica: self.plotter(grafica))
 
@@ -357,13 +358,13 @@ class PruebaDiariaHc(PruebaBasico):
             "El registro diario del Halcyon se carga automáticamente desde "
             "los archivos MPC y no se edita manualmente.")
 
-        
+
     def mostrar_submenu(self):
-        
+
         for grafica in self.graficar:
             grafica.hide()
             grafica.setCurrentIndex(0)
         selection = self.menu_graficar.currentIndex()
-        
+
         if selection > 0 and selection <= len(self.graficar):
             self.graficar[selection-1].show()
