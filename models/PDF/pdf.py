@@ -348,8 +348,12 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
 
         filas_resumen = [
             ['Análisis de la placa', ''],
-            ['Promedio [mm]', _celda_resumen(promedio_val)],
-            ['Desviación estándar [mm]', _celda_resumen(desviacion_val)],
+            # C.5 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §4): decir de qué
+            # es el promedio -- el paréntesis aquí es una aclaración, no
+            # una unidad, así que se conserva y el corchete sigue siendo
+            # la unidad.
+            ['Promedio (distancia entre líneas) [mm]', _celda_resumen(promedio_val)],
+            ['Desviación estándar (distancia entre líneas) [mm]', _celda_resumen(desviacion_val)],
         ]
         tabla_resumen = Table(filas_resumen, colWidths=[225, 225])
         tabla_resumen.setStyle(TableStyle([

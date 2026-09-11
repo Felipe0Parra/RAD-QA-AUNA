@@ -416,9 +416,11 @@ class TestR6PlacaBraquiTablaAparte:
         texto, _ = _capturar_pdf(monkeypatch, "2026-03-02", "Gammamed Plus i X",
                                   DICC_BRAQUI, "si")
         assert "Análisis de la placa" in texto
-        assert "Promedio [mm]" in texto
+        # C.5 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §4): dice de qué es el
+        # promedio -- "Promedio [mm]" a secas ya no aparece.
+        assert "Promedio (distancia entre líneas) [mm]" in texto
         assert "9.99" in texto
-        assert "Desviación estándar [mm]" in texto
+        assert "Desviación estándar (distancia entre líneas) [mm]" in texto
         assert "0.06" in texto
 
     def test_caso_pelicula_sin_analisis_muestra_no_aplica_en_las_dos_filas(
