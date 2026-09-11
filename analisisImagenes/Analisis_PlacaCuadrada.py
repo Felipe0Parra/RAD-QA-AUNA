@@ -114,7 +114,7 @@ def perfil_promediado_horizontal(imagen, fila_inicio, fila_fin):
                                     Estudio General de los perfiles
     ======================================================================================="""
 def analizar_franja(imagen_proc, imagen_path, ini_f, fin_f, cm_por_pixel, cruz, centro_teorico,
-                    arriba_izq, arriba_der, abajo_izq, abajo_der, 
+                    arriba_izq, arriba_der, abajo_izq, abajo_der,
                     arriba_izqg, arriba_derg, abajo_izqg, abajo_derg,
                     medio_izq=None, medio_der=None, medio_arr=None, medio_aba=None, mostrar=False, canvas = None):
 
@@ -204,7 +204,7 @@ def analizar_franja(imagen_proc, imagen_path, ini_f, fin_f, cm_por_pixel, cruz, 
         "vertical": ancho_media_v
     },
     "excesos": resultados[-4:] if len(resultados) >= 11 else resultados[-2:]
-    }   
+    }
 
 def grafica_3perfiles(imagen_proc, resultados, esquinas, cm_por_pixel, canvas=None):
     try:
@@ -301,7 +301,7 @@ def verificar_cuadro_derecho(arriba_izq, arriba_der, abajo_izq, abajo_der, toler
     import numpy as np
 
     #print(f"{':' * 108}")
-    
+
     def angulo_entre(v1, v2):
         v1 = np.array(v1)
         v2 = np.array(v2)
@@ -409,7 +409,7 @@ def verificar_cuadro_derecho(arriba_izq, arriba_der, abajo_izq, abajo_der, toler
 
 def corregir_cuadro_a_recto_mm(esquinas_dict, cm_por_pixel=10):
     import numpy as np
-    
+
     arriba_izq = esquinas_dict["arriba_izq"]
     arriba_der = esquinas_dict["arriba_der"]
     abajo_izq  = esquinas_dict["abajo_izq"]
@@ -459,7 +459,7 @@ def corregir_cuadro_a_recto_mm(esquinas_dict, cm_por_pixel=10):
         "arriba_der": arriba_der_n,
         "abajo_izq":  abajo_izq_n,
         "abajo_der":  abajo_der_n
-    }, centro_correccion, ancho_prom * mm_por_pixel, alto_prom * mm_por_pixel, correcciones_mm 
+    }, centro_correccion, ancho_prom * mm_por_pixel, alto_prom * mm_por_pixel, correcciones_mm
 
 def comparar_campo_ideal(ancho_mm, alto_mm, campo_nominal_mm=100):
     mitad = campo_nominal_mm / 2
@@ -568,7 +568,7 @@ def grafica_correciones(imagen_proc, esquinas, esquinas_corregidas, esquinas_ide
 
 def aplicar_excesos(esquinas, resultados, cm_por_pixel):
     import numpy as np
-    
+
     def mm_a_px(mm): return mm / (cm_por_pixel * 10)
     cruce_izq = resultados[0]["cruces_media_h"][0]
     cruce_der = resultados[2]["cruces_media_h"][-1]
@@ -594,7 +594,7 @@ def aplicar_excesos(esquinas, resultados, cm_por_pixel):
 
         # Derecha:
     ajuste_der_ar = cruce_der - mm_a_px(ex_der_ar) #if ex_der_ar >= 0 else cruce_der + mm_a_px(ex_der_ar)
-    ajuste_der_ab = cruce_der - mm_a_px(ex_der_ab) #if ex_der_ab >= 0 else cruce_der + mm_a_px(ex_der_ab) 
+    ajuste_der_ab = cruce_der - mm_a_px(ex_der_ab) #if ex_der_ab >= 0 else cruce_der + mm_a_px(ex_der_ab)
 
         # Arriba:
     ajuste_ar_izq = cruce_arr - mm_a_px(-ex_ar_izq) #if ex_ar_izq >= 0 else cruce_arr + mm_a_px(ex_ar_izq)
@@ -604,7 +604,7 @@ def aplicar_excesos(esquinas, resultados, cm_por_pixel):
     ajuste_ab_izq = cruce_aba - mm_a_px(ex_ab_izq) #if ex_ab_izq >= 0 else cruce_aba + mm_a_px(ex_ab_izq)
     ajuste_ab_der = cruce_aba - mm_a_px(ex_ab_der) #if ex_ab_der >= 0 else cruce_aba + mm_a_px(ex_ab_der)
 
-    
+
     # Aplicar excesos (según dirección y convención de signo)
     return {
         "arriba_izq": (
@@ -625,7 +625,7 @@ def aplicar_excesos(esquinas, resultados, cm_por_pixel):
         ),
     }
 
-def placa_corregida(imagen_proc, cm_por_pixel=None, resultados=None, mostrar=False, esquinas=None, canvas = None, campo_nominal_mm=100): 
+def placa_corregida(imagen_proc, cm_por_pixel=None, resultados=None, mostrar=False, esquinas=None, canvas = None, campo_nominal_mm=100):
     #print("\n                                   Simetría de los puntos de referencia")
     verificacion_inicial  = verificar_cuadro_derecho(*extraer_esquinas(esquinas), cm_por_pixel=cm_por_pixel)
 
@@ -640,7 +640,7 @@ def placa_corregida(imagen_proc, cm_por_pixel=None, resultados=None, mostrar=Fal
     #print("\n                               Simetría de los puntos corregidos (con angulos)")
     verificacion_ideal  = verificar_cuadro_derecho(*extraer_esquinas(esquinas_ideal), cm_por_pixel=cm_por_pixel)
     esquinas_ideal, centro_corr, ancho_mm, alto_mm, correcciones_mm = corregir_cuadro_a_recto_mm(esquinas_corregidas, cm_por_pixel=cm_por_pixel)
-    
+
     excesos_ideal = comparar_campo_ideal(ancho_mm, alto_mm, campo_nominal_mm)
 
     if mostrar or canvas is not None:
@@ -655,17 +655,17 @@ def placa_corregida(imagen_proc, cm_por_pixel=None, resultados=None, mostrar=Fal
     "esquinas_corregidas": esquinas_corregidas,
     "esquinas_ideal": esquinas_ideal,
     "correcciones":correcciones_mm
-    }  
+    }
 
 def analizar_cuadrado2(imagen_path, filtro=None, mostrar=True, canvas=None):
     import cv2
     import numpy as np
-    
+
     img = cv2.imread(imagen_path)
     cm_por_pixel = metadata(imagen_path)
     dpi = int(round(2.54 / cm_por_pixel, 1))
     escala = {200: 1, 300: 1.5, 599:3, 600: 3}.get(dpi, 1)
-    
+
     cruz, esquinas, centro_teorico, lado_arriba, lado_izquierda = detectar_contornos(img, area_min=10, cm_por_pixel=cm_por_pixel)
     imagen_proc = preprocesar_imagen(img, filtro=filtro)
     campo_nominal_mm = round((lado_arriba * cm_por_pixel * 10) / 5) * 5
@@ -681,7 +681,7 @@ def analizar_cuadrado2(imagen_path, filtro=None, mostrar=True, canvas=None):
     medio_izq = ((arriba_izq[0] + abajo_izq[0])  / 2, (arriba_izq[1] + abajo_izq [1]) / 2)
     medio_der = ((arriba_der[0] + abajo_der[0])  / 2, (arriba_der[1] + abajo_der [1]) / 2)
 
-    
+
     franjas = [
         {"ini": int(y_top + 0.05 * alto_px), "fin": int(y_top + 0.15 * alto_px),
         "arriba_izq": arriba_izq, "arriba_der": arriba_der,
@@ -715,14 +715,14 @@ def analizar_cuadrado2(imagen_path, filtro=None, mostrar=True, canvas=None):
         )
         resultados.append(resultado)
 
-    
-    if mostrar or (canvas is not None): 
+
+    if mostrar or (canvas is not None):
         grafica_3perfiles(imagen_proc, resultados, esquinas, cm_por_pixel, canvas=canvas)
 
 
     analisis_placa = placa_corregida(imagen_proc, cm_por_pixel = cm_por_pixel, resultados=resultados,
                     mostrar=mostrar, esquinas=esquinas, canvas=canvas, campo_nominal_mm=campo_nominal_mm)
-    
+
 
     graficas = []
 
@@ -757,7 +757,7 @@ def analizar_cuadrado2(imagen_path, filtro=None, mostrar=True, canvas=None):
         )
 
         # Captura explícita de `args` en el entorno de la lambda
-        graficas.append((lambda args_capturados=args: 
+        graficas.append((lambda args_capturados=args:
                         lambda c: analizar_franja(**args_capturados, canvas=c))())
 
 
@@ -787,7 +787,14 @@ def generar_reporte_completo(resultados_dict):
 
     def html_doble_columna(ancho_h, pen_izq_h, pen_der_h, ancho_v, pen_izq_v, pen_der_v, conversion):
         def format_val(valor):
-            return "{:.3f} mm".format(valor * conversion) if valor and abs(valor) > 1e-4 else "No cumple"
+            # C.6 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §4, SS0.7): `valor`
+            # es None cuando `calcular_penumbras` no pudo medir por ese
+            # lado -- un hecho de la placa, no un incumplimiento. La
+            # guarda vieja (`valor and abs(valor) > 1e-4`) tambien
+            # mandaba un 0.0 legitimo a "No cumple".
+            if valor is None:
+                return "No medible"
+            return "{:.3f} mm".format(valor * conversion)
 
         return f"""
         <table style="width:100%; margin-bottom:1px; border-spacing:0; table-layout:fixed; font-family:Arial, sans-serif;">
@@ -917,13 +924,13 @@ def generar_reporte_completo(resultados_dict):
     <tr>
     <td style='vertical-align:top; width:50%; font-family:Arial, sans-serif;border-left:10px'>
     <b>Cuadro Inicial (marcado en la placa)</b><br>
-    """ + 
+    """ +
     "<b>Dimensiones</b>" +
     diccionario_a_tabla(verificacion["verificacion_inicial"]["lados_mm"]) +
     "<b>Desviaciones</b>" +
     diccionario_a_tabla(verificacion["verificacion_inicial"]["alineacion_mm"]) +
     "<b>Alineación</b>" +
-    estado_legible(verificacion["verificacion_inicial"]["estado"]) + 
+    estado_legible(verificacion["verificacion_inicial"]["estado"]) +
     "<b>Correcciones a los vértices:</b>" +
     diccionario_a_tabla(verificacion["correcciones"]) +"""
     </td>
@@ -965,6 +972,3 @@ if __name__ == "__main__":
         filtro=None,       # Puede ser "gauss", "mediana", "blur", o None
         mostrar=False      # Mostrar gráficas con matplotlib
     )
-
-
-
