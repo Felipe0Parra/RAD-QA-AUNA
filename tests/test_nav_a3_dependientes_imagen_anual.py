@@ -34,8 +34,12 @@ def app():
 
 @pytest.fixture(autouse=True)
 def _sin_dialogos(monkeypatch):
-    for tipo in ("information", "warning", "critical", "question"):
+    """A.4: `_cerrar_control` pide confirmación con `.question` -- por
+    defecto confirma (Yes), Trampa 2 (mockear o la suite cuelga)."""
+    for tipo in ("information", "warning", "critical"):
         monkeypatch.setattr(QMessageBox, tipo, staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(QMessageBox, "question",
+                         staticmethod(lambda *a, **k: QMessageBox.Yes))
 
 
 @pytest.fixture

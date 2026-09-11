@@ -247,6 +247,16 @@ class Menuu(QWidget):
             self.maquina == "Braquiterapia" and clave == "mensual"
         ):
             return
+        # A.4: cerrar destruye el formulario en pantalla -- lo ya subido
+        # está a salvo, pero lo tecleado y no subido se pierde. Un clic de
+        # más, justo encima de "Inicio", no debe costar un formulario.
+        # Sin símbolos (DA-18).
+        respuesta = QMessageBox.question(
+            self, "Cerrar control",
+            f"¿Cerrar el control {clave} actual? Lo que no se haya subido se perderá.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if respuesta != QMessageBox.Yes:
+            return
         for dependiente in DEPENDIENTES.get(clave, ()):
             self._descartar_pagina(dependiente)
         self._descartar_pagina(clave)

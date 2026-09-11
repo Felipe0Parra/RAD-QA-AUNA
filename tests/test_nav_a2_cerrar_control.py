@@ -46,8 +46,14 @@ def app():
 
 @pytest.fixture(autouse=True)
 def _sin_dialogos_modales(monkeypatch):
-    for tipo in ("information", "warning", "critical", "question"):
+    """A.4: `_cerrar_control` ahora pide confirmación con `.question` --
+    sin mockearla, cualquier test que llegue ahí cuelga bajo offscreen
+    (Trampa 2). Por defecto confirma (Yes); los tests de A.4 que prueban
+    "cancelar" la sobreescriben con otra respuesta."""
+    for tipo in ("information", "warning", "critical"):
         monkeypatch.setattr(QMessageBox, tipo, staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(QMessageBox, "question",
+                         staticmethod(lambda *a, **k: QMessageBox.Yes))
 
 
 @pytest.fixture
