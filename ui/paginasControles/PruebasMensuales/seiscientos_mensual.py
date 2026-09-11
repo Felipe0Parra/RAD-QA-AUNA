@@ -568,8 +568,6 @@ class PruebaMensual600(PruebaBasico):
         La función configura la estructura usando QVBoxLayout y QSplitter,
         permitiendo que ambas columnas sean redimensionables y mantengan proporciones iguales.
         """
-        btn_volver = QPushButton('← Volver')
-        btn_volver.clicked.connect(lambda: self._volver_a_preINIGI(inputs_maquina))
         # Crear layout vertical principal donde se colocará todo el contenido
         #self.main_layout = QVBoxLayout(self)
         #self.main_layout = self.main_layout.layout()
@@ -633,7 +631,6 @@ class PruebaMensual600(PruebaBasico):
 
         # Agregar el splitter al layout principal de la ventana
         self.main_layout.addWidget(splitter)
-        #self.main_layout.addWidget(btn_volver)
         # Agregar botón de finalizar al layout principal
 
 
