@@ -23,6 +23,15 @@ from services.audit_minimo import usuario_actual as _usuario_actual
 from data.ManejoDatos.conection import Conexion, checkpoint_wal
 from services.respaldo import respaldar_bd
 
+# A.2 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): claves de pagina que
+# "Cerrar control" puede descartar y recrear. El mensual de BRAQUITERAPIA
+# queda FUERA por decision del fisico (10-09): esa pantalla ya navega por
+# fecha (braq_mensual.py:124) y no tiene boton "Iniciar", asi que no hay
+# ningun control que "cerrar". Excluirla saca del alcance, ademas, el
+# acoplamiento de `posicionamiento` (SS0.5a) -- el mas delicado de los dos.
+CLAVES_CERRABLES = ("mensual", "anual", "imagen_mensual", "imagen_anual")
+
+
 class Menuu(QWidget):
     finished = pyqtSignal()
     def __init__(self, maquina, user_id):
@@ -98,6 +107,11 @@ class Menuu(QWidget):
             self.pm_img_btn = QPushButton("Imágenes\nMensual")
             self.pa_img_btn = QPushButton("Imágenes\nAnual")
         self.back_button = QPushButton('Inicio')
+        # A.2 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): boton nuevo, justo
+        # ENCIMA de "Inicio" -- la posicion que pidio el fisico. A diferencia
+        # de "Inicio" (que cierra la sesion, DA no-2/SS0.2), este vuelve a la
+        # pantalla de seleccion sin reautenticarse.
+        self.cerrar_ctrl_btn = QPushButton('Cerrar control')
 
         top_buttons_layout.addWidget(self.pm_btn)
         if self.maquina != "Braquiterapia":
@@ -124,6 +138,7 @@ class Menuu(QWidget):
 
             top_buttons_layout.addWidget(self.cf_btn)
 
+        top_buttons_layout.addWidget(self.cerrar_ctrl_btn)
         top_buttons_layout.addWidget(self.back_button)
 
         menu_layout.addLayout(top_buttons_layout)
@@ -133,6 +148,7 @@ class Menuu(QWidget):
 
         # Estructura para almacenar referencias diferidas de cada vista
         self._paginas = {}
+        self._clave_actual = None
 
         # Conectamos los botones para cargar cada sección solo cuando el usuario la solicita
         if self.maquina != "Tomógrafo":
@@ -150,6 +166,7 @@ class Menuu(QWidget):
 
         # Conectar botones
         self.back_button.clicked.connect(self.entrada)
+        self.cerrar_ctrl_btn.clicked.connect(self._cerrar_control)
 
         self.menu_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.pages_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -183,6 +200,42 @@ class Menuu(QWidget):
         widget = self._obtener_pagina(clave)
         if widget is not None:
             self.pages_widget.setCurrentWidget(widget)
+            self._clave_actual = clave
+            self._actualizar_estado_boton_cerrar()
+
+    def _actualizar_estado_boton_cerrar(self):
+        """A.2: "Cerrar control" solo tiene sentido sobre una pagina
+        cerrable -- sobre una diaria, o el mensual de braquiterapia (que
+        navega por fecha, SS0.2/A.2), no hay ningun estado que descartar."""
+        cerrable = self._clave_actual in CLAVES_CERRABLES and not (
+            self.maquina == "Braquiterapia" and self._clave_actual == "mensual"
+        )
+        self.cerrar_ctrl_btn.setEnabled(cerrable)
+
+    def _descartar_pagina(self, clave):
+        """Saca la pagina del cache y del QStackedWidget. `deleteLater()`
+        no destruye en el acto (SS2, [medido]): basta con que salga del
+        cache y del contenedor -- la proxima `_obtener_pagina(clave)`
+        construira una instancia nueva por el mismo camino de siempre."""
+        widget = self._paginas.pop(clave, None)
+        if widget is None:
+            return
+        self.pages_widget.removeWidget(widget)
+        widget.setParent(None)
+        widget.deleteLater()
+
+    def _cerrar_control(self):
+        """A.2 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): descarta la pagina
+        visible y la recrea -- el mismo camino que un arranque normal de la
+        app (_crear_pagina), nunca una reconstruccion en sitio (evita
+        DP-54). A diferencia de "Inicio", NO cierra sesion."""
+        clave = self._clave_actual
+        if clave not in CLAVES_CERRABLES or (
+            self.maquina == "Braquiterapia" and clave == "mensual"
+        ):
+            return
+        self._descartar_pagina(clave)
+        self._mostrar_pagina(clave)
 
     def _obtener_pagina(self, clave):
         """Devuelve la vista asociada a la clave, utilizando carga diferida."""
