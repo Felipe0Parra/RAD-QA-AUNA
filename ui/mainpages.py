@@ -31,6 +31,15 @@ from services.respaldo import respaldar_bd
 # acoplamiento de `posicionamiento` (SS0.5a) -- el mas delicado de los dos.
 CLAVES_CERRABLES = ("mensual", "anual", "imagen_mensual", "imagen_anual")
 
+# A.3 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): paginas que se construyen
+# A PARTIR de otra -- si la de la izquierda se cierra, las de la derecha
+# dejan de ser validas y tambien se descartan. El QStackedWidget reparenta
+# lo que se le agrega, asi que una pagina dependiente NO muere con su
+# dueno con solo cerrar este ultimo -- hay que sacarla explicitamente.
+DEPENDIENTES = {
+    "anual": ("imagen_anual",),  # mainpages.py:376/388, copia su `ref`
+}
+
 
 class Menuu(QWidget):
     finished = pyqtSignal()
@@ -228,13 +237,28 @@ class Menuu(QWidget):
         """A.2 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): descarta la pagina
         visible y la recrea -- el mismo camino que un arranque normal de la
         app (_crear_pagina), nunca una reconstruccion en sitio (evita
-        DP-54). A diferencia de "Inicio", NO cierra sesion."""
+        DP-54). A diferencia de "Inicio", NO cierra sesion.
+
+        A.3: cerrar tambien invalida lo que se construyo A PARTIR de la
+        pagina cerrada (DEPENDIENTES) -- si no, "Imagenes Anual" seguiria
+        escribiendo contra el `ref` de un control ya destruido."""
         clave = self._clave_actual
         if clave not in CLAVES_CERRABLES or (
             self.maquina == "Braquiterapia" and clave == "mensual"
         ):
             return
+        for dependiente in DEPENDIENTES.get(clave, ()):
+            self._descartar_pagina(dependiente)
         self._descartar_pagina(clave)
+        if clave == "anual":
+            # Las referencias que "imagen_anual" usa para copiar el `ref`
+            # (mainpages.py:376/388) tienen que dejar de apuntar a la
+            # instancia recien destruida -- si no, la PROXIMA vez que se
+            # pida "imagen_anual" (ya sin pasar por DEPENDIENTES, porque
+            # para entonces ya no esta en _paginas) resolveria contra un
+            # objeto muerto en vez de contra el anual nuevo.
+            self._pagina_anual_ix = None
+            self._pagina_anual_hc = None
         self._mostrar_pagina(clave)
 
     def _obtener_pagina(self, clave):
