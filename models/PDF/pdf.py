@@ -271,6 +271,27 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
         Y_FIRMA_NOMBRE = 25
         Y_FIRMA_CARGO = 50
 
+    # C.3 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md §4): el bloque de firma se
+    # dibujaba UNA sola vez, al final -- por construcción caía solo en la
+    # última página. Se extrae a una función y se llama antes de CADA
+    # showPage(), además de al final. Gateada a `es_diario_qc`: la rama
+    # `else` (calculadora de dosis, R5) queda intacta -- solo dibuja al
+    # final, como siempre -- porque la compuerta de esta tarea es cero
+    # bytes de diferencia en el PDF de la calculadora.
+    def _dibujar_firma_en_pagina_actual():
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(1)
+        c.line(100, Y_FIRMA_LINEA, 300, Y_FIRMA_LINEA)
+        if firma:
+            try:
+                c.drawImage(firma, 100, Y_FIRMA_IMG_BASE, width=150, height=Y_FIRMA_IMG_ALTO, mask='auto')
+            except:
+                print("No se pudo cargar la firma, revisa la ruta.")
+        c.setFont("Helvetica", 12)
+        c.drawString(100, Y_FIRMA_NOMBRE, user)
+        c.setFont("Helvetica", 12)
+        c.drawString(100, Y_FIRMA_CARGO, role)
+
     # 🔹 Manejo de paginación de la tabla
     x_start, y_start = 81, height - 245  # Posición inicial
     available_height = y_start - ALTO_BLOQUE_FIRMA  # Espacio disponible en la primera página
@@ -279,6 +300,8 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
 
     for i, part in enumerate(parts):
         if i > 0:  # Si no es la primera página, agrega una nueva
+            if es_diario_qc:
+                _dibujar_firma_en_pagina_actual()
             c.showPage()
             y_start = height - 50  # Reinicia la posición en la nueva página
 
@@ -334,6 +357,8 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
 
         # ¿Cabe antes de la franja de la firma en la página actual?
         if y_cursor - alto_bloque_r6 < ALTO_BLOQUE_FIRMA:
+            if es_diario_qc:
+                _dibujar_firma_en_pagina_actual()
             c.showPage()
             y_start = height - 50
             y_cursor = y_start
@@ -363,23 +388,10 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
                     "Imagen no disponible (formato no reconocido)")
             y_cursor = y_recuadro
 
-    #linea de firma
-    c.setStrokeColor(colors.black)
-    c.setLineWidth(1)
-    c.line(100, Y_FIRMA_LINEA, 300, Y_FIRMA_LINEA)
-
-    if firma:
-        try:
-            c.drawImage(firma, 100, Y_FIRMA_IMG_BASE, width=150, height=Y_FIRMA_IMG_ALTO, mask='auto')
-        except:
-            print("No se pudo cargar la firma, revisa la ruta.")
-
-    # 🔹 Agregar texto de firma
-    c.setFont("Helvetica", 12)
-    c.drawString(100, Y_FIRMA_NOMBRE, user)
-
-    c.setFont("Helvetica", 12)
-    c.drawString(100, Y_FIRMA_CARGO, role)
+    # Firma de la última página (siempre, en las dos ramas -- comportamiento
+    # original sin cambios para la calculadora; C.3 añadió las llamadas de
+    # arriba para que además aparezca en cada página anterior del diario).
+    _dibujar_firma_en_pagina_actual()
 
     c.save()
     #print(f"PDF guardado como {nombre_pdf}")
