@@ -29,6 +29,17 @@ from services.fechas_control import mes_anio_de_fecha
 
 MESES_VENTANA_EDICION = 2
 
+# R.5 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md §6, 11-09-2026): la ventana de 2
+# meses queda DESACTIVADA por decisión del físico -- un control mensual
+# admite "Subir" sin límite de tiempo. `motivo_bloqueo` ya no evalúa la
+# parte temporal (ver ahí abajo); todo lo de aquí arriba/abajo que la
+# calculaba (`MESES_VENTANA_EDICION`, `limite_edicion`,
+# `fecha_ancla_de_control`, la rama de `mensaje_bloqueo_edicion` que
+# redacta el aviso de vencimiento) NO se borra -- queda como el mecanismo
+# completo por si se decide reactivar, mismo criterio que bandit comentado
+# en `.pre-commit-config.yaml` (DP-85): se explica por qué sigue ahí, no se
+# hace desaparecer en silencio.
+
 
 def _ultimo_dia_del_mes(mes, anio):
     return date(anio, mes, calendar.monthrange(anio, mes)[1])
@@ -123,7 +134,9 @@ def _motivo_estructural(control_id):
 
 def motivo_bloqueo(control_id, hoy=None):
     """Por qué `control_id` no admite edición ahora mismo, o None si sí la
-    admite: "inexistente" | "anulado" | "fuera_de_ventana" | None.
+    admite: "inexistente" | "anulado" | None -- "fuera_de_ventana" YA NO SE
+    DEVUELVE (R.5, 11-09-2026: la ventana de 2 meses se desactivó por
+    decisión del físico).
 
     Hasta LR7 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR7, [[DA-49]]) los dos
     puntos de "Subir" distinguían el motivo para ofrecer reactivar solo
@@ -131,17 +144,14 @@ def motivo_bloqueo(control_id, hoy=None):
     DA-34) -- retirado. La distinción sigue viva porque
     `mensaje_bloqueo_edicion` todavía redacta un aviso distinto para cada
     motivo (más informativo para el físico), no porque abra ninguna acción.
+
+    `hoy` se conserva en la firma (aunque ya no se use aquí) para no romper
+    a quien todavía llame con ese argumento -- ver W1: lo único que sigue
+    bloqueando es que el control no exista o esté anulado.
     """
     if not control_id:
         return None
-    motivo = _motivo_estructural(control_id)
-    if motivo is not None:
-        return motivo
-    ancla, _ = fecha_ancla_de_control(control_id)
-    if ancla is None:
-        return None
-    hoy = hoy or date.today()
-    return None if hoy <= limite_edicion(ancla) else "fuera_de_ventana"
+    return _motivo_estructural(control_id)
 
 
 def puede_editarse(control_id, hoy=None):

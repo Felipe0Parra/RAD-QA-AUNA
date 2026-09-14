@@ -112,19 +112,21 @@ def _filas_dosimetria(ruta_db, ref):
 
 class TestGateSubirLineasMensuales600:
 
-    def test_fuera_de_ventana_bloquea_y_no_escribe(self, app, bd_temporal, monkeypatch):
+    def test_fecha_antigua_ya_no_bloquea_escribe_normalmente(self, app, bd_temporal, monkeypatch):
+        """R.5 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md §6, 11-09-2026): la
+        ventana de 2 meses se desactivó por decisión del físico -- un
+        control anclado en enero (muy fuera de la vieja ventana) ya no
+        bloquea "Subir"; escribe normal, sin aviso."""
         control_id = _crear_control_con_ancla(bd_temporal, "2026-01-05 10:00:00")
-        avisos = []
         monkeypatch.setattr(load_mod.QMessageBox, "warning",
-                             staticmethod(lambda *a, **k: avisos.append(a[2] if len(a) > 2 else k.get("text"))))
+                             staticmethod(lambda *a, **k: (_ for _ in ()).throw(
+                                 AssertionError("no debía bloquear -- R.5 desactivó la ventana"))))
 
         obj = _pelado_600()
         obj.ln_dosis_ref_cgy_um_6mv.setText("0.993")
         subirlineasmensuales(obj, "dosimetriaMen", 0, ref=control_id, usarid=False)
 
-        assert len(avisos) == 1
-        assert "2 meses" in avisos[0]
-        assert _filas_dosimetria(bd_temporal, control_id) == 0
+        assert _filas_dosimetria(bd_temporal, control_id) == 1
 
     def test_dentro_de_ventana_permite_escribir(self, app, bd_temporal, monkeypatch):
         # F0: ancla RELATIVA a hoy, no un literal -- un literal caduca sin
@@ -159,15 +161,53 @@ class TestGateSubirLineasMensuales600:
 
 class TestGateSubirLineasMensualesIX:
 
-    def test_fuera_de_ventana_bloquea_y_no_escribe(self, app, bd_temporal, monkeypatch):
+    def test_fecha_antigua_ya_no_bloquea_escribe_normalmente(self, app, bd_temporal, monkeypatch):
+        """R.5: mismo cambio que en 600 -- ver el test gemelo arriba.
+
+        Trampa 2: `subirlineasmensuales_ix` avisa del ÉXITO con un
+        `QMessageBox.information` (`ix_mensual.py:334`) que solo se alcanza
+        cuando el guardado llega al commit. Mientras la ventana bloqueaba,
+        este test moría en la línea 208 y ese diálogo nunca se abría; al
+        desactivarla (R.5) pasa a abrirse modal y cuelga la suite entera sin
+        lanzar ninguna excepción. Se mockea sobre la clase de PyQt5, no sobre
+        el módulo, para no depender de desde dónde la importe producción."""
         control_id = _crear_control_con_ancla(bd_temporal, "2026-01-05 10:00:00")
-        avisos = []
+        monkeypatch.setattr(QMessageBox, "information",
+                             staticmethod(lambda *a, **k: None))
         monkeypatch.setattr(load_mod.QMessageBox, "warning",
-                             staticmethod(lambda *a, **k: avisos.append(1)))
+                             staticmethod(lambda *a, **k: (_ for _ in ()).throw(
+                                 AssertionError("no debía bloquear -- R.5 desactivó la ventana"))))
 
         obj, df_lines = _pelado_ix()
         obj.ln_dosis_ref_cgy_um_6mv.setText("0.993")
         obj.subirlineasmensuales_ix("dosimetriaMen", 0, ref=control_id, usarid=True, df_lines=df_lines)
 
-        assert len(avisos) == 1
-        assert _filas_dosimetria(bd_temporal, control_id) == 0
+        # El iX escribe UNA FILA POR ENERGÍA, no una sola como el 600 -- el
+        # número se deriva de la declaración, no se copia, para que añadir
+        # una energía no deje el test afirmando un conteo viejo.
+        assert _filas_dosimetria(bd_temporal, control_id) == len(PruebaMensualIX.ENERGIAS)
+
+    def test_dentro_de_ventana_escribe_lo_mismo(self, app, bd_temporal, monkeypatch):
+        """ANCLA de R.5, gemelo del que el 600 ya tenía y al iX le faltaba.
+
+        Un control DENTRO de la vieja ventana de 2 meses nunca estuvo
+        bloqueado -- ni antes ni después de R.5 -- así que el número de filas
+        que deja aquí es el comportamiento propio de
+        `subirlineasmensuales_ix`, no una consecuencia de haber quitado la
+        puerta. Que los dos casos (dentro y fuera) escriban EXACTAMENTE lo
+        mismo es lo que demuestra que R.5 cambió *si* se escribe, nunca
+        *cuánto* -- sin este test, el conteo del caso de arriba sería solo
+        'lo que el código hace hoy'."""
+        ancla = (date.today() - timedelta(days=15)).strftime("%Y-%m-%d 10:00:00")
+        control_id = _crear_control_con_ancla(bd_temporal, ancla)
+        monkeypatch.setattr(QMessageBox, "information",
+                             staticmethod(lambda *a, **k: None))
+        monkeypatch.setattr(load_mod.QMessageBox, "warning",
+                             staticmethod(lambda *a, **k: (_ for _ in ()).throw(
+                                 AssertionError("no debía bloquear -- está dentro de la ventana"))))
+
+        obj, df_lines = _pelado_ix()
+        obj.ln_dosis_ref_cgy_um_6mv.setText("0.993")
+        obj.subirlineasmensuales_ix("dosimetriaMen", 0, ref=control_id, usarid=True, df_lines=df_lines)
+
+        assert _filas_dosimetria(bd_temporal, control_id) == len(PruebaMensualIX.ENERGIAS)

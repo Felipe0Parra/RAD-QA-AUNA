@@ -118,11 +118,22 @@ class TestPuedeEditarse:
 
         assert puede_editarse(control_id, hoy=date(2026, 9, 5)) is True
 
-    def test_un_dia_despues_del_limite_no_es_editable(self, bd_temporal):
+    def test_un_dia_despues_del_limite_sigue_siendo_editable(self, bd_temporal):
+        """R.5 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md §6, 11-09-2026): la
+        ventana de 2 meses se desactivó por decisión del físico -- lo que
+        antes bloqueaba (un día después del límite) ahora edita normal."""
         control_id = _crear_control(bd_temporal, "Clinac iX", "05/07/2026")
         _auditar_creacion(bd_temporal, control_id, "2026-07-05 10:30:00")
 
-        assert puede_editarse(control_id, hoy=date(2026, 9, 6)) is False
+        assert puede_editarse(control_id, hoy=date(2026, 9, 6)) is True
+
+    def test_muy_lejos_del_limite_sigue_siendo_editable(self, bd_temporal):
+        """R.5: ni siquiera importa cuánto tiempo pasó -- 5 años después
+        de creado, un control existente y activo sigue editable."""
+        control_id = _crear_control(bd_temporal, "Clinac iX", "05/07/2026")
+        _auditar_creacion(bd_temporal, control_id, "2026-07-05 10:30:00")
+
+        assert puede_editarse(control_id, hoy=date(2031, 7, 5)) is True
 
     def test_sin_ancla_no_bloquea(self, bd_temporal):
         """El control EXISTE (activo) pero no tiene ninguna fecha
@@ -134,10 +145,12 @@ class TestPuedeEditarse:
     def test_control_id_none_no_bloquea(self, bd_temporal):
         assert puede_editarse(None) is True
 
-    def test_historico_respaldo_2025_ya_cerrado(self, bd_temporal):
+    def test_historico_respaldo_2025_sigue_editable_tras_r5(self, bd_temporal):
+        """R.5: un control de 2025 (ancla de respaldo, sin auditoría) que
+        antes quedaba cerrado para siempre ahora también se puede editar."""
         control_id = _crear_control(bd_temporal, "Clinac ix", "14/12/2025")
 
-        assert puede_editarse(control_id, hoy=date(2026, 7, 23)) is False
+        assert puede_editarse(control_id, hoy=date(2026, 7, 23)) is True
 
 
 class TestPuedeEditarseW1ExisteYActivo:

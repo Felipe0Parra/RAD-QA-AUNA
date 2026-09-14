@@ -141,7 +141,7 @@ SITIOS_IDENTIDAD = {
          "SELECT id, modelo FROM LinealidadBraquiterapia WHERE id = ?"),
     "data/ManejoDatos/load.py:244":
         ("braqui", "SELECT id, pelicula FROM braqui WHERE id = ?"),
-    "services/ventana_edicion.py:100":
+    "services/ventana_edicion.py:111":  # R.5 (11-09): 100->111
         ("controles", "SELECT id, activo FROM controles WHERE id = ?"),
     "data/GraficasyTablas/tablas.py:213 (600)":
         ("aceleradorlineal_600",

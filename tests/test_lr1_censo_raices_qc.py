@@ -215,10 +215,10 @@ CENSO_RAICES = {
     # services/reactivacion.py (3 sitios, DA-34) -- RETIRADO por LR7
     # ([[DA-49]]): el archivo entero desapareció junto con el mecanismo de
     # reactivación. No hay nada que censar donde ya no hay código.
-    ("services/ventana_edicion.py", 67, "controles"):
+    ("services/ventana_edicion.py", 78, "controles"):  # R.5 (11-09): 67->78
         (IDENTIDAD, "fecha del control pedido por id (respaldo cuando no "
                     "hay marca de auditoría)"),
-    ("services/ventana_edicion.py", 100, "controles"):
+    ("services/ventana_edicion.py", 111, "controles"):  # R.5 (11-09): 100->111
         (IDENTIDAD, "_estado_control (W1): lee `activo` como DATO para "
                     "distinguir 'no existe' de 'existe pero anulado'. "
                     "Filtrar aquí borraría justo la distinción que la "
