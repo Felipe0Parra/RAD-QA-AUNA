@@ -54,14 +54,29 @@ def datos_a_dataframe(datos: dict) -> pd.DataFrame:
     # verificado en el plan que ninguna serie real del catálogo coincide
     # con ningún id existente). Solo se omite la fila cuando lo único
     # disponible es un id sin significado para el físico.
+    # R.3 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md §4): `equipo_id` guardado hace
+    # tiempo puede resolver HOY contra un equipo distinto (id reciclado,
+    # R.1 lo impide por la vía normal pero no depende de eso) -- antes de
+    # imprimir esa serie como si fuera la de este cálculo, se comprueba que
+    # el equipo que resuelve coincide con el modelo/serie que ya se
+    # guardaron. `serie_guardada` es None en formato pre-C1 (Numero_serie
+    # guardaba el id crudo, no una serie real -- misma guarda de Q.4) para
+    # no comparar un id contra una serie real y rechazar de más.
     datos = dict(datos)
     if "Numero_serie" in datos:
         equipo_id = datos.get("equipo_id")
         numero_serie = datos.get("Numero_serie")
+        modelo_guardado = datos.get("Modelo_equipo")
+        serie_guardada = (
+            numero_serie
+            if numero_serie and str(numero_serie) != str(equipo_id)
+            else None)
         serie_real = None
-        if equipo_id:
-            from services.equipos_service import EquiposService
-            equipo = EquiposService.obtener_por_id(equipo_id)
+        from services.equipos_service import EquiposService
+        equipo_id_confiable = EquiposService.resolver_guardado(
+            equipo_id, modelo_guardado, serie_guardada)
+        if equipo_id_confiable is not None:
+            equipo = EquiposService.obtener_por_id(equipo_id_confiable)
             if equipo:
                 serie_real = equipo.get("serie")
         if serie_real:

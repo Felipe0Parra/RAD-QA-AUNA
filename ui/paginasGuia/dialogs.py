@@ -2577,12 +2577,31 @@ class DialogCalculadoraDosis(QDialog):
                 # Numero_serie -- que guarda el MISMO id, F1, nombre de
                 # columna engañoso -- queda como fallback solo para
                 # registros anteriores a B3 que no tengan equipo_id.
-                if datos.get('equipo_id'):
-                    index = self.combo_series.findData(datos['equipo_id'])
+                #
+                # R.3 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md §4): equipo_id se
+                # confirma contra el modelo/serie que este registro guardó
+                # antes de usarlo -- un id reciclado podría resolver hoy a
+                # OTRO equipo del mismo modelo. Si no confirma, cae al mismo
+                # respaldo por Numero_serie que ya existe para cuando
+                # equipo_id falta del todo. serie_guardada es None en
+                # formato pre-C1 (Numero_serie guardaba el id crudo, no una
+                # serie real -- misma guarda de Q.4/Z3).
+                equipo_id = datos.get('equipo_id')
+                numero_serie = datos.get('Numero_serie')
+                serie_guardada = (
+                    numero_serie
+                    if numero_serie and str(numero_serie) != str(equipo_id)
+                    else None)
+                equipo_id_confiable = (
+                    EquiposService.resolver_guardado(
+                        equipo_id, datos.get('Modelo_equipo'), serie_guardada)
+                    if equipo_id else None)
+                if equipo_id_confiable is not None:
+                    index = self.combo_series.findData(equipo_id_confiable)
                     if index >= 0:
                         self.combo_series.setCurrentIndex(index)
-                elif datos.get('Numero_serie'):
-                    index = self.combo_series.findData(datos['Numero_serie'])
+                elif numero_serie:
+                    index = self.combo_series.findData(numero_serie)
                     if index >= 0:
                         self.combo_series.setCurrentIndex(index)
                 if datos.get('Tamano_campo'):

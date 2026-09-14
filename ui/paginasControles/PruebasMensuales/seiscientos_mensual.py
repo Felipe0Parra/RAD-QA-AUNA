@@ -3664,9 +3664,20 @@ class PruebaMensual600(PruebaBasico):
                             # respaldo por texto. Si ninguno acierta, se añade
                             # una entrada al final con el id resuelto por
                             # (model, serie) y se avisa por consola.
+                            #
+                            # R.3 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md §4): antes
+                            # de confiar en `equipo_id`, se comprueba que el
+                            # equipo que resuelve HOY en el catálogo sigue
+                            # siendo el mismo modelo/serie que esta fila
+                            # guardó -- un id reciclado (R.1 lo impide por la
+                            # vía normal, pero no depende de eso) podría
+                            # resolver a OTRA cámara del mismo modelo, y
+                            # `findData` la adoptaría en silencio.
                             idx_serie = -1
-                            if equipo_id is not None:
-                                idx_serie = serie_widget.findData(equipo_id)
+                            equipo_id_confiable = EquiposService.resolver_guardado(
+                                equipo_id, model, serie)
+                            if equipo_id_confiable is not None:
+                                idx_serie = serie_widget.findData(equipo_id_confiable)
                             if idx_serie == -1:
                                 idx_serie = serie_widget.findText(
                                     f"Serie: {serie}", Qt.MatchStartsWith)

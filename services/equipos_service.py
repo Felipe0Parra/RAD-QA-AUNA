@@ -162,7 +162,7 @@ class EquiposService:
                     "calibr_fact", "t_cal", "p_cal", "h_cal"]
 
         return dict(zip(columnas, fila))
-    
+
     @staticmethod
     def obtener_modelos_unicos():
         """Obtiene lista de modelos únicos.
@@ -188,7 +188,7 @@ class EquiposService:
         cur.close()
 
         return [{"model": fila[0], "equip_type": fila[1]} for fila in filas]
-    
+
     @staticmethod
     def obtener_series_por_modelo(model):
         """Obtiene las series disponibles para un modelo específico.
@@ -239,7 +239,7 @@ class EquiposService:
                     "fecha_calibr"]
 
         return [dict(zip(columnas, fila)) for fila in filas]
-    
+
     @staticmethod
     def obtener_por_id(equipo_id):
         """Obtiene un equipo por su ID"""
@@ -263,3 +263,38 @@ class EquiposService:
                     "calibr_fact", "t_cal", "p_cal", "h_cal"]
 
         return dict(zip(columnas, fila))
+
+    @staticmethod
+    def resolver_guardado(equipo_id, model, serie):
+        """R.3 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md §4): devuelve `equipo_id`
+        SOLO si la fila que resuelve en el catálogo HOY coincide con el
+        snapshot que un control guardó en su momento (`model`/`serie`). Si
+        `equipo_id` no resuelve, o resuelve a un equipo distinto, devuelve
+        `None` -- el llamador cae a su propio respaldo (texto guardado,
+        u omitir el dato) en vez de adoptar un equipo que no es el que se
+        usó.
+
+        Por qué hace falta: R.1 (`Conexion._asegurar_secuencias_sin_
+        duplicados`) impide que un id se recicle por las vías normales,
+        pero un contador ya se perdió una vez en una reconstrucción de BD
+        (medido, §0.3 del plan) y hay copias de la BD que se restauran sin
+        pasar por el arranque que lo repara. Comparar contra lo que la
+        propia fila guardó no depende de ningún contador: modelo y serie
+        viajan en el mismo registro que el puntero.
+
+        `model`/`serie` en `None` significa "el llamador no lo sabe" (filas
+        legacy anteriores a F9, o un formato de guardado que no llevaba esa
+        columna) -- esa comprobación se OMITE, no se fuerza a fallar; solo
+        se rechaza cuando un campo SÍ provisto no coincide con el catálogo.
+        Comparación por texto (`str()`), tolerante a que un lado sea int y
+        el otro str (mismo criterio que la guarda pre/post-C1 de Q.4)."""
+        if equipo_id is None:
+            return None
+        equipo = EquiposService.obtener_por_id(equipo_id)
+        if equipo is None:
+            return None
+        if model is not None and str(equipo.get("model")) != str(model):
+            return None
+        if serie is not None and str(equipo.get("serie")) != str(serie):
+            return None
+        return equipo_id

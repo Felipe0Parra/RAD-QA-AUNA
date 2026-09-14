@@ -385,8 +385,8 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasGuia/dialogs.py', 2178, '%'),
     ('ui/paginasGuia/dialogs.py', 2206, '%'),
     ('ui/paginasGuia/dialogs.py', 2228, 'Gy/MU'),
-    ('ui/paginasGuia/dialogs.py', 3014, 'UM'),
-    ('ui/paginasGuia/dialogs.py', 3040, 'cGy/UM'),
+    ('ui/paginasGuia/dialogs.py', 3033, 'UM'),  # R.3 (11-09): 3014->3033
+    ('ui/paginasGuia/dialogs.py', 3059, 'cGy/UM'),  # R.3 (11-09): 3040->3059
     ('ui/paginasGuia/equipos.py', 128, '%'),
     ('ui/paginasGuia/equipos.py', 128, 'kPa'),
     ('ui/paginasGuia/equipos.py', 128, '°C'),
