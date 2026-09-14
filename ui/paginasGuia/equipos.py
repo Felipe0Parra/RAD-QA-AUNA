@@ -1083,7 +1083,13 @@ class Config(PruebaBasico):
         # A6.2/H2.4: sin la fila, el rastro de auditoría es lo único que
         # queda -- lleva los 12 campos (no solo modelo/serie) para que la
         # fila sea reconstruible desde audit_log.
+        # R.2 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md §3): el `id` va delante --
+        # sin él, `audit_log` no sirve como evidencia del techo de ids que
+        # R.1 (services/... `_asegurar_secuencias_sin_duplicados`)
+        # reconstruye al arranque si algún día se pierden a la vez el
+        # contador de `sqlite_sequence` y los punteros vivos hacia este id.
         detalle = (
+            f"id={id_equipo}; "
             f"equip_type={equip_type}; model={modelo}; serie={serie}; "
             f"calibr_fact={calibr_fact}; calibr_fact2={calibr_fact2}; "
             f"fecha_calibr={fecha_calibr}; fabricante={fabricante}; "
