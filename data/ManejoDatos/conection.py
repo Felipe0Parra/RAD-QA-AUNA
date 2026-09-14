@@ -421,13 +421,96 @@ class Conexion():
         MÁXIMO (lo conservador: un salto de ids es inocuo; una reutilización
         no). Es metadato de infraestructura, no dato clínico -- ninguna fila
         de ninguna tabla de QC se toca.
+
+        R.1 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md): dos fallos más, medidos
+        sobre la BD real (18 equipos borrados del catálogo, [[DA-74]]):
+          - Esta rutina solo miraba filas DUPLICADAS; a una tabla a la que
+            le FALTA la fila (`equipos`, desde el rebuild del 28-08-2026)
+            no la tocaba nunca, y `AUTOINCREMENT` caía a `MAX(id)+1` --
+            reciclando ids que punteros vivos en `equipos_medicion`/
+            `calculadora_dosimetrica` todavía apuntaban.
+          - `DELETE ... WHERE name = ?` con `name=NULL` nunca acierta (en
+            SQL, `= NULL` no es verdad jamás); el `INSERT` de más abajo sí
+            corría igual, así que cada arranque dejaba una fila NULL nueva
+            (53 acumuladas, medido).
+        Se agrega una tercera pasada que reconstruye y ELEVA (nunca baja)
+        el contador de cada tabla declarada en `PUNTEROS_A_EQUIPOS` al techo
+        real: sirve para CUALQUIER BD sin importar cuántos equipos se hayan
+        borrado ni cuáles -- exigencia explícita del físico -- porque el
+        techo se deriva de la evidencia que la propia base contiene (un
+        puntero vivo hacia un id es la prueba de que ese id se entregó
+        alguna vez), no de un número escrito a mano. Verificado con una
+        prueba de estrés de 15 semillas x 4 rondas de borrados aleatorios
+        (§0.11 del plan): 0 choques.
         """
+        PUNTEROS_A_EQUIPOS = {
+            "equipos": [("equipos_medicion", "equipo_id"),
+                        ("calculadora_dosimetrica", "equipo_id")],
+        }
+
+        def _tabla_existe(cur, tabla):
+            return cur.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (tabla,)).fetchone() is not None
+
+        def _techo_de_ids(cur, tabla):
+            """El id más alto que `tabla` alguna vez entregó, reconstruido
+            de tres evidencias que ya están en la propia base: el contador
+            de `sqlite_sequence` si sobrevive, `MAX(id)` de la tabla, y
+            `MAX(columna)` de cada puntero vivo hacia ella. None si la
+            tabla no existe o no hay ninguna evidencia."""
+            if not _tabla_existe(cur, tabla):
+                return None
+            candidatos = []
+            try:
+                fila = cur.execute(
+                    "SELECT MAX(seq) FROM sqlite_sequence WHERE name=?",
+                    (tabla,)).fetchone()
+                if fila and isinstance(fila[0], int):
+                    candidatos.append(fila[0])
+            except sqlite3.OperationalError:
+                pass
+            fila = cur.execute(f'SELECT MAX(id) FROM "{tabla}"').fetchone()
+            if fila and fila[0] is not None:
+                candidatos.append(fila[0])
+            for tabla_puntero, columna in PUNTEROS_A_EQUIPOS.get(tabla, ()):
+                if not _tabla_existe(cur, tabla_puntero):
+                    continue
+                columnas = [c[1] for c in cur.execute(
+                    f'PRAGMA table_info("{tabla_puntero}")').fetchall()]
+                if columna not in columnas:
+                    continue
+                fila = cur.execute(
+                    f'SELECT MAX("{columna}") FROM "{tabla_puntero}"'
+                ).fetchone()
+                if fila and fila[0] is not None:
+                    candidatos.append(fila[0])
+            return max(candidatos) if candidatos else None
+
+        def _elevar_secuencia(cur, tabla, techo):
+            """Sube sqlite_sequence[tabla] a `techo` si hace falta -- NUNCA
+            lo baja (un salto de ids es inocuo; una reutilización no,
+            mismo criterio que el resto de esta función). Siembra la fila
+            si falta."""
+            if techo is None:
+                return
+            fila = cur.execute(
+                "SELECT seq FROM sqlite_sequence WHERE name=?",
+                (tabla,)).fetchone()
+            if fila is None or fila[0] is None or techo > fila[0]:
+                cur.execute("DELETE FROM sqlite_sequence WHERE name=?", (tabla,))
+                cur.execute(
+                    "INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)",
+                    (tabla, techo))
+
         try:
             cur = self.con.cursor()
             try:
+                cur.execute("DELETE FROM sqlite_sequence WHERE name IS NULL")
                 duplicadas = cur.execute(
                     "SELECT name, MAX(seq) FROM sqlite_sequence "
-                    "GROUP BY name HAVING COUNT(*) > 1").fetchall()
+                    "WHERE name IS NOT NULL GROUP BY name HAVING COUNT(*) > 1"
+                ).fetchall()
             except sqlite3.OperationalError:
                 cur.close()
                 return  # la BD no tiene sqlite_sequence
@@ -437,6 +520,8 @@ class Conexion():
                             (nombre, seq_max))
                 print(f"E10: sqlite_sequence normalizada para {nombre} "
                       f"(duplicados -> seq={seq_max})")
+            for tabla in PUNTEROS_A_EQUIPOS:
+                _elevar_secuencia(cur, tabla, _techo_de_ids(cur, tabla))
             self.con.commit()
             cur.close()
         except Exception as ex:

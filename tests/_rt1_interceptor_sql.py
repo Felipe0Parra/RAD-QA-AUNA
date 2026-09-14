@@ -130,17 +130,25 @@ SITIOS_CENSALES_PERMITIDOS = {
         "censo (OB1, censo.total): el observador necesita el total SIN "
         "filtrar para poder calcular `anuladas = total - activas`; la "
         "consulta de al lado (línea 146) sí filtra, y es la que compara.",
-    ("data/ManejoDatos/conection.py", 594):
+    ("data/ManejoDatos/conection.py", 679):  # R.1 (11-09): 594->679
         "migración (E10, _asegurar_fk_on_delete_restrict): "
         "`INSERT INTO \"{temporal}\" SELECT * FROM \"{nombre}\"` copia la "
         "tabla ENTERA al reconstruirla para cambiar sus FK. Filtrar aquí "
         "no sería una lectura más estricta: BORRARÍA el histórico.",
-    ("data/ManejoDatos/conection.py", 694):
+    ("data/ManejoDatos/conection.py", 779):  # R.1 (11-09): 694->779
         "migración (EB2d, DA-57, _asegurar_angulo_starshot_sin_unique_de_tabla): "
         "mismo patrón que E10 arriba -- copia la tabla ENTERA al "
         "reconstruirla para retirar el UNIQUE(ref, spoke_index) de tabla "
         "(no partial, bloqueaba anular+insertar). Filtrar aquí borraría "
         "el histórico que la propia migración existe para preservar.",
+    ("data/ManejoDatos/conection.py", 483):
+        "R.1 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md, _techo_de_ids): censo del "
+        "id más alto que un puntero vivo hacia `equipos` todavía menciona, "
+        "sobre `equipos_medicion`/`calculadora_dosimetrica`. Tiene que ver "
+        "TODO puntero alguna vez escrito, esté su fila activa o anulada -- "
+        "un puntero que solo vive en una fila histórica es exactamente el "
+        "caso que R.1 protege (un id reciclado podría adoptarlo igual). "
+        "Filtrar `activo` dejaría sin proteger esos ids.",
     # LR4 (§6-LR4, [[DA-48]]): con las 7 raíces dentro del alcance, estas dos
     # sentencias sobre `controles` pasan a ser visibles para RT1. Las dos son
     # de la MISMA migración y tienen que ver las dos ramas o dejarían el

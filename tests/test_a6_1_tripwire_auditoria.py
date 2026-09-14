@@ -267,6 +267,10 @@ ALLOWLIST = {
     ("data/ManejoDatos/conection.py", "Conexion.createAdmin"): BOOTSTRAP,
     ("data/ManejoDatos/conection.py", "Conexion._asegurar_roles_de_sistema"): BOOTSTRAP,
     ("data/ManejoDatos/conection.py", "Conexion._asegurar_secuencias_sin_duplicados"): BOOTSTRAP,
+    # R.1 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md): helper anidado dentro de la
+    # función de arriba -- mismo metadato de infraestructura (contador de
+    # sqlite_sequence), ninguna fila de ninguna tabla de QC.
+    ("data/ManejoDatos/conection.py", "Conexion._elevar_secuencia"): BOOTSTRAP,
     ("data/ManejoDatos/conection.py", "Conexion._asegurar_fk_on_delete_restrict"): BOOTSTRAP,
     ("data/ManejoDatos/conection.py",
      "Conexion._asegurar_angulo_starshot_sin_unique_de_tabla"): BOOTSTRAP,
