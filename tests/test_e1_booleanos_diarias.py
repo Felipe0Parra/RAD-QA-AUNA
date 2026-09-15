@@ -27,8 +27,8 @@ from ui.paginasControles.PruebasDiarias.PruebasDiarias import (
     PruebaBasico, traducir_booleano_editado)
 from data.ManejoDatos.user import Usuario
 
-RUTA_PRODUCCION_REAL = os.path.join(
-    os.path.dirname(__file__), "..", "..", "BaseDatosQA.db")
+from _bd_referencia import BD_QA  # DP-104: fuente única de rutas de BD
+RUTA_PRODUCCION_REAL = str(BD_QA)
 
 TABLAS_DIARIAS = ["braqui", "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon"]
 

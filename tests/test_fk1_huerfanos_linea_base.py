@@ -39,8 +39,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
-RUTA_PRODUCCION_REAL = str(ROOT.parent / "BaseDatosQA.db")
-RUTA_BD_VIEJA_REAL = str(ROOT.parent / "BaseDatosQA(A_Ajustar).db")
+from _bd_referencia import BD_A_AJUSTAR, BD_QA  # DP-104: fuente única de rutas de BD
+RUTA_PRODUCCION_REAL = str(BD_QA)
+RUTA_BD_VIEJA_REAL = str(BD_A_AJUSTAR)
 
 # Desglose por (tabla, padre_ausente) medido en PLAN_CONTRATO_COMPLETO_19-08.md
 # §2.9. La diferencia entre las dos BD es exactamente (controles, users): 7 en

@@ -35,10 +35,9 @@ import data.ManejoDatos.load as load_mod
 from data.ManejoDatos.load import create_control
 from scripts.migrar_bd_a_estandar import migrar
 
-RUTA_PRODUCCION_REAL = os.path.join(
-    os.path.dirname(__file__), "..", "..", "BaseDatosQA.db")
-RUTA_BD_VIEJA_REAL = os.path.join(
-    os.path.dirname(__file__), "..", "..", "BaseDatosQA(A_Ajustar).db")
+from _bd_referencia import BD_A_AJUSTAR, BD_QA  # DP-104: fuente única de rutas de BD
+RUTA_PRODUCCION_REAL = str(BD_QA)
+RUTA_BD_VIEJA_REAL = str(BD_A_AJUSTAR)
 
 
 @pytest.fixture(scope="module")

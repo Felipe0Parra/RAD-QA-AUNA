@@ -35,7 +35,8 @@ from ui.paginasControles.PruebasMensuales.seiscientos_mensual import (
     PruebaMensual600, DatabaseManager,
 )
 
-DB = "/home/felipepp/Documents/CodigosPython/AUNA_2026_2/BaseDatosQA.db"
+from _bd_referencia import BD_QA  # DP-104: fuente única de rutas de BD
+DB = str(BD_QA)
 
 
 @pytest.fixture(scope="module")

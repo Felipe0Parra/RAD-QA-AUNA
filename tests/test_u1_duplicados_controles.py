@@ -18,7 +18,8 @@ import pytest
 from services.duplicados_control import duplicados_controles
 
 ROOT = Path(__file__).resolve().parent.parent
-BD_PRODUCCION = ROOT.parent / "BaseDatosQA.db"
+from _bd_referencia import BD_QA  # DP-104: fuente única de rutas de BD
+BD_PRODUCCION = BD_QA
 
 
 def _con_memoria(filas):

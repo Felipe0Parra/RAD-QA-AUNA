@@ -35,7 +35,8 @@ from services.mcc_metrics import (
 )
 from _corpus import mes_primeros  # HI-0: fuente única de rutas del corpus
 
-DB = "/home/felipepp/Documents/CodigosPython/AUNA_2026_2/BaseDatosQA.db"
+from _bd_referencia import BD_QA  # DP-104: fuente única de rutas de BD
+DB = str(BD_QA)
 
 # ref -> (carpeta_mes, nombre_carpeta_ix_o_None_si_es_600)
 # La may/min de "IX"/"iX" no es consistente en el corpus real entre meses.

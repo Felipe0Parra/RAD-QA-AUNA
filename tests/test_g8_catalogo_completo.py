@@ -23,7 +23,8 @@ import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
 from ui.paginasGuia.equipos import Config
 
-DB = "/home/felipepp/Documents/CodigosPython/AUNA_2026_2/BaseDatosQA.db"
+from _bd_referencia import BD_QA  # DP-104: fuente única de rutas de BD
+DB = str(BD_QA)
 
 
 @pytest.fixture(scope="module")

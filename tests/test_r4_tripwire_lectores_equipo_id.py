@@ -67,7 +67,7 @@ EXCLUDE_DIRS = {
     "resources", "mcc_PTW_read",
 }
 
-BD_REBUILD_11_09 = ROOT.parent / "BaseDatosQA(Rebuild_11-09-2026).db"
+from _bd_referencia import BD_REBUILD_11_09  # DP-104: fuente única de rutas de BD
 
 
 # ---------------------------------------------------------------------------

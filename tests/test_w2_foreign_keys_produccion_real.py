@@ -38,8 +38,8 @@ def _tabla_con_fila(id_valor, texto="fila"):
 class _DlgFalso:
     pass
 
-RUTA_PRODUCCION_REAL = os.path.join(
-    os.path.dirname(__file__), "..", "..", "BaseDatosQA.db")
+from _bd_referencia import BD_QA  # DP-104: fuente única de rutas de BD
+RUTA_PRODUCCION_REAL = str(BD_QA)
 
 
 @pytest.fixture(scope="module")

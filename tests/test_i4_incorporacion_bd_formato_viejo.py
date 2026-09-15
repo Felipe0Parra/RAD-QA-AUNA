@@ -28,8 +28,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from scripts.migrar_bd_a_estandar import migrar
 
-RUTA_BD_A_AJUSTAR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "BaseDatosQA(A_Ajustar).db")
+from _bd_referencia import BD_A_AJUSTAR  # DP-104: fuente única de rutas de BD
+RUTA_BD_A_AJUSTAR = str(BD_A_AJUSTAR)
 
 # Verdad terreno del artefacto, medida por inspección directa el 2026-07-24
 # (no asumida): si el físico algún día reemplaza el archivo por otra copia
