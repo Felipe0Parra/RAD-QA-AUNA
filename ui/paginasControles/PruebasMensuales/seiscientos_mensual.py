@@ -3265,9 +3265,14 @@ class PruebaMensual600(PruebaBasico):
                             "Faltan por seleccionar: " + ", ".join(faltantes))
                         return
 
-                    self.subirtodo_modificado(datos)
-                    QMessageBox.information(self, "", "Datos subidos correctamente")
-                    self._actualizar_tabla_despues_subida()
+                    # T.3 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §4,
+                    # cierra la mitad de DP-50 que este camino toca): el
+                    # mensaje de éxito depende de que SÍ se haya escrito --
+                    # antes se mostraba incondicionalmente, incluso cuando
+                    # `subirtodo_modificado` no insertó nada.
+                    if self.subirtodo_modificado(datos):
+                        QMessageBox.information(self, "", "Datos subidos correctamente")
+                        self._actualizar_tabla_despues_subida()
                     #print(f"\nLa variable equipo_f en la función botonescomboboox equipos es: {self.equipo_f}")
 
                 btn_guardar.clicked.connect(subir)
@@ -3345,6 +3350,21 @@ class PruebaMensual600(PruebaBasico):
         También guarda `equipo_id` -- puntero de trazabilidad hacia el
         catálogo (mismo patrón que `calculadora_dosimetrica.equipo_id`
         desde B3).
+
+        T.3 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §4): si el catálogo ya
+        no puede resolver una cámara (`equipo_id is None`, la entrada de
+        respaldo que `Traerinfo` añadió), se arrastra la COPIA que
+        `Traerinfo` recordó en `self._copia_restaurada` en vez de descartar
+        el grupo en silencio -- antes, esa cámara desaparecía del bloque
+        vigente y el físico veía "Datos subidos correctamente" igual (3
+        controles reales del iX en esa situación, §0.5 del plan). Si un
+        grupo no se puede resolver NI por catálogo NI por copia, no se
+        escribe NADA (ni el UPDATE de anulación): el bloque anterior queda
+        intacto y se avisa nombrando el grupo (criterio AV2/DA-37).
+
+        Devuelve `True` si escribió, `False` si no -- el llamador solo
+        muestra el mensaje de éxito cuando escribió (cierra la mitad de
+        DP-50 que este camino toca).
         """
 
         if hasattr(self, "esIX") and self.esIX:
@@ -3355,7 +3375,9 @@ class PruebaMensual600(PruebaBasico):
 
         if not datos or len(datos) < n:
             print("Datos insuficientes para procesar equipos")
-            return
+            return False
+
+        copia_restaurada = getattr(self, "_copia_restaurada", {})
 
         try:
             with self.db_manager.obtener_conexion() as conn:
@@ -3365,6 +3387,7 @@ class PruebaMensual600(PruebaBasico):
                 cursor.execute("BEGIN TRANSACTION")
 
                 filas_a_insertar = []
+                grupos_irresolubles = []
 
                 # Procesar grupos de 3 elementos
                 tipos_camara = self._tipos_camara()
@@ -3383,25 +3406,57 @@ class PruebaMensual600(PruebaBasico):
                         equipo_id = (serie_widget.currentData()
                                     if serie_widget is not None else None)
 
-                        if not model or not calibr_fact or equipo_id is None:
+                        if not model or not calibr_fact:
+                            # Fuera de alcance de T.3: esta guarda es
+                            # PREEXISTENTE y defensiva (en producción, AV2 ya
+                            # bloqueó "Subir" antes de llegar aquí si algún
+                            # widget quedó en blanco) -- se conserva como
+                            # `continue` silencioso, sin abortar el guardado
+                            # entero, para no tocar un comportamiento que el
+                            # plan no nombró.
                             print(f"Datos incompletos en grupo {base//3 + 1}")
                             continue
 
-                        # Resolver serie/fecha_calibr/equip_type por ID -- nunca
-                        # por MAX(id) GROUP BY serie (el colapso que F9 elimina
-                        # en todo el resto del selector) ni por el texto decorado.
-                        cursor.execute("""
-                            SELECT serie, fecha_calibr, equip_type
-                            FROM equipos
-                            WHERE id = ?
-                        """, (equipo_id,))
+                        if equipo_id is not None:
+                            # Camino normal: resolver serie/fecha_calibr/
+                            # equip_type por ID -- nunca por MAX(id) GROUP BY
+                            # serie (el colapso que F9 elimina en todo el
+                            # resto del selector) ni por el texto decorado.
+                            cursor.execute("""
+                                SELECT serie, fecha_calibr, equip_type
+                                FROM equipos
+                                WHERE id = ?
+                            """, (equipo_id,))
 
-                        resultado = cursor.fetchone()
-                        if resultado is None:
-                            print(f"Advertencia: no se encontró el equipo id={equipo_id} "
-                                  f"para el grupo {base//3 + 1}")
-                            continue
-                        serie, fecha_calibr, equip_type = resultado
+                            resultado = cursor.fetchone()
+                            if resultado is None:
+                                print(f"Advertencia: no se encontró el equipo "
+                                      f"id={equipo_id} para el grupo {base//3 + 1}")
+                                grupos_irresolubles.append(tipo_camara)
+                                continue
+                            serie, fecha_calibr, equip_type = resultado
+                        else:
+                            # T.3: el catálogo ya no puede explicar esta
+                            # cámara. Si `Traerinfo` había restaurado una
+                            # copia para este tipo_camara y el texto
+                            # seleccionado sigue siendo el de esa copia (no
+                            # se cambió a otra opción), se arrastra:
+                            # equip_type/serie/fecha_calibr/equipo_id de la
+                            # fila VIGENTE que ya existía -- calibr_fact sale
+                            # del formulario, igual que en el camino normal.
+                            copia = copia_restaurada.get(tipo_camara)
+                            texto_actual = (serie_widget.currentText()
+                                           if serie_widget is not None else None)
+                            if copia is None or texto_actual != copia["texto"]:
+                                print(f"Advertencia: no se pudo resolver el "
+                                      f"equipo del grupo {base//3 + 1} ni por "
+                                      f"catálogo ni por copia")
+                                grupos_irresolubles.append(tipo_camara)
+                                continue
+                            serie = copia["serie"]
+                            fecha_calibr = copia["fecha_calibr"]
+                            equip_type = copia["equip_type"]
+                            equipo_id = copia["equipo_id"]
 
                         # Preparar fila para inserción
                         fila = (self.ref, tipo_camara, equip_type, model, serie,
@@ -3409,8 +3464,26 @@ class PruebaMensual600(PruebaBasico):
                         filas_a_insertar.append(fila)
 
                     except (IndexError, ValueError) as e:
+                        # Fuera de alcance de T.3, misma razón que arriba --
+                        # esta excepción es preexistente y ajena a la
+                        # resolución catálogo/copia.
                         print(f"Error procesando grupo {base//3 + 1}: {e}")
                         continue
+
+                # T.3 punto 3: cualquier grupo irresoluble (ni catálogo ni
+                # copia) aborta el guardado ENTERO -- no se escribe nada, ni
+                # siquiera el UPDATE de anulación, y el bloque anterior queda
+                # intacto. Descartar en silencio era la peor de las tres
+                # opciones; bloquear entero cuando SÍ hay grupos resueltos
+                # es la única que no pierde nada.
+                if grupos_irresolubles:
+                    cursor.execute("ROLLBACK")
+                    print(f"No se guardó: grupos irresolubles {grupos_irresolubles}")
+                    QMessageBox.warning(
+                        self, "Equipos incompletos",
+                        "No se pudo guardar: falta resolver "
+                        + ", ".join(grupos_irresolubles))
+                    return False
 
                 # Inserción por lotes para mejor rendimiento
                 if filas_a_insertar:
@@ -3439,9 +3512,11 @@ class PruebaMensual600(PruebaBasico):
                     # Actualizar tabla si existe
                     if hasattr(self, 'tabla'):
                         self._actualizar_tabla_despues_subida()
+                    return True
                 else:
                     cursor.execute("ROLLBACK")
                     print("No se insertaron registros - datos insuficientes")
+                    return False
 
         except sqlite3.Error as e:
             try:
@@ -3451,6 +3526,7 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error de BD al insertar equipos: {e}")
             QMessageBox.critical(self, "Error de Base de Datos",
                                 f"No se pudieron guardar los equipos: {str(e)}")
+            return False
         except Exception as e:
             try:
                 cursor.execute("ROLLBACK")
@@ -3459,6 +3535,7 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error inesperado al insertar equipos: {e}")
             traceback.print_exc()
             QMessageBox.critical(self, "Error", "Error inesperado al guardar equipos")
+            return False
 
     def verificacion_observaciones(self, line_edit):
         texto = line_edit.text().strip()
@@ -3589,13 +3666,25 @@ class PruebaMensual600(PruebaBasico):
         inserción -- el hueco que M3 dejó abierto aquí (a diferencia de
         `Traerinfo_cunas`/`Traerinfo_conos`, que sí tenían el filtro de
         `activo` y el desempate determinista).
+
+        T.3 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §4): además de
+        posicionar los combos, deja en `self._copia_restaurada` -- por
+        `tipo_camara` -- la fila COMPLETA que restauró (`equip_type`,
+        `model`, `serie`, `fecha_calibr`, `equipo_id` ORIGINAL, y el texto
+        exacto de la entrada de respaldo si tuvo que crear una). Es lo que
+        permite que "Subir" (`subirtodo_modificado`) arrastre la copia en
+        vez de descartar la cámara cuando el catálogo ya no puede
+        explicarla (§0.5 del plan: hoy 3 controles reales del iX pierden
+        una cámara así, en silencio, al reguardar).
         """
+        self._copia_restaurada = {}
         try:
             with self.db_manager.obtener_conexion() as conn:
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT tipo_camara, model, serie, calibr_fact, equipo_id, id
+                    SELECT tipo_camara, model, serie, calibr_fact, equipo_id, id,
+                           equip_type, fecha_calibr
                     FROM equipos_medicion
                     WHERE ref = ? AND (activo IS NULL OR activo = 1)
                     ORDER BY tipo_camara, id DESC
@@ -3609,9 +3698,11 @@ class PruebaMensual600(PruebaBasico):
                 # ORDER BY ... id DESC (la de id más alto -- el bloque vigente
                 # cuando hay varios activos, caso real ref=30).
                 filas_por_tipo = {}
-                for tipo_camara, model, serie, calibr_fact, equipo_id, _fila_id in results:
+                for (tipo_camara, model, serie, calibr_fact, equipo_id, _fila_id,
+                     equip_type, fecha_calibr) in results:
                     if tipo_camara not in filas_por_tipo:
-                        filas_por_tipo[tipo_camara] = (model, serie, calibr_fact, equipo_id)
+                        filas_por_tipo[tipo_camara] = (
+                            model, serie, calibr_fact, equipo_id, equip_type, fecha_calibr)
 
                 tipos_camara = self._tipos_camara()
                 fecha_referencia = (
@@ -3619,7 +3710,8 @@ class PruebaMensual600(PruebaBasico):
                     else QDate.currentDate()
                 )
 
-                for tipo_camara, (model, serie, calibr_fact, equipo_id) in filas_por_tipo.items():
+                for tipo_camara, (model, serie, calibr_fact, equipo_id,
+                                 equip_type, fecha_calibr) in filas_por_tipo.items():
                     if tipo_camara not in tipos_camara:
                         print(f"Advertencia: tipo_camara desconocido '{tipo_camara}' "
                               f"en ref={self.ref}")
@@ -3692,8 +3784,28 @@ class PruebaMensual600(PruebaBasico):
                                 print(f"Advertencia: no se pudo ubicar la serie '{serie}' "
                                       f"de '{model}' en el combo (ref={self.ref}, "
                                       f"tipo_camara={tipo_camara}); se agrega al final")
-                                serie_widget.addItem(f"Serie: {serie}", equipo_id_resuelto)
+                                texto_respaldo = f"Serie: {serie}"
+                                serie_widget.addItem(texto_respaldo, equipo_id_resuelto)
                                 idx_serie = serie_widget.count() - 1
+                                # T.3 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md
+                                # §4): recordar la copia guardada para que
+                                # "Subir" pueda arrastrarla si el catálogo ya
+                                # no puede resolverla. El `equipo_id` que se
+                                # arrastra es el que ESTA FILA ya tenía --
+                                # nunca `equipo_id_resuelto` de arriba, que es
+                                # una ADIVINANZA por (model, serie) y podría
+                                # apuntar a una recalibración nueva de la
+                                # misma serie (el defecto que T.6 cierra en
+                                # este mismo mecanismo, aquí solo se evita
+                                # dejando que la escritura la use).
+                                self._copia_restaurada[tipo_camara] = {
+                                    "texto": texto_respaldo,
+                                    "equip_type": equip_type,
+                                    "model": model,
+                                    "serie": serie,
+                                    "fecha_calibr": fecha_calibr,
+                                    "equipo_id": equipo_id,
+                                }
                             serie_widget.setCurrentIndex(idx_serie)
                             serie_widget.setEnabled(True)
 

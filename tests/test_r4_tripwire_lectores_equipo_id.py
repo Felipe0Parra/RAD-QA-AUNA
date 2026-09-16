@@ -245,7 +245,7 @@ SITIOS_EQUIPO_ID_PERMITIDOS = {
         "R.3 (commit 9396f83), sitio #5 del censo original -- guardado "
         "por resolver_guardado en :2595-2598, con respaldo por "
         "Numero_serie si no resuelve."),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3680): (
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3772): (
         "BLINDADO",
         "R.3 (commit 9396f83), sitio #1 del censo original, EL CRITICO -- "
         "guardado por resolver_guardado en :3677 (Traerinfo)."),
@@ -277,7 +277,7 @@ SITIOS_EQUIPO_ID_PERMITIDOS = {
         "item.data(Qt.UserRole) de la fila EN VIVO que se está editando; "
         "lee 'datos originales' para comparar contra el formulario, no "
         "resuelve un puntero guardado en otra tabla."),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3393): (
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3425): (
         "EXENTO",
         "R.3, sitio #2 del censo original -- resuelve serie/fecha/tipo al "
         "GUARDAR, con el equipo_id que el propio combo tiene seleccionado "
@@ -477,7 +477,7 @@ class TestQuitarUnaJustificacionRompeElTest:
         hallado = censar_produccion()
         blanca_incompleta = dict(SITIOS_EQUIPO_ID_PERMITIDOS)
         sitio_retirado = (
-            "ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3680)
+            "ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3772)
         del blanca_incompleta[sitio_retirado]
 
         extra = set(hallado) - set(blanca_incompleta)

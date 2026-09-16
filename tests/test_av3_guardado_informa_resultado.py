@@ -283,7 +283,18 @@ class TestAV2ComboFaltanteAvisaYNoGuarda:
         obj.combo_menu = [combo_modelo, combo_serie, lineedit_calib]
 
         llamadas_guardado = []
-        obj.subirtodo_modificado = lambda datos: llamadas_guardado.append(datos)
+
+        # T.3 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §4): el mensaje de
+        # éxito ahora depende de que `subirtodo_modificado` devuelva `True`
+        # -- este mock representa un guardado que SÍ escribió, así que debe
+        # devolverlo (antes el `return` implícito era `None`, y con la
+        # sección "todos los combos completos" del propio nombre del test,
+        # el resultado correcto es un guardado exitoso).
+        def _guardado_exitoso(datos):
+            llamadas_guardado.append(datos)
+            return True
+
+        obj.subirtodo_modificado = _guardado_exitoso
         obj._actualizar_tabla_despues_subida = lambda: None
 
         obj.botonescombobox(categoria, obj.combo_menu, None)
