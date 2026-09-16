@@ -3771,41 +3771,72 @@ class PruebaMensual600(PruebaBasico):
                             if equipo_id_confiable is not None:
                                 idx_serie = serie_widget.findData(equipo_id_confiable)
                             if idx_serie == -1:
-                                idx_serie = serie_widget.findText(
-                                    f"Serie: {serie}", Qt.MatchStartsWith)
-                            if idx_serie == -1:
+                                # T.6 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md
+                                # §6-bis, regla 2 del principio): antes de
+                                # CUALQUIERA de los dos respaldos (por texto o
+                                # "la más nueva"), se cuenta cuántas
+                                # calibraciones ACTIVAS hay para este
+                                # (model, serie). Con más de una, NINGÚN
+                                # respaldo actúa -- elegir por texto (que se
+                                # queda con la primera que encuentra) o por
+                                # "ORDER BY id DESC" es ADIVINAR, y es
+                                # exactamente la vía por la que una
+                                # recalibración de una serie ya usada
+                                # contaminaría un control viejo (el caso real
+                                # de A092535, dos calibraciones activas hasta
+                                # el 11-09). Con una sola, el comportamiento
+                                # es IDÉNTICO al de siempre.
                                 cursor.execute("""
                                     SELECT id FROM equipos
                                     WHERE model = ? AND serie = ? AND activo = 1
-                                    ORDER BY id DESC LIMIT 1
                                 """, (model, serie))
-                                fila_equipo = cursor.fetchone()
-                                equipo_id_resuelto = fila_equipo[0] if fila_equipo else None
-                                print(f"Advertencia: no se pudo ubicar la serie '{serie}' "
-                                      f"de '{model}' en el combo (ref={self.ref}, "
-                                      f"tipo_camara={tipo_camara}); se agrega al final")
-                                texto_respaldo = f"Serie: {serie}"
-                                serie_widget.addItem(texto_respaldo, equipo_id_resuelto)
-                                idx_serie = serie_widget.count() - 1
-                                # T.3 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md
-                                # §4): recordar la copia guardada para que
-                                # "Subir" pueda arrastrarla si el catálogo ya
-                                # no puede resolverla. El `equipo_id` que se
-                                # arrastra es el que ESTA FILA ya tenía --
-                                # nunca `equipo_id_resuelto` de arriba, que es
-                                # una ADIVINANZA por (model, serie) y podría
-                                # apuntar a una recalibración nueva de la
-                                # misma serie (el defecto que T.6 cierra en
-                                # este mismo mecanismo, aquí solo se evita
-                                # dejando que la escritura la use).
-                                self._copia_restaurada[tipo_camara] = {
-                                    "texto": texto_respaldo,
-                                    "equip_type": equip_type,
-                                    "model": model,
-                                    "serie": serie,
-                                    "fecha_calibr": fecha_calibr,
-                                    "equipo_id": equipo_id,
-                                }
+                                candidatas = cursor.fetchall()
+
+                                if len(candidatas) == 1:
+                                    idx_serie = serie_widget.findText(
+                                        f"Serie: {serie}", Qt.MatchStartsWith)
+
+                                if idx_serie == -1:
+                                    if len(candidatas) > 1:
+                                        print(f"Advertencia: {len(candidatas)} "
+                                              f"calibraciones activas para la serie "
+                                              f"'{serie}' de '{model}' (ref={self.ref}, "
+                                              f"tipo_camara={tipo_camara}); no se elige "
+                                              f"ninguna, se muestra la copia guardada")
+                                        equipo_id_resuelto = None
+                                    elif len(candidatas) == 1:
+                                        equipo_id_resuelto = candidatas[0][0]
+                                        print(f"Advertencia: no se pudo ubicar la serie "
+                                              f"'{serie}' de '{model}' en el combo "
+                                              f"(ref={self.ref}, tipo_camara={tipo_camara}); "
+                                              f"se agrega al final")
+                                    else:
+                                        equipo_id_resuelto = None
+                                        print(f"Advertencia: no se pudo ubicar la serie "
+                                              f"'{serie}' de '{model}' en el combo "
+                                              f"(ref={self.ref}, tipo_camara={tipo_camara}); "
+                                              f"se agrega al final")
+                                    texto_respaldo = f"Serie: {serie}"
+                                    serie_widget.addItem(texto_respaldo, equipo_id_resuelto)
+                                    idx_serie = serie_widget.count() - 1
+                                    # T.3 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md
+                                    # §4): recordar la copia guardada para que
+                                    # "Subir" pueda arrastrarla si el catálogo ya
+                                    # no puede resolverla. El `equipo_id` que se
+                                    # arrastra es el que ESTA FILA ya tenía --
+                                    # nunca `equipo_id_resuelto` de arriba, que es
+                                    # una ADIVINANZA por (model, serie) y podría
+                                    # apuntar a una recalibración nueva de la
+                                    # misma serie -- exactamente lo que T.6
+                                    # impide que se elija en primer lugar.
+                                    self._copia_restaurada[tipo_camara] = {
+                                        "texto": texto_respaldo,
+                                        "equip_type": equip_type,
+                                        "model": model,
+                                        "serie": serie,
+                                        "fecha_calibr": fecha_calibr,
+                                        "equipo_id": equipo_id,
+                                    }
                             serie_widget.setCurrentIndex(idx_serie)
                             serie_widget.setEnabled(True)
 
