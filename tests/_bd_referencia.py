@@ -32,3 +32,11 @@ BD_A_AJUSTAR = CARPETA_BD / "BaseDatosQA(A_Ajustar).db"
 # Línea de PRUEBA del rebuild del 11-09-2026. No desciende de producción
 # (ver la corrección de linaje de PLAN_PUNTEROS_A_EQUIPOS_11-09.md).
 BD_REBUILD_11_09 = CARPETA_BD / "BaseDatosQA(Rebuild_11-09-2026).db"
+
+# Copia MÁS RECIENTE de la producción REAL (entregada por el físico el
+# 15-09-2026, ya pasada por la herramienta de migración con R.1). Es la que
+# describe el estado verdadero de la BD en uso -- `BD_QA` es del 21-08 y no
+# sirve para medir producción. Añadida en T.0
+# (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md), que exige ensayar toda
+# migración de esquema sobre una copia de la producción real.
+BD_REBUILD_14_09 = CARPETA_BD / "BaseDatosQA(Rebuild_14-09-2026).db"

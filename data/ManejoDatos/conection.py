@@ -223,6 +223,7 @@ class Conexion():
             self._asegurar_roles_de_sistema()
             self._asegurar_activo_bloque_qc()
             self._asegurar_parametros_analisis_braqui()
+            self._asegurar_identidad_sistema_medicion()
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -870,6 +871,59 @@ class Conexion():
         cur = self.con.cursor()
         _asegurar_columna(cur, "braqui", "umbral_relativo", "REAL")
         _asegurar_columna(cur, "braqui", "distancia_minima", "INTEGER")
+        self.con.commit()
+        cur.close()
+
+    def _asegurar_identidad_sistema_medicion(self):
+        """T.0 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §1-bis): `equipo_id_cp`
+        / `equipo_id_ele` en `SistemaMedicion` -- cuál calibración EXACTA del
+        catálogo se usó como cámara de pozo y como electrómetro en un control
+        de braquiterapia. Hasta hoy la tabla no tenía NINGUNA columna de id
+        (`ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec,
+        serie_ele, electrometro, t0, p0, h0, activo`), así que con dos
+        calibraciones activas de la misma serie era imposible saber cuál se
+        usó -- el caso que motivó el principio del físico (16-09-2026).
+
+        Punto 3 del principio: **al guardar se identifica por `id`**. El id es
+        TRAZABILIDAD, no la fuente de la que se lee: ni la recarga ni el PDF
+        dependen de estas columnas -- los valores mostrados e impresos salen
+        siempre de la copia guardada en esta misma fila. Cuando el id existe,
+        la recarga puede posicionar el combo en la calibración exacta en vez
+        de buscar por serie; cuando no existe, el comportamiento es el mismo
+        que antes de esta migración.
+
+        **Sin relleno retroactivo** (`DA-13`): las 15 filas históricas quedan
+        en `NULL`, que es información honesta -- deducir cuál de dos
+        calibraciones se usó es exactamente lo que este plan existe para no
+        hacer. **Sin FK declarada**, igual que `equipos_medicion.equipo_id`:
+        es un puntero de trazabilidad y `R.1` ya garantiza que ningún id
+        apuntado se recicle.
+
+        Aditiva e idempotente (`ALTER TABLE ADD COLUMN` no puede perder una
+        fila) -- mismo criterio que justifica correr esto al arranque en vez
+        de en la herramienta de migración manual (`DA-69`, que sacó de aquí
+        `EB2d` por RECONSTRUIR una tabla, cosa que esto no hace).
+
+        **Va DESPUÉS de `_asegurar_activo_bloque_qc`, no dentro de
+        `_asegurar_migraciones_ad_hoc`** (que corre antes): es el mismo patrón
+        y el mismo motivo que `_asegurar_parametros_analisis_braqui` (`P1`).
+        Puesta antes, una BD NUEVA tendría el orden `... h0, equipo_id_cp,
+        equipo_id_ele, activo` y una BD YA DESPLEGADA `... h0, activo,
+        equipo_id_cp, equipo_id_ele` -- dos órdenes físicos distintos para la
+        misma tabla según la edad de la base. Aquí el orden es uno solo.
+
+        [medido] los 9 consumidores reales de `SistemaMedicion` toleran dos
+        columnas al final: 5 usan columnas explícitas (`load.py` INSERT/2
+        SELECT, `braq_mensual.py`, `braquiterapia.py`), 2 hacen `SELECT *`
+        pero leen POR NOMBRE de campo (`reportes_mensuales.py`,
+        `SQLtoEXCEL.py`), 1 solo arma el WHERE (`guardarEdicion`) y el
+        noveno (`addsomething`) recorta con `encontrar_columnas`, que excluye
+        `activo` POR NOMBRE y deja las columnas originales en su posición de
+        siempre -- lo nuevo queda al final y su `zip` lo descarta. Es la
+        trampa de `DP-80` verificada, no supuesta."""
+        cur = self.con.cursor()
+        _asegurar_columna(cur, "SistemaMedicion", "equipo_id_cp", "INTEGER")
+        _asegurar_columna(cur, "SistemaMedicion", "equipo_id_ele", "INTEGER")
         self.con.commit()
         cur.close()
 

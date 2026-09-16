@@ -130,18 +130,18 @@ SITIOS_CENSALES_PERMITIDOS = {
         "censo (OB1, censo.total): el observador necesita el total SIN "
         "filtrar para poder calcular `anuladas = total - activas`; la "
         "consulta de al lado (línea 146) sí filtra, y es la que compara.",
-    ("data/ManejoDatos/conection.py", 679):  # R.1 (11-09): 594->679
+    ("data/ManejoDatos/conection.py", 680):  # R.1 (11-09): 594->679
         "migración (E10, _asegurar_fk_on_delete_restrict): "
         "`INSERT INTO \"{temporal}\" SELECT * FROM \"{nombre}\"` copia la "
         "tabla ENTERA al reconstruirla para cambiar sus FK. Filtrar aquí "
         "no sería una lectura más estricta: BORRARÍA el histórico.",
-    ("data/ManejoDatos/conection.py", 779):  # R.1 (11-09): 694->779
+    ("data/ManejoDatos/conection.py", 780):  # R.1 (11-09): 694->779
         "migración (EB2d, DA-57, _asegurar_angulo_starshot_sin_unique_de_tabla): "
         "mismo patrón que E10 arriba -- copia la tabla ENTERA al "
         "reconstruirla para retirar el UNIQUE(ref, spoke_index) de tabla "
         "(no partial, bloqueaba anular+insertar). Filtrar aquí borraría "
         "el histórico que la propia migración existe para preservar.",
-    ("data/ManejoDatos/conection.py", 483):
+    ("data/ManejoDatos/conection.py", 484):
         "R.1 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md, _techo_de_ids): censo del "
         "id más alto que un puntero vivo hacia `equipos` todavía menciona, "
         "sobre `equipos_medicion`/`calculadora_dosimetrica`. Tiene que ver "

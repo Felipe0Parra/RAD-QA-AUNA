@@ -137,9 +137,9 @@ BASELINE_D1_PENDIENTE = {
     ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1734, 'cm'),
     ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1861, 'HU'),
     ('data/ManejoDatos/catphan_TAC/leer_dicom.py', 951, 'mm'),
-    ('data/ManejoDatos/conection.py', 1734, 'HU'),  # R.1 (11-09): 1649->1734
-    ('data/ManejoDatos/conection.py', 1757, 'HU'),  # R.1 (11-09): 1672->1757
-    ('data/ManejoDatos/conection.py', 1771, '%'),  # R.1 (11-09): 1686->1771
+    ('data/ManejoDatos/conection.py', 1788, 'HU'),  # R.1 (11-09): 1649->1734; T.0 (16-09): 1734->1788
+    ('data/ManejoDatos/conection.py', 1811, 'HU'),  # R.1 (11-09): 1672->1757; T.0 (16-09): 1757->1811
+    ('data/ManejoDatos/conection.py', 1825, '%'),  # R.1 (11-09): 1686->1771; T.0 (16-09): 1771->1825
     ('data/ManejoDatos/load.py', 3014, 'cm'),
     ('data/ManejoDatos/load.py', 3051, 'mm'),
     ('data/ManejoDatos/load.py', 3052, 'mm'),

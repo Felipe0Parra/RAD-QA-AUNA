@@ -231,16 +231,18 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 886):
         "INSERT (linealidad_ct) -- no aplica a EB5, un INSERT nunca muta el "
         "bloque vigente.",
-    ("data/ManejoDatos/conection.py", 678):  # R.1 (11-09): 593->678
+    ("data/ManejoDatos/conection.py", 679):  # R.1 (11-09): 593->678
         "DDL (E10 -- CREATE TABLE de la tabla temporal de la migración "
         "CASCADE->RESTRICT) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 778):  # R.1 (11-09): 693->778
+    ("data/ManejoDatos/conection.py", 779):  # R.1 (11-09): 693->778
         "DDL (EB2d, DA-57 -- CREATE TABLE de la tabla temporal que retira "
         "el UNIQUE de angulo_starshot) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 2309):
+    ("data/ManejoDatos/conection.py", 2363):
         # R1 (PLAN_REPARACION_ANUAL_27-08.md, 27-08): 2091->2160, desplazado
         # por las 4 tablas nuevas (CREATE TABLE) agregadas a
         # crearTablasAnuales. Mismo sitio. R.1 (11-09): 2224->2309.
+        # T.0 (16-09): 2309->2363, desplazado por
+        # _asegurar_identidad_sistema_medicion y su llamada en __init__.
         "INSERT (users, admin de arranque) -- no aplica a EB5.",
     ("data/ManejoDatos/load.py", 370):
         "INSERT (controles, alta de un control nuevo) -- no aplica a EB5.",
