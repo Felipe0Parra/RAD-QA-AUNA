@@ -10,7 +10,10 @@ from data.ManejoDatos.load import (mostrar_db_mensualBraqui, verificar_editar, v
                                     cancelarEdicion, guardar_resultado_CambioFuente, encontrar_columnas)
 from data.ManejoDatos.conection import Conexion
 from services.equipos_service import EquiposService
-from services.etiqueta_equipo import etiqueta_equipo
+from services.etiqueta_equipo import etiqueta_equipo, serie_de_etiqueta
+from services.combo_equipo_guardado import (
+    agregar_item_calibracion, posicionar_en_guardado, posicionar_modelo,
+    serie_de_item)
 from services.vigencia_equipo import es_vigente_en_fecha
 from analisisImagenes.ActividadFuente import  *
 from resources.utils.matplotlib_lazy import get_matplotlib_components
@@ -462,8 +465,11 @@ class PruebaMensualBraq(PruebaBasico):
         for eq_id, serie, fecha_calibr, equip_type in calibraciones_activas:
             equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
                       "equip_type": equip_type}
-            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
-            self.combo_serie.addItem(texto, eq_id)
+            # T.1: la SERIE REAL viaja en su propio rol (ROL_SERIE). El texto
+            # visible lleva fecha y vigencia desde G10, así que compararlo con
+            # lo guardado es frágil por construcción -- es la causa de DP-105.
+            # `currentData()` sigue siendo el id: ningún lector actual cambia.
+            agregar_item_calibracion(self.combo_serie, equipo, fecha_referencia)
             if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
                 item = self.combo_serie.model().item(self.combo_serie.count() - 1)
                 item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
@@ -504,8 +510,8 @@ class PruebaMensualBraq(PruebaBasico):
         for eq_id, serie, fecha_calibr, equip_type in calibraciones_activas:
             equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
                       "equip_type": equip_type}
-            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
-            self.combo_serie_elec.addItem(texto, eq_id)
+            # T.1: misma razón que en la cámara de pozo -- serie real en rol.
+            agregar_item_calibracion(self.combo_serie_elec, equipo, fecha_referencia)
             if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
                 item = self.combo_serie_elec.model().item(self.combo_serie_elec.count() - 1)
                 item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
@@ -926,11 +932,52 @@ class PruebaMensualBraq(PruebaBasico):
             if not hasattr(self, "modelo"):
                 raise AttributeError("El campo 'modelo' no fue creado. Revisa tu setupBox, tu Excel y la inicialización de la interfaz.")
             modelo = self.modelo.currentText()
-            serie_cp = self.serie_cp.currentText()
             calibracion = float(self.calibracion.text())
-            serie_cp = self._limpiar_serie(self.serie_cp.currentText())
-            serie_ele = self._limpiar_serie(self.serie_ele.currentText())
             modelo_elec = self.modelo_elec.currentText()
+
+            # T.2 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §3): la serie se
+            # lee del ROL que T.1 dejó puesto en el combo (la serie REAL),
+            # nunca de `currentText()` -- desde G10 ese texto lleva la
+            # etiqueta decorada, y guardarla tal cual es justo lo que
+            # `DP-105` documentó (`SistemaMedicion` ref 36 con la etiqueta
+            # completa; `LinealidadBraquiterapia` id 10 con el propio
+            # "Seleccionar Serie..." guardado como si fuera un dato, y eso
+            # llega impreso al PDF). Con la entrada de RESPALDO seleccionada
+            # (T.1, equipo ya no en el catálogo), esto devuelve la serie de
+            # la COPIA -- así reguardar un control viejo conserva su serie
+            # en vez de reescribirla desde el catálogo de hoy.
+            # `self.serie_cp`/`self.serie_ele` son el MISMO objeto que
+            # `self.combo_serie`/`self.combo_serie_elec` (createInterface
+            # hace `setattr` con el nombre del Excel Y con el atributo
+            # corto -- ver `_restaurar_equipos_guardados`).
+            serie_cp = serie_de_item(self.serie_cp, self.serie_cp.currentIndex())
+            serie_ele = serie_de_item(self.serie_ele, self.serie_ele.currentIndex())
+
+            # P1 (§7 del plan, sin respuesta del físico -- se implementa el
+            # bloqueo recomendado): mismo criterio que AV2/DA-37 (cuñas y
+            # conos) -- si falta una serie, no se guarda NADA y se avisa
+            # nombrando qué falta, sin símbolos (DA-18). Antes de este
+            # cambio, sin selección se escribía el propio marcador
+            # "Seleccionar Serie..." como si fuera la serie.
+            faltantes_equipo = []
+            if not serie_cp:
+                faltantes_equipo.append("la serie de la cámara de pozo")
+            if not serie_ele:
+                faltantes_equipo.append("la serie del electrómetro")
+            if faltantes_equipo:
+                QMessageBox.warning(
+                    self, "Equipos incompletos",
+                    "Falta seleccionar: " + ", ".join(faltantes_equipo))
+                return
+
+            # T.2 punto 4 (principio, regla 3): el id de la calibración
+            # elegida se guarda como TRAZABILIDAD (columnas de `T.0`), nunca
+            # como fuente de lectura. Con la copia de respaldo seleccionada,
+            # `currentData()` ya es el id que esa fila tenía o `None` si
+            # nunca lo tuvo -- nunca se inventa uno por parecido.
+            equipo_id_cp = self.serie_cp.currentData()
+            equipo_id_ele = self.serie_ele.currentData()
+
             electrometro = float(self.electrometro.text())
             t0 = float(self.t0.text())
             p0 = round(float(self.p0.text()))
@@ -996,7 +1043,8 @@ class PruebaMensualBraq(PruebaBasico):
             V_alto, V_bajo, V_neg,                      # Medidas asociadas
             [V_alto_prom, V_bajo_prom, V_neg_prom],     # Promedios asociados
             Ks, Kp, Ktp, actividad_monitor, actividad_calculada,
-            actividad_decaimiento, desplazamiento_ini, observaciones
+            actividad_decaimiento, desplazamiento_ini, observaciones,
+            equipo_id_cp=equipo_id_cp, equipo_id_ele=equipo_id_ele
         )
 
             self.ref_bd = ref_bd
@@ -1013,9 +1061,15 @@ class PruebaMensualBraq(PruebaBasico):
     def _limpiar_serie(self, texto):
         # F9 (PLAN_F_CIERRE_ESTANDAR_29-07.md §9): sin símbolos -- el
         # marcador de vencida ahora es "{serie} (vencida)" en minúsculas.
-        if texto.endswith(" (vencida)"):
-            texto = texto[:-len(" (vencida)")]
-        return texto.strip()
+        #
+        # T.1 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §2): delega en
+        # `serie_de_etiqueta`, el inverso CANÓNICO del formato, que vive
+        # junto a `etiqueta_equipo`. Esta versión solo quitaba el
+        # `" (vencida)"` final, así que desde G10 -- cuando la etiqueta pasó
+        # a llevar "Serie: X — calibrado dd/mm/aaaa" -- dejó de reconocer
+        # nada: es la causa medida de DP-105. Se conserva el método porque
+        # `guardar_DB` lo llama, pero el criterio ya no vive aquí.
+        return serie_de_etiqueta(texto)
     def cargar_datos_equipos(self):
         #print("Entra a cargar_datos_equipos de la clase PruebaMensualBraq")
 
@@ -1353,14 +1407,25 @@ class PruebaMensualBraq(PruebaBasico):
             # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas
             # -- son las 4 que se leen más abajo (modelo, serie_cp,
             # modelo_elec, serie_ele), por nombre en los 4 casos.
+            # T.1 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §2): se piden
+            # también los valores HISTÓRICOS y los dos ids de identidad
+            # (`T.0`). Los ids solo POSICIONAN el combo; los valores que se
+            # muestran salen de esta misma copia, nunca del catálogo.
             query.prepare(f"""
-                SELECT modelo, serie_cp, modelo_elec, serie_ele FROM SistemaMedicion
+                SELECT modelo, serie_cp, modelo_elec, serie_ele,
+                       calibracion, electrometro, t0, p0, h0,
+                       equipo_id_cp, equipo_id_ele FROM SistemaMedicion
                 WHERE (DATE(fecha) = ?
                 OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('SistemaMedicion')}
 
             """)
             query.addBindValue((fecha_str))
-            query.addBindValue(str(self.user_id))
+            # T.1 (§0.9): el segundo `?` es la MISMA fecha reconstruida desde
+            # el formato `DD/MM/YYYY`; enlazaba `str(self.user_id)`, así que
+            # esa segunda condición no casaba nunca. Hoy no tenía efecto --
+            # [medido] las 15 filas de SistemaMedicion están en ISO -- pero
+            # cualquier fila guardada como DD/MM/YYYY era invisible.
+            query.addBindValue((fecha_str))
             print(fecha_str)
             if not query.exec():
                 print(f"Error en consulta: {query.lastError().text()}")
@@ -1373,18 +1438,7 @@ class PruebaMensualBraq(PruebaBasico):
 
                 columnas_numericas = []
                 try:
-                    if hasattr(self, 'combo_modelo'):
-
-                        self.combo_modelo.setCurrentText(str(query.value(record.indexOf('modelo'))))
-                    if hasattr(self, 'combo_serie'):
-                        self._set_combo_serie(self.combo_serie, query.value(record.indexOf('serie_cp')))
-                        print(f"Serie combo de camara de pozo: {query.value(record.indexOf('serie_cp'))}")
-                    if hasattr(self, 'combo_modelo_elec'):
-                        self.combo_modelo_elec.setCurrentText(str(query.value(record.indexOf('modelo_elec'))))
-                        print(f"El modelo del electrometro: {query.value(record.indexOf('modelo_elec'))}")
-                    if hasattr(self, 'combo_serie_elec'):
-                        self._set_combo_serie(self.combo_serie_elec, query.value(record.indexOf('serie_ele')))
-                        print("La serie del electrometro es: ", query.value(record.indexOf('serie_ele')))
+                    self._restaurar_equipos_guardados(query, record)
                 except Exception as e:
                     print("Error en equipos: ", e)
 
@@ -1395,14 +1449,65 @@ class PruebaMensualBraq(PruebaBasico):
         finally:
             query.finish()
 
-    """ Función para limpiar las series porque a alguien le dio por guardarlas en la db con un emoji y un texto decorador .|. """
-    def _set_combo_serie(self, combo, serie_bd):
-        serie_limpia = self._limpiar_serie(str(serie_bd))
-        for i in range(combo.count()):
-            if self._limpiar_serie(combo.itemText(i)) == serie_limpia:
-                combo.setCurrentIndex(i)
-                return
-        print(f"Serie '{serie_limpia}' no encontrada en el combo.")
+    def _restaurar_equipos_guardados(self, query, record):
+        """T.1 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §2): deja los cuatro
+        combos mostrando LO QUE ESTE CONTROL GUARDÓ, y repone al final los
+        valores históricos.
+
+        Orden, y el orden es la garantía (patrón D2.2/K3, el mismo que
+        `Traerinfo` ya usa en el mensual de aceleradores):
+
+          1. el MODELO primero, con señales VIVAS -- es su
+             `currentTextChanged` el que puebla el combo de series;
+          2. la SERIE después, con señales BLOQUEADAS -- si no,
+             `on_serie_pozo_cambio` sobrescribiría factor, T0, P0 y H0 con los
+             del CATÁLOGO (§0.4 del plan). Hoy eso no se ve sólo porque la
+             recarga nunca acertaba;
+          3. los valores históricos AL FINAL, releídos de esta misma fila.
+             Antes de `T.1` dependían del orden en que alguien conectó siete
+             señales de `dateChanged` -- eso no es una garantía, es una
+             coincidencia que el próximo cambio puede romper.
+        """
+        def valor(columna):
+            indice = record.indexOf(columna)
+            return query.value(indice) if indice >= 0 else None
+
+        def id_o_none(columna):
+            crudo = valor(columna)
+            if crudo in (None, ""):
+                return None
+            try:
+                return int(crudo)
+            except (TypeError, ValueError):
+                return None
+
+        pares = (
+            ('combo_modelo', 'combo_serie', 'modelo', 'serie_cp', 'equipo_id_cp'),
+            ('combo_modelo_elec', 'combo_serie_elec', 'modelo_elec', 'serie_ele',
+             'equipo_id_ele'),
+        )
+        for nombre_modelo, nombre_serie, col_modelo, col_serie, col_id in pares:
+            if hasattr(self, nombre_modelo):
+                posicionar_modelo(getattr(self, nombre_modelo), valor(col_modelo))
+            if hasattr(self, nombre_serie):
+                motivo = posicionar_en_guardado(
+                    getattr(self, nombre_serie),
+                    valor(col_serie),
+                    equipo_id=id_o_none(col_id),
+                    model=valor(col_modelo),
+                    resolver_guardado=EquiposService.resolver_guardado)
+                print(f"Serie guardada de {nombre_serie}: "
+                      f"{valor(col_serie)!r} -> {motivo}")
+
+        # 3. El histórico gana: se repone DESPUÉS de tocar los combos.
+        historicos = (('line_cal', 'calibracion'), ('line_cal_elec', 'electrometro'),
+                      ('t0', 't0'), ('p0', 'p0'), ('h0', 'h0'))
+        for atributo, columna in historicos:
+            widget = getattr(self, atributo, None)
+            crudo = valor(columna)
+            if widget is not None and hasattr(widget, 'setText') and crudo not in (None, ""):
+                widget.setText(str(crudo))
+
 
 
     def cargar_monthtest_desde_db_parametros(self, fecha=None):

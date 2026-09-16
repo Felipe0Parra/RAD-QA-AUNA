@@ -116,7 +116,7 @@ SITIOS_LITERALES_PERMITIDOS = {
         "create_control (anual) -- gemelo exacto de load.py:309: reabre el "
         "control existente del año y reasigna los físicos por su id "
         "físico. Mismo mecanismo DA-08, misma tabla, otra raíz de UI.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 105):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 108):
         "actualizar_desplazamiento (DP-39, hallazgo del 24-08 al resolver "
         "DP-38/DA-50): escribe CondicionesMedicion.desplazamiento_ini en "
         "sitio sobre el `ref` vigente, filtrado a activo. Es la ruta real "
@@ -154,7 +154,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
         "(QtSql, DA-08) -- gemelo Qt del mecanismo genérico de "
         "guardarEdicion (load.py:4201, más abajo en OPACOS). Tabla y "
         "columna dinámicas (elegidas en la UI), WHERE siempre 'id = ?'.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 55):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 58):
         "normalizar_fechas_db -- migración de FORMATO de fecha "
         "(DD-MM-YYYY -> YYYY-MM-DD) sobre las 6 tablas de braquiterapia. "
         "Tiene que alcanzar TAMBIÉN las filas anuladas (una anulada con la "
@@ -172,20 +172,20 @@ SITIOS_DINAMICOS_PERMITIDOS = {
 SITIOS_OPACOS_PERMITIDOS = {
     # A11 (PLAN_FUGA_CONEXIONES_01-09.md §9, 01-09): mismo punto ciego
     # que A9/A10 (Trampa 6) -- with envolvio mostrar_controles_tac.
-    ("data/ManejoDatos/load.py", 2712): "mostrar_controles_tac -- UPDATE de backfill mes_control, ya filtraba con filtro_activo('pruebas')",
-    ("data/ManejoDatos/load.py", 2740): "SELECT (mostrar_controles_tac, MAX/MIN final) -- no aplica a EB5, tercer gemelo del sitio 2119/2091 de A9",
+    ("data/ManejoDatos/load.py", 2723): "mostrar_controles_tac -- UPDATE de backfill mes_control, ya filtraba con filtro_activo('pruebas')",
+    ("data/ManejoDatos/load.py", 2751): "SELECT (mostrar_controles_tac, MAX/MIN final) -- no aplica a EB5, tercer gemelo del sitio 2119/2091 de A9",
     # A10 (PLAN_FUGA_CONEXIONES_01-09.md §9, 01-09): mismo punto ciego
     # que A9 (Trampa 6) -- with envolvio mostrar_controles_imgHC. El
     # comentario original decia "imgHC_anual" por error (ese gemelo no
     # tiene este backfill, verificado igual que en A9).
-    ("data/ManejoDatos/load.py", 2512): "mostrar_controles_imgHC -- UPDATE de backfill mes_control, ya filtraba con filtro_activo('pruebas')",
-    ("data/ManejoDatos/load.py", 2540): "SELECT (mostrar_controles_imgHC, MAX/MIN final) -- no aplica a EB5, gemelo del sitio 2119/2091 de A9",
-    ("data/ManejoDatos/load.py", 2144):
+    ("data/ManejoDatos/load.py", 2523): "mostrar_controles_imgHC -- UPDATE de backfill mes_control, ya filtraba con filtro_activo('pruebas')",
+    ("data/ManejoDatos/load.py", 2551): "SELECT (mostrar_controles_imgHC, MAX/MIN final) -- no aplica a EB5, gemelo del sitio 2119/2091 de A9",
+    ("data/ManejoDatos/load.py", 2155):
         "SELECT (mostrar_controles_imgIX, MAX/MIN final) -- no aplica a "
         "EB5, un SELECT nunca muta el bloque vigente. Opaco desde A9 "
         "(PLAN_FUGA_CONEXIONES_01-09.md §9) por el mismo punto ciego de "
         "Trampa 6 que el UPDATE de la línea 2091, arriba.",
-    ("data/ManejoDatos/load.py", 2116):
+    ("data/ManejoDatos/load.py", 2127):
         # A9 (PLAN_FUGA_CONEXIONES_01-09.md §9, 01-09): vivía en
         # SITIOS_LITERALES_PERMITIDOS (resuelto via _rastrear_variable
         # antes del `with`) hasta que A9 envolvió el cuerpo de
@@ -246,14 +246,14 @@ SITIOS_OPACOS_PERMITIDOS = {
         "INSERT (users, admin de arranque) -- no aplica a EB5.",
     ("data/ManejoDatos/load.py", 370):
         "INSERT (controles, alta de un control nuevo) -- no aplica a EB5.",
-    ("data/ManejoDatos/load.py", 4352):
+    ("data/ManejoDatos/load.py", 4363):
         "guardarEdicion (A3, DA-05/DA-07/DA-08) -- mecanismo GENÉRICO de "
         "edición directa de una celda: tabla y columna dinámicas (elegidas "
         "en la UI), WHERE por id físico O por (ref, energia) según la "
         "tabla. Mecanismo de corrección PERMANENTE, decidido, auditado -- "
         "no el patrón G1/G2 que este plan elimina (que mutaba TODO el "
         "bloque en cada guardado, no un campo puntual con rastro).",
-    ("data/ManejoDatos/load.py", 4432):
+    ("data/ManejoDatos/load.py", 4443):
         "guardarEdicion -- recálculo en cascada de ResultadosActividad "
         "(Ks/Kp/Ktp/actividad_calculada/actividad_decaimiento) al editar un "
         "campo de TipoCalibracion. Filtra 'activo' (filtro_activo), opaco "
@@ -261,7 +261,7 @@ SITIOS_OPACOS_PERMITIDOS = {
         "misma función. Parte del mismo mecanismo A3/DA-05 que la entrada "
         "anterior: una corrección dispara su recálculo derivado, ambos con "
         "el mismo rastro de auditoría.",
-    ("data/ManejoDatos/load.py", 4768):
+    ("data/ManejoDatos/load.py", 4779):
         "eliminarRegistro, rama else -- DELETE físico, alcanzable SOLO "
         "para tablas fuera del cierre transitivo de QC (catálogos "
         "genéricos). La rama if (anular_fila) cubre las 59 tablas de "

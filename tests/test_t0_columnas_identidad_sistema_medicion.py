@@ -319,10 +319,18 @@ def test_encontrar_columnas_deja_las_previas_en_su_posicion(bd_legada, monkeypat
 def test_los_consumidores_explicitos_siguen_nombrando_sus_columnas():
     """Compuerta de alcance: T.0 NO debe haber tocado ningún `SELECT`/`INSERT`
     de SistemaMedicion. Los 5 sitios de columnas explícitas se quedan como
-    estaban -- `T.2` será quien añada las dos al INSERT, no esta tarea."""
+    estaban -- `T.2` es quien añade las dos al INSERT, no esta tarea.
+
+    Actualizado al ejecutar `T.2` (16-09): el INSERT ganó `equipo_id_cp`/
+    `equipo_id_ele`, exactamente como esta misma prueba predecía en su
+    docstring original ("T.2 será quien añada las dos al INSERT"). La
+    compuerta de ALCANCE de T.0 sigue siendo la garantía real -- se verifica
+    ahora comparando contra la forma POST-T.2, que es la vigente."""
     import pathlib
     raiz = pathlib.Path(__file__).resolve().parent.parent
     insert = (raiz / "data/ManejoDatos/load.py").read_text(encoding="utf-8", errors="replace")
     assert ("INSERT INTO SistemaMedicion (ref, user, fecha, modelo, serie_cp, "
-            "calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0)") in insert, (
-        "el INSERT explícito de SistemaMedicion cambió en T.0; le corresponde a T.2")
+            "calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0, "
+            "equipo_id_cp, equipo_id_ele)") in insert, (
+        "el INSERT explícito de SistemaMedicion no tiene la forma esperada "
+        "tras T.2")

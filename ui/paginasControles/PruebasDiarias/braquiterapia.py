@@ -17,7 +17,10 @@ from ui.paginasControles.PruebasMensuales.PruebasMensuales import PruebaMensualB
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos import conection as _conection  # HI-1: resolucion dinamica, no import por valor
 from services.equipos_service import EquiposService
-from services.etiqueta_equipo import etiqueta_equipo
+from services.etiqueta_equipo import etiqueta_equipo, serie_de_etiqueta
+from services.combo_equipo_guardado import (
+    agregar_item_calibracion, posicionar_en_guardado, posicionar_modelo,
+    serie_de_item)
 from services.vigencia_equipo import es_vigente_en_fecha
 from PyQt5.QtWidgets import (QHBoxLayout, QVBoxLayout, QWidget, QToolBox, QPushButton, QLabel, QComboBox, QTableWidget,
                             QTableWidgetItem, QMessageBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout, QDialog,
@@ -2106,17 +2109,38 @@ class CalRedundanteFuente(PruebaMensualBraq):
                 self.conversion.setText(str(tipo_data[4]))
 
             # 3. SistemaMedicion
+            # T.1 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §2): se piden
+            # también los dos ids de identidad (`T.0`). Solo POSICIONAN el
+            # combo -- los valores mostrados salen de esta misma copia.
             cursor.execute(f'''
-                SELECT modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0
+                SELECT modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0,
+                       equipo_id_cp, equipo_id_ele
                 FROM SistemaMedicion WHERE fecha = ?{filtro_activo('SistemaMedicion')}
             ''', (fecha,))
             sis_data = cursor.fetchone()
             if sis_data:
-                self.modelo.setCurrentText(sis_data[0])
-                self.serie_cp.setCurrentText(sis_data[1])
+                # T.1: el MODELO primero con señales vivas (su cambio puebla
+                # el combo de series), la SERIE después con señales
+                # bloqueadas, y los valores HISTÓRICOS al final -- patrón
+                # D2.2/K3. `setCurrentText` sobre un combo no editable no
+                # hacía nada cuando el texto guardado no coincidía con la
+                # etiqueta decorada de G10, que es DP-105.
+                id_cp = sis_data[9] if len(sis_data) > 9 else None
+                id_ele = sis_data[10] if len(sis_data) > 10 else None
+
+                posicionar_modelo(self.modelo, sis_data[0])
+                posicionar_en_guardado(
+                    self.serie_cp, sis_data[1], equipo_id=id_cp,
+                    model=sis_data[0],
+                    resolver_guardado=EquiposService.resolver_guardado)
+
+                posicionar_modelo(self.modelo_elec, sis_data[3])
+                posicionar_en_guardado(
+                    self.serie_ele, sis_data[4], equipo_id=id_ele,
+                    model=sis_data[3],
+                    resolver_guardado=EquiposService.resolver_guardado)
+
                 self.calibracion.setText(str(sis_data[2]))
-                self.modelo_elec.setCurrentText(sis_data[3])
-                self.serie_ele.setCurrentText(sis_data[4])
                 self.electrometro.setText(str(sis_data[5]))
                 self.t0.setText(str(sis_data[6]))
                 self.p0.setText(str(sis_data[7]))
@@ -2551,18 +2575,32 @@ class Linealidad(PruebaBasico):
                     return query.value(record.indexOf(col))
 
                 # QComboBox
-                def set_combo(widget_name, col):
-                    val = get(col)
+                # T.1 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §2): el
+                # MODELO por texto (su cambio puebla el combo de series), la
+                # SERIE por la copia guardada y con señales bloqueadas.
+                #
+                # `findText(str(val))` exacto no acertaba desde G10: el texto
+                # del combo es la etiqueta decorada y lo guardado es la serie
+                # pelada -- DP-105 en la tercera pantalla.
+                #
+                # Aquí NO hay `equipo_id`: `LinealidadBraquiterapia` no tiene
+                # columnas de identidad (T.0 solo las añadió a
+                # `SistemaMedicion`), así que se resuelve por serie. Con más
+                # de una candidata no se elige ninguna y se muestra la copia.
+                def set_modelo(widget_name, col):
                     w = getattr(self, widget_name, None)
-                    if w and val is not None:
-                        idx = w.findText(str(val))
-                        if idx >= 0:
-                            w.setCurrentIndex(idx)
+                    if w is not None:
+                        posicionar_modelo(w, get(col))
 
-                set_combo('combo_modelo',      'modelo')
-                set_combo('combo_serie',       'serie_cp')
-                set_combo('combo_modelo_elec', 'modelo_elec')
-                set_combo('combo_serie_elec',  'serie_ele')
+                def set_serie(widget_name, col, col_modelo):
+                    w = getattr(self, widget_name, None)
+                    if w is not None:
+                        posicionar_en_guardado(w, get(col), model=get(col_modelo))
+
+                set_modelo('combo_modelo',      'modelo')
+                set_serie('combo_serie',        'serie_cp',  'modelo')
+                set_modelo('combo_modelo_elec', 'modelo_elec')
+                set_serie('combo_serie_elec',   'serie_ele', 'modelo_elec')
 
                 # QLineEdit
                 mapeo = {
@@ -2749,8 +2787,12 @@ class Linealidad(PruebaBasico):
         for eq_id, serie, fecha_calibr, equip_type in calibraciones_activas:
             equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
                       "equip_type": equip_type}
-            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
-            self.combo_serie.addItem(texto, eq_id)
+            # T.1: serie real en su propio rol -- misma razon que en
+            # braq_mensual.py. Esta es la COPIA de esa poblacion (Linealidad
+            # no hereda de PruebaMensualBraq), y por eso el rol se pone desde
+            # una sola funcion: si una de las cuatro lo olvidara, la recarga
+            # fallaria solo en esa pantalla y en silencio.
+            agregar_item_calibracion(self.combo_serie, equipo, fecha_referencia)
             if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
                 item = self.combo_serie.model().item(self.combo_serie.count() - 1)
                 item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
@@ -2785,8 +2827,8 @@ class Linealidad(PruebaBasico):
         for eq_id, serie, fecha_calibr, equip_type in calibraciones_activas:
             equipo = {"id": eq_id, "serie": serie, "fecha_calibr": fecha_calibr,
                       "equip_type": equip_type}
-            texto, _ = etiqueta_equipo(equipo, fecha_referencia)
-            self.combo_serie_elec.addItem(texto, eq_id)
+            # T.1: serie real en su propio rol.
+            agregar_item_calibracion(self.combo_serie_elec, equipo, fecha_referencia)
             if not es_vigente_en_fecha(fecha_calibr, equip_type, fecha_referencia):
                 item = self.combo_serie_elec.model().item(self.combo_serie_elec.count() - 1)
                 item.setForeground(QColor(255, 0, 0))  # Texto rojo, sin símbolos
@@ -3193,11 +3235,32 @@ class Linealidad(PruebaBasico):
 
             # Datos generales
             modelo = self.modelo.currentText()
-            serie_cp = self.serie_cp.currentText()
             calibracion = float(self.calibracion.text())
             modelo_elec = self.modelo_elec.currentText()
-            serie_ele = self.serie_ele.currentText()
             electrometro = float(self.electrometro.text())
+
+            # T.2 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §3, punto 3:
+            # "mismo cambio en el INSERT de Linealidad"): la serie sale del
+            # rol que T.1 dejó puesto, nunca de `currentText()`. Sin id de
+            # trazabilidad aquí -- `LinealidadBraquiterapia` no ganó
+            # columnas de identidad en `T.0` (solo `SistemaMedicion` las
+            # necesitaba: es la tabla con más de una calibración activa por
+            # serie documentada, A092535).
+            serie_cp = serie_de_item(self.serie_cp, self.serie_cp.currentIndex())
+            serie_ele = serie_de_item(self.serie_ele, self.serie_ele.currentIndex())
+
+            # Mismo criterio de bloqueo que guardar_DB (P1, AV2/DA-37): sin
+            # serie elegida, no se guarda nada de la linealidad.
+            faltantes_equipo = []
+            if not serie_cp:
+                faltantes_equipo.append("la serie de la cámara de pozo")
+            if not serie_ele:
+                faltantes_equipo.append("la serie del electrómetro")
+            if faltantes_equipo:
+                QMessageBox.warning(
+                    self, "Equipos incompletos",
+                    "Falta seleccionar: " + ", ".join(faltantes_equipo))
+                return
 
             q_est = float(self.q_est.text())
             t_integrado = float(self.t_integrado.text())

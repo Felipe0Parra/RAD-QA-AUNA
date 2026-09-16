@@ -1021,7 +1021,14 @@ def guardar_resultado_CambioFuente(
     posiciones, medida1, medida2, promedios,
     voltaje, V_300, V_150, Vn_300, promediosV,
     Ks, Kp, Ktp, actividad_monitor, actividad_calculada, actividad_decaimiento,
-    desplazamiento_ini, observaciones):
+    desplazamiento_ini, observaciones,
+    equipo_id_cp=None, equipo_id_ele=None):
+    # T.2 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §3 punto 4): las dos
+    # columnas de identidad de `T.0` -- TRAZABILIDAD, no fuente de lectura.
+    # Con default `None` la firma preserva el comportamiento de cualquier
+    # otro llamador que no las pase (regla de sesión: toda firma ampliada
+    # lleva valor por defecto). `braq_mensual.py::guardar_DB` es hoy el
+    # único llamador real.
 
     conn = Conexion().conectar()
     cursor = conn.cursor()
@@ -1072,10 +1079,14 @@ def guardar_resultado_CambioFuente(
                     (ref_anterior,))
 
         # --- SistemaMedicion ---
+        # T.2: equipo_id_cp/equipo_id_ele (T.0) -- es lo único que se toca
+        # de este archivo fuera de la firma de arriba (§1 del plan, zona
+        # ámbar: "T.2 solo añade las dos columnas nuevas al INSERT explícito
+        # de :1076 y sus dos parámetros. Ninguna otra línea se toca").
         cursor.execute("""
-            INSERT INTO SistemaMedicion (ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0))
+            INSERT INTO SistemaMedicion (ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0, equipo_id_cp, equipo_id_ele)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (ref, user, fecha, modelo, serie_cp, calibracion, modelo_elec, serie_ele, electrometro, t0, p0, h0, equipo_id_cp, equipo_id_ele))
 
         # --- CondicionesMedicion ---
         cursor.execute("""
