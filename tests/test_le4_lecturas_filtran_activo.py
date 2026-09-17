@@ -360,6 +360,17 @@ SITIOS_CLAVE_INCOMPLETA_PERMITIDOS = {
 
 
 SITIOS_CENSALES_LITERALES = {
+    ("services/contexto_auditoria.py", 133):
+        "T.4 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §5, DA-47): visor de "
+        "auditoría -- WHERE id IN (...) resuelve por LOTE un grupo de filas "
+        "de `controles`, cada una nombrada por su propia clave física, no "
+        "una clave de bloque con varias generaciones. Un control ANULADO "
+        "debe seguir identificándose en su propio rastro de auditoría -- "
+        "filtrar lo dejaría en blanco justo para el caso que más importa.",
+    ("services/contexto_auditoria.py", 141):
+        "T.4, misma razón que la línea 133 -- identidad por lote sobre "
+        "TipoCalibracion, para que una calibración anulada también siga "
+        "identificándose en su rastro.",
     ("scripts/migrar_bd_a_estandar.py", 121):
         "migración (_contar_centinela): cuenta las filas de `controles` con "
         "el centinela histórico de 2º físico (' ---- ') para decidir si hay "

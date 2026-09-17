@@ -321,12 +321,18 @@ class TestDenominadorDeCobertura:
         #             un COUNT(*) sobre `equipos_medicion` para el aviso
         #             previo al borrado real del catálogo -- una lectura
         #             nueva, real, sobre una tabla del bloque de QC.
+        #   99 -> 100 T.4 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §5,
+        #             16-09): `contexto_de_auditoria`
+        #             (services/contexto_auditoria.py) -- el visor de
+        #             auditoría resuelve equipo+fecha en lote contra
+        #             `controles`/`TipoCalibracion`, dos lecturas nuevas y
+        #             reales sobre raíces del bloque de QC.
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 99, (
-            f"Q.1 (DA-74) sumó una lectora nueva -- 99 funciones "
+        assert len(lectoras) == 100, (
+            f"T.4 sumó una lectora nueva -- 100 funciones "
             f"esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "

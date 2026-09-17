@@ -69,6 +69,16 @@ RAICES = lv.RAICES_QC
 # revisar la clasificación sin volver a leer los 75 sitios.
 # ---------------------------------------------------------------------------
 CENSO_RAICES = {
+    # -- T.4 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §5) ----------------
+    ("services/contexto_auditoria.py", 133, "controles"):
+        (IDENTIDAD, "visor de auditoría -- WHERE id IN (...) resuelve por "
+         "LOTE un grupo de filas de `controles`, cada una nombrada por su "
+         "propia clave física; DA-47 exige que un control ANULADO siga "
+         "identificándose en su propio rastro de auditoría"),
+    ("services/contexto_auditoria.py", 141, "TipoCalibracion"):
+        (IDENTIDAD, "visor de auditoría -- misma razón que la línea 133, "
+         "sobre TipoCalibracion (una calibración anulada también debe "
+         "seguir identificándose en su rastro)"),
     # -- Tablas anuales -------------------------------------------------
     ("data/ManejoDatos/Tablas_Anuales/tablas_anuales.py", 111, "controles"):
         (LISTA, "catálogo de controles anuales de un equipo -- varias filas"),
@@ -316,8 +326,8 @@ CENSO_RAICES = {
 # imgHC` (load.py:2515). Un sitio menos: 72 -> 71.
 # A11 (mismo día, mismo motivo): tercer gemelo, `mostrar_controles_tac`
 # (load.py:2715). Un sitio menos: 71 -> 70.
-FILAS_ESPERADAS = 70
-SITIOS_FISICOS_ESPERADOS = 68
+FILAS_ESPERADAS = 72
+SITIOS_FISICOS_ESPERADOS = 70
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

@@ -13,6 +13,12 @@ pestaña "Registros" y el método que la crea seguían comentados en
 A11 (§8.1 H6, PLAN_AUDITORIA_DOS_EJES_21-07): habilitada en `mainpages.py`,
 visible para cualquier usuario logueado -- es un visor de SOLO LECTURA y
 ninguna otra pestaña está restringida por rol hoy.
+
+T.4 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §5): dos columnas nuevas,
+`Equipo` y `Fecha del control`, DESPUÉS de `Tabla` -- no mueve los índices
+0-3 que `test_a7_visor_registros.py` ya fija. El contenido lo resuelve
+`services/contexto_auditoria.py` (puro, sin PyQt5), en LOTE sobre las
+filas ya traídas -- nada nuevo se guarda, nada de lo ya registrado cambia.
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
@@ -20,11 +26,13 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 import data.ManejoDatos.conection as con
+from services.contexto_auditoria import contexto_de_auditoria
 
 
 class Registros(QWidget):
 
-    COLUMNAS = ['Fecha/Hora', 'Usuario', 'Acción', 'Tabla', 'Ref', 'Detalle']
+    COLUMNAS = ['Fecha/Hora', 'Usuario', 'Acción', 'Tabla', 'Equipo',
+                'Fecha del control', 'Ref', 'Detalle']
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -88,17 +96,27 @@ class Registros(QWidget):
         try:
             with con.Conexion().conectar() as db:
                 filas = db.execute(query, params).fetchall()
-            self._poblar_tabla(filas)
+                # T.4: una sola consulta en lote para las 500 filas, no una
+                # por fila -- de ahí que se resuelva aquí, con la MISMA
+                # conexión ya abierta, antes de cerrar el `with`.
+                contexto = contexto_de_auditoria(
+                    ((f[3], f[4]) for f in filas), db)
+            self._poblar_tabla(filas, contexto)
         except Exception as e:
             print(f"[Registros] Error cargando histórico: {e}")
 
-    def _poblar_tabla(self, filas):
+    def _poblar_tabla(self, filas, contexto=None):
+        contexto = contexto or {}
         self._tabla.setSortingEnabled(False)
         self._tabla.setRowCount(0)
         for fila in filas:
+            timestamp, usuario, accion, tabla, ref, detalle = fila
+            equipo, fecha_control = contexto.get((tabla, ref), ('', ''))
+            fila_mostrada = (timestamp, usuario, accion, tabla,
+                            equipo, fecha_control, ref, detalle)
             idx = self._tabla.rowCount()
             self._tabla.insertRow(idx)
-            for col, valor in enumerate(fila):
+            for col, valor in enumerate(fila_mostrada):
                 item = QTableWidgetItem(str(valor if valor is not None else ''))
                 item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
                 self._tabla.setItem(idx, col, item)

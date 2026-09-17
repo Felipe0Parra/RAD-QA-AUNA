@@ -119,6 +119,20 @@ def _es_produccion(origen):
 # juzgarlos por su contenido real. Heredarlos sería anular el frente
 # dinámico justo donde aporta.
 SITIOS_CENSALES_PERMITIDOS = {
+    ("services/contexto_auditoria.py", 133):
+        "T.4 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §5, DA-47): identidad "
+        "por LOTE -- `WHERE id IN (...)` resuelve un grupo de filas de "
+        "`controles`, cada una nombrada por su propia clave FÍSICA (no una "
+        "clave de bloque que pueda tener varias generaciones); es el mismo "
+        "caso que `_es_lectura_de_identidad` reconoce para `WHERE id = ?`, "
+        "solo que en lote -- el patrón anclado a `=` no ve el `IN (...)`. "
+        "El visor de auditoría tiene que identificar un control ANULADO en "
+        "su propio rastro (DA-47 explícito): filtrar aquí lo dejaría en "
+        "blanco justo para el caso que más importa auditar.",
+    ("services/contexto_auditoria.py", 141):
+        "T.4, misma razón que la línea 133 -- identidad por lote sobre "
+        "`TipoCalibracion`, para que una calibración anulada también siga "
+        "identificándose en su rastro de auditoría.",
     ("scripts/migrar_bd_a_estandar.py", 147):
         "censo (_contar_qc): cuenta el TOTAL de filas de cada tabla de QC "
         "antes y después de migrar, para verificar que ninguna se pierde. "
