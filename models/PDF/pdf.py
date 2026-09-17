@@ -579,7 +579,12 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                           'resultados_actividad']
 
     else:
-        orden_tablas = ['equipos', 'seguridad', 'aspectos_mecanicos_gantry', 'aspectos_mecanicos_colimador', 'preguntas',
+        # T.5 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §6): 'seguridad_cunas'
+        # añadida justo detrás de 'seguridad' -- SOLO el iX la produce
+        # (reportes_mensuales.py::_procesar_datos_para_reporte); el bucle
+        # de abajo ya salta cualquier clave ausente de `tablas`, así que el
+        # 600/TAC/Halcyon no ven ningún cambio.
+        orden_tablas = ['equipos', 'seguridad', 'seguridad_cunas', 'aspectos_mecanicos_gantry', 'aspectos_mecanicos_colimador', 'preguntas',
                         'tamanos_campo', 'imagen','analisis_imagen', 'dosimetricos']
 
     for i, nombre_tabla in enumerate(orden_tablas):
@@ -711,7 +716,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                     ])
 
                 elif nombre_tabla in ['equipos', 'aspectos_mecanicos_gantry', 'aspectos_mecanicos_colimador',
-                                    'preguntas', 'seguridad', 'analisis_imagen', 'indicadores_laser', 'desplazamiento_isocentro',
+                                    'preguntas', 'seguridad', 'seguridad_cunas', 'analisis_imagen', 'indicadores_laser', 'desplazamiento_isocentro',
                                     'parametros', 'espesor', 'tamano_pixel', 'resolucion_espacial',
                                     'valores_ct', 'linealidad_ct', 'uniformidad', 'parametros_espesor', 'parametros_tamano_pixel',
                                     'parametros_resolucion_contraste', 'parametros_resolucion_espacial', 'parametros_valores_ct',

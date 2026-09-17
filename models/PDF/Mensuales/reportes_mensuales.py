@@ -470,6 +470,13 @@ def _procesar_datos_para_reporte(datos_completos, diccionario, umbrales, maquina
     # Tabla 2: Seguridad (Control de cuñas/conos según máquina)
     if maquina in ['Clinac 600', 'Clinac ix']:
         tablas_reporte['seguridad'] = _crear_tabla_seguridad(datos_completos, maquina)
+        # T.5 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §6): el iX conserva
+        # 'seguridad' = conos (salida idéntica a hoy) y GANA
+        # 'seguridad_cunas' -- la config del propio reporte ya declara
+        # 'accesorios': ['cunas', 'conos'] para el iX (§0.7), pero la rama
+        # de cuñas de _crear_tabla_seguridad era inalcanzable para él.
+        if maquina == 'Clinac ix':
+            tablas_reporte['seguridad_cunas'] = _crear_tabla_cunas(datos_completos)
 
     # Tabla 3: Aspectos mecánicos (indicadores angulares del gantry)
     tablas_reporte['aspectos_mecanicos_gantry'] = _crear_tabla_indicadores_angulares_g(datos_completos, maquina)
@@ -547,12 +554,41 @@ def _crear_tabla_equipos(equipos_data, maquina):
         tabla.append([tipo, modelo, serie, f'{factor} {unidades_fc.get(tipo, "")}'])
     return pd.DataFrame(tabla, columns=['Equipos de medición', '', '', ''])
 
+def _crear_tabla_cunas(datos_completos):
+    """T.5 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §6): construye la tabla
+    de control de cuñas -- extraída de `_crear_tabla_seguridad` (corolario
+    1: una operación, una definición) para que el 600 y el iX no puedan
+    volver a divergir. Llamada desde la rama del 600 (salida idéntica a
+    antes de esta tarea) y desde la del iX (que antes no podía alcanzarla:
+    ver el `elif` muerto que esta tarea corrige)."""
+    import pandas as pd
+    tabla = []
+    encabezado = ['Cuña', 'In', 'Out', 'Right', 'Left']
+    tabla.append(encabezado)
+    cunas_data = datos_completos.get('control_cunas', [])
+    angulos = ['15°', '30°', '45°', '60°']
+    for angulo in angulos:
+        # angulo no es un string y no tiene el símbolo °
+        cuna = next((c for c in cunas_data if c.get('angulo') == int(angulo.replace('°', ''))), None)
+        if cuna:
+            in_val = 'Funciona' if cuna.get('in_val') == 1 else 'No funciona'
+            out_val = 'Funciona' if cuna.get('out_val') == 1 else 'No funciona'
+            right_val = 'Funciona' if cuna.get('right_val') == 1 else 'No funciona'
+            left_val = 'Funciona' if cuna.get('left_val') == 1 else 'No funciona'
+        else:
+            in_val = out_val = right_val = left_val = ''
+        tabla.append([angulo, in_val, out_val, right_val, left_val])
+    # Siempre usar encabezado explícito
+    df = pd.DataFrame(tabla, columns=['Control de cuñas', '', '', '', ''])
+    return df
+
 def _crear_tabla_seguridad(datos_completos, maquina):
     """Crea la Tabla 2: Seguridad (Control de cuñas/conos)"""
     import pandas as pd
     tabla = []
     if maquina == 'Clinac ix':
-        # Control de conos para iX
+        # Control de conos para iX (salida IDÉNTICA a antes de T.5 -- esta
+        # rama no se toca)
         tabla.append(['Cono', 'Estado'])
         conos_data = datos_completos.get('control_conos', [])
         medidas_cono = ['6x6', '10x10', '15x15', '20x20', '25x25']
@@ -568,26 +604,13 @@ def _crear_tabla_seguridad(datos_completos, maquina):
         df = pd.DataFrame(tabla, columns=['Control de conos', ''])  # Saltar la fila de título
         return df
 
-    elif maquina == 'Clinac 600' or maquina == 'Clinac ix':
-        # Control de cuñas para 600 e iX
-        encabezado = ['Cuña', 'In', 'Out', 'Right', 'Left']
-        tabla.append(encabezado)
-        cunas_data = datos_completos.get('control_cunas', [])
-        angulos = ['15°', '30°', '45°', '60°']
-        for angulo in angulos:
-            # angulo no es un string y no tiene el símbolo °
-            cuna = next((c for c in cunas_data if c.get('angulo') == int(angulo.replace('°', ''))), None)
-            if cuna:
-                in_val = 'Funciona' if cuna.get('in_val') == 1 else 'No funciona'
-                out_val = 'Funciona' if cuna.get('out_val') == 1 else 'No funciona'
-                right_val = 'Funciona' if cuna.get('right_val') == 1 else 'No funciona'
-                left_val = 'Funciona' if cuna.get('left_val') == 1 else 'No funciona'
-            else:
-                in_val = out_val = right_val = left_val = ''
-            tabla.append([angulo, in_val, out_val, right_val, left_val])
-        # Siempre usar encabezado explícito
-        df = pd.DataFrame(tabla, columns=['Control de cuñas', '', '', '', ''])
-        return df
+    elif maquina == 'Clinac 600':
+        # T.5: antes decía `maquina == 'Clinac 600' or maquina == 'Clinac
+        # ix'` -- el `if` de arriba ya captura TODO 'Clinac ix' primero,
+        # así que ese `or` era una rama MUERTA: el iX nunca llegaba aquí
+        # (§0.7 del plan). Se retira el `or` porque ya no aporta nada
+        # alcanzable, no porque cambie el comportamiento del 600.
+        return _crear_tabla_cunas(datos_completos)
 
     else:
         tabla.append(['Sin controles de seguridad requeridos'])
