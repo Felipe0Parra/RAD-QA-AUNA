@@ -192,3 +192,70 @@ def leer_serie(carpeta: str) -> SerieCT:
         etiquetas=etiquetas,
         avisos=avisos,
     )
+
+
+# A.3 (PLAN_CATPHAN_AUTOMATICO_POR_EQUIPO_18-09.md): tabla de reglas de
+# identificación de equipo. Vive aquí de forma TEMPORAL -- B.3 la mueve a
+# `perfiles.py`, que es donde vivirán también los umbrales por equipo
+# (§0.9 del plan). Fabricante + modelo es el requisito; número de serie o
+# estación son la confirmación (no el requisito), porque un cambio de
+# consola o de software puede alterarlos sin cambiar el equipo físico.
+_REGLAS_EQUIPO = {
+    "Tomógrafo": {
+        "manufacturer": "Siemens Healthineers",
+        "model": "SOMATOM go.Sim",
+        "serial": None,
+        "station": None,
+    },
+    "Clinac ix": {
+        "manufacturer": "Varian Medical Systems",
+        "model": "OBI Cone-beam CT",
+        "serial": "505",
+        "station": "IX5005",
+    },
+    "Halcyon": {
+        "manufacturer": "Varian Medical Systems",
+        "model": "Halcyon - PVA",
+        "serial": "1161",
+        "station": "Halcyon",
+    },
+}
+
+
+def identificar_equipo(serie: SerieCT):
+    """Identifica de qué equipo es `serie`, leyendo sus propias etiquetas
+    DICOM -- nunca de la pantalla en la que se cargó (D-07: hoy nada lo
+    impide, y la carpeta `Catphan/` real mezcla tomógrafo y Halcyon).
+
+    Devuelve una tupla `(equipo, advertencia)`:
+    - `(None, None)` si fabricante+modelo no coinciden con ninguna regla
+      conocida (equipo no identificable).
+    - `(equipo, None)` si fabricante+modelo coinciden Y el número de serie
+      o la estación (los que la regla declare) también.
+    - `(equipo, texto)` si fabricante+modelo coinciden pero el número de
+      serie/estación no -- probablemente sí es ese equipo (consola o
+      software reemplazados), pero se avisa en vez de asumir en silencio.
+
+    `serie.etiquetas` solo refleja la serie CT elegida por `leer_serie`
+    (nunca un RTSTRUCT descartado) -- por eso el `DeviceSerialNumber` del
+    iX que aquí se compara es siempre el de las imágenes (505), nunca el
+    del RTSTRUCT (5005).
+    """
+    manufacturer = serie.etiquetas.get("Manufacturer")
+    model = serie.etiquetas.get("ManufacturerModelName")
+    serial = serie.etiquetas.get("DeviceSerialNumber")
+    station = serie.etiquetas.get("StationName")
+
+    for equipo, regla in _REGLAS_EQUIPO.items():
+        if manufacturer == regla["manufacturer"] and model == regla["model"]:
+            confirma = (regla["serial"] is None or serial == regla["serial"]) and (
+                regla["station"] is None or station == regla["station"]
+            )
+            if confirma:
+                return equipo, None
+            return equipo, (
+                f"{equipo}: fabricante y modelo coinciden, pero el número de serie "
+                f"o la estación no coinciden con lo esperado "
+                f"(serie={serial!r}/estación={station!r})"
+            )
+    return None, None
