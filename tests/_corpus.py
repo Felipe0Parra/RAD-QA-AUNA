@@ -43,6 +43,30 @@ MPC_HALCYON = os.path.join(RAIZ, "ReportesDiariosQA001", "ReportesDiarioHalcyon"
 # físico, no de la app) -- igual que en test_corpus_2024_cross_check.
 GRAFIAS_IX = ("IX", "iX", "Cinac IX", "Clinac IX")
 
+# Series Catphan reales (PLAN_CATPHAN_AUTOMATICO_POR_EQUIPO_18-09.md, A.0).
+# CATPHAN_RAIZ es distinto de RAIZ: estas series viven directo bajo
+# Archivos_UseApp, no bajo "Archivos QA". Referencias de oro (pylinac
+# 3.45.0 sobre cada una) en tests/_catphan_oro.py.
+CATPHAN_RAIZ = os.path.expanduser("~/Documents/Archivos_UseApp")
+CATPHAN = {
+    "TOMOGRAFO": "QA tomografo Catphan",
+    "HALCYON_SEP": "QA Halcyon Catphan",
+    "HALCYON_JUN": os.path.join("DICOM", "CatphanHalcyonJunio2026"),
+    "HALCYON_236": os.path.join("DICOM", "CATPHANKV"),
+    "IX_DIC": os.path.join("DICOM", "Catphandiciembre"),
+    "MIXTA": "Catphan",
+}
+
+
+def serie_catphan(clave):
+    """Ruta a una serie Catphan real, o None si no existe (skip honesto).
+
+    `clave`: una de las llaves de CATPHAN ('TOMOGRAFO', 'HALCYON_SEP',
+    'HALCYON_JUN', 'HALCYON_236', 'IX_DIC', 'MIXTA').
+    """
+    ruta = os.path.join(CATPHAN_RAIZ, CATPHAN[clave])
+    return ruta if os.path.isdir(ruta) else None
+
 
 def mes_primeros(mes, maquina, sub=None):
     """Ruta a una carpeta de un mes de PrimerosMeses, tolerando la grafía IX/iX.
