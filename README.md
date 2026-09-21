@@ -50,11 +50,23 @@ Este sistema permite:
 - pylinac (para validación)
 
 ### Instalación
+
+En la direccion de tu repositorio donde esta el codigo fuente completo:
+
 ```bash
-pip install -r requirements.txt
+py -3.11 -m venv .venv # Selecciona el interprete adecuado para el repo
+.\Codigo_radqa_2026-XX-XX\.venv\Scripts\python.exe # Interprete del entorno virtual
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install pyinstaller==6.21.0
+Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue # Evitamos que hayan archivos basura estorbando en la creacion del ejecutable
+.\.venv\Scripts\python.exe build_exe.py # Con todo lo necesario ya podemos construir el ejecutable
 ```
 
 ### Ejecución
+
+Desde la terminal ejecutando el comando que aparece a continuacion o abriendo directamente el archivo .exe que se genera dentro de la carpeta dist del repositorio.
+
 ```bash
 python main.py
 ```
@@ -99,7 +111,7 @@ Controles/
 │   │       ├── leer_dicom.py        # ⭐ Lectura y procesamiento DICOM
 │   │       └── catphan_db.py        # ⭐ Guardado de resultados CatPhan
 │   │   ├── Tablas_Anuales/
-│   │       ├── tablas_anuales.py    # ⭐ Muestra la tablas de BD en la interfaz 
+│   │       ├── tablas_anuales.py    # ⭐ Muestra la tablas de BD en la interfaz
 │   └── GraficasyTablas/
 │       ├── tablas.py                # Configuración de tablas
 │       └── unovsuno.py              # Gráficos personalizados
@@ -175,7 +187,7 @@ pero contiene funciones que pueden ser usadas en todas las pruebas
 
 **Métodos importantes:**
 ```python
-setupBox()              # Crea la estructura de la interfaz desde el excel 
+setupBox()              # Crea la estructura de la interfaz desde el excel
 crear_labels()          # Crea campos de entrada
 agregar_tabla()         # Agrega tablas editables
 agregar_graficos()      # Agrega visualizaciones
@@ -373,28 +385,28 @@ class PruebaMensualTAC(QWidget):
             'Tamaño Píxel': self.categoria_tamano_pixel,
             # ... etc ...
         }
-        
+
     def cargar_dicom(self):
         """Carga carpeta DICOM y muestra visualizador"""
         self.dicom_volume = DicomVolume(carpeta_dicom)
         self.visualizador = VisualizadorDicom(self.dicom_volume)
-        
+
     def categoria_espesor(self):
         """Ejecuta análisis de espesor de corte"""
         # 1. Obtener corte actual
         corte = self.visualizador.obtener_corte_actual()
-        
+
         # 2. Ejecutar análisis
         self.resultados_espesor = espesor_corte(
-            corte, 
+            corte,
             self.geometria,
             visualizar=True
         )
-        
+
         # 3. Mostrar resultados en tabla
         tabla = tabla_resultados_espesor(self.resultados_espesor)
         self.layout_resultados.addWidget(tabla)
-        
+
     def guardar_todo(self):
         """Guarda todos los resultados en BD"""
         # 1. Guardar prueba general TAC
@@ -403,7 +415,7 @@ class PruebaMensualTAC(QWidget):
             columnas=['fecha', 'usuario', 'equipo'],
             nombreTabla='tac_mensual'
         )
-        
+
         # 2. Guardar análisis CatPhan completo
         guardar_prueba_completa_catphan(
             id_tac,
@@ -413,7 +425,7 @@ class PruebaMensualTAC(QWidget):
             self.corte_dicom_array,
             self.usuario
         )
-        
+
         # 3. Generar PDF
         self.generar_pdf()
 ```
@@ -501,25 +513,25 @@ class MiNuevaPrueba(PruebaBasico):
         super().__init__(info_widget, usuario)
         self.nombreTabla = "mi_tabla"  # Nombre de tabla en BD
         self.setupBox()
-        
+
     def setupBox(self):
         """Define la interfaz específica"""
         # Agregar campos
         self.crear_labels(['Campo1', 'Campo2', 'Campo3'])
-        
+
         # Agregar tabla
         self.agregar_tabla(num_columnas=5)
-        
+
         # Agregar botones personalizados
         btn_analizar = QPushButton("Analizar")
         btn_analizar.clicked.connect(self.analizar)
         self.layout.addWidget(btn_analizar)
-        
+
     def analizar(self):
         """Lógica de análisis específica"""
         # Tu código aquí
         pass
-        
+
     def guardar_datos(self):
         """Guardado personalizado"""
         datos = {
@@ -536,7 +548,7 @@ En `data/ManejoDatos/conection.py`, agrega en `createTable()`:
 ```python
 def createTable(self):
     # ... código existente ...
-    
+
     # Tu nueva tabla
     self.executeQuery('''
         CREATE TABLE IF NOT EXISTS mi_tabla (
@@ -579,13 +591,13 @@ import numpy as np
 def mi_analisis(imagen, parametro1, parametro2, visualizar=False):
     """
     Descripción detallada del análisis.
-    
+
     Args:
         imagen: Array NumPy (H, W) o (H, W, C)
         parametro1: Descripción
         parametro2: Descripción
         visualizar: Si True, muestra imágenes de debug
-        
+
     Returns:
         dict: {
             'resultado1': valor1,
@@ -598,11 +610,11 @@ def mi_analisis(imagen, parametro1, parametro2, visualizar=False):
         imagen_gray = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
     else:
         imagen_gray = imagen
-        
+
     # 2. Tu algoritmo aquí
     resultado1 = np.mean(imagen_gray)
     resultado2 = np.std(imagen_gray)
-    
+
     # 3. Visualización (opcional)
     if visualizar:
         import matplotlib.pyplot as plt
@@ -614,7 +626,7 @@ def mi_analisis(imagen, parametro1, parametro2, visualizar=False):
         plt.imshow(imagen_procesada, cmap='gray')
         plt.title('Procesada')
         plt.show()
-        
+
     # 4. Retornar resultados
     return {
         'resultado1': resultado1,
@@ -633,7 +645,7 @@ from analisisImagenes.mi_analisis import mi_analisis
 def ejecutar_mi_analisis(self):
     # Cargar imagen
     imagen = cv2.imread(self.ruta_imagen)
-    
+
     # Ejecutar análisis
     resultados = mi_analisis(
         imagen,
@@ -641,7 +653,7 @@ def ejecutar_mi_analisis(self):
         parametro2='opcion',
         visualizar=True
     )
-    
+
     # Mostrar resultados
     self.labels['Resultado1'].setText(str(resultados['resultado1']))
     self.labels['Resultado2'].setText(str(resultados['resultado2']))
@@ -709,13 +721,13 @@ def reporte_mi_equipo(datos, imagenes):
     """Reporte personalizado para mi equipo"""
     doc = SimpleDocTemplate(filename, pagesize=letter)
     story = []
-    
+
     # Encabezado personalizado
     story.append(Paragraph("Mi Equipo - Reporte", estilos['Title']))
-    
+
     # Contenido específico
     # ...
-    
+
     doc.build(story)
     return filename
 ```
@@ -749,16 +761,16 @@ class TestMiAnalisis(unittest.TestCase):
     def setUp(self):
         # Preparar datos de prueba
         self.imagen_test = np.random.rand(512, 512)
-        
+
     def test_resultado_valido(self):
         resultado = mi_analisis(self.imagen_test, param1=10)
         self.assertIsNotNone(resultado)
         self.assertIn('resultado1', resultado)
-        
+
     def test_parametros_invalidos(self):
         with self.assertRaises(ValueError):
             mi_analisis(None, param1=10)
-            
+
 if __name__ == '__main__':
     unittest.main()
 ```
@@ -804,9 +816,9 @@ except Exception as e:
 # En leer_dicom.py:GeometriaCatphan.desde_imagen()
 # Ajustar parámetros de detección
 _, imagen_bin = cv2.threshold(
-    imagen_norm, 
+    imagen_norm,
     umbral_ajustado,  # Probar diferentes valores (100-150)
-    255, 
+    255,
     cv2.THRESH_BINARY
 )
 ```
@@ -853,6 +865,7 @@ pdf_path = os.path.join(pdf_dir, 'reporte.pdf')
 ### Referencias de Física Médica
 - AAPM TG Reports para protocolos de control de calidad
 - Documentación del phantom CatPhan (Phantom Laboratory)
+- IAEA TRS-398 (2000/2021)
 
 ---
 
@@ -865,16 +878,16 @@ pdf_path = os.path.join(pdf_dir, 'reporte.pdf')
 def mi_funcion(parametro1, parametro2):
     """
     Descripción breve.
-    
+
     Descripción detallada si es necesario.
-    
+
     Args:
         parametro1 (tipo): Descripción
         parametro2 (tipo): Descripción
-        
+
     Returns:
         tipo: Descripción del retorno
-        
+
     Raises:
         ErrorType: Cuándo se lanza
     """
@@ -909,8 +922,8 @@ from data.ManejoDatos.conection import Conexion
 ## 📞 Contacto y Soporte
 
 Para preguntas o reportar bugs:
-- **Repositorio:** AngieNavarroyh/Controles
-- **Rama:** main
+- **Repositorio:** Felipe0Parra/RAD-QA-AUNA
+- **Rama:** /tree/master
 
 ---
 
@@ -938,7 +951,7 @@ Para preguntas o reportar bugs:
 
 ---
 
-**Última actualización:** Octubre 2025
+**Última actualización:** Septiembre 2026
 **Mantenedor:** [Tu nombre/equipo]
 
 ---

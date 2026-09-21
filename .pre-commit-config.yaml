@@ -2,8 +2,24 @@ repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v3.2.0
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
+    # trailing-whitespace y end-of-file-fixer DESACTIVADOS el 21-09-2026, a
+    # peticion del fisico ("que no bloquee los commits"). No fallan por un
+    # defecto: fallan porque MODIFICAN el archivo, y pre-commit aborta siempre
+    # que un hook reescribe algo. Con README.md -- que lo edita un tercero y
+    # vive con cambios sin preparar -- eso se vuelve un bucle: el hook lo
+    # arregla en el arbol, pre-commit guarda y restaura ese cambio sin
+    # preparar, y el commit no sale nunca.
+    # Razon propia de este repo: un hook que reescribe archivos de produccion
+    # DESPUES de que se verificaron numeros de linea y md5 rompe en silencio
+    # los censos por linea de la suite (Trampa 5 en CLAUDE.md). La higiene de
+    # espacios se hace al editar, no en la puerta del commit.
+    # Para reactivarlos sin el bucle basta con excluir lo ajeno:
+    #     -   id: trailing-whitespace
+    #         exclude: ^README\.md$
+    #     -   id: end-of-file-fixer
+    #         exclude: ^README\.md$
+    # Los dos que quedan NO tocan ningun archivo: solo fallan si hay un
+    # problema de verdad (YAML invalido, archivo enorme en el indice).
     -   id: check-yaml
     -   id: check-added-large-files
 
