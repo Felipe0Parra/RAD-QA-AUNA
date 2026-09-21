@@ -344,11 +344,11 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 203, '%'),
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 203, 'cm'),
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 217, 'cm'),
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1269, 'mm'),  # A.2 (21-09): 1256->1269
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1527, 'mm'),  # A.2 (21-09): 1514->1527
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1531, 'mm'),  # A.2 (21-09): 1518->1531
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1704, '°'),  # A.2 (21-09): 1691->1704
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2364, 'cm'),  # A.2 (21-09): 2305->2364
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1270, 'mm'),  # A.2 (21-09): 1256->1269; B.3 (21-09): 1269->1270
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1528, 'mm'),  # A.2 (21-09): 1514->1527; B.3 (21-09): 1527->1528
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1532, 'mm'),  # A.2 (21-09): 1518->1531; B.3 (21-09): 1531->1532
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1705, '°'),  # A.2 (21-09): 1691->1704; B.3 (21-09): 1704->1705
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2425, 'cm'),  # A.2 (21-09): 2305->2364; B.3 (21-09): 2364->2425
     ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 760, 'MeV'),
     ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1595, 'mm'),
     ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1738, 'cm'),

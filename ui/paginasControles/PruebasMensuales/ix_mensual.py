@@ -396,6 +396,10 @@ class PruebaMensualIX(PruebaMensual600):
         # [2] Cargar lo ya guardado en BD (si existe), por nombre de columna
         self._cargar_dosimetria_bd_ix(df_lines, nombre_tabla, ref)
 
+        # [2b] B.3: la precarga va DESPUÉS de la BD y solo llena las energías
+        # sin copia guardada (método heredado de PruebaMensual600)
+        self._precargar_referencia_calidad(df_lines, nombre_tabla, ref)
+
         # [3] Crear botones
         if layout is not None:
             buttonLayout = QHBoxLayout()

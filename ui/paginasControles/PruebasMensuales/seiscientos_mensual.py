@@ -32,6 +32,7 @@ from ui.util_formato import codigo_de_formato
 from services.vigencia_equipo import es_vigente_en_fecha
 from services.etiqueta_equipo import etiqueta_equipo
 from services.equipos_service import EquiposService
+from services.referencias_qc import leer_referencia
 from services.MLCs_calibration_service import MLC_MEASSUREMENT, STARSHOT_MEASUREMENT
 from services.MLCs_calibration_service import _dibujar_peine, _dibujar_picket_detalle, _dibujar_perfiles_picket, _conectar_interactividad, _error_color, procesar_data_starshot, dibujar_starshot_imagen, conectar_interactividad_starshot, _dibujar_varianza_interpicket, _dibujar_analisis_estadistico, pf_db_insertion, pf_picket_error_insertion, pf_leaf_error_insertion, pf_highest_leaf_errors_insertion, analisis_profundo_starshot, _dibujar_colinealidad_starshot, _dibujar_uniformidad_angular, _dibujar_residuos_starshot, starshot_angles_insertion, starshot_residual_statistics_insert, starshot_angular_uniformity_insert, starshot_insert
 from services.MLCs_calibration_service import (
@@ -1824,6 +1825,10 @@ class PruebaMensual600(PruebaBasico):
             # [2] Cargar lo ya guardado en BD (si existe)
             self._cargar_de_bd(df_lines, nombre_tabla, ref)
 
+            # [2b] B.3: solo DESPUÉS de la BD -- la precarga llena lo que la
+            # copia guardada dejó sin dueño, nunca la pisa (orden de H2.7)
+            self._precargar_referencia_calidad(df_lines, nombre_tabla, ref)
+
             # [3] Crear botones UNA SOLA VEZ (después de cargar datos)
             btn_guardar, btn_calculadora = self._crear_accion_botones(layout)
 
@@ -2187,6 +2192,62 @@ class PruebaMensual600(PruebaBasico):
             widget.itemChanged.connect(debounced_callback)
         else:
             widget.textChanged.connect(debounced_callback)
+
+    def _energias_con_fila_vigente(self, ref):
+        """Energías de este control que YA tienen una fila vigente en
+        dosimetriaMen -- es decir, que ya llevan su copia guardada. Una fila
+        anulada (generación superada) no cuenta. Clave de bloque completa
+        (ref, energia), igual que el guardado."""
+        con_fila = set()
+        with Conexion().conectar() as conn:
+            cursor = conn.cursor()
+            for energia in self.ENERGIAS:
+                cursor.execute(
+                    f"SELECT 1 FROM dosimetriaMen WHERE ref = ? AND energia = ?"
+                    f"{filtro_activo('dosimetriaMen')}", (ref, energia))
+                if cursor.fetchone() is not None:
+                    con_fila.add(energia)
+            cursor.close()
+        return con_fila
+
+    def _precargar_referencia_calidad(self, df_lines, nombre_tabla, ref):
+        """B.3 (PLAN_REFERENCIAS_EDITABLES_21-09): un control NUEVO llega con
+        la referencia de calidad que fijó el jefe para ESE equipo; uno que ya
+        tiene copia guardada conserva la suya, aunque la tabla haya cambiado.
+
+        Debe correr DESPUÉS de la carga desde BD. Actúa solo sobre las
+        energías que (a) no tienen fila vigente en dosimetriaMen y (b) tienen
+        el widget vacío -- una fila guardada con val_teo_calidad NULL también
+        cuenta como "ya tiene copia" (se juzgó con lo que el código usaba
+        entonces; rellenarla ahora la haría parecer juzgada contra un número
+        que nadie vio). Sin referencia en la tabla el widget queda vacío y
+        A.1 cae al respaldo: no se inventa nada. Se rellena con blockSignals
+        para no disparar el recálculo a media precarga (P3/DP-56).
+
+        Nunca propaga: addsomething envuelve todo en un try/except que, ante
+        una excepción, se saltaría la creación de los botones."""
+        if nombre_tabla != "dosimetriaMen":
+            return
+        self._referencia_precargada = {}
+        try:
+            con_fila = self._energias_con_fila_vigente(ref)
+            for energia in self.ENERGIAS:
+                attr = f"val_teo_{energia}"
+                widget = getattr(self, attr, None) if attr in df_lines else None
+                if widget is None or widget.text().strip() or energia in con_fila:
+                    continue
+                referencia = leer_referencia(self.equipo_f, "calidad", energia)
+                if referencia is None:
+                    continue
+                texto = str(referencia["valor"])
+                widget.blockSignals(True)
+                try:
+                    widget.setText(texto)
+                finally:
+                    widget.blockSignals(False)
+                self._referencia_precargada[energia] = texto
+        except Exception as e:
+            print(f"Error precargando referencia de calidad (B.3): {e}")
 
     def _persistir_referencia_calidad_si_vacia(self, df_lines):
         """A.2 (PLAN_REFERENCIAS_EDITABLES_21-09): la copia guardada manda

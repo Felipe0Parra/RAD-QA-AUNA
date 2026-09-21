@@ -331,12 +331,18 @@ class TestDenominadorDeCobertura:
         #             `services/referencias_qc.py` (leer_referencia,
         #             listar_vigentes, historial) -- tres lectoras nuevas
         #             sobre `referencias_qc`, quinta raíz del bloque.
+        #   103 -> 104 B.3 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09):
+        #             `_energias_con_fila_vigente` (seiscientos_mensual.py)
+        #             -- lee `dosimetriaMen` por (ref, energia) para saber si
+        #             el control ya tiene copia guardada antes de precargar
+        #             la referencia. Una lectura nueva y real; filtra
+        #             vigencia con `filtro_activo` y cubre la clave completa.
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 103, (
-            f"B.2 sumó lectoras nuevas -- 103 funciones "
+        assert len(lectoras) == 104, (
+            f"B.3 sumó lectoras nuevas -- 104 funciones "
             f"esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
