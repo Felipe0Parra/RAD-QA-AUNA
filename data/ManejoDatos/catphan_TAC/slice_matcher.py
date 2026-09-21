@@ -56,12 +56,21 @@ class ResultadoModulo:
 def detectar_modulos_pylinac(ruta_dicom: str) -> dict[str, ResultadoModulo]:
     from pylinac import CatPhan504
 
+    from analisisImagenes.catphan.serie import leer_serie
+
     resultados = {}
 
     try:
-        ct = CatPhan504(ruta_dicom)
+        # A.2 (PLAN_CATPHAN_AUTOMATICO_POR_EQUIPO_18-09.md): se pasa la
+        # LISTA de rutas de la serie elegida por `leer_serie` (la misma
+        # función que ordena el volumen del visor, A.1), no la carpeta
+        # cruda -- así el índice que devuelve pylinac se refiere exactamente
+        # a los mismos archivos que `DicomVolume.cortes`, incluso si la
+        # carpeta tuviera una segunda serie o un RTSTRUCT (D-06).
+        rutas = [corte.ruta for corte in leer_serie(ruta_dicom).cortes]
+        ct = CatPhan504(rutas)
         ct.analyze()
-    
+
     except Exception as e:
         print(f"⚠️  pylinac no pudo analizar el volumen: {e}")
         for nombre in DESCRIPCION_MODULOS:
@@ -94,7 +103,9 @@ def detectar_modulos_pylinac(ruta_dicom: str) -> dict[str, ResultadoModulo]:
             continue
 
         try:
-            idx = int(modulo_pylinac.slice_num) - 1  # pylinac es 1-based
+            # D-02: `slice_num` ya es 0-based (solo los TÍTULOS de las
+            # figuras de pylinac suman 1) -- no se le resta 1 aquí.
+            idx = int(modulo_pylinac.slice_num)
             resultados[nombre] = ResultadoModulo(
                 nombre=nombre,
                 descripcion=DESCRIPCION_MODULOS[nombre],
@@ -117,8 +128,8 @@ def detectar_modulos_pylinac(ruta_dicom: str) -> dict[str, ResultadoModulo]:
 # Popup informativo — solo muestra números de corte, no hace nada más
 # ---------------------------------------------------------------------------
 
-    
-    
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -175,8 +186,8 @@ def detectar_y_resolver_modulos(
     return resultados, cortes
 
 
-        
-    
+
+
 
 # ---------------------------------------------------------------------------
 # CLI de prueba
