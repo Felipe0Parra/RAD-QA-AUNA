@@ -327,12 +327,16 @@ class TestDenominadorDeCobertura:
         #             auditoría resuelve equipo+fecha en lote contra
         #             `controles`/`TipoCalibracion`, dos lecturas nuevas y
         #             reales sobre raíces del bloque de QC.
+        #   100 -> 103 B.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09):
+        #             `services/referencias_qc.py` (leer_referencia,
+        #             listar_vigentes, historial) -- tres lectoras nuevas
+        #             sobre `referencias_qc`, quinta raíz del bloque.
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 100, (
-            f"T.4 sumó una lectora nueva -- 100 funciones "
+        assert len(lectoras) == 103, (
+            f"B.2 sumó lectoras nuevas -- 103 funciones "
             f"esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "

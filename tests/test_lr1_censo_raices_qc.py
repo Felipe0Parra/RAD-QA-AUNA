@@ -69,6 +69,18 @@ RAICES = lv.RAICES_QC
 # revisar la clasificación sin volver a leer los 75 sitios.
 # ---------------------------------------------------------------------------
 CENSO_RAICES = {
+    # -- B.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md) -----------------------
+    ("services/referencias_qc.py", 70, "referencias_qc"):
+        (LISTA, "leer_referencia: WHERE equipo=? AND magnitud=? AND energia=? "
+         "-- la CLAVE DE BLOQUE completa (no una fila física), así que filtra "
+         "activo con filtro_activo() dentro del propio f-string"),
+    ("services/referencias_qc.py", 83, "referencias_qc"):
+        (LISTA, "listar_vigentes: lista TODAS las referencias vigentes para "
+         "la pestaña; filtra activo con filtro_activo() en el f-string"),
+    ("services/referencias_qc.py", 98, "referencias_qc"):
+        (CENSO, "historial: lee las filas vigentes E históricas de una clave "
+         "de bloque A PROPÓSITO -- es el rastro de quién cambió qué y cuándo "
+         "(paso 8 de la puerta de salida); filtrar activo lo dejaría vacío"),
     # -- T.4 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §5) ----------------
     ("services/contexto_auditoria.py", 133, "controles"):
         (IDENTIDAD, "visor de auditoría -- WHERE id IN (...) resuelve por "
@@ -326,8 +338,12 @@ CENSO_RAICES = {
 # imgHC` (load.py:2515). Un sitio menos: 72 -> 71.
 # A11 (mismo día, mismo motivo): tercer gemelo, `mostrar_controles_tac`
 # (load.py:2715). Un sitio menos: 71 -> 70.
-FILAS_ESPERADAS = 72
-SITIOS_FISICOS_ESPERADOS = 70
+# B.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09): `referencias_qc` es la
+# quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
+# en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
+# 70 -> 73 sitios físicos.
+FILAS_ESPERADAS = 75
+SITIOS_FISICOS_ESPERADOS = 73
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca
