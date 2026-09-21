@@ -348,7 +348,7 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1528, 'mm'),  # A.2 (21-09): 1514->1527; B.3 (21-09): 1527->1528
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1532, 'mm'),  # A.2 (21-09): 1518->1531; B.3 (21-09): 1531->1532
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1705, '°'),  # A.2 (21-09): 1691->1704; B.3 (21-09): 1704->1705
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2425, 'cm'),  # A.2 (21-09): 2305->2364; B.3 (21-09): 2364->2425
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2497, 'cm'),  # A.2 (21-09): 2305->2364; B.3 (21-09): 2364->2425; B.4 (21-09): 2425->2497
     ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 760, 'MeV'),
     ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1595, 'mm'),
     ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1738, 'cm'),

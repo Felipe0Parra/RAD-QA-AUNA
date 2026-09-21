@@ -334,6 +334,15 @@ ALLOWLIST = {
      "PruebaMensual600._persistir_val_teo_dosis"):
         "audita-el-llamador:data/ManejoDatos/load.py::subirlineasmensuales",
 
+    # B.4 (PLAN_REFERENCIAS_EDITABLES_21-09.md): _persistir_origen_referencia
+    # escribe la trazabilidad del origen de la referencia de calidad en la
+    # misma fila que ese mismo clic "Subir" acaba de guardar -- se llama
+    # justo después de _persistir_val_teo_dosis, y la acción ya la audita
+    # subirlineasmensuales/_ix (una fila por clic, no una por UPDATE).
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py",
+     "PruebaMensual600._persistir_origen_referencia"):
+        "audita-el-llamador:data/ManejoDatos/load.py::subirlineasmensuales",
+
     # --- A6.4 (anual 600/IX/Halcyon) cerrada 2026-08-04: create_control
     # (mismo patrón que el mensual, solo audita el alta -- la reapertura
     # tampoco audita en el hermano mensual), subir_imagen_perfil_mlc_db y

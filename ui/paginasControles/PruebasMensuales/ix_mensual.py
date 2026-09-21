@@ -440,6 +440,7 @@ class PruebaMensualIX(PruebaMensual600):
                 self._persistir_referencia_calidad_si_vacia(df_lines)
                 self.subirlineasmensuales_ix(nombre_tabla, datos_eliminar, ref=ref, usarid=usarid, df_lines=df_lines)
                 self._persistir_val_teo_dosis(ref)
+                self._persistir_origen_referencia(ref)
                 for line in df_lines:
 
                     dato = getattr(self, line)

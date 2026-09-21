@@ -2195,18 +2195,25 @@ class PruebaMensual600(PruebaBasico):
 
     def _energias_con_fila_vigente(self, ref):
         """Energías de este control que YA tienen una fila vigente en
-        dosimetriaMen -- es decir, que ya llevan su copia guardada. Una fila
-        anulada (generación superada) no cuenta. Clave de bloque completa
-        (ref, energia), igual que el guardado."""
-        con_fila = set()
+        dosimetriaMen -- es decir, que ya llevan su copia guardada -- como
+        {energia: (val_teo_calidad, origen_referencia)}. Una fila anulada
+        (generación superada) no cuenta. Clave de bloque completa
+        (ref, energia), igual que el guardado.
+
+        B.4: el origen se lee solo para CONSERVARLO al reguardar (el
+        reemplazo de bloque inserta una fila nueva que no lo trae); nunca
+        decide qué valor se muestra ni se calcula."""
+        con_fila = {}
         with Conexion().conectar() as conn:
             cursor = conn.cursor()
             for energia in self.ENERGIAS:
                 cursor.execute(
-                    f"SELECT 1 FROM dosimetriaMen WHERE ref = ? AND energia = ?"
+                    f"SELECT val_teo_calidad, origen_referencia FROM dosimetriaMen "
+                    f"WHERE ref = ? AND energia = ?"
                     f"{filtro_activo('dosimetriaMen')}", (ref, energia))
-                if cursor.fetchone() is not None:
-                    con_fila.add(energia)
+                fila = cursor.fetchone()
+                if fila is not None:
+                    con_fila[energia] = (fila[0], fila[1])
             cursor.close()
         return con_fila
 
@@ -2229,8 +2236,10 @@ class PruebaMensual600(PruebaBasico):
         if nombre_tabla != "dosimetriaMen":
             return
         self._referencia_precargada = {}
+        self._referencia_guardada = {}
         try:
             con_fila = self._energias_con_fila_vigente(ref)
+            self._referencia_guardada = con_fila
             for energia in self.ENERGIAS:
                 attr = f"val_teo_{energia}"
                 widget = getattr(self, attr, None) if attr in df_lines else None
@@ -2269,6 +2278,12 @@ class PruebaMensual600(PruebaBasico):
                 respaldo = self.VALORES_REFERENCIA_CALIDAD_RESPALDO.get(energia)
                 if respaldo is not None:
                     widget.setText(str(respaldo))
+                    # B.4: recordar que este número lo puso el respaldo, no
+                    # una persona -- en un segundo guardado de la misma
+                    # pantalla el widget ya no estará vacío
+                    if not hasattr(self, "_referencia_respaldo_puesta"):
+                        self._referencia_respaldo_puesta = {}
+                    self._referencia_respaldo_puesta[energia] = str(respaldo)
 
     def _persistir_val_teo_dosis(self, ref):
         """A.2: val_teo_dosis no tiene widget en esta pantalla (R5) -- se
@@ -2289,6 +2304,62 @@ class PruebaMensual600(PruebaBasico):
         except Exception as e:
             print(f"Error persistiendo val_teo_dosis (A.2): {e}")
 
+    @staticmethod
+    def _mismo_numero(a, b):
+        try:
+            return float(a) == float(b)
+        except (TypeError, ValueError):
+            return False
+
+    def _decidir_origen_referencia(self, energia, texto):
+        """B.4: de dónde salió el número que hay HOY en val_teo_{energia}.
+        Devuelve 'respaldo' | 'tabla' | 'manual' | el origen ya guardado
+        (que puede ser None: fila histórica, no se inventa) | None si el
+        campo está vacío. Se comparan NÚMEROS, no texto ('0.6270' es la
+        referencia). Orden: lo que puso el respaldo, lo que precargó la
+        tabla, lo que ya estaba guardado y no cambió, y solo entonces lo
+        que tecleó alguien."""
+        if not texto.strip():
+            return None
+        puesta = getattr(self, "_referencia_respaldo_puesta", {}).get(energia)
+        if puesta is not None and self._mismo_numero(texto, puesta):
+            return "respaldo"
+        precargada = getattr(self, "_referencia_precargada", {}).get(energia)
+        if precargada is not None and self._mismo_numero(texto, precargada):
+            return "tabla"
+        guardada = getattr(self, "_referencia_guardada", {}).get(energia)
+        if guardada is not None and self._mismo_numero(texto, guardada[0]):
+            return guardada[1]
+        return "manual"
+
+    def _persistir_origen_referencia(self, ref):
+        """B.4: escribe `origen_referencia` en la fila vigente de cada
+        energía, DESPUÉS del guardado (la fila que inserta el reemplazo de
+        bloque no lo trae -- mismo patrón que _persistir_val_teo_dosis).
+        Es solo trazabilidad: ningún lector decide un valor con ella (DA-13,
+        y el tripwire de test_b4 lo afirma). Nunca propaga."""
+        try:
+            filas = []
+            for energia in self.ENERGIAS:
+                widget = getattr(self, f"val_teo_{energia}", None)
+                if widget is None:
+                    continue
+                origen = self._decidir_origen_referencia(energia, widget.text())
+                if origen is not None:
+                    filas.append((origen, ref, energia))
+            if not filas:
+                return
+            with Conexion().conectar() as conn:
+                cursor = conn.cursor()
+                cursor.executemany(
+                    "UPDATE dosimetriaMen SET origen_referencia = ? "
+                    "WHERE ref = ? AND energia = ? "
+                    "AND (activo IS NULL OR activo = 1)", filas)
+                conn.commit()
+                cursor.close()
+        except Exception as e:
+            print(f"Error persistiendo origen_referencia (B.4): {e}")
+
     def _subir_optimizado(self, df_lines, nombre_tabla, datos_eliminar, ref, usarid, anual=False):
         """Método optimizado para subir datos con mejor manejo de errores"""
         if not self._confirmar_campos_mcc_sin_revisar():
@@ -2304,6 +2375,7 @@ class PruebaMensual600(PruebaBasico):
 
             if nombre_tabla == "dosimetriaMen" and not anual:
                 self._persistir_val_teo_dosis(ref)
+                self._persistir_origen_referencia(ref)
 
             # Procesar líneas adicionales si es necesario
             for line in df_lines:
