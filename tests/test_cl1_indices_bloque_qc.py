@@ -61,13 +61,14 @@ def _indices_reales(ruta):
 # desde E7, ya tiene `activo` desde siempre.
 
 
-def test_crea_los_61_tras_mi1_mi3_eb6_r1(bd_temporal):
+def test_crea_los_62_tras_mi1_mi3_eb6_r1_b1(bd_temporal):
     resultado = crear_indices(bd_temporal)
 
     # R1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, 27-08): +4 sobre las 57
     # que dejó EB6 -- las lecturas crudas de Linealidad entran directo a
     # TABLAS_ANULABLES, sin pasar por un estado "declarada, pendiente".
-    assert len(resultado) == 61
+    # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09): +1 (referencias_qc).
+    assert len(resultado) == 62
     for tabla, r in resultado.items():
         assert r == "creado", (
             f"{tabla}: se esperaba 'creado' -- tras MI1/MI3/EB6/R1 las 61 "
@@ -177,5 +178,6 @@ def test_claves_coinciden_con_las_del_plan_para_las_8_de_h2():
     # (§6-MI3) añadió las 4 diarias (clave por expresión DATE(date)) = 56.
     # EB6 (24-08, hallazgo G3) añadió TipoCalibracion = 57. R1
     # (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, 27-08) añadió las 4 lecturas
-    # crudas de Linealidad = 61.
-    assert len(CLAVES_INDICE) == 61
+    # crudas de Linealidad = 61. B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md,
+    # 21-09) añadió referencias_qc = 62.
+    assert len(CLAVES_INDICE) == 62

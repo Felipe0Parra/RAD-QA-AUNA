@@ -70,11 +70,14 @@ def _insertar_control(ruta_bd, **campos):
 # ---------------------------------------------------------------------------
 
 class TestSecciones:
-    def test_las_7_raices_estan_todas(self, bd_temporal):
+    def test_las_8_raices_estan_todas(self, bd_temporal):
+        # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09): +1
+        # (referencias_qc, quinta raíz propia -- RAICES_QC).
         secc = va.secciones()
         assert set(secc) == {
             "controles", "TipoCalibracion", "LinealidadBraquiterapia",
             "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui",
+            "referencias_qc",
         }
 
     def test_cada_seccion_incluye_a_su_propia_raiz(self, bd_temporal):

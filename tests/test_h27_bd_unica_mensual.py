@@ -218,7 +218,8 @@ class TestDdlIgualProduccion:
             "simetria_crossplane", "tolerancia_simetria",
             "planicidad_inplane", "planicidad_crossplane",
             "tolerancia_planicidad", "observaciones_dosi", "energia",
-            "activo"]  # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11)
+            "activo",  # E7 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §11)
+            "origen_referencia"]  # B.4 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
 
 
 class TestSinRegistroNaceVacio:

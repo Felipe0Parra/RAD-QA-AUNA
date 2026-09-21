@@ -162,6 +162,16 @@ TABLAS_ANULABLES = frozenset({
     # `_asegurar_migraciones_ad_hoc` (data/ManejoDatos/conection.py).
     "angulos_entre_lineas_starshot",
     "uniformidad_angular_starshot",
+    # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, DA-80): valores de referencia
+    # editables desde la app (calidad de haz, dosis, tolerancias) por equipo
+    # y magnitud -- entra al contrato desde que nace, receta de R1. Sin FK
+    # (no cuelga de `controles`: es una tabla de configuración por equipo,
+    # no un hijo de un control puntual), así que no forma parte del cierre
+    # transitivo por FK que vigila IV2 -- clasificarla aquí es la garantía
+    # de que `_asegurar_activo_bloque_qc`, `crear_indices` (CLAVES_INDICE) y
+    # `reemplazar_bloque`/`filtro_activo` (services/referencias_qc.py, B.2)
+    # la traten como el resto del bloque de QC.
+    "referencias_qc",
 })
 
 

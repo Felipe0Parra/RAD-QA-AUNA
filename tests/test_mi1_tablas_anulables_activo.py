@@ -83,13 +83,16 @@ class TestInventarioTrasMI1:
             f"MI1 debía mover estas tablas a TABLAS_ANULABLES y no aparecen: "
             f"{faltantes}")
 
-    def test_el_frozenset_tiene_63_entradas(self):
+    def test_el_frozenset_tiene_64_entradas(self):
         # R1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, F-5, 27-08): +4
         # (anual_linealidad_um, anual_lecturas_factor_campo,
         # anual_lecturas_transmision, anual_tasa_dosis) sobre las 59 que
         # dejó MI1 -- 56 hijas + 7 raíces.
-        assert len(TABLAS_ANULABLES) == 63, (
-            f"56 hijas + 7 raíces tras MI1+R1 -- hay "
+        # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09): +1
+        # (referencias_qc, quinta raíz propia -- ver RAICES_QC en
+        # services/lectura_vigente.py) sobre las 63 que dejó R1.
+        assert len(TABLAS_ANULABLES) == 64, (
+            f"56 hijas + 8 raíces tras MI1+R1+B.1 -- hay "
             f"{len(TABLAS_ANULABLES)}. Si el cambio es deliberado, "
             f"actualiza este número a la vez que TABLAS_ANULABLES.")
 

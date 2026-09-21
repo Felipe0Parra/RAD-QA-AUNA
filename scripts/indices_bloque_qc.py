@@ -144,6 +144,14 @@ CLAVES_INDICE = {
     "anual_lecturas_factor_campo": ("ref", "id_energia", "clave"),
     "anual_lecturas_transmision": ("ref", "id_energia", "accesorio"),
     "anual_tasa_dosis": ("ref", "id_energia", "tasa_um_min"),
+
+    # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md §1.3): la clave de bloque de
+    # una referencia editable es (equipo, magnitud, energia) -- impide dos
+    # referencias VIGENTES a la vez para el mismo equipo+magnitud+energía.
+    # `energia` guarda '' (no NULL) cuando la magnitud no depende de la
+    # energía (p.ej. una tolerancia global) -- en SQLite dos NULL no
+    # colisionan en un UNIQUE, así que NULL dejaría esas filas sin proteger.
+    "referencias_qc": ("equipo", "magnitud", "energia"),
 }
 
 _RE_EXPRESION_CLAVE = re.compile(r'^(\w+)\((\w+)\)$')

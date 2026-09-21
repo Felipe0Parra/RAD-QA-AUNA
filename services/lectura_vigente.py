@@ -71,6 +71,14 @@ _INDICES_PATH = ROOT / "scripts" / "indices_bloque_qc.py"
 RAICES_QC = frozenset({
     "controles", "TipoCalibracion", "LinealidadBraquiterapia",
     "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui",
+    # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, DA-80): quinta raíz nueva --
+    # `referencias_qc` es una tabla de CONFIGURACIÓN por equipo (valores de
+    # referencia y tolerancias), no un hijo de un control puntual, así que
+    # a propósito no tiene FK hacia ninguna otra tabla del bloque de QC.
+    # Sin clasificarla aquí, IV2 la marca "sobrante" (en TABLAS_ANULABLES
+    # pero fuera del cierre transitivo por FK desde las demás raíces) --
+    # que es exactamente lo que es: una raíz propia, no un descendiente.
+    "referencias_qc",
 })
 
 

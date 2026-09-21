@@ -224,14 +224,17 @@ SITIOS_OPACOS_PERMITIDOS = {
         "criterio que la entrada anterior: solo corre para tablas sin "
         "'activo' (p.ej. 'preguntas' antes de PR1). Contrato original, sin "
         "cambios; documentado también en el propio archivo.",
-    ("services/anulacion.py", 247):
+    ("services/anulacion.py", 257):
         # R1 (PLAN_REPARACION_ANUAL_27-08.md, 27-08): 238->247, desplazado
         # por las 4 tablas nuevas agregadas a TABLAS_ANULABLES. Mismo sitio.
+        # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md): 247->257, desplazado
+        # por el comentario de `referencias_qc` agregado a TABLAS_ANULABLES.
         "anular_fila -- _SQL_ANULAR.format(...) compone siempre "
         "'SET activo = 0'. Verificado a mano contra el propio literal del "
         "helper (services/anulacion.py, _SQL_ANULAR).",
-    ("services/anulacion.py", 357):
+    ("services/anulacion.py", 367):
         # R1: 348->357, mismo desplazamiento que el sitio de arriba.
+        # B.1: 357->367, mismo desplazamiento que el sitio de arriba.
         "reemplazar_bloque (EB1) -- sql_anular_bloque(...) compone siempre "
         "'SET activo = 0' más el AND de vigencia. Mismo helper, mismo "
         "template verificado a mano.",
@@ -241,13 +244,13 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 886):
         "INSERT (linealidad_ct) -- no aplica a EB5, un INSERT nunca muta el "
         "bloque vigente.",
-    ("data/ManejoDatos/conection.py", 679):  # R.1 (11-09): 593->678
+    ("data/ManejoDatos/conection.py", 681):  # R.1 (11-09): 593->678; B.1 (21-09): 679->681
         "DDL (E10 -- CREATE TABLE de la tabla temporal de la migración "
         "CASCADE->RESTRICT) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 779):  # R.1 (11-09): 693->778
+    ("data/ManejoDatos/conection.py", 781):  # R.1 (11-09): 693->778; B.1 (21-09): 779->781
         "DDL (EB2d, DA-57 -- CREATE TABLE de la tabla temporal que retira "
         "el UNIQUE de angulo_starshot) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 2363):
+    ("data/ManejoDatos/conection.py", 2417):  # B.1 (21-09): 2363->2417
         # R1 (PLAN_REPARACION_ANUAL_27-08.md, 27-08): 2091->2160, desplazado
         # por las 4 tablas nuevas (CREATE TABLE) agregadas a
         # crearTablasAnuales. Mismo sitio. R.1 (11-09): 2224->2309.

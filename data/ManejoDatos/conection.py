@@ -202,6 +202,7 @@ class Conexion():
             self.crearTablasAnuales() # Crear tablas para controles anuales del 600 e IX
             self.crearTablasHalcyon()  # Crear tablas para controles Halcyon (Anuales y Mensuales)
             self.crearTablasMLCs()
+            self.crearTablaReferenciasQC()  # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
 
             # R1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): DosisService.crear_tabla()
             # (que asegura columnas como "energia"/"vigente" via ALTER TABLE)
@@ -224,6 +225,7 @@ class Conexion():
             self._asegurar_activo_bloque_qc()
             self._asegurar_parametros_analisis_braqui()
             self._asegurar_identidad_sistema_medicion()
+            self._asegurar_origen_referencia_dosimetria()  # B.4 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -924,6 +926,33 @@ class Conexion():
         cur = self.con.cursor()
         _asegurar_columna(cur, "SistemaMedicion", "equipo_id_cp", "INTEGER")
         _asegurar_columna(cur, "SistemaMedicion", "equipo_id_ele", "INTEGER")
+        self.con.commit()
+        cur.close()
+
+    def _asegurar_origen_referencia_dosimetria(self):
+        """B.4 (PLAN_REFERENCIAS_EDITABLES_21-09.md): `origen_referencia` en
+        `dosimetriaMen` -- de TRAZABILIDAD, no de valor. Dice si el número
+        contra el que se comparó vino de la tabla editable (`referencias_qc`,
+        B.2), se tecleó a mano, o cayó al respaldo por energía (A.1). Mismo
+        principio que `equipos_medicion.equipo_id` ([[DA-13]]): NO manda en
+        la lectura -- lo que se muestra y se imprime siempre es la copia
+        (`val_teo_calidad`/`val_teo_dosis`), nunca esta columna.
+
+        Sin relleno retroactivo: las filas históricas quedan en `NULL` (no
+        hay forma honesta de saber de dónde salió un número ya guardado
+        antes de que esta columna existiera). El relleno para filas NUEVAS
+        lo hace el guardado (B.4, tarea separada de ESTE cambio de esquema
+        -- ver §6 del plan: el ADD COLUMN se hace junto con B.1 para pagar
+        el remapeo de Trampa 5 una sola vez; el código que lo llena viene
+        después, con B.2/B.3 ya construidos).
+
+        Aditiva e idempotente, mismo criterio que
+        `_asegurar_identidad_sistema_medicion` -- va justo después, para
+        que el orden físico de columnas sea el mismo en una BD nueva y en
+        una ya desplegada (`DP-80`: `ALTER TABLE ADD COLUMN` siempre añade
+        al final físico)."""
+        cur = self.con.cursor()
+        _asegurar_columna(cur, "dosimetriaMen", "origen_referencia", "TEXT")
         self.con.commit()
         cur.close()
 
@@ -2343,8 +2372,33 @@ class Conexion():
             cursor.execute(tabla)
         self.con.commit()
 
-
-
+    def crearTablaReferenciasQC(self):
+        """B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, DA-80): valores de
+        referencia editables desde la app (calidad de haz por equipo y
+        energía, dosis, tolerancias) -- para que un cambio de referencia no
+        reescriba en silencio el veredicto de un control ya firmado (DP-25).
+        Sin `activo`: la agrega sola `_asegurar_activo_bloque_qc` (la tabla
+        ya está en TABLAS_ANULABLES desde que nace, mismo patrón que las 4
+        tablas de R1/PLAN_REPARACION_ANUAL_27-08.md). Sin fecha de vigencia
+        a propósito (§1.3 del plan): el historial lo da el contrato de
+        anulación, no una tercera fuente de verdad."""
+        tabla = """
+            CREATE TABLE IF NOT EXISTS referencias_qc (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                equipo TEXT NOT NULL,
+                magnitud TEXT NOT NULL,
+                energia TEXT,
+                valor REAL NOT NULL,
+                unidad TEXT,
+                fuente TEXT,
+                observaciones TEXT,
+                fijada_por TEXT,
+                fecha TEXT
+            )
+        """
+        cursor = self.con.cursor()
+        cursor.execute(tabla)
+        self.con.commit()
 
 
 

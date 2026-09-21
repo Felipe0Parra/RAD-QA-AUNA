@@ -127,6 +127,10 @@ CLAVES_ESPERADAS_DEL_PLAN = {
     "anual_lecturas_factor_campo": ("ref", "id_energia", "clave"),
     "anual_lecturas_transmision": ("ref", "id_energia", "accesorio"),
     "anual_tasa_dosis": ("ref", "id_energia", "tasa_um_min"),
+    # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md): referencias de calidad,
+    # dosis y tolerancias editables desde la app -- clave por equipo,
+    # magnitud y energía (quinta raíz propia, sin FK, RAICES_QC).
+    "referencias_qc": ("equipo", "magnitud", "energia"),
 }
 
 # Tablas del bloque de QC que YA estaban en TABLAS_ANULABLES antes de IV1
