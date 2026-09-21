@@ -321,6 +321,19 @@ ALLOWLIST = {
     ("data/ManejoDatos/load.py", "loadtablacomplex"):
         "audita-el-llamador:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600._subir_tabla_optimizada",
 
+    # A.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md): _persistir_val_teo_dosis
+    # rellena UNA columna que subirlineasmensuales/_ix no puede tocar (no
+    # tiene widget, R5) DENTRO del mismo clic "Subir" -- se llama justo
+    # después de subirlineasmensuales (600/Halcyon, _subir_optimizado) o de
+    # subirlineasmensuales_ix (iX, subir() en ix_mensual.py), y las DOS ya
+    # auditan esa acción (ACCION_GUARDAR, mismo ref). Se referencia la del
+    # 600/Halcyon, que es la ruta base; la del iX está verificada arriba en
+    # su propia entrada de guardar_control_conos (mismo patrón: un clic, una
+    # fila de auditoría, no una por cada UPDATE que ese clic dispara).
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py",
+     "PruebaMensual600._persistir_val_teo_dosis"):
+        "audita-el-llamador:data/ManejoDatos/load.py::subirlineasmensuales",
+
     # --- A6.4 (anual 600/IX/Halcyon) cerrada 2026-08-04: create_control
     # (mismo patrón que el mensual, solo audita el alta -- la reapertura
     # tampoco audita en el hermano mensual), subir_imagen_perfil_mlc_db y

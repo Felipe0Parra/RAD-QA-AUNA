@@ -18,41 +18,41 @@ from services.anulacion import TABLAS_ANULABLES
 class PruebaMensualIX(PruebaMensual600):
     ENERGIAS = ["6mv", "15mv", "6mev", "9mev", "12mev", "15mev"]
 
-    
+
     def __init__(self, user_id):
         #print("PruebaMensualIX        __init__ called")
         self.esIX = True
         self.equipo_f = "Clinac ix"
         super().__init__(user_id, equipo_f="Clinac ix")  # ✅ Llamada correcta al constructor padre
         self.lista_maquina=['encabezado_mensu_IX', 'Control mensual', 'Iniciar control mensual', 'Clinac ix', 'preguntas_mensu_ix']
-        
-   
+
+
 
     def iniGUI(self, inputs_maquina=None):
         """
         Inicializa la interfaz gráfica para PruebaMensualIX,
         asegurando que el botón de guardar se conecte a guardar_todo_ix.
         """
-        
+
         # Crear un separador horizontal que divide la ventana en dos columnas (controles y gráficos)
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(3)  # Ancho del divisor
 
         # Crear layout izquierdo con el formulario de control
         test_control_layout = QWidget()
-        
+
         # Esta llamada debe crear self.btn_guardar_ix
 
         _, _, self.commenu = self.controlTestWindow(sheet_name="preguntas_mensu_ix", lista_maquina=self.lista_maquina)
         test_control_layout.setLayout(self.general_layout)
-     
+
         # Crear layout derecho con los gráficos u otros elementos visuales
         graphics_layout = self.graphicsWindow()
 
         # Agregar ambas columnas al splitter
         splitter.addWidget(test_control_layout)
         splitter.addWidget(graphics_layout)
-        
+
         #Configurar que no se puedan colapsar
         splitter.setCollapsible(0, False)
         splitter.setCollapsible(1, False)
@@ -61,16 +61,16 @@ class PruebaMensualIX(PruebaMensual600):
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
 
-  
+
         if hasattr(self, 'nombre_fisico1'):
             index = self.fisico1.findText(self.nombre_fisico1)
             if index >= 0:
                 self.fisico1.setCurrentIndex(index)
-            self.fisico1.setEnabled(False) 
+            self.fisico1.setEnabled(False)
         if hasattr(self, 'nombre_fisico2'):
             self.fisico2.setItemText(0, self.nombre_fisico2)  # Forzar actualización del texto
             self.fisico2.setEnabled(False)
-            
+
         # Agregar el splitter al layout principal
         self.main_layout.addWidget(splitter)
         if hasattr(self, 'fecha_control'):
@@ -100,8 +100,8 @@ class PruebaMensualIX(PruebaMensual600):
             self.guardar_todo_ix()
 
         self.btn_guardar_ix.clicked.connect(wrapper_guardar)
-        
-        
+
+
         #print(f"\n[DEBUG] En {self.__class__.__name__}, btn_guardar_ix conectado a:", self.btn_guardar_ix.receivers(self.btn_guardar_ix.clicked))
         #print(f"Bandera entre 600 e IX: {self.esIX}, Acá es IX")
         self.btn_guardar_ix.clicked.connect(lambda: print("\nSe presionó btn_guardar_ix"))
@@ -137,7 +137,7 @@ class PruebaMensualIX(PruebaMensual600):
     #     fecha = self.date_box.date()
     #     fecha = fecha.toString("MM/yyyy")
     #     print(fecha)
-    #     try: 
+    #     try:
     #         if hasattr(self, 'equipo_f') and self.equipo_f != 'Tomógrafo':
     #             conn = self.db_manager.obtener_conexion()
     #         else:
@@ -155,7 +155,7 @@ class PruebaMensualIX(PruebaMensual600):
     #                 self.fisico2.setCurrentText(fisicos[0][1])
     #     except Exception as e:
     #         print("ERRRRORRR: ", e)
-    
+
     def checkLineEdits_ix(self, df_lines=None):
         if df_lines is None:
             return False
@@ -164,8 +164,8 @@ class PruebaMensualIX(PruebaMensual600):
         leidos = []
 
         for line in df_lines:
-            
-      
+
+
             if line == "ln_observaciones_dosi":
                 continue  # este no lo validamos
 
@@ -178,7 +178,7 @@ class PruebaMensualIX(PruebaMensual600):
 
         # print(f"Valores revisados {leidos}")
         return not campos_vacios
-    
+
     def _campos_de_energia(self, df_lines, energia):
         """Widgets de dosimetría que pertenecen a UNA energía del iX: los que
         llevan su sufijo (todos lo llevan en la hoja del iX, tolerancias y
@@ -236,7 +236,7 @@ class PruebaMensualIX(PruebaMensual600):
                 # --- 3. Obtener columnas reales de la tabla ---
                 columnas_str, placeholders = encontrar_columnas(nombre_tabla, delete=num_delet, id=usarid)
                 columnas = columnas_str.split(", ")
-       
+
                 if "ref" not in columnas:
                     columnas = ["ref"] + columnas
                 if "energia" not in columnas:
@@ -428,7 +428,14 @@ class PruebaMensualIX(PruebaMensual600):
                 return
             try:
                 subidos = []
+                # A.2 (PLAN_REFERENCIAS_EDITABLES_21-09): mismo mecanismo que
+                # el 600/Halcyon -- si val_teo_{energia} está vacío, se
+                # rellena con el respaldo antes de guardar; val_teo_dosis
+                # (sin widget, R5) se persiste con el literal que usa el
+                # cálculo. Ambos métodos son de PruebaMensual600 (heredados).
+                self._persistir_referencia_calidad_si_vacia(df_lines)
                 self.subirlineasmensuales_ix(nombre_tabla, datos_eliminar, ref=ref, usarid=usarid, df_lines=df_lines)
+                self._persistir_val_teo_dosis(ref)
                 for line in df_lines:
 
                     dato = getattr(self, line)
@@ -654,5 +661,3 @@ class PruebaMensualIX(PruebaMensual600):
         except Exception as e:
             import traceback
             #print(f"Error guardar_todo_ix: {traceback.format_exc()}")
-    
-    

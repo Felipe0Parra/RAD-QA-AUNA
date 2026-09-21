@@ -66,6 +66,19 @@ class PruebaMensual600(PruebaBasico):
     EQUIPO_NAME = "Clinac 600"
     ENERGIAS = ["6mv"]
 
+    # PLAN_REFERENCIAS_EDITABLES_21-09 A.1/A.2: respaldo por energía (NO por
+    # máquina, DP-25) para cuando val_teo_{energia} está vacío -- promovido a
+    # atributo de clase para que tanto discrepancias() como el guardado
+    # (A.2: _persistir_referencia_calidad_si_vacia) lean el mismo diccionario.
+    VALORES_REFERENCIA_CALIDAD_RESPALDO = {
+        "6mv": 0.665,
+        "15mv": 0.761,
+        "6mev": 0.483,
+        "9mev": 0.500,
+        "12mev": 0.606,
+        "15mev": 0.605,
+    }
+
     def consultar_fisicos_bd(self, id_f1=None):
         fecha = self.date_box.date()
         fecha = fecha.toString("MM/yyyy")
@@ -2175,6 +2188,46 @@ class PruebaMensual600(PruebaBasico):
         else:
             widget.textChanged.connect(debounced_callback)
 
+    def _persistir_referencia_calidad_si_vacia(self, df_lines):
+        """A.2 (PLAN_REFERENCIAS_EDITABLES_21-09): la copia guardada manda
+        siempre, así que un control nuevo no puede quedar sin decir contra
+        qué referencia se comparó. Si el físico dejó val_teo_{energia}
+        vacío, se rellena el WIDGET (no solo el cálculo, A.1) con el
+        respaldo por energía antes de que subirlineasmensuales/
+        subirlineasmensuales_ix lo lean -- así lo que se ve, lo que se
+        calculó y lo que se guarda son el mismo número (principio 3, §1.1
+        del plan). No pisa nunca un valor ya tecleado."""
+        for energia in self.ENERGIAS:
+            attr = f"val_teo_{energia}"
+            if attr not in df_lines:
+                continue
+            widget = getattr(self, attr, None)
+            if widget is None:
+                continue
+            if not widget.text().strip():
+                respaldo = self.VALORES_REFERENCIA_CALIDAD_RESPALDO.get(energia)
+                if respaldo is not None:
+                    widget.setText(str(respaldo))
+
+    def _persistir_val_teo_dosis(self, ref):
+        """A.2: val_teo_dosis no tiene widget en esta pantalla (R5) -- se
+        persiste el valor que de verdad usa el cálculo hoy (el literal `1`
+        de operacion_dosis_optimizada; desde B.4 sería el de la tabla de
+        referencias). Solo llena lo que quedaría NULL: nunca sobrescribe un
+        valor ya guardado (histórico o tecleado por otra vía)."""
+        try:
+            with Conexion().conectar() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE dosimetriaMen SET val_teo_dosis = ? "
+                    "WHERE ref = ? AND (activo IS NULL OR activo = 1) "
+                    "AND val_teo_dosis IS NULL",
+                    (1.0, ref))
+                conn.commit()
+                cursor.close()
+        except Exception as e:
+            print(f"Error persistiendo val_teo_dosis (A.2): {e}")
+
     def _subir_optimizado(self, df_lines, nombre_tabla, datos_eliminar, ref, usarid, anual=False):
         """Método optimizado para subir datos con mejor manejo de errores"""
         if not self._confirmar_campos_mcc_sin_revisar():
@@ -2183,7 +2236,13 @@ class PruebaMensual600(PruebaBasico):
             self.df_lines = df_lines
             print(f"\nSubiendo datos para {nombre_tabla}")
 
+            if nombre_tabla == "dosimetriaMen":
+                self._persistir_referencia_calidad_si_vacia(df_lines)
+
             subirlineasmensuales(self, nombre_tabla, datos_eliminar, ref=ref, usarid=usarid, anual=anual)
+
+            if nombre_tabla == "dosimetriaMen" and not anual:
+                self._persistir_val_teo_dosis(ref)
 
             # Procesar líneas adicionales si es necesario
             for line in df_lines:
@@ -4178,18 +4237,9 @@ class PruebaMensual600(PruebaBasico):
             "15mev":("ln_dosis_ref_cgy_um_15mev","ln_calidad_j2_j1_15mev",
                     "ln_discrepancia_dosis_15mev","ln_discrepancia_calidad_15mev", "val_teo_15mev"),
         }
-        # PLAN_REFERENCIAS_EDITABLES_21-09 A.1: esto ERA la referencia usada para calcular
-        # (DP-25/DP-108). Ahora es solo RESPALDO -- por energía, no por máquina, así que
-        # miente en el Halcyon (6mv real ahí es 0.627, no 0.665) -- se usa únicamente
-        # cuando el widget val_teo_{energia} está vacío y no hay referencia en la BD (B.3).
-        VALORES_REFERENCIA_CALIDAD_RESPALDO = {
-            "6mv": 0.665,
-            "15mv": 0.761,
-            "6mev": 0.483,
-            "9mev": 0.500,
-            "12mev": 0.606,
-            "15mev": 0.605,
-            }
+        # A.2: el diccionario ahora vive como atributo de clase (arriba),
+        # compartido con el guardado -- ver VALORES_REFERENCIA_CALIDAD_RESPALDO.
+        VALORES_REFERENCIA_CALIDAD_RESPALDO = self.VALORES_REFERENCIA_CALIDAD_RESPALDO
 
         for energia, (dosis_attr, calidad_attr, salida_dosis_attr, salida_calidad_attr, val_teo_attr) in mapping.items():
             try:

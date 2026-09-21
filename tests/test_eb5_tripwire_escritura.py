@@ -126,7 +126,17 @@ SITIOS_LITERALES_PERMITIDOS = {
         "abierto EXPLÍCITAMENTE como 'nada del contrato de guardado -- es "
         "del formulario de braquiterapia': fuera de alcance de EB1-EB7 por "
         "decisión ya registrada, no un descuido de esta tarea.",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3623):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 2221):
+        "_persistir_val_teo_dosis (A.2, PLAN_REFERENCIAS_EDITABLES_21-09) -- "
+        "val_teo_dosis no tiene widget (R5), así que no puede llegar por "
+        "subirlineasmensuales/_ix; se llena SOLO cuando queda NULL "
+        "('AND val_teo_dosis IS NULL' en el propio WHERE), en la fila "
+        "vigente ('activo IS NULL OR activo = 1') recién anulada+insertada "
+        "por el guardado que lo llama. Nunca pisa un valor ya guardado -- "
+        "edición directa de UNA celda que el INSERT no cubre (mismo "
+        "criterio que subir_control_cunas, dos entradas más abajo), no "
+        "mutación del histórico.",
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3682):  # A.2 (21-09): 3623->3682
         "subir_control_cunas -- UPDATE de 'observaciones' restringido a "
         "'activo = 1', pero DENTRO de la misma transacción y DESPUÉS de "
         "anular el bloque anterior (activo=0) e insertar las filas nuevas: "
@@ -298,7 +308,7 @@ SITIOS_OPACOS_PERMITIDOS = {
         "subirlineasmensuales_ix, rama UPDATE fuera del bloque de QC -- "
         "mismo criterio que load.py:727: nombre_tabla nunca es una tabla "
         "de TABLAS_ANULABLES en esta rama (ya verificado por ES1).",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 4065):  # R.3 (11-09): 3911->3922
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 4124):  # R.3 (11-09): 3911->3922; A.2 (21-09): 4065->4124
         "SELECT (DO1, pruebatalas -- lectura genérica, ya filtra con "
         "filtro_activo) -- no aplica a EB5, no escribe.",
     ("ui/paginasGuia/SQLtoEXCEL.py", 529):
