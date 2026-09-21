@@ -3,12 +3,12 @@ import sys
 
 hidden_imports = [
     # PAGINAS
-    
+
     "ui.paginasControles.PruebasDiarias.IX",
     "ui.paginasControles.PruebasDiarias.halcyon",
     "ui.paginasControles.PruebasMensuales.ix_mensual",
     "ui.paginasControles.PruebasMensuales.tac_mensual",
-    "ui.paginasControles.PruebasAnuales.ix_anual",   
+    "ui.paginasControles.PruebasAnuales.ix_anual",
     "ui.paginasControles.PruebasDiarias.seiscientos",
     "ui.paginasControles.PruebasMensuales.seiscientos_mensual",
     "ui.paginasControles.PruebasDiarias.braquiterapia",
@@ -24,6 +24,7 @@ hidden_imports = [
     "analisisImagenes.Analisis_PlacaCuadrada",
     "analisisImagenes.Analisis_PlacaRC",
     "analisisImagenes.ActividadFuente",
+    "analisisImagenes.catphan.motor",
     "services.dosis_service",
     "services.equipos_service",
 
@@ -69,7 +70,7 @@ for h in hidden_imports:
 cmd += ["--collect-submodules", "pylinac"]
 
 # data
-cmd += [      
+cmd += [
     "--add-data", "ui;ui",
     "--add-data", "data;data",
     "--add-data", "models;models",
