@@ -5,6 +5,10 @@ indexa esa lista por POSICIÓN, y `block()` referencia índices comentados
 Lista literal de las 9 pestañas previas, para que mover o reordenar
 cualquiera de ellas ponga este test en rojo -- no solo que aparezca
 "Usuarios".
+
+C.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md) añadió "Referencias" DESPUÉS de
+"Usuarios", por la misma razón: por eso ya no se afirma que Usuarios sea la
+última, sino que sigue en su índice y que las 9 previas no se movieron.
 """
 import os
 import sqlite3
@@ -59,7 +63,7 @@ class TestPestanaUsuariosEnMainWindow:
 
     def test_titulos_y_orden_de_las_nueve_previas_no_cambia(self, app, bd_temporal):
         w = MainWindow(Usuario(username="lamaya", fullname="Luz Adriana Maya"))
-        titulos = [w.tabs.tabText(i) for i in range(w.tabs.count() - 1)]
+        titulos = [w.tabs.tabText(i) for i in range(len(TITULOS_PREVIOS))]
         assert titulos == TITULOS_PREVIOS
 
     def test_existe_una_pestana_titulada_usuarios(self, app, bd_temporal):
@@ -67,10 +71,10 @@ class TestPestanaUsuariosEnMainWindow:
         titulos = [w.tabs.tabText(i) for i in range(w.tabs.count())]
         assert "Usuarios" in titulos
 
-    def test_usuarios_es_la_ultima_pestana(self, app, bd_temporal):
+    def test_usuarios_sigue_justo_despues_de_las_nueve_previas(self, app, bd_temporal):
         w = MainWindow(Usuario(username="lamaya", fullname="Luz Adriana Maya"))
-        assert w.tabs.tabText(w.tabs.count() - 1) == "Usuarios"
-        assert w.tabs.count() == len(TITULOS_PREVIOS) + 1
+        assert w.tabs.tabText(len(TITULOS_PREVIOS)) == "Usuarios"
+        assert w.tabs.count() == len(TITULOS_PREVIOS) + 2  # Usuarios + Referencias (C.2)
 
     def test_la_pestana_usuarios_carga_el_widget_real_al_visitarla(
             self, app, bd_temporal):
@@ -80,7 +84,7 @@ class TestPestanaUsuariosEnMainWindow:
         from ui.paginasGuia.usuarios import Usuarios as PestanaUsuarios
 
         w = MainWindow(Usuario(username="lamaya", fullname="Luz Adriana Maya"))
-        indice_usuarios = w.tabs.count() - 1
+        indice_usuarios = len(TITULOS_PREVIOS)
         w._cargar_pestania_diferida(indice_usuarios)
         widget_real = w._tab_instancias[indice_usuarios]
         assert isinstance(widget_real, PestanaUsuarios)

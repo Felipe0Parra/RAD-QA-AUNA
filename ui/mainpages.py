@@ -544,6 +544,12 @@ class MainWindow(QMainWindow):
             # secreta); lo que restringe es la UI misma, por rol, dentro de
             # Usuarios() -- ver su docstring.
             ("Usuarios", lambda: self.Usuarios()),
+            # C.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md): también AL FINAL,
+            # por la misma razón que Usuarios -- ninguna de las 10 pestañas
+            # anteriores cambia de índice. Visible para todos (todos pueden
+            # VER las referencias); fijarlas lo restringe la pantalla y,
+            # sobre todo, el servicio (es_fisico_jefe).
+            ("Referencias", lambda: self.Referencias()),
         ]
         self._tab_instancias = {}
 
@@ -624,6 +630,20 @@ class MainWindow(QMainWindow):
             return Usuarios(self.user_id)
         except Exception as e:
             print(f"✗ Error pestaña de usuarios: {e}")
+            return QWidget()  # Widget vacío como fallback
+
+    def Referencias(self):
+        """Importa y crea la pestaña de referencias y líneas base (C.1/C.2,
+        PLAN_REFERENCIAS_EDITABLES_21-09.md). Visible para CUALQUIER usuario
+        logueado -- R4: todos pueden ver; los controles de edición quedan
+        deshabilitados salvo para el jefe/administrador, y el servicio
+        vuelve a comprobarlo al fijar."""
+        try:
+            modulo = importlib.import_module("ui.paginasGuia.referencias")
+            Referencias = getattr(modulo, "Referencias")
+            return Referencias(self.user_id)
+        except Exception as e:
+            print(f"Error pestaña de referencias: {e}")
             return QWidget()  # Widget vacío como fallback
 
     def _cargar_pestania_diferida(self, indice):
