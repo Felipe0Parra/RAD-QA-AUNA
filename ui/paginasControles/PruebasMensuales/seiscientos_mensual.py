@@ -4109,16 +4109,23 @@ class PruebaMensual600(PruebaBasico):
         """Procesa discrepancias de dosis y calidad de manera optimizada"""
 
         @lru_cache(maxsize=100)
-        def operacion_dosis_optimizada(dato_str):
-            """Calcula discrepancia de dosis con caché y validación mejorada"""
+        def operacion_dosis_optimizada(dato_str, val_teo_str="1"):
+            """Calcula discrepancia de dosis con caché y validación mejorada.
+
+            val_teo_str: la referencia de dosis contra la que se compara.
+            Default "1" -- preserva el comportamiento de hoy (PLAN_REFERENCIAS_EDITABLES_21-09 A.1):
+            hoy no hay ningún widget de referencia de dosis en esta pantalla (R5),
+            así que el llamador nunca pasa un valor distinto.
+            """
             if not dato_str or dato_str == "":
                 #print("Dato de dosis vacío o inválido")
                 return None
             try:
                 dato_float = float(dato_str)
+                val_teo_float = float(val_teo_str) if val_teo_str else 1.0
                 if dato_float == 0.0:
                     return 0.0
-                return abs(100 * (1 - dato_float) )
+                return abs(100 * (1 - dato_float / val_teo_float))
             except (ValueError, TypeError, ZeroDivisionError):
                 return 0.0
 
@@ -4141,7 +4148,9 @@ class PruebaMensual600(PruebaBasico):
         def mostrar_resultado_optimizado(valor, out_widget, tolerancia):
             """Muestra resultado con estilo optimizado"""
             if valor is None:
-                out_widget.setText("0.0")
+                # PLAN_REFERENCIAS_EDITABLES_21-09 A.1: sin referencia no se inventa
+                # un "0.0" que parece un veredicto perfecto -- el campo queda vacío.
+                out_widget.setText("")
                 out_widget.setStyleSheet("border: 1px solid rgb(51, 142, 158);")
                 return
 
@@ -4169,7 +4178,11 @@ class PruebaMensual600(PruebaBasico):
             "15mev":("ln_dosis_ref_cgy_um_15mev","ln_calidad_j2_j1_15mev",
                     "ln_discrepancia_dosis_15mev","ln_discrepancia_calidad_15mev", "val_teo_15mev"),
         }
-        VALORES_REFERENCIA_CALIDAD = {
+        # PLAN_REFERENCIAS_EDITABLES_21-09 A.1: esto ERA la referencia usada para calcular
+        # (DP-25/DP-108). Ahora es solo RESPALDO -- por energía, no por máquina, así que
+        # miente en el Halcyon (6mv real ahí es 0.627, no 0.665) -- se usa únicamente
+        # cuando el widget val_teo_{energia} está vacío y no hay referencia en la BD (B.3).
+        VALORES_REFERENCIA_CALIDAD_RESPALDO = {
             "6mv": 0.665,
             "15mv": 0.761,
             "6mev": 0.483,
@@ -4195,19 +4208,27 @@ class PruebaMensual600(PruebaBasico):
                 self._calcular_mostrar_discrepancia(
                     dosis_ref.text(), salida_dosis, tolerancia, operacion_dosis_optimizada, mostrar_resultado_optimizado
                 )
-                valor_ref = VALORES_REFERENCIA_CALIDAD[energia]
-                # Función robusta para discrepancia de calidad
+                valor_ref_respaldo = VALORES_REFERENCIA_CALIDAD_RESPALDO[energia]
+                # Función robusta para discrepancia de calidad.
+                # PLAN_REFERENCIAS_EDITABLES_21-09 A.1: valor_ref ya NO se congela aquí --
+                # se lee val_teo.text() en cada invocación (DP-25: antes el físico tecleaba
+                # la referencia correcta y el cálculo la ignoraba). Solo cuando el campo
+                # está vacío se cae al respaldo por energía.
                 def actualizar_discrepancia_calidad(
                     calidad=calidad,
                     salida_calidad=salida_calidad,
                     tolerancia=tolerancia,
-                    valor_ref=valor_ref
+                    val_teo=val_teo,
+                    valor_ref_respaldo=valor_ref_respaldo
                 ):
                     calidad_val = calidad.text()
+                    val_teo_val = val_teo.text()
+                    if not val_teo_val or val_teo_val == "":
+                        val_teo_val = str(valor_ref_respaldo)
 
                     resultado = operacion_calidad_optimizada(
                         calidad_val,
-                        valor_ref
+                        val_teo_val
                     )
 
                     mostrar_resultado_optimizado(
