@@ -9,5 +9,6 @@ __pycache__/
 # No subir las bases de datos o archivos confidenciales
 BaseDatosQA.db
 error_log.txt
+carga_dicom_memoria.log  # C.2 (22-09): instrumentación de memoria, junto a error_log.txt
 *.db
 HANDOFF_BUILD_WINDOWS*.md

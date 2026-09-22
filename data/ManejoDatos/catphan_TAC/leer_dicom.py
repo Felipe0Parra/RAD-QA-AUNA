@@ -1,6 +1,8 @@
 import os
+import sys
 import gc
 import weakref
+from datetime import datetime
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSlider, QWidget, QPushButton, QFileDialog, QDialog, QFrame, QApplication)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import pyqtgraph as pg
@@ -8,6 +10,125 @@ from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modul
 from analisisImagenes.catphan.serie import leer_serie
 import pydicom
 import pydicom.data
+
+
+# ---------------------------------------------------------------------------
+# C.2 (PLAN_HANDOFF_IMAGENES_22-09.md): instrumentacion de memoria para el
+# diagnostico de la caida al importar DICOM. Registra a ARCHIVO, no a
+# consola (el .exe se distribuye con --noconsole). El manejador global de
+# excepciones no capturadas YA existe (main.py:_configurar_registro_errores,
+# escribe a error_log.txt y RE-LANZA); lo que faltaba era saber, si vuelve a
+# caer, en que ETAPA de la carga se quedo -- una caida por memoria no
+# siempre deja una excepcion de Python que ese manejador pueda ver.
+# ---------------------------------------------------------------------------
+
+def _ruta_log_memoria():
+    """Mismo criterio de ubicacion que error_log.txt (main.py): junto al
+    ejecutable si esta congelado (--noconsole), junto al proyecto en
+    desarrollo -- para que el fisico encuentre los dos logs en el mismo
+    sitio."""
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_dir, 'carga_dicom_memoria.log')
+
+
+def _memoria_proceso_mb():
+    """Memoria residente (RSS) del proceso actual, en MB. Usa psutil si
+    esta disponible; si no, /proc/self/status en Linux. Sin dependencia
+    nueva -- psutil NO esta en requirements.txt (medido en C.2). Devuelve
+    None si no se puede leer, en vez de fallar el registro."""
+    try:
+        import psutil
+        return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+    except ImportError:
+        pass
+    try:
+        with open('/proc/self/status', encoding='utf-8') as f:
+            for linea in f:
+                if linea.startswith('VmRSS:'):
+                    return int(linea.split()[1]) / 1024  # kB -> MB
+    except OSError:
+        pass
+    return None
+
+
+def _registrar_etapa(etapa, extra=''):
+    """Escribe una linea con la etapa de carga y la memoria del proceso en
+    ese instante. Nunca lanza: un fallo al registrar no debe impedir la
+    carga real (mismo criterio que el hook de main.py)."""
+    try:
+        mem = _memoria_proceso_mb()
+        mem_txt = f"{mem:.1f} MB" if mem is not None else "desconocida"
+        with open(_ruta_log_memoria(), 'a', encoding='utf-8') as f:
+            f.write(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {etapa}: "
+                    f"memoria proceso={mem_txt}"
+                    f"{(' -- ' + extra) if extra else ''}\n")
+    except OSError:
+        pass
+
+
+def _ram_libre_bytes():
+    """RAM fisicamente libre, en bytes. Sin dependencia nueva: psutil si
+    esta instalado, si no /proc/meminfo en Linux o GlobalMemoryStatusEx
+    (ctypes) en Windows. None si no se puede determinar -- el llamador cae
+    entonces al umbral fijo de respaldo."""
+    try:
+        import psutil
+        return psutil.virtual_memory().available
+    except ImportError:
+        pass
+    if sys.platform.startswith('linux'):
+        try:
+            with open('/proc/meminfo', encoding='utf-8') as f:
+                for linea in f:
+                    if linea.startswith('MemAvailable:'):
+                        return int(linea.split()[1]) * 1024
+        except OSError:
+            return None
+    elif sys.platform.startswith('win'):
+        try:
+            import ctypes
+
+            class _MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ('dwLength', ctypes.c_ulong),
+                    ('dwMemoryLoad', ctypes.c_ulong),
+                    ('ullTotalPhys', ctypes.c_ulonglong),
+                    ('ullAvailPhys', ctypes.c_ulonglong),
+                    ('ullTotalPageFile', ctypes.c_ulonglong),
+                    ('ullAvailPageFile', ctypes.c_ulonglong),
+                    ('ullTotalVirtual', ctypes.c_ulonglong),
+                    ('ullAvailVirtual', ctypes.c_ulonglong),
+                    ('sullAvailExtendedVirtual', ctypes.c_ulonglong),
+                ]
+
+            estado = _MEMORYSTATUSEX()
+            estado.dwLength = ctypes.sizeof(_MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(estado))
+            return estado.ullAvailPhys
+        except Exception:
+            return None
+    return None
+
+
+def _tamano_volumen_estimado_bytes(dicoms):
+    """Tamano crudo del volumen estimado desde los ENCABEZADOS (Rows x
+    Columns x BitsAllocated/8 x n cortes), sin decodificar un solo pixel.
+    La version anterior llamaba `ds.pixel_array.nbytes`, que descomprime
+    cada corte solo para medirlo -- C.2, PLAN_HANDOFF_IMAGENES_22-09.md."""
+    total = 0
+    for ds in dicoms:
+        filas = getattr(ds, 'Rows', None)
+        columnas = getattr(ds, 'Columns', None)
+        bits = getattr(ds, 'BitsAllocated', None)
+        if not filas or not columnas or not bits:
+            continue
+        total += filas * columnas * (bits // 8)
+    return total
+
+
 class DicomVolume:
     """
     Clase para cargar, procesar y acceder a volúmenes DICOM de tomografía.
@@ -35,7 +156,19 @@ class DicomVolume:
         # Gestión de memoria mejorada
         self._cache_cortes_norm = {}  # Cache para cortes normalizados
         self._max_cache_size = 10  # Máximo número de cortes en cache
-        self._memory_threshold = 500 * 1024 * 1024  # 500MB threshold, es decir, si el volumen es mayor a esto, usa carga optimizada
+        # C.2 (22-09): umbral con holgura relativa a la RAM libre, no un
+        # tope fijo. El fijo de 500MB comparaba contra el tamano CRUDO
+        # (uint16) mientras el pico real es ~7x eso -- nunca se disparaba
+        # para ninguna carpeta real del servicio (medido). La decision se
+        # toma en _load_dicoms() con _ram_libre_bytes(); esta constante
+        # queda solo como respaldo si la RAM libre no se puede leer.
+        self._memory_threshold = 500 * 1024 * 1024  # respaldo si no hay lectura de RAM libre
+        # Medido tras C.2 (22-09) sobre CatphanHalcyonJunio2026 y Catphan
+        # (278 cortes): pico ~= 4.1x crudo en AMBAS rutas (antes ~7.1x en
+        # la estandar). 4.5 deja holgura sobre lo medido sin ser el 7x de
+        # antes.
+        self._umbral_multiplicador_pico = 4.5
+        self._umbral_fraccion_ram_libre = 0.25
         self._observers = weakref.WeakSet()  # Referencias débiles a observadores
 
         self._load_dicoms()
@@ -55,6 +188,8 @@ class DicomVolume:
         self.no_imagen = 0
         self.avisos = []
 
+        _registrar_etapa("inicio _load_dicoms", self.ruta_carpeta)
+
         try:
             serie = leer_serie(self.ruta_carpeta)
             self.serie_uid = serie.serie_uid
@@ -72,11 +207,13 @@ class DicomVolume:
                 print(f"Advertencia: {aviso}")
 
             dicoms = [pydicom.dcmread(corte.ruta) for corte in serie.cortes]
-            total_memory = sum(
-                ds.pixel_array.nbytes for ds in dicoms if hasattr(ds, 'pixel_array')
-            )
 
-            #print(f"Memoria estimada del volumen: {total_memory / (1024*1024):.1f} MB")
+            # C.2 (22-09): tamano estimado desde encabezados, SIN decodificar
+            # ningun pixel (antes: ds.pixel_array.nbytes, que descomprimia
+            # los N cortes solo para medirlos).
+            total_memory = _tamano_volumen_estimado_bytes(dicoms)
+            _registrar_etapa("encabezados leidos", f"{len(dicoms)} corte(s), "
+                              f"crudo estimado={total_memory / (1024*1024):.1f} MB")
 
             self.cortes = dicoms
 
@@ -89,8 +226,29 @@ class DicomVolume:
                 self.ma = getattr(self.cortes[0], 'XRayTubeCurrent', None)
                 self.espesor_corte = getattr(self.cortes[0], 'SliceThickness', None)
 
-                # Carga optimizada del volumen
-                if total_memory > self._memory_threshold:
+                # C.2 (22-09): umbral con holgura relativa a la RAM libre en
+                # vez de un tope fijo (el fijo comparaba contra el crudo,
+                # nunca contra el pico real ~7x -- no se disparaba nunca
+                # para ninguna carpeta real del servicio, medido). Si no se
+                # puede leer la RAM libre, cae al tope fijo de respaldo.
+                ram_libre = _ram_libre_bytes()
+                if ram_libre is not None:
+                    pico_estimado = self._umbral_multiplicador_pico * total_memory
+                    usar_ruta_optimizada = pico_estimado > (self._umbral_fraccion_ram_libre * ram_libre)
+                    _registrar_etapa(
+                        "umbral evaluado",
+                        f"pico estimado={pico_estimado / (1024*1024):.1f} MB, "
+                        f"RAM libre={ram_libre / (1024*1024):.1f} MB, "
+                        f"ruta={'optimizada' if usar_ruta_optimizada else 'estandar'}"
+                    )
+                else:
+                    usar_ruta_optimizada = total_memory > self._memory_threshold
+                    _registrar_etapa(
+                        "umbral evaluado (RAM libre desconocida, usa respaldo fijo)",
+                        f"ruta={'optimizada' if usar_ruta_optimizada else 'estandar'}"
+                    )
+
+                if usar_ruta_optimizada:
                     print("⚠️ Volumen grande detectado. Usando carga optimizada...")
                     self._load_large_volume()
                 else:
@@ -99,7 +257,10 @@ class DicomVolume:
                 self.volumen = None
                 self.volumen_hu = None
 
+            _registrar_etapa("fin _load_dicoms")
+
         except Exception as e:
+            _registrar_etapa("EXCEPCION en _load_dicoms", str(e))
             print(f"Error durante la carga de DICOM: {e}")
             self.volumen = None
             self.volumen_hu = None
@@ -116,12 +277,40 @@ class DicomVolume:
             del pixel_arrays
             gc.collect()
 
+            # C.2 (22-09): soltar la cache de pixeles de cada dataset AQUI,
+            # antes de convertir a HU -- ya estan apilados en self.volumen y
+            # nada vuelve a leer ds.pixel_array despues de esto (verificado:
+            # solo se leen metadatos de self.cortes en adelante). Medido: si
+            # esto se hace DESPUES de calcular volumen_hu (como en la
+            # primera version de este cambio), el pico no baja nada --
+            # `astype(float32) * slope + intercept` ya crea sus propios
+            # temporales mientras la cache de los N datasets sigue viva, y
+            # el pico ocurre AHI. La guarda mira el atributo de CACHE
+            # (`_pixel_array`), no la propiedad (`pixel_array`), que al
+            # consultarse volveria a decodificar.
+            for ds in self.cortes:
+                if getattr(ds, '_pixel_array', None) is not None:
+                    delattr(ds, '_pixel_array')
+            gc.collect()
+
             # Convertir a Hounsfield Units
             slope = float(getattr(self.cortes[0], 'RescaleSlope', 1))
             intercept = float(getattr(self.cortes[0], 'RescaleIntercept', 0))
 
-            # Usar float32 para ahorrar memoria
-            self.volumen_hu = (self.volumen.astype(np.float32) * slope + intercept)
+            # Usar float32 para ahorrar memoria. C.2 (22-09): `*=`/`+=` EN
+            # SITIO en vez de `astype(...) * slope + intercept` -- la
+            # version con operadores normales crea un array float32 nuevo
+            # en CADA paso (la conversion, la multiplicacion, la suma) y
+            # los tres pueden estar vivos a la vez; con `*=`/`+=` solo
+            # existe el UNO que ya se reservo en el astype. Mismo resultado
+            # bit a bit: mismas operaciones, mismo orden, sin copia extra
+            # (verificado con hash sha256 de volumen_hu, prueba (d) de C.2).
+            self.volumen_hu = self.volumen.astype(np.float32)
+            self.volumen_hu *= slope
+            self.volumen_hu += intercept
+
+            _registrar_etapa("_load_standard_volume terminada",
+                              f"volumen_hu dtype={self.volumen_hu.dtype}")
 
         except Exception as e:
             print(f"Advertencia: Error en conversión HU: {e}")
@@ -145,15 +334,34 @@ class DicomVolume:
 
             for i, ds in enumerate(self.cortes):
                 self.volumen[i] = ds.pixel_array.astype(dtype)
-                # Liberar memoria del dataset después de usar
-                if hasattr(ds, 'pixel_array'):
+                # C.2 (22-09): la guarda miraba `pixel_array` -- una
+                # PROPIEDAD que siempre existe y que, al consultarla,
+                # decodifica el pixel de nuevo. Debe mirar el atributo de
+                # CACHE (`_pixel_array`), que es lo que de verdad ocupa
+                # memoria y lo que hay que soltar.
+                if getattr(ds, '_pixel_array', None) is not None:
                     delattr(ds, '_pixel_array')
 
-            # Convertir a HU con tipo eficiente
-            self.volumen_hu = self.volumen * slope + intercept
+            # C.2 (22-09): convertir a float32 ANTES de aplicar slope/
+            # intercept, igual que _load_standard_volume. Sin este astype,
+            # `self.volumen (uint16) * slope (float de Python)` promueve a
+            # float64 -- el DOBLE de memoria que la ruta estandar para los
+            # mismos numeros (medido: 258 MB vs 129 MB sobre
+            # CatphanHalcyonJunio2026, array_equal=True, dtype distinto).
+            # Esta ruta nunca se habia ejercitado con datos reales del
+            # servicio -- el umbral fijo jamas se disparaba -- asi que el
+            # defecto estaba dormido. `*=`/`+=` en sitio por la misma razon
+            # que en _load_standard_volume: un solo array float32 vivo en
+            # vez de tres.
+            self.volumen_hu = self.volumen.astype(np.float32)
+            self.volumen_hu *= slope
+            self.volumen_hu += intercept
 
             # Forzar garbage collection
             gc.collect()
+
+            _registrar_etapa("_load_large_volume terminada",
+                              f"volumen_hu dtype={self.volumen_hu.dtype}")
 
         except Exception as e:
             print(f"Advertencia: Error en carga optimizada: {e}")
