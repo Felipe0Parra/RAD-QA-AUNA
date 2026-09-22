@@ -8,7 +8,7 @@ Pillow==12.3.0
 pyAesCrypt==6.1.1
 keyboard==0.13.5
 pywin32==312; sys_platform == "win32"
-pydicom==2.4.4
+pydicom==2.4.5
 pylinac==3.45.0
 PyQt5==5.15.11
 PyQt5_sip==12.17.0

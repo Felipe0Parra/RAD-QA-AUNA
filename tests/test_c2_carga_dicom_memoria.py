@@ -156,11 +156,26 @@ def _medir_pico_subproceso(ruta):
     return int(base_kb) * 1024, int(pico_kb) * 1024, int(crudo_bytes)
 
 
-# Medido tras C.2 (22-09-2026): ~4.1x en HALCYON_JUN (123 cortes) y en
-# MIXTA/Catphan (278 cortes) -- antes de C.2, ~7-8x. 5.0 deja holgura sobre
-# lo medido sin volver al ~7-8x de antes (ver §13.1: si esta prueba se
-# rompe, es que el pico volvio a subir).
-UMBRAL_MULTIPLICADOR_PICO_ACEPTADO = 5.0
+# Medido tras C.2 (22-09-2026): ~4.11x en HALCYON_JUN (123 cortes) y en
+# MIXTA/Catphan (278 cortes) -- antes de C.2, ~7.10x.
+#
+# El tope era 5.0 y se subio a 6.0 el 22-09 por una razon medida, no por
+# comodidad: el pico es BIMODAL, 4.11x o 5.11x, nunca en medio. La
+# diferencia es exactamente 1x el volumen crudo (61.5 MB), o sea UNA copia
+# mas viva en el pico: cuando el `delattr` de la cache de pixeles libera
+# paginas que glibc devuelve al sistema operativo sale 4.11x, y cuando las
+# retiene en su arena sale 5.11x. Con la instalacion normal del venv salen
+# 8/8 en 4.11x; basta cargar pydicom desde otra ruta (`pip install
+# --target` + PYTHONPATH) para que aparezca el modo de 5.11x en ~2 de cada
+# 8 corridas -- comprobado que ocurre IGUAL con pydicom 2.4.4 y 2.4.5, asi
+# que es el asignador de memoria, no la version.
+#
+# Con 5.0 el tope caia DENTRO del modo alto: prueba intermitente, que es
+# peor que no tener prueba. 6.0 deja ~0.9x de holgura sobre el peor caso
+# medido y sigue separando con claridad del 7.10x de antes de C.2, que es
+# la regresion que esta prueba existe para atrapar. En Windows el
+# asignador es otro; el margen tiene que aguantar eso tambien.
+UMBRAL_MULTIPLICADOR_PICO_ACEPTADO = 6.0
 
 
 @pytest.mark.parametrize("clave", ["HALCYON_JUN", "MIXTA"])

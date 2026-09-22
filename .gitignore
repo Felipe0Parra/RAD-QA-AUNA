@@ -9,6 +9,10 @@ __pycache__/
 # No subir las bases de datos o archivos confidenciales
 BaseDatosQA.db
 error_log.txt
-carga_dicom_memoria.log  # C.2 (22-09): instrumentación de memoria, junto a error_log.txt
+# C.2 (22-09): instrumentación de memoria de la carga DICOM, junto a error_log.txt.
+# El comentario va en su PROPIA línea: .gitignore no admite comentarios al final
+# de una línea de patrón -- con el `#` pegado atrás, el patrón no ignoraba nada
+# y el log se coló en el commit 5dcc130.
+carga_dicom_memoria.log
 *.db
 HANDOFF_BUILD_WINDOWS*.md
