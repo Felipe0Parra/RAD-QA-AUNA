@@ -5,7 +5,7 @@ Conecta los resultados de las funciones de análisis con las tablas de base de d
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont
-import traceback, os, io
+import json, traceback, os, io
 import numpy as np
 from PIL import Image
 from datetime import datetime
@@ -498,8 +498,42 @@ def convertir_corte_dicom_a_blob(ruta_carpeta_dicom, indice_corte=None, wl=None,
         traceback.print_exc()
         return None
 
+def mapear_identidad_dicom(adquisicion):
+    """A.1 (PLAN_HANDOFF_IMAGENES_22-09.md): las cuatro columnas de identidad
+    de `pruebas` a partir del diccionario de `adquisicion_de_serie`.
+
+    Devuelve `(equipo_dicom, serie_uid, fecha_adquisicion, adquisicion_dicom)`.
+    Sin adquisición (un llamador que no la trae, o una fila histórica) las
+    cuatro son `None`: `NULL` es el estado honesto, nunca un valor inventado.
+    `adquisicion_dicom` es el JSON completo, para que el PDF imprima lo
+    GUARDADO y no lo que la sesión tenga en memoria (§12.4)."""
+    if not adquisicion:
+        return (None, None, None, None)
+    partes = [str(p) for p in (adquisicion.get("modelo"), adquisicion.get("estacion")) if p]
+    return (
+        " / ".join(partes) if partes else None,
+        adquisicion.get("serie_uid"),
+        adquisicion.get("fecha_adquisicion"),
+        json.dumps(adquisicion, ensure_ascii=False, sort_keys=True),
+    )
+
+
 def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_corte, resultados_por_categoria, 
-                                    tam_px_teorico=None, id_sesion=None, info_dicom=None, output_blob=None):
+                                    tam_px_teorico=None, id_sesion=None, info_dicom=None, output_blob=None,
+                                    adquisicion_por_categoria=None):
+    """Guarda las categorías de una sesión de CatPhan: una fila de `pruebas`
+    por categoría (anular+insertar, EB2c) y sus tablas hijas.
+
+    `adquisicion_por_categoria` (A.1): `{categoria: {"kv", "ma", "espesor_corte",
+    "adquisicion"}}` -- la adquisición del volumen CON EL QUE SE CORRIÓ cada
+    prueba. Una categoría que la trae se guarda con SU kv/ma/espesor y su
+    identidad DICOM; una que no (llamadores anteriores) cae a los `kv`/`ma`/
+    `espesor_corte` de la llamada y deja la identidad en `NULL`. Antes había
+    UN solo kv/ma/espesor para todas las categorías de la llamada, fijado al
+    cargar la última carpeta: con dos carpetas en una misma sesión, las
+    pruebas de la primera quedaban grabadas con los parámetros de la segunda
+    (§0.4, "segundo camino").
+    """
     conn = None
     print("Guardando")
     try:
@@ -573,16 +607,29 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             imagen_path_usar = imagen_blob if imagen_blob else imagen_path_anterior
             imagen_resultado_usar = output_blob if imagen_blob else imagen_resultado_anterior
 
+            # A.1: la adquisición de ESTA categoría (la del volumen con el que
+            # se corrió), no una única para toda la llamada.
+            adq_categoria = (adquisicion_por_categoria or {}).get(categoria)
+            if adq_categoria:
+                kv_categoria = adq_categoria.get("kv")
+                ma_categoria = adq_categoria.get("ma")
+                espesor_categoria = adq_categoria.get("espesor_corte")
+            else:
+                kv_categoria, ma_categoria, espesor_categoria = kv, ma, espesor_corte
+            identidad = mapear_identidad_dicom(
+                adq_categoria.get("adquisicion") if adq_categoria else None)
+
             reemplazar_bloque(
                 cursor, "pruebas", [("id_sesion", id_sesion), ("id_tipo", id_tipo)],
                 """
                     INSERT INTO pruebas
                     (id_sesion, id_tipo, kv, ma, espesor_corte, created_at,
-                     imagen_path, imagen_resultado, equipo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     imagen_path, imagen_resultado, equipo,
+                     equipo_dicom, serie_uid, fecha_adquisicion, adquisicion_dicom)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                [(id_sesion, id_tipo, kv, ma, espesor_corte, fecha,
-                  imagen_path_usar, imagen_resultado_usar, equipo)],
+                [(id_sesion, id_tipo, kv_categoria, ma_categoria, espesor_categoria, fecha,
+                  imagen_path_usar, imagen_resultado_usar, equipo, *identidad)],
                 _nombre_usuario, auditar=False)
             id_prueba = cursor.lastrowid
 
@@ -590,7 +637,7 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
                 anular_datos_especificos(cursor, categoria, id_prueba_anterior)
 
             if categoria == "espesor":
-                guardar_espesor_corte(cursor, id_prueba, resultados, espesor_corte)
+                guardar_espesor_corte(cursor, id_prueba, resultados, espesor_categoria)
             elif categoria == "tamano_pixel":
                 guardar_tamano_pixel(cursor, id_prueba, resultados, tam_px_teorico)
             elif categoria == "resolucion_contraste":

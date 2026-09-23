@@ -226,6 +226,7 @@ class Conexion():
             self._asegurar_parametros_analisis_braqui()
             self._asegurar_identidad_sistema_medicion()
             self._asegurar_origen_referencia_dosimetria()  # B.4 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
+            self._asegurar_identidad_dicom_pruebas()  # A.1 (PLAN_HANDOFF_IMAGENES_22-09.md)
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -953,6 +954,45 @@ class Conexion():
         al final físico)."""
         cur = self.con.cursor()
         _asegurar_columna(cur, "dosimetriaMen", "origen_referencia", "TEXT")
+        self.con.commit()
+        cur.close()
+
+    def _asegurar_identidad_dicom_pruebas(self):
+        """A.1 (PLAN_HANDOFF_IMAGENES_22-09.md): `pruebas` gana la identidad
+        DICOM de la serie con la que se corrió cada prueba de imagen.
+
+        CAUSA: la tabla guardaba `kv`, `ma` y `espesor_corte` y nada que dijera
+        DE QUE MAQUINA eran las imagenes -- por eso dos sesiones archivadas
+        (6 y 48) llevan la adquisicion de un equipo distinto al declarado y
+        nadie podia verlo (§0.4 del plan).
+
+          equipo_dicom       TEXT  modelo + estacion, tal como salen del DICOM
+          serie_uid          TEXT  SeriesInstanceUID de la serie analizada
+          fecha_adquisicion  TEXT  ISO; SeriesDate -> ContentDate ->
+                                   AcquisitionDate (NO StudyDate, §0.10.2)
+          adquisicion_dicom  TEXT  JSON con TODAS las etiquetas de
+                                   `adquisicion_de_serie` (kV, mA, mAs,
+                                   CTDIvol, kernel/filtro, FOV, pixel...)
+
+        La ultima existe porque lo que el PDF imprime tiene que salir de la
+        BD y no de la memoria de la sesion (§12.4, copia guardada manda): el
+        PDF de un control reabierto dice lo mismo que el del dia.
+
+        Es TRAZABILIDAD, no fuente de decision -- mismo principio que
+        `equipos_medicion.equipo_id` ([[DA-13]]) y el origen de la referencia. Sin
+        relleno retroactivo: las filas historicas quedan en `NULL` (no hay
+        forma honesta de saber de que maquina eran las imagenes de una prueba
+        ya archivada sin haberlas leido entonces). Todas admiten `NULL`
+        (`kv`/`ma`/`espesor_corte` son NOT NULL; estas no lo son a proposito).
+
+        Aditiva e idempotente, mismo criterio que
+        `_asegurar_identidad_sistema_medicion` -- va DESPUES de
+        `_asegurar_activo_bloque_qc` para que el orden fisico de columnas sea
+        el mismo en una BD nueva y en una ya desplegada (`DP-80`: `ALTER
+        TABLE ADD COLUMN` siempre anade al final fisico)."""
+        cur = self.con.cursor()
+        for columna in ("equipo_dicom", "serie_uid", "fecha_adquisicion", "adquisicion_dicom"):
+            _asegurar_columna(cur, "pruebas", columna, "TEXT")
         self.con.commit()
         cur.close()
 

@@ -373,6 +373,16 @@ class ConfiguradorUI:
             # No mostrar nada aquí, permitir que se muestre el área de carga
             return False  # No se mostró mensaje, mostrar área de carga
 
+def _parametros_de_volumen(vol):
+    """`(kv, ma, espesor_corte)` de un volumen, con el espesor redondeado a un
+    decimal. Única definición: la usan `asignar_parametros_adquisicion` (lo
+    que se muestra y valida al cargar) y `_registrar_adquisicion` (lo que se
+    guarda con cada prueba), para que no puedan diferir en cómo se redondea."""
+    espesor = getattr(vol, 'espesor_corte', None)
+    return (getattr(vol, 'kv', None), getattr(vol, 'ma', None),
+            round(espesor, 1) if espesor is not None else None)
+
+
 class PruebaMensualTAC(PruebaMensual600):
     def __init__(self, user_id):
         #print("PruebaMensualTAC       __init__ called")
@@ -407,6 +417,9 @@ class PruebaMensualTAC(PruebaMensual600):
         self.resultados_uniformidad = None
         self.kv_actual = None
         self.ma_actual = None
+        # A.1 (23-09): adquisicion del volumen CON EL QUE SE CORRIO cada prueba,
+        # por categoria -- ver `_registrar_adquisicion`.
+        self.adquisicion_por_categoria = {}
         self.tam_px_teorico = None
         self.resultados_texto = None
         self.reconstruido = False  # Mantenemos para compatibilidad backwards
@@ -972,6 +985,37 @@ class PruebaMensualTAC(PruebaMensual600):
         
         return widget_categoria
     
+    def _registrar_adquisicion(self, categoria):
+        """A.1 (PLAN_HANDOFF_IMAGENES_22-09.md §0.4, "segundo camino"): fija la
+        adquisición del volumen CON EL QUE SE ACABA DE CORRER la prueba
+        `categoria` (nombre de la BD: `espesor`, `tamano_pixel`, ...).
+
+        `kv_actual`/`ma_actual`/`espesor_corte_val` se fijan una sola vez, al
+        cargar, y se aplicaban a TODAS las pruebas que se guardaran después:
+        con dos carpetas en la misma sesión, las pruebas de la primera
+        quedaban grabadas con los parámetros de la segunda (la sesión 47 del
+        22-09 salió toda con 125/100/2.0 habiendo mezclado iX y Halcyon). Aquí
+        se toma en el momento de correrla, y es lo que el guardado usa."""
+        vol = getattr(getattr(self, 'visualizador_principal', None), 'vol', None)
+        if vol is None:
+            self.adquisicion_por_categoria.pop(categoria, None)
+            return
+        kv, ma, espesor_corte = _parametros_de_volumen(vol)
+        self.adquisicion_por_categoria[categoria] = {
+            "kv": kv, "ma": ma, "espesor_corte": espesor_corte,
+            "adquisicion": getattr(vol, 'adquisicion', None),
+        }
+
+    def _registrar_adquisicion_linealidad(self):
+        """La linealidad sale de los HU de `valores_ct`, así que su adquisición
+        es la de ESA prueba si se corrió en esta sesión (aunque después se haya
+        cargado otra carpeta); solo si no hay, la del volumen activo."""
+        adq_valores_ct = self.adquisicion_por_categoria.get('valores_ct')
+        if adq_valores_ct:
+            self.adquisicion_por_categoria['linealidad_ct'] = adq_valores_ct
+        else:
+            self._registrar_adquisicion('linealidad_ct')
+
     # Asigna los parámetros de adquisición (kv, ma, espesor de corte) desde el visualizador principal
     def asignar_parametros_adquisicion(self, reconstruido=False):
         if not hasattr(self, 'visualizador_principal'):
@@ -983,9 +1027,7 @@ class PruebaMensualTAC(PruebaMensual600):
             print("Error: No hay volumen cargado en el visualizador principal para asignar parámetros.")
             return
         
-        kv = getattr(visualizador.vol, 'kv', None)
-        ma = getattr(visualizador.vol, 'ma', None)
-        espesor_corte = round(getattr(visualizador.vol, 'espesor_corte', None), 1) if getattr(visualizador.vol, 'espesor_corte', None) is not None else None
+        kv, ma, espesor_corte = _parametros_de_volumen(visualizador.vol)
         #contrast_resolution = getattr(visualizador.vol, 'corte', None) if getattr(visualizador.vol, 'espesor_corte', None) is not None else None
         # Guardar parámetros para uso posterior y guardado en BD
         self.espesor_corte_val = espesor_corte
@@ -1457,6 +1499,7 @@ class PruebaMensualTAC(PruebaMensual600):
             #print(" Análisis de Linealidad del CT completado")
             #print(f"   Resultados: {linealidad}")
             self.resultados_linealidad_ct = linealidad  # Almacenar para guardado
+            self._registrar_adquisicion_linealidad()
             if linealidad:
                 self._agregar_botones_guardado_post_analisis("linealidad_numero_ct")
             return linealidad
@@ -2076,6 +2119,7 @@ class PruebaMensualTAC(PruebaMensual600):
                                                                 canvas=self.canvas_resultados)
                     
                     self.resultados_espesor = resultados_espesor  # Almacenar para guardado
+                    self._registrar_adquisicion('espesor')
                     error = (abs((self.espesor_corte_val) - resultados_espesor.get("espesor_promedio_mm", None)) / self.espesor_corte_val) * 100 if self.espesor_corte_val and resultados_espesor.get("espesor_promedio_mm", None) else None
                     espesor_teorico_mm = self.espesor_corte_val if self.espesor_corte_val else None
                     resultados_espesor['espesor_teorico_mm'] = espesor_teorico_mm
@@ -2098,6 +2142,7 @@ class PruebaMensualTAC(PruebaMensual600):
 
                     resultados_tamano_pixel = tamano_pixel(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados)
                     self.resultados_tamano_pixel = resultados_tamano_pixel  # Almacenar para guardado
+                    self._registrar_adquisicion('tamano_pixel')
                     self.tam_px_teorico = tam_px  # Almacenar valor teórico
 
                     # Calcular promedio de los valores medidos (x_arriba, x_abajo, y_izquierda, y_derecha)
@@ -2130,6 +2175,7 @@ class PruebaMensualTAC(PruebaMensual600):
 
                     resultados_resolucion = resolucion_espacial(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados, orientacion=orientacion_serie, roll_deg=roll_deg_serie)
                     self.resultados_resolucion_espacial = resultados_resolucion  # Almacenar para guardado
+                    self._registrar_adquisicion('resolucion_espacial')
                     texto = tabla_resultados_resolucion_espacial(resultados_resolucion)
                     self.reemplazar_resultados_texto_con_tabla(texto)
                     # Agregar botones de guardado después del análisis completado
@@ -2171,6 +2217,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         roll_deg=roll_deg_serie,
                     )
                     self.resultados_resolucion_contraste = resolucion
+                    self._registrar_adquisicion('resolucion_contraste')
                     imprimir_resultados_contraste_bajo(resolucion)
                     tabla_widget = tabla_resultados_resolucion_contraste(resolucion)
                     self.reemplazar_resultados_texto_con_tabla(tabla_widget)
@@ -2202,6 +2249,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         visualizar=True,
                         canvas=self.canvas_resultados,
                     )
+                    self._registrar_adquisicion('valores_ct')
                 
                     tabla_widget = tabla_resultados_ct(self.resultados_ct)
                     self.reemplazar_resultados_texto_con_tabla(tabla_widget)
@@ -2230,6 +2278,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     uniformidad_resultados = uniformidad(imagen_grafica, imagen_analisis, tam_px, visualizar=True, 
                                                         canvas=self.canvas_resultados)
                     self.resultados_uniformidad = uniformidad_resultados  # Almacenar para guardado
+                    self._registrar_adquisicion('uniformidad')
                     
                     # Reemplazar el QLabel con QTableWidget
                     tabla_widget = tabla_resultados_uniformidad(uniformidad_resultados)
@@ -2453,7 +2502,8 @@ class PruebaMensualTAC(PruebaMensual600):
                     user_id = self.user_id, fecha = fecha_actual, equipo = self.equipo_f,
                     kv = self.kv_actual, ma = self.ma_actual, espesor_corte = self.espesor_corte_val,
                     resultados_por_categoria = resultados_por_categoria, tam_px_teorico = self.tam_px_teorico,
-                    id_sesion = self.ref, info_dicom = info_dicom, output_blob = output_blob
+                    id_sesion = self.ref, info_dicom = info_dicom, output_blob = output_blob,
+                    adquisicion_por_categoria = self.adquisicion_por_categoria
                 )
             except Exception as db_error:
                 print(f"❌ Error específico de base de datos: {db_error}")
@@ -2636,7 +2686,8 @@ class PruebaMensualTAC(PruebaMensual600):
                     resultados_por_categoria=resultados_por_categoria,
                     tam_px_teorico=self.tam_px_teorico,
                     id_sesion=self.ref,  # Usar el self.ref como id_sesion
-                    info_dicom=info_dicom
+                    info_dicom=info_dicom,
+                    adquisicion_por_categoria=self.adquisicion_por_categoria
                 )
             except Exception as db_error:
                 print(f"❌ Error específico de base de datos: {db_error}")
@@ -2814,6 +2865,7 @@ class PruebaMensualTAC(PruebaMensual600):
             self.resultados_ct = None
             self.resultados_linealidad_ct = None
             self.resultados_uniformidad = None
+            self.adquisicion_por_categoria = {}
             #print("🧹 Todos los resultados CatPhan limpiados")
         else:
             # Limpiar solo la categoría específica (guardado individual)
@@ -2831,6 +2883,7 @@ class PruebaMensualTAC(PruebaMensual600):
                 self.resultados_linealidad_ct = None
             elif categoria == "uniformidad":
                 self.resultados_uniformidad = None
+            self.adquisicion_por_categoria.pop(categoria, None)
             #print(f"🧹 Resultado de {categoria} limpiado")
 
     def generar_reporte_pdf(self):

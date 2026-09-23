@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSlider, QWidget,
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import pyqtgraph as pg
 from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modulos
-from analisisImagenes.catphan.serie import leer_serie
+from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie
 import pydicom
 import pydicom.data
 
@@ -184,6 +184,9 @@ class DicomVolume:
         # D-06). Antes: `sorted(..., key=SliceLocation)`, ausente en los CBCT
         # de Varian (Halcyon, iX) -> volumen barajado.
         self.serie_uid = None
+        # A.1 (23-09): identidad y adquisicion de ESTA serie, leidas una sola
+        # vez por `leer_serie` (el mismo corte de donde salen kv/ma).
+        self.adquisicion = None
         self.series_descartadas = {}
         self.no_imagen = 0
         self.avisos = []
@@ -193,6 +196,7 @@ class DicomVolume:
         try:
             serie = leer_serie(self.ruta_carpeta)
             self.serie_uid = serie.serie_uid
+            self.adquisicion = adquisicion_de_serie(serie)
             self.series_descartadas = serie.series_descartadas
             self.no_imagen = serie.no_imagen
             self.avisos = serie.avisos

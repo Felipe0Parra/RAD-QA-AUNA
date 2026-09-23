@@ -38,6 +38,20 @@ ETIQUETAS_SERIE = (
     "ReconstructionDiameter",
     "ConvolutionKernel",
     "PatientPosition",
+    # A.1 (PLAN_HANDOFF_IMAGENES_22-09.md, ajuste 23-09): lo que la ventana de
+    # A.3 muestra y lo que el PDF de E.2 imprime. Se lee UNA vez, aquí -- una
+    # segunda lectura en otro sitio sería una segunda fuente que puede
+    # divergir. `SeriesDate` (no `StudyDate`: esa es la fecha del estudio del
+    # fantoma, 2023-12-15 en cinco de seis carpetas, §0.10.2), con respaldo en
+    # `ContentDate` y luego `AcquisitionDate` (el iX no trae esta última).
+    "SeriesDate",
+    "ContentDate",
+    "AcquisitionDate",
+    "ExposureTime",
+    "CTDIvol",
+    # El Halcyon publica su "filtro" aquí (`'Tit V2,HF V2'`) y deja
+    # `ConvolutionKernel` en la cadena `'None'`; el tomógrafo trae los dos.
+    "FilterType",
 )
 
 
@@ -177,7 +191,17 @@ def leer_serie(carpeta: str) -> SerieCT:
                 f"(mín={pasos.min():.3f} mm, máx={pasos.max():.3f} mm)"
             )
 
-    etiquetas = {clave: getattr(primero, clave, None) for clave in ETIQUETAS_SERIE}
+    # A.1: las etiquetas salen del corte espacialmente PRIMERO -- el mismo que
+    # `DicomVolume` usa para `kv`/`ma` (`self.cortes[0]`, ya en orden espacial).
+    # `primero` (el primero del disco) sigue sirviendo para lo que se valida
+    # uniforme en toda la serie (píxel, filas, rescale); pero una etiqueta que
+    # PUEDA variar por corte (`XRayTubeCurrent` con modulación de dosis,
+    # `Exposure`) no puede leerse de un corte y `kv`/`ma` de otro: la
+    # identidad y el kV/mA de una prueba tienen que venir del mismo corte,
+    # por construcción y no por coincidencia.
+    ds_por_ruta = {ruta: ds for ruta, ds in elegidos}
+    primero_espacial = ds_por_ruta[cortes[0].ruta]
+    etiquetas = {clave: getattr(primero_espacial, clave, None) for clave in ETIQUETAS_SERIE}
 
     return SerieCT(
         carpeta=carpeta,
@@ -192,6 +216,83 @@ def leer_serie(carpeta: str) -> SerieCT:
         etiquetas=etiquetas,
         avisos=avisos,
     )
+
+
+def _valor_simple(valor):
+    """Una etiqueta DICOM como tipo nativo, serializable a JSON.
+
+    pydicom devuelve `DSfloat` (subclase de float), `IS` (subclase de int),
+    `MultiValue`, cadenas... y `None` si la etiqueta falta. Para guardar y
+    comparar hace falta lo nativo: `json.dumps` no sabe de `DSfloat`."""
+    if valor is None:
+        return None
+    if isinstance(valor, bool):
+        return valor
+    if isinstance(valor, int):
+        return int(valor)
+    if isinstance(valor, float):
+        return float(valor)
+    if isinstance(valor, (list, tuple)) or (
+        hasattr(valor, "__iter__") and not isinstance(valor, (str, bytes))
+    ):
+        return ", ".join(str(v) for v in valor)
+    return str(valor)
+
+
+def _fecha_iso(valor):
+    """`'20260912'` -> `'2026-09-12'` (ordena bien como texto). Lo que no
+    tiene forma de fecha DICOM se devuelve tal cual, no se inventa."""
+    if not valor:
+        return None
+    s = str(valor).strip()
+    if len(s) == 8 and s.isdigit():
+        return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
+    return s or None
+
+
+def adquisicion_de_serie(serie: SerieCT) -> dict:
+    """Identidad y adquisición de una serie, como diccionario plano.
+
+    A.1 (PLAN_HANDOFF_IMAGENES_22-09.md): es la ÚNICA definición de "qué
+    datos identifican de dónde salió este volumen". La consumen la ventana de
+    A.3, el guardado de `pruebas` y el PDF de E.2 -- y lo que el PDF imprime
+    sale de lo guardado, no de la memoria de la sesión (§12.4, copia guardada
+    manda).
+
+    Un dato que el equipo no publica queda en `None`; nunca se escribe la
+    cadena "None" ni se inventa (el iX no trae `AcquisitionDate`, `CTDIvol`,
+    `FilterType` ni `SeriesDescription`, [medido]).
+
+    Unidades tal como las da DICOM: `kv` en kV, `ma` en mA, `mas` en mAs,
+    `tiempo_exposicion_ms` en ms, `ctdi_vol_mgy` en mGy, resto en mm.
+    """
+    e = serie.etiquetas
+    fecha = next(
+        (f for f in (_fecha_iso(e.get(k)) for k in ("SeriesDate", "ContentDate", "AcquisitionDate")) if f),
+        None,
+    )
+    return {
+        "fabricante": _valor_simple(e.get("Manufacturer")),
+        "modelo": _valor_simple(e.get("ManufacturerModelName")),
+        "numero_serie_equipo": _valor_simple(e.get("DeviceSerialNumber")),
+        "estacion": _valor_simple(e.get("StationName")),
+        "software": _valor_simple(e.get("SoftwareVersions")),
+        "descripcion_serie": _valor_simple(e.get("SeriesDescription")),
+        "serie_uid": serie.serie_uid,
+        "fecha_adquisicion": fecha,
+        "kv": _valor_simple(e.get("KVP")),
+        "ma": _valor_simple(e.get("XRayTubeCurrent")),
+        "mas": _valor_simple(e.get("Exposure")),
+        "tiempo_exposicion_ms": _valor_simple(e.get("ExposureTime")),
+        "ctdi_vol_mgy": _valor_simple(e.get("CTDIvol")),
+        "espesor_mm": _valor_simple(serie.espesor_mm),
+        "kernel": _valor_simple(e.get("ConvolutionKernel")),
+        "filtro": _valor_simple(e.get("FilterType")),
+        "fov_mm": _valor_simple(e.get("ReconstructionDiameter")),
+        "pixel_mm": _valor_simple(serie.pixel_mm[0]),
+        "posicion_paciente": _valor_simple(e.get("PatientPosition")),
+        "n_cortes": len(serie.cortes),
+    }
 
 
 # A.3 (PLAN_CATPHAN_AUTOMATICO_POR_EQUIPO_18-09.md): tabla de reglas de
