@@ -207,13 +207,13 @@ EXCEPCIONES_LITERALES = {
     # LF1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF1): mismo patrón, aplicado a
     # las 30 tablas nuevas -- variable intermedia califica filtro_activo()
     # con el alias del JOIN antes de interpolarse.
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1068):  # A.1 (23-09): 1021->1068
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1074):  # A.1 (23-09): 1021->1068; A.2 (23-09): 1068->1074
         "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
         "del LEFT JOIN (variable `filtro_p`) en consultar_pruebas_disponibles",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1431):  # A.1 (23-09): 1384->1431
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1437):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437
         "valores_ct -- filtro_activo('valores_ct') se califica con el alias "
         "'vc.' del JOIN (variable `filtro_vc`) en reconstruir_valores_ct",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1522):  # A.1 (23-09): 1475->1522
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1528):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528
         "uniformidad_ruido -- filtro_activo('uniformidad_ruido') se califica "
         "con el alias 'ur.' del JOIN (variable `filtro_ur`) en "
         "reconstruir_uniformidad",
@@ -451,11 +451,11 @@ SITIOS_OPACOS_PERMITIDOS = {
     # el cuerpo de la función, el resolver de AN1 lo trata como texto vacío
     # -- no aparece en el censo de opacos (verificado, no es un hueco: el
     # INSERT lo arma cada llamador con columnas explícitas, MI0).
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 712): "anular_datos_especificos (EB2c) -- `sql_anular_bloque(tabla, [\"id_prueba\"])` compone el UPDATE con el AND de vigencia ya incluido; es la ESCRITURA que anula las hijas del `id_prueba` ANTERIOR, no una lectura",  # A.1 (23-09): 665->712
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 933): "INSERT (linealidad_ct)",  # A.1 (23-09): 886->933
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 718): "anular_datos_especificos (EB2c) -- `sql_anular_bloque(tabla, [\"id_prueba\"])` compone el UPDATE con el AND de vigencia ya incluido; es la ESCRITURA que anula las hijas del `id_prueba` ANTERIOR, no una lectura",  # A.1 (23-09): 665->712; A.2 (23-09): 712->718
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 939): "INSERT (linealidad_ct)",  # A.1 (23-09): 886->933; A.2 (23-09): 933->939
     ("data/ManejoDatos/conection.py", 682): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",  # R.1: 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682
     ("data/ManejoDatos/conection.py", 782): "DDL/migración (EB2d, DA-57, tabla temporal de la migración que retira el UNIQUE de angulo_starshot)",  # R.1: 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782
-    ("data/ManejoDatos/conection.py", 2457): "INSERT (users, no está en TABLAS_ANULABLES)",  # R1: 2091->2160; R.1: 2224->2309; T.0: 2309->2363; B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457
+    ("data/ManejoDatos/conection.py", 2461): "INSERT (users, no está en TABLAS_ANULABLES)",  # R1: 2091->2160; R.1: 2224->2309; T.0: 2309->2363; B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461
     ("data/ManejoDatos/load.py", 370): "INSERT (controles -- un INSERT nunca necesita filtro)",
     ("data/ManejoDatos/load.py", 4363): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",
     # LF (gap hallado por el subagente que resolvió LF3): decía "no está en

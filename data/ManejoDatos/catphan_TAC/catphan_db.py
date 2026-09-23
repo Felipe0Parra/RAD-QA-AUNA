@@ -528,7 +528,9 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
     "adquisicion"}}` -- la adquisición del volumen CON EL QUE SE CORRIÓ cada
     prueba. Una categoría que la trae se guarda con SU kv/ma/espesor y su
     identidad DICOM; una que no (llamadores anteriores) cae a los `kv`/`ma`/
-    `espesor_corte` de la llamada y deja la identidad en `NULL`. Antes había
+    `espesor_corte` de la llamada y deja la identidad en `NULL`. La misma
+    entrada puede traer `"desviacion_protocolo"` (A.2): el texto que archiva por
+    qué esa adquisición no es la del protocolo fijo del equipo. Antes había
     UN solo kv/ma/espesor para todas las categorías de la llamada, fijado al
     cargar la última carpeta: con dos carpetas en una misma sesión, las
     pruebas de la primera quedaban grabadas con los parámetros de la segunda
@@ -618,6 +620,9 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
                 kv_categoria, ma_categoria, espesor_categoria = kv, ma, espesor_corte
             identidad = mapear_identidad_dicom(
                 adq_categoria.get("adquisicion") if adq_categoria else None)
+            # A.2: por que esta adquisicion no es la del protocolo fijo del
+            # equipo (o NULL si lo es / no se comparo). No bloquea, se archiva.
+            desviacion = adq_categoria.get("desviacion_protocolo") if adq_categoria else None
 
             reemplazar_bloque(
                 cursor, "pruebas", [("id_sesion", id_sesion), ("id_tipo", id_tipo)],
@@ -625,11 +630,12 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
                     INSERT INTO pruebas
                     (id_sesion, id_tipo, kv, ma, espesor_corte, created_at,
                      imagen_path, imagen_resultado, equipo,
-                     equipo_dicom, serie_uid, fecha_adquisicion, adquisicion_dicom)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     equipo_dicom, serie_uid, fecha_adquisicion, adquisicion_dicom,
+                     desviacion_protocolo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [(id_sesion, id_tipo, kv_categoria, ma_categoria, espesor_categoria, fecha,
-                  imagen_path_usar, imagen_resultado_usar, equipo, *identidad)],
+                  imagen_path_usar, imagen_resultado_usar, equipo, *identidad, desviacion)],
                 _nombre_usuario, auditar=False)
             id_prueba = cursor.lastrowid
 

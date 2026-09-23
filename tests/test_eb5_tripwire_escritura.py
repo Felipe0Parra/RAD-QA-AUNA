@@ -250,10 +250,10 @@ SITIOS_OPACOS_PERMITIDOS = {
         "reemplazar_bloque (EB1) -- sql_anular_bloque(...) compone siempre "
         "'SET activo = 0' más el AND de vigencia. Mismo helper, mismo "
         "template verificado a mano.",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 712):  # A.1 (23-09): 665->712
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 718):  # A.1 (23-09): 665->712; A.2 (23-09): 712->718
         "anular_datos_especificos (EB2c) -- sql_anular_bloque(...), mismo "
         "template 'SET activo = 0' de EB1.",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 933):  # A.1 (23-09): 886->933
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 939):  # A.1 (23-09): 886->933; A.2 (23-09): 933->939
         "INSERT (linealidad_ct) -- no aplica a EB5, un INSERT nunca muta el "
         "bloque vigente.",
     ("data/ManejoDatos/conection.py", 682):  # R.1 (11-09): 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682
@@ -262,7 +262,7 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/conection.py", 782):  # R.1 (11-09): 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782
         "DDL (EB2d, DA-57 -- CREATE TABLE de la tabla temporal que retira "
         "el UNIQUE de angulo_starshot) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 2457):  # B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457
+    ("data/ManejoDatos/conection.py", 2461):  # B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461
         # R1 (PLAN_REPARACION_ANUAL_27-08.md, 27-08): 2091->2160, desplazado
         # por las 4 tablas nuevas (CREATE TABLE) agregadas a
         # crearTablasAnuales. Mismo sitio. R.1 (11-09): 2224->2309.

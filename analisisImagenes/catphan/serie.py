@@ -323,12 +323,15 @@ _REGLAS_EQUIPO = {
 }
 
 
-def identificar_equipo(serie: SerieCT):
-    """Identifica de qué equipo es `serie`, leyendo sus propias etiquetas
-    DICOM -- nunca de la pantalla en la que se cargó (D-07: hoy nada lo
-    impide, y la carpeta `Catphan/` real mezcla tomógrafo y Halcyon).
+def identificar_equipo_por_datos(manufacturer, model, serial, station):
+    """Reglas de identificación de equipo sobre los cuatro datos crudos.
 
-    Devuelve una tupla `(equipo, advertencia)`:
+    Es la ÚNICA definición de "qué equipo es este": `identificar_equipo` la
+    llama con las etiquetas de una serie, y `protocolos.comparar_con_protocolo`
+    con las de una adquisición ya guardada (A.2, PLAN_HANDOFF_IMAGENES_22-09.md)
+    -- dos llamadores, una regla, para que no puedan discrepar.
+
+    Devuelve `(equipo, advertencia)`:
     - `(None, None)` si fabricante+modelo no coinciden con ninguna regla
       conocida (equipo no identificable).
     - `(equipo, None)` si fabricante+modelo coinciden Y el número de serie
@@ -336,17 +339,7 @@ def identificar_equipo(serie: SerieCT):
     - `(equipo, texto)` si fabricante+modelo coinciden pero el número de
       serie/estación no -- probablemente sí es ese equipo (consola o
       software reemplazados), pero se avisa en vez de asumir en silencio.
-
-    `serie.etiquetas` solo refleja la serie CT elegida por `leer_serie`
-    (nunca un RTSTRUCT descartado) -- por eso el `DeviceSerialNumber` del
-    iX que aquí se compara es siempre el de las imágenes (505), nunca el
-    del RTSTRUCT (5005).
     """
-    manufacturer = serie.etiquetas.get("Manufacturer")
-    model = serie.etiquetas.get("ManufacturerModelName")
-    serial = serie.etiquetas.get("DeviceSerialNumber")
-    station = serie.etiquetas.get("StationName")
-
     for equipo, regla in _REGLAS_EQUIPO.items():
         if manufacturer == regla["manufacturer"] and model == regla["model"]:
             confirma = (regla["serial"] is None or serial == regla["serial"]) and (
@@ -360,3 +353,23 @@ def identificar_equipo(serie: SerieCT):
                 f"(serie={serial!r}/estación={station!r})"
             )
     return None, None
+
+
+def identificar_equipo(serie: SerieCT):
+    """Identifica de qué equipo es `serie`, leyendo sus propias etiquetas
+    DICOM -- nunca de la pantalla en la que se cargó (D-07: hoy nada lo
+    impide, y la carpeta `Catphan/` real mezcla tomógrafo y Halcyon).
+
+    Devuelve `(equipo, advertencia)`; ver `identificar_equipo_por_datos`.
+
+    `serie.etiquetas` solo refleja la serie CT elegida por `leer_serie`
+    (nunca un RTSTRUCT descartado) -- por eso el `DeviceSerialNumber` del
+    iX que aquí se compara es siempre el de las imágenes (505), nunca el
+    del RTSTRUCT (5005).
+    """
+    return identificar_equipo_por_datos(
+        serie.etiquetas.get("Manufacturer"),
+        serie.etiquetas.get("ManufacturerModelName"),
+        serie.etiquetas.get("DeviceSerialNumber"),
+        serie.etiquetas.get("StationName"),
+    )

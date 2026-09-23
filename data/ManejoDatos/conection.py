@@ -973,6 +973,9 @@ class Conexion():
           adquisicion_dicom  TEXT  JSON con TODAS las etiquetas de
                                    `adquisicion_de_serie` (kV, mA, mAs,
                                    CTDIvol, kernel/filtro, FOV, pixel...)
+          desviacion_protocolo TEXT  (A.2) por que esta adquisicion NO es la del
+                                   protocolo fijo del equipo, o NULL si lo es;
+                                   `protocolos.comparar_con_protocolo`
 
         La ultima existe porque lo que el PDF imprime tiene que salir de la
         BD y no de la memoria de la sesion (§12.4, copia guardada manda): el
@@ -991,7 +994,8 @@ class Conexion():
         el mismo en una BD nueva y en una ya desplegada (`DP-80`: `ALTER
         TABLE ADD COLUMN` siempre anade al final fisico)."""
         cur = self.con.cursor()
-        for columna in ("equipo_dicom", "serie_uid", "fecha_adquisicion", "adquisicion_dicom"):
+        for columna in ("equipo_dicom", "serie_uid", "fecha_adquisicion", "adquisicion_dicom",
+                        "desviacion_protocolo"):
             _asegurar_columna(cur, "pruebas", columna, "TEXT")
         self.con.commit()
         cur.close()

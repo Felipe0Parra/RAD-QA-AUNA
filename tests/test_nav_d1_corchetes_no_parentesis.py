@@ -133,13 +133,13 @@ BASELINE_D1_PENDIENTE = {
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 929, '%'),
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 930, '%'),
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 937, '%'),
-    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1638, 'mm'),  # A.1 (23-09): 1591->1638
-    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1781, 'cm'),  # A.1 (23-09): 1734->1781
-    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1908, 'HU'),  # A.1 (23-09): 1861->1908
+    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1644, 'mm'),  # A.1 (23-09): 1591->1638; A.2 (23-09): 1638->1644
+    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1787, 'cm'),  # A.1 (23-09): 1734->1781; A.2 (23-09): 1781->1787
+    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1914, 'HU'),  # A.1 (23-09): 1861->1908; A.2 (23-09): 1908->1914
     ('data/ManejoDatos/catphan_TAC/leer_dicom.py', 1294, 'mm'),  # A.1 (18-09): 951->956; C.2 (22-09): 956->1142->1164; D.0 (23-09): 1164->1258; D.1 (23-09): 1258->1290; A.1 (23-09): 1290->1294
-    ('data/ManejoDatos/conection.py', 1857, 'HU'),  # R.1 (11-09): 1649->1734; T.0 (16-09): 1734->1788; B.1 (21-09): 1788->1817; A.1 (23-09): 1817->1857
-    ('data/ManejoDatos/conection.py', 1880, 'HU'),  # R.1 (11-09): 1672->1757; T.0 (16-09): 1757->1811; B.1 (21-09): 1811->1840; A.1 (23-09): 1840->1880
-    ('data/ManejoDatos/conection.py', 1894, '%'),  # R.1 (11-09): 1686->1771; T.0 (16-09): 1771->1825; B.1 (21-09): 1825->1854; A.1 (23-09): 1854->1894
+    ('data/ManejoDatos/conection.py', 1861, 'HU'),  # R.1 (11-09): 1649->1734; T.0 (16-09): 1734->1788; B.1 (21-09): 1788->1817; A.1 (23-09): 1817->1857; A.2 (23-09): 1857->1861
+    ('data/ManejoDatos/conection.py', 1884, 'HU'),  # R.1 (11-09): 1672->1757; T.0 (16-09): 1757->1811; B.1 (21-09): 1811->1840; A.1 (23-09): 1840->1880; A.2 (23-09): 1880->1884
+    ('data/ManejoDatos/conection.py', 1898, '%'),  # R.1 (11-09): 1686->1771; T.0 (16-09): 1771->1825; B.1 (21-09): 1825->1854; A.1 (23-09): 1854->1894; A.2 (23-09): 1894->1898
     ('data/ManejoDatos/load.py', 3025, 'cm'),
     ('data/ManejoDatos/load.py', 3062, 'mm'),
     ('data/ManejoDatos/load.py', 3063, 'mm'),
@@ -349,10 +349,10 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1532, 'mm'),  # A.2 (21-09): 1518->1531; B.3 (21-09): 1531->1532
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1705, '°'),  # A.2 (21-09): 1691->1704; B.3 (21-09): 1704->1705
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2497, 'cm'),  # A.2 (21-09): 2305->2364; B.3 (21-09): 2364->2425; B.4 (21-09): 2425->2497
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 773, 'MeV'),  # A.1 (23-09): 760->773
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1645, 'mm'),  # D.1 (23-09): 1595->1602; A.1 (23-09): 1602->1645
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1788, 'cm'),  # D.1 (23-09): 1738->1745; A.1 (23-09): 1745->1788
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1915, 'HU'),  # D.1 (23-09): 1865->1872; A.1 (23-09): 1872->1915
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 774, 'MeV'),  # A.1 (23-09): 760->773; A.2 (23-09): 773->774
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1651, 'mm'),  # D.1 (23-09): 1595->1602; A.1 (23-09): 1602->1645; A.2 (23-09): 1645->1651
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1794, 'cm'),  # D.1 (23-09): 1738->1745; A.1 (23-09): 1745->1788; A.2 (23-09): 1788->1794
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1921, 'HU'),  # D.1 (23-09): 1865->1872; A.1 (23-09): 1872->1915; A.2 (23-09): 1915->1921
     ('ui/paginasGuia/SQLtoEXCEL.py', 317, 'cGy/UM'),
     ('ui/paginasGuia/SQLtoEXCEL.py', 318, '%'),
     ('ui/paginasGuia/SQLtoEXCEL.py', 319, '%'),

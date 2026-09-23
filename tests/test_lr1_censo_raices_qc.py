@@ -310,7 +310,7 @@ CENSO_RAICES = {
                 "Python -- un control anulado del mes prestaría sus físicos"),
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 558, "controles"):  # A.2 (21-09): 544->557; B.3 (21-09): 557->558
         (IDENTIDAD, "_fecha_real_del_control (F3): WHERE id = ?, fila ya elegida"),
-    ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 164, "controles"):
+    ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 165, "controles"):  # A.2 (23-09): 164->165
         (IDENTIDAD, "_existe_ref: WHERE id = ? AND equipo = ? -- el id ya "
                     "nombra la fila; el equipo es una guarda, no un "
                     "selector"),

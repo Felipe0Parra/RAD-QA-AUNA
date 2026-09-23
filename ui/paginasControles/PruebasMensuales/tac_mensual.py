@@ -7,6 +7,7 @@ from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensu
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.catphan_TAC.leer_dicom import VisualizadorDicom
+from analisisImagenes.catphan.protocolos import comparar_con_protocolo
 from analisisImagenes.Analisis_Catphan_TAC import *
 from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
@@ -1001,9 +1002,14 @@ class PruebaMensualTAC(PruebaMensual600):
             self.adquisicion_por_categoria.pop(categoria, None)
             return
         kv, ma, espesor_corte = _parametros_de_volumen(vol)
+        adquisicion = getattr(vol, 'adquisicion', None)
         self.adquisicion_por_categoria[categoria] = {
             "kv": kv, "ma": ma, "espesor_corte": espesor_corte,
-            "adquisicion": getattr(vol, 'adquisicion', None),
+            "adquisicion": adquisicion,
+            # A.2: contra el protocolo fijo del equipo SELECCIONADO. No bloquea:
+            # se archiva con la prueba, que queda marcada como no comparable.
+            "desviacion_protocolo": comparar_con_protocolo(
+                getattr(self, 'equipo_f', None), adquisicion).desviacion_texto(),
         }
 
     def _registrar_adquisicion_linealidad(self):
