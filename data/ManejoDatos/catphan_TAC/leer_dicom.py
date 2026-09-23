@@ -581,7 +581,16 @@ class GeometriaCatphan:
         "5mm":  {"angulo": -12.9, "radio_mm": 1.5, "diametro_mm": 5},
     }
 
-    def __init__(self, corte_hu: np.ndarray, tam_px: float):
+    def __init__(self, corte_hu: np.ndarray, tam_px: float,
+                 orientacion: str = "normal", roll_deg: float = 0.0):
+        """`orientacion`/`roll_deg` (D.1, 23-09): la orientación ("normal" |
+        "invertido") y el giro medidos por el motor pylinac (B.2 del plan
+        del 18-09) para ESTA serie -- el fantoma es rígido, así que son los
+        mismos para los cuatro módulos. Se usan en `_calcular_roi_float`
+        para que las 6 posiciones fijas de `ROI_CONFIG` (CTP515) sigan
+        cayendo sobre el material correcto aunque el fantoma esté girado o
+        invertido en la camilla. Con los valores por defecto ("normal", 0.0)
+        el comportamiento es idéntico al de antes de D.1."""
         if corte_hu.dtype == np.uint8:
             raise TypeError(
                 "GeometriaCatphan exige el corte en HU (float), no la imagen "
@@ -592,6 +601,8 @@ class GeometriaCatphan:
                 "resultado de get_volumen_normalizado(wl, ww)[corte]."
             )
         self.tam_px = tam_px
+        self.orientacion = orientacion
+        self.roll_deg = roll_deg
         self.centro, self.radio = self._detectar_phantom(corte_hu)
 
         # Offsets globales
@@ -741,7 +752,18 @@ class GeometriaCatphan:
 
     def _calcular_roi_float(self, nombre):
         info      = self.ROI_CONFIG[nombre]
-        ang_rad   = np.radians(info["angulo"] + self.offset_ang)
+        # D.1 (23-09): angulo NOMINAL -> angulo EFECTIVO, dado el giro y la
+        # orientación medidos por el motor. Fórmula validada empíricamente
+        # (giro sintético grande + HU real de materiales conocidos, ver
+        # PLAN_HANDOFF_IMAGENES_22-09.md D.1): un fantoma invertido se
+        # refleja (180 - angulo) antes de sumar el giro; uno normal solo
+        # suma el giro. Con orientacion="normal"/roll_deg=0.0 (D.0) esto
+        # es angulo_nominal, igual que antes de D.1.
+        if self.orientacion == "invertido":
+            angulo_efectivo = 180.0 - info["angulo"] + self.roll_deg
+        else:
+            angulo_efectivo = info["angulo"] + self.roll_deg
+        ang_rad   = np.radians(angulo_efectivo + self.offset_ang)
         dist_px   = self.ROI_DIST_MM / self.tam_px
         radio_px  = info["radio_mm"]  / self.tam_px
 
@@ -994,6 +1016,16 @@ class VisualizadorDicom(QWidget):
         self.resultados, self.cortes = detectar_y_resolver_modulos(
             ruta_dicom=self.ruta_carpeta,
         )
+        # D.1 (23-09): orientación y giro medidos por el motor para esta
+        # serie -- el fantoma es rígido, los cuatro módulos comparten el
+        # mismo valor; se toma de cualquiera que haya salido confiable.
+        # Sin ninguno confiable, "normal"/0.0 (mismo comportamiento que
+        # antes de D.1).
+        _primer_resultado = next(
+            (r for r in self.resultados.values() if r.confiable), None
+        )
+        self.orientacion = getattr(_primer_resultado, "orientacion", "normal")
+        self.roll_deg = getattr(_primer_resultado, "roll_deg", 0.0)
             # ------------------------------------------------------------------
         # 4️⃣  Ocultar dialogo y continuar con el resto de la UI
         # ------------------------------------------------------------------

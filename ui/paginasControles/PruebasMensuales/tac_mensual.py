@@ -1515,6 +1515,13 @@ class PruebaMensualTAC(PruebaMensual600):
         """
         Maneja el evento cuando se carga una imagen DICOM.
         """
+        # D.1 (23-09): orientación y giro medidos por el motor para la
+        # serie del visualizador principal ("un solo visualizador, una
+        # sola carga", C.2) -- "normal"/0.0 si aún no se detectaron.
+        _vis_activo = getattr(self, 'visualizador_principal', None)
+        orientacion_serie = getattr(_vis_activo, 'orientacion', 'normal')
+        roll_deg_serie = getattr(_vis_activo, 'roll_deg', 0.0)
+
         # Funciones para escribir resultados en tablas de texto
         def tabla_resultados_espesor(resultados):
             if not resultados:
@@ -2121,7 +2128,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     self.graficar.setCurrentText("Resolución Espacial")
                     #print("Procesando corte para la categoría de RESOLUCIÓN DE ESPACIAL")
 
-                    resultados_resolucion = resolucion_espacial(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados)
+                    resultados_resolucion = resolucion_espacial(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados, orientacion=orientacion_serie, roll_deg=roll_deg_serie)
                     self.resultados_resolucion_espacial = resultados_resolucion  # Almacenar para guardado
                     texto = tabla_resultados_resolucion_espacial(resultados_resolucion)
                     self.reemplazar_resultados_texto_con_tabla(texto)
@@ -2134,7 +2141,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     
                     # 1. Crear GeometriaCatphan UNA sola vez (D.0: geometría desde HU)
                     from data.ManejoDatos.catphan_TAC.leer_dicom import GeometriaCatphan
-                    catphan = GeometriaCatphan(imagen_analisis, tam_px)
+                    catphan = GeometriaCatphan(imagen_analisis, tam_px, orientacion=orientacion_serie, roll_deg=roll_deg_serie)
                     
                     # 2. Abrir posicionador — bloquea hasta que el usuario confirme o cancele
                     from data.ManejoDatos.catphan_TAC.posicionador_manual import PosicionadorDialog
@@ -2156,7 +2163,12 @@ class PruebaMensualTAC(PruebaMensual600):
                         visualizar=True,
                         canvas=self.canvas_resultados,
                         cnr_lim=1.0,
-                        visibilidad_lim=0.1
+                        visibilidad_lim=0.1,
+                        # D.1: mismos orientacion/roll_deg con los que se
+                        # construyó `catphan` arriba -- las ROI de fondo
+                        # los necesitan aparte (no pasan por `catphan`).
+                        orientacion=orientacion_serie,
+                        roll_deg=roll_deg_serie,
                     )
                     self.resultados_resolucion_contraste = resolucion
                     imprimir_resultados_contraste_bajo(resolucion)

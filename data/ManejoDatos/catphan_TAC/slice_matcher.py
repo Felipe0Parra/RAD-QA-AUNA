@@ -25,6 +25,7 @@ Dependencias:
 
 import os
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Optional
 from PyQt5.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout,
@@ -47,6 +48,12 @@ class ResultadoModulo:
     idx_corte: Optional[int]
     confiable: bool
     error: Optional[str] = None
+    # D.1 (23-09, PLAN_HANDOFF_IMAGENES_22-09.md): orientación y giro que
+    # midió el motor para ESTA serie (el fantoma es rígido -- los cuatro
+    # módulos comparten el mismo valor). "normal"/0.0 si no se pudo medir
+    # (mismo comportamiento que antes de D.1).
+    orientacion: str = "normal"
+    roll_deg: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -54,23 +61,32 @@ class ResultadoModulo:
 # ---------------------------------------------------------------------------
 
 def detectar_modulos_pylinac(ruta_dicom: str) -> dict[str, ResultadoModulo]:
-    from pylinac import CatPhan504
-
-    from analisisImagenes.catphan.serie import leer_serie
+    # D.1 (23-09): antes corría CatPhan504 puro (sin volteo ni límite de
+    # homogeneidad por equipo) -- por eso fallaba con el iX y con el
+    # fantoma invertido. Pasa a usar el motor ya validado (B.1/B.2, plan
+    # del 18-09), que además entrega orientación y giro.
+    from analisisImagenes.catphan import motor
+    from analisisImagenes.catphan.perfiles import PERFILES
+    from analisisImagenes.catphan.serie import identificar_equipo, leer_serie
 
     resultados = {}
 
     try:
-        # A.2 (PLAN_CATPHAN_AUTOMATICO_POR_EQUIPO_18-09.md): se pasa la
+        serie = leer_serie(ruta_dicom)
+        # A.2 (PLAN_CATPHAN_AUTOMATICO_POR_EQUIPO_18-09.md): se usa la
         # LISTA de rutas de la serie elegida por `leer_serie` (la misma
         # función que ordena el volumen del visor, A.1), no la carpeta
         # cruda -- así el índice que devuelve pylinac se refiere exactamente
         # a los mismos archivos que `DicomVolume.cortes`, incluso si la
         # carpeta tuviera una segunda serie o un RTSTRUCT (D-06).
-        rutas = [corte.ruta for corte in leer_serie(ruta_dicom).cortes]
-        ct = CatPhan504(rutas)
-        ct.analyze()
-
+        equipo, _advertencia = identificar_equipo(serie)
+        # Equipo no identificable (aún no se cargó A.2/A.3, o serie de un
+        # equipo nuevo): perfil neutro -- D.1 no depende de saber de qué
+        # equipo es la serie para detectar cortes, orientación y giro.
+        perfil = PERFILES.get(equipo) if equipo else SimpleNamespace(
+            limite_variacion_hu=None, nombre=equipo, visibility_threshold=None,
+        )
+        resultado = motor.analizar(serie, perfil)
     except Exception as e:
         print(f"⚠️  pylinac no pudo analizar el volumen: {e}")
         for nombre in DESCRIPCION_MODULOS:
@@ -83,34 +99,38 @@ def detectar_modulos_pylinac(ruta_dicom: str) -> dict[str, ResultadoModulo]:
             )
         return resultados
 
-    modulo_a_attr = {
-        "CTP404": "ctp404",
-        "CTP486": "ctp486",
-        "CTP515": "ctp515",
-        "CTP528": "ctp528",
-    }
-
-    for nombre, attr in modulo_a_attr.items():
-        modulo_pylinac = getattr(ct, attr, None)
-        if modulo_pylinac is None:
+    n_cortes = len(serie.cortes)
+    for nombre in DESCRIPCION_MODULOS:
+        modulo_res = resultado.modulos.get(nombre)
+        if modulo_res is None:
             resultados[nombre] = ResultadoModulo(
                 nombre=nombre,
                 descripcion=DESCRIPCION_MODULOS[nombre],
                 idx_corte=None,
                 confiable=False,
                 error="Módulo no encontrado en el scan.",
+                orientacion=resultado.orientacion,
+                roll_deg=resultado.roll_deg,
             )
             continue
 
         try:
-            # D-02: `slice_num` ya es 0-based (solo los TÍTULOS de las
-            # figuras de pylinac suman 1) -- no se le resta 1 aquí.
-            idx = int(modulo_pylinac.slice_num)
+            # D-02: `corte_indice` ya es 0-based (solo los TÍTULOS de las
+            # figuras de pylinac suman 1) -- no se le resta 1 aquí. Es el
+            # índice en el marco que analizó el motor (volteado si la
+            # serie está invertida); la app siempre muestra el volumen SIN
+            # voltear, así que se traduce al índice físico real (D-01/D.1:
+            # dos marcos de referencia).
+            idx = int(modulo_res.corte_indice)
+            if resultado.orientacion == "invertido":
+                idx = n_cortes - 1 - idx
             resultados[nombre] = ResultadoModulo(
                 nombre=nombre,
                 descripcion=DESCRIPCION_MODULOS[nombre],
                 idx_corte=idx,
                 confiable=True,
+                orientacion=resultado.orientacion,
+                roll_deg=resultado.roll_deg,
             )
         except Exception as e:
             resultados[nombre] = ResultadoModulo(
@@ -119,6 +139,8 @@ def detectar_modulos_pylinac(ruta_dicom: str) -> dict[str, ResultadoModulo]:
                 idx_corte=None,
                 confiable=False,
                 error=str(e),
+                orientacion=resultado.orientacion,
+                roll_deg=resultado.roll_deg,
             )
 
     return resultados
