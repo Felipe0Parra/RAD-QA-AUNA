@@ -668,11 +668,19 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
     Analiza la resolución espacial mediante el cálculo del MTF.
     Usa boundaries en orden descendente (segmentos: start > end).
 
-    `corte_hu` (D.0, 23-09): solo para la geometría (dónde caen las 8
-    regiones del anillo) -- sale de la ventana, no del HU. Los VALORES
-    del perfil (`values_sorted` más abajo) siguen leyéndose de `corte`
-    (la imagen ventaneada de 8 bits); llevarlos también a HU es B.1, no
-    esta tarea.
+    `corte_hu` (D.0, 23-09): la geometría (dónde caen las 8 regiones del
+    anillo) y, desde B.1 (23-09), también los VALORES del perfil
+    (`values_sorted` más abajo) salen de aquí -- antes se leían de
+    `corte` (la imagen ventaneada de 8 bits), así que el MTF salía de
+    datos saturados por la ventana de visualización (§0.5 del plan: esta
+    función era la única de las seis que medía así). `corte` sigue
+    yendo solo al dibujo del anillo.
+
+    B.1 (23-09): las regiones por encima del límite de Nyquist del
+    píxel (`1/(2·tam_px_cm)`) no se intentan analizar -- cualquier "pico"
+    ahí sería aliasing, no resolución real -- y su estado pasa a decir
+    "Fuera del límite de muestreo", no "Picos insuficientes" (que sugiere
+    un fallo del análisis en vez de un límite físico de la adquisición).
 
     `orientacion`/`roll_deg` (D.1, 23-09): del motor pylinac para esta
     serie. `boundaries` son fracciones fijas del círculo completo,
@@ -722,8 +730,13 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
     angles = np.radians(np.mod(angles_deg, 360.0))
     idx = np.argsort(angles)
     angles_sorted = angles[idx]
-    values_sorted = corte[ys[idx], xs[idx]]
+    values_sorted = corte_hu[ys[idx], xs[idx]]  # B.1: valores desde HU, no desde la ventana
     norm_angles = angles_sorted / (2*np.pi)
+
+    # B.1 (23-09): límite de Nyquist del propio píxel -- un hecho físico de
+    # la adquisición, no un umbral de la app. tam_px está en mm; 1 lp/cm
+    # necesita el tamaño de píxel en cm.
+    nyquist_lp_cm = 1.0 / (2.0 * (tam_px / 10.0))
 
     from scipy.ndimage import gaussian_filter1d
     values_filtered = gaussian_filter1d(values_sorted, sigma=1)
@@ -744,6 +757,15 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
         end_norm = region["end"]
         if start_norm <= end_norm:
             region_results[key] = {"status": "Intervalo inválido (start<=end)"}
+            continue
+
+        # B.1 (23-09): por encima de Nyquist, cualquier "pico" sería
+        # aliasing -- se declara el límite físico, no se intenta medir.
+        if region["lp/cm"] > nyquist_lp_cm:
+            region_results[key] = {
+                "lp/cm": region["lp/cm"],
+                "status": f"Fuera del límite de muestreo ({nyquist_lp_cm:.2f} lp/cm con este píxel)",
+            }
             continue
 
         start_idx = np.searchsorted(norm_angles, end_norm, side="left")
