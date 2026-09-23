@@ -74,8 +74,8 @@ def espesor_corte(corte_255, corte_hu, tam_px: float, visualizar: bool = True,
         imagen_analisis = np.mean(slices_stack, axis=2).astype(np.uint8)
     
     # Obtener geometría del phantom
-    catphan = GeometriaCatphan(corte_255, tam_px)
-    
+    catphan = GeometriaCatphan(corte_hu, tam_px)  # D.0: geometría desde HU
+
     # Configuración de ROIs para las rampas
     # width: dimensión perpendicular al alambre (dirección del ángulo)
     # height: dimensión paralela al alambre (perpendicular al ángulo)
@@ -265,11 +265,12 @@ def espesor_corte(corte_255, corte_hu, tam_px: float, visualizar: bool = True,
 
 # ---------------------------------------------- Tamaño de pixel  ----------------------------------------------
 
-def tamano_pixel(corte_255,  tam_px: float, visualizar: bool, canvas = None)  -> dict:
+def tamano_pixel(corte_255, corte_hu, tam_px: float, visualizar: bool, canvas = None)  -> dict:
     """
     Calcula el tamaño de pixel estimado usando los centros de los círculos.
     Args:
-        corte: Imagen 2D (0-255).
+        corte_255: Imagen 2D (0-255), solo para dibujar.
+        corte_hu: Imagen 2D en HU -- de aquí sale la geometría (D.0, 23-09).
         tam_px: Tamaño de píxel en mm.
         visualizar: Si se muestran visualizaciones.
         tolerancia: Diferencia máxima para considerar alineados (en píxeles).
@@ -287,9 +288,9 @@ def tamano_pixel(corte_255,  tam_px: float, visualizar: bool, canvas = None)  ->
         "AbajoDer": {"angulo": 315, "distancia": 35, "radio": 3}
     }
 
-    # Obtener geometría del phantom
-    catphan = GeometriaCatphan(corte_255, tam_px)
-    
+    # Obtener geometría del phantom (D.0: desde HU, no desde la ventana)
+    catphan = GeometriaCatphan(corte_hu, tam_px)
+
     # Preparar visualización
     output = cv2.cvtColor(corte_255, cv2.COLOR_GRAY2BGR) if visualizar else None
     
@@ -387,7 +388,7 @@ def resolucion_contraste(corte_255, corte_hu, tam_px: float,
     import numpy as np
 
     if catphan is None:
-        catphan = GeometriaCatphan(corte_255, tam_px)
+        catphan = GeometriaCatphan(corte_hu, tam_px)  # D.0: geometría desde HU
 
     contraste_rois = catphan.ROI_CONFIG
     roi_dist_mm    = catphan.ROI_DIST_MM
@@ -631,15 +632,21 @@ def imprimir_resultados_contraste_bajo(resultados):
 
 # ---------------------------------------------- Resolución espacial -------------------------------------------
 
-def resolucion_espacial(corte, tam_px: float, visualizar=True, canvas=None) -> dict:
+def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=None) -> dict:
     """
     Analiza la resolución espacial mediante el cálculo del MTF.
     Usa boundaries en orden descendente (segmentos: start > end).
+
+    `corte_hu` (D.0, 23-09): solo para la geometría (dónde caen las 8
+    regiones del anillo) -- sale de la ventana, no del HU. Los VALORES
+    del perfil (`values_sorted` más abajo) siguen leyéndose de `corte`
+    (la imagen ventaneada de 8 bits); llevarlos también a HU es B.1, no
+    esta tarea.
     """
     import cv2
     import numpy as np
-    
-    catphan = GeometriaCatphan(corte, tam_px)
+
+    catphan = GeometriaCatphan(corte_hu, tam_px)  # D.0: geometría desde HU
 
     # Boundaries descendentes (norm_angle 0..1)
     boundaries = (0.470, 0.382, 0.320, 0.260, 0.220, 0.160, 0.120, 0.060, 0.020)
@@ -915,16 +922,18 @@ def resolucion_espacial(corte, tam_px: float, visualizar=True, canvas=None) -> d
         "imagen_analisis": output_blob if visualizar else None
     }
 
-def mostrar_regiones_anillo(corte, tam_px: float, boundaries=None, roi_settings=None,
+def mostrar_regiones_anillo(corte, corte_hu, tam_px: float, boundaries=None, roi_settings=None,
         radio_mm=47, ancho_rel=0.08, angle_offset_deg=0, visualizar=True, return_data=True,
         invertir_config_en_mismo_lugar=False, invertir_posicion=False):
     """
     Visualiza las regiones del anillo. Usa los mismos flags de inversión que construir_roi_settings.
+
+    `corte_hu` (D.0, 23-09): geometría desde HU, no desde la ventana.
     """
     import cv2
     import numpy as np
-    
-    geo = GeometriaCatphan(corte, tam_px)
+
+    geo = GeometriaCatphan(corte_hu, tam_px)  # D.0: geometría desde HU
     cx, cy = int(geo.centro[0]), int(geo.centro[1])
     radio_px = int(radio_mm / tam_px)
     h, w = corte.shape
@@ -1033,7 +1042,7 @@ def valor_numero_ct(corte_255, corte_hu,tam_px, catphan=None,visualizar=True, ca
     # 1. Preparar detectar geometría (rois)
     from data.ManejoDatos.catphan_TAC.posicionador_manual import GeometriaCatphanCT
     if catphan is None:
-        catphan = GeometriaCatphanCT(corte_255, tam_px)
+        catphan = GeometriaCatphanCT(corte_hu, tam_px)  # D.0: geometría desde HU
     resultados = []    
     output = cv2.cvtColor(corte_255, cv2.COLOR_GRAY2BGR) if visualizar else None
     # 2. Analizar cada ROI definido
@@ -1279,7 +1288,7 @@ def uniformidad(corte_255, corte_hu, tam_px, visualizar:bool=True, canvas=None,
         "Izquierda":{"angulo": 180, "distancia": 53, "radio": 10}
     }
 
-    catphan = GeometriaCatphan(corte_255, tam_px)
+    catphan = GeometriaCatphan(corte_hu, tam_px)  # D.0: geometría desde HU
     output = cv2.cvtColor(corte_255, cv2.COLOR_GRAY2BGR) if visualizar else None
 
     resultados = {}

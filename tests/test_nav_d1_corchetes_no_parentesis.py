@@ -87,7 +87,7 @@ BASELINE_D1_PENDIENTE = {
     ('analisisImagenes/ActividadFuente.py', 52, 'nA'),
     ('analisisImagenes/ActividadFuente.py', 140, 's'),
     ('analisisImagenes/ActividadFuente.py', 141, 's'),
-    ('analisisImagenes/Analisis_Catphan_TAC.py', 1008, 'HU'),
+    ('analisisImagenes/Analisis_Catphan_TAC.py', 1017, 'HU'),  # D.0 (23-09): 1008->1017
     ('analisisImagenes/Analisis_PlacaCuadrada.py', 257, 'mm'),
     ('analisisImagenes/Analisis_PlacaCuadrada.py', 267, 'mm'),
     ('analisisImagenes/Analisis_PlacaRC.py', 213, 'mm'),
@@ -136,7 +136,7 @@ BASELINE_D1_PENDIENTE = {
     ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1591, 'mm'),
     ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1734, 'cm'),
     ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1861, 'HU'),
-    ('data/ManejoDatos/catphan_TAC/leer_dicom.py', 1164, 'mm'),  # A.1 (18-09): 951->956; C.2 (22-09): 956->1142->1164
+    ('data/ManejoDatos/catphan_TAC/leer_dicom.py', 1258, 'mm'),  # A.1 (18-09): 951->956; C.2 (22-09): 956->1142->1164; D.0 (23-09): 1164->1258
     ('data/ManejoDatos/conection.py', 1817, 'HU'),  # R.1 (11-09): 1649->1734; T.0 (16-09): 1734->1788; B.1 (21-09): 1788->1817
     ('data/ManejoDatos/conection.py', 1840, 'HU'),  # R.1 (11-09): 1672->1757; T.0 (16-09): 1757->1811; B.1 (21-09): 1811->1840
     ('data/ManejoDatos/conection.py', 1854, '%'),  # R.1 (11-09): 1686->1771; T.0 (16-09): 1771->1825; B.1 (21-09): 1825->1854

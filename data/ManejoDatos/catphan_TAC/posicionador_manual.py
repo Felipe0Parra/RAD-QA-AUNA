@@ -626,8 +626,11 @@ class GeometriaCatphanCT(GeometriaCatphan):
  
     # offsets locales no aplican; el dict se mantiene vacío para no romper
     # llamadas heredadas que pudieran consultarlo.
-    def __init__(self, corte: np.ndarray, tam_px: float):
-        super().__init__(corte, tam_px)
+    def __init__(self, corte_hu: np.ndarray, tam_px: float):
+        # D.0 (23-09): hereda la detección de la base -- corte_hu, nunca la
+        # imagen ventaneada; el TypeError de GeometriaCatphan cubre también
+        # esta subclase.
+        super().__init__(corte_hu, tam_px)
         # Sobreescribir offsets_locales con keys del ROI_CONFIG correcto
         self.offsets_locales = {nombre: [0.0, 0.0] for nombre in self.ROI_CONFIG}
  
@@ -657,8 +660,8 @@ class PosicionadorDialogCT(QDialog):
     No hay modo Individual ni modo Manual — innecesarios para este módulo.
  
     Uso:
-        catphan_ct = GeometriaCatphanCT(corte_255, tam_px)
-        dlg = PosicionadorDialogCT(catphan_ct, corte_255, parent=self)
+        catphan_ct = GeometriaCatphanCT(corte_hu, tam_px)  # D.0: geometría desde HU
+        dlg = PosicionadorDialogCT(catphan_ct, corte_255, parent=self)  # corte_255 solo para dibujar
         dlg.exec_()
         # catphan_ct.offset_x/y/ang contienen los ajustes del usuario
         # (o 0.0 si canceló / no tocó nada)

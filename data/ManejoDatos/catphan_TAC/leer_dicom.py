@@ -554,6 +554,19 @@ import numpy as np
 
 
 class GeometriaCatphan:
+    """D.0 (23-09, PLAN_HANDOFF_IMAGENES_22-09.md): el centro y el radio del
+    fantoma se detectan sobre el corte en HU, nunca sobre la imagen ventaneada
+    de 8 bits que solo existe para MIRAR.
+
+    Causa que esto cierra [medido en §0.9 del plan]: pasarle a esta clase la
+    imagen ventaneada movía el centro detectado hasta 15 mm según dónde
+    estuviera el WL/WW del deslizador, y en 5-6 de cada 24 ventanas probadas
+    la detección fallaba en silencio y caía al centro geométrico de la
+    imagen -- el anillo de resolución "excéntrico" y media de la resolución
+    de contraste que "no funciona" salen de aquí. Otsu sobre el HU no
+    depende de ninguna ventana (0.01-0.07 mm del centro que da pylinac en
+    las 5 series reales, iX incluido, que vive corrido ≈ +490 HU).
+    """
     RADIO_PHANTOM_MM = 100.0
     TOLERANCIA       = 0.12
     ROI_DIST_MM      = 50.0
@@ -568,10 +581,18 @@ class GeometriaCatphan:
         "5mm":  {"angulo": -12.9, "radio_mm": 1.5, "diametro_mm": 5},
     }
 
-    def __init__(self, corte: np.ndarray, tam_px: float):
-        self.tam_px       = tam_px
-        self._corte_blur  = cv2.GaussianBlur(corte, (5, 5), 1.2)
-        self.centro, self.radio = self._detectar_phantom()
+    def __init__(self, corte_hu: np.ndarray, tam_px: float):
+        if corte_hu.dtype == np.uint8:
+            raise TypeError(
+                "GeometriaCatphan exige el corte en HU (float), no la imagen "
+                "ventaneada de 8 bits: la geometría del fantoma no puede "
+                "depender de la ventana de visualización (D.0, "
+                "PLAN_HANDOFF_IMAGENES_22-09.md). Pase volumen_hu[corte] "
+                "(o el 'corte_hu' que ya recibe la función), nunca el "
+                "resultado de get_volumen_normalizado(wl, ww)[corte]."
+            )
+        self.tam_px = tam_px
+        self.centro, self.radio = self._detectar_phantom(corte_hu)
 
         # Offsets globales
         self.offset_x   = 0.0
@@ -583,7 +604,53 @@ class GeometriaCatphan:
 
     # ── detección ────────────────────────────────────────────────────────────
 
-    def _detectar_phantom(self):
+    def _radio_valido(self, radio_px):
+        """¿Cae el radio detectado dentro de RADIO_PHANTOM_MM ± TOLERANCIA?"""
+        radio_nominal_px = self.RADIO_PHANTOM_MM / self.tam_px
+        return abs(radio_px - radio_nominal_px) <= self.TOLERANCIA * radio_nominal_px
+
+    def _detectar_por_otsu(self, corte_hu):
+        """Método primario (D.0): umbral de Otsu sobre el HU -> apertura
+        morfológica (separa la camilla) -> mayor componente conexa -> huecos
+        rellenos -> centroide y radio equivalente sqrt(area/pi). No depende
+        de ninguna ventana de visualización ni de ningún supuesto de escala
+        (le da igual que el iX viva corrido ≈ +490 HU)."""
+        from skimage.filters import threshold_otsu
+        from scipy import ndimage as ndi
+
+        try:
+            umbral = threshold_otsu(corte_hu)
+        except ValueError:
+            return None
+
+        mascara = ndi.binary_opening(corte_hu > umbral, iterations=3)
+        etiquetas, n = ndi.label(mascara)
+        if n == 0:
+            return None
+
+        tamanos = ndi.sum(mascara, etiquetas, index=range(1, n + 1))
+        mayor = 1 + int(np.argmax(tamanos))
+        componente = ndi.binary_fill_holes(etiquetas == mayor)
+        area = float(componente.sum())
+        if area <= 0:
+            return None
+
+        cy, cx = ndi.center_of_mass(componente)
+        radio_px = float(np.sqrt(area / np.pi))
+        return (float(cx), float(cy)), radio_px
+
+    def _detectar_por_hough(self, corte_hu):
+        """Respaldo (D.0): Hough sobre el HU normalizado por PERCENTILES del
+        propio corte -- no por la ventana de visualización -- así que sigue
+        siendo un dato, no una decisión del operador."""
+        p_low, p_high = np.percentile(corte_hu, (0.5, 99.5))
+        if p_high <= p_low:
+            return None
+        normalizado = np.clip(
+            (corte_hu - p_low) / (p_high - p_low) * 255.0, 0, 255
+        ).astype(np.uint8)
+        blur = cv2.GaussianBlur(normalizado, (5, 5), 1.2)
+
         radio_nominal_px = self.RADIO_PHANTOM_MM / self.tam_px
         min_r = int(radio_nominal_px * (1 - self.TOLERANCIA))
         max_r = int(radio_nominal_px * (1 + self.TOLERANCIA))
@@ -591,23 +658,49 @@ class GeometriaCatphan:
             max_r = min_r + 1
 
         circles = cv2.HoughCircles(
-            self._corte_blur, cv2.HOUGH_GRADIENT,
-            dp=1.2, minDist=self._corte_blur.shape[0] // 2,
+            blur, cv2.HOUGH_GRADIENT,
+            dp=1.2, minDist=blur.shape[0] // 2,
             param1=50, param2=30,
             minRadius=min_r, maxRadius=max_r,
         )
-
-        h, w = self._corte_blur.shape
         if circles is None:
-            print("⚠️ Phantom no detectado. Usando centro geométrico.")
-            return (w / 2.0, h / 2.0), radio_nominal_px
+            return None
 
-        mejor = self._seleccionar_mejor(circles[0], radio_nominal_px)
+        mejor = self._seleccionar_mejor(circles[0], radio_nominal_px, blur)
         cx, cy, r = float(mejor[0]), float(mejor[1]), float(mejor[2])
         return (cx, cy), r
 
-    def _seleccionar_mejor(self, candidatos, radio_nominal_px):
-        h, w   = self._corte_blur.shape
+    def _detectar_phantom(self, corte_hu):
+        centro_radio = self._detectar_por_otsu(corte_hu)
+        metodo = "otsu"
+
+        if centro_radio is None or not self._radio_valido(centro_radio[1]):
+            candidato_hough = self._detectar_por_hough(corte_hu)
+            if candidato_hough is not None and self._radio_valido(candidato_hough[1]):
+                centro_radio = candidato_hough
+                metodo = "hough_percentiles"
+            else:
+                centro_radio = None
+                metodo = "centro_geometrico"
+
+        if centro_radio is None:
+            h, w = corte_hu.shape
+            radio_nominal_px = self.RADIO_PHANTOM_MM / self.tam_px
+            print(
+                "⚠️ Phantom no detectado (ni Otsu ni Hough dieron un radio "
+                f"dentro de {self.RADIO_PHANTOM_MM:.0f} mm ± "
+                f"{self.TOLERANCIA * 100:.0f}%). Usando centro geométrico -- "
+                "revisar con el posicionador manual (D.0, "
+                "PLAN_HANDOFF_IMAGENES_22-09.md)."
+            )
+            centro_radio = (w / 2.0, h / 2.0), radio_nominal_px
+
+        self.metodo_deteccion = metodo
+        self.deteccion_confiable = metodo != "centro_geometrico"
+        return centro_radio
+
+    def _seleccionar_mejor(self, candidatos, radio_nominal_px, imagen_255):
+        h, w   = imagen_255.shape
         cx_img = w / 2.0;  cy_img = h / 2.0
         diagonal = np.hypot(h, w)
         scores = []
@@ -620,12 +713,13 @@ class GeometriaCatphan:
             s_rad  = 1.0 - min(err_r / 0.15, 1.0)
             margen = min(cx - r, cy - r, w - cx - r, h - cy - r)
             s_borde = 1.0 if margen > 5 else 0.0
-            mask   = np.zeros(self._corte_blur.shape, np.uint8)
-            cv2.circle(mask, (int(round(cx)), int(round(cy))), int(round(r * 0.7)), 1, -1)
-            vals   = self._corte_blur[mask == 1]
-            hu_m   = float(np.mean(vals)) if len(vals) > 0 else 999.0
-            s_hu   = float(np.exp(-((hu_m - 128) / 60) ** 2))
-            scores.append(s_cent * 0.4 + s_rad * 0.3 + s_borde * 0.2 + s_hu * 0.1)
+            # (D.0, 23-09): se retira el término "s_hu" que puntuaba contra
+            # 128 -- gris medio de una imagen de 8 bits, no HU. Era una
+            # suposición de escala que no vale ni para el iX (corrido ≈490
+            # HU) ni para ningún equipo con otra ventana; ese término
+            # desaparece (opción explícita del plan) en vez de reinventarse.
+            # Pesos redistribuidos proporcionalmente (0.4/0.3/0.2 -> suman 1).
+            scores.append(s_cent * 0.45 + s_rad * 0.35 + s_borde * 0.20)
 
         return candidatos[int(np.argmax(scores))]
 

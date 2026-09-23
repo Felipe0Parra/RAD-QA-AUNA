@@ -2089,7 +2089,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     self.graficar.setCurrentText("Tamaño de Pixel")
                     #print("\nProcesando corte para la categoría de TAMAÑO DE PIXEL")
 
-                    resultados_tamano_pixel = tamano_pixel(imagen_grafica, tam_px, visualizar=True, canvas=self.canvas_resultados)
+                    resultados_tamano_pixel = tamano_pixel(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados)
                     self.resultados_tamano_pixel = resultados_tamano_pixel  # Almacenar para guardado
                     self.tam_px_teorico = tam_px  # Almacenar valor teórico
 
@@ -2121,7 +2121,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     self.graficar.setCurrentText("Resolución Espacial")
                     #print("Procesando corte para la categoría de RESOLUCIÓN DE ESPACIAL")
 
-                    resultados_resolucion = resolucion_espacial(imagen_grafica, tam_px, visualizar=True, canvas=self.canvas_resultados)
+                    resultados_resolucion = resolucion_espacial(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados)
                     self.resultados_resolucion_espacial = resultados_resolucion  # Almacenar para guardado
                     texto = tabla_resultados_resolucion_espacial(resultados_resolucion)
                     self.reemplazar_resultados_texto_con_tabla(texto)
@@ -2132,9 +2132,9 @@ class PruebaMensualTAC(PruebaMensual600):
                 elif categoria == 'resolucion_contraste':
                     self.graficar.setCurrentText("Resolución de Contraste")
                     
-                    # 1. Crear GeometriaCatphan UNA sola vez
+                    # 1. Crear GeometriaCatphan UNA sola vez (D.0: geometría desde HU)
                     from data.ManejoDatos.catphan_TAC.leer_dicom import GeometriaCatphan
-                    catphan = GeometriaCatphan(imagen_grafica, tam_px)
+                    catphan = GeometriaCatphan(imagen_analisis, tam_px)
                     
                     # 2. Abrir posicionador — bloquea hasta que el usuario confirme o cancele
                     from data.ManejoDatos.catphan_TAC.posicionador_manual import PosicionadorDialog
@@ -2173,7 +2173,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         GeometriaCatphanCT,
                         PosicionadorDialogCT,
                     )
-                    catphan_ct = GeometriaCatphanCT(imagen_grafica, tam_px)
+                    catphan_ct = GeometriaCatphanCT(imagen_analisis, tam_px)  # D.0: geometría desde HU
                 
                     # 2. Abrir posicionador — bloquea hasta confirmar o cancelar
                     dlg = PosicionadorDialogCT(catphan_ct, imagen_grafica, parent=self)

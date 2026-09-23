@@ -15,6 +15,10 @@ PyQt5_sip==12.17.0
 pyqtgraph==0.13.7
 reportlab==4.4.2
 scipy==1.16.3
+# D.0 (23-09, PLAN_HANDOFF_IMAGENES_22-09.md): threshold_otsu para la geometría del
+# fantoma desde HU. Ya llegaba transitivo por pylinac (pylinac exige scikit-image>=0.18);
+# se declara explícito porque leer_dicom.py pasa a importarlo directamente.
+scikit-image==0.26.0
 
 openpyxl==3.1.5
 
