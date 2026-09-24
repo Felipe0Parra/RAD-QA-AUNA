@@ -27,6 +27,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from PyQt5.QtWidgets import QLabel
@@ -219,8 +220,8 @@ def test_con_linea_base_si_se_juzga():
 # 3. NO SE INVENTAN EQUIVALENCIAS
 # ---------------------------------------------------------------------------
 
-RESULTADOS_ARBITRARIOS = {"espesor": {"espesor_promedio_mm": 2.82, "espesor_teorico_mm": 2.0},
-                          "tamano_pixel": {"X": 1.07, "Y": 1.07, "tam_px_teorico": 1.074},
+ESPESOR_TOMOGRAFO = {"espesor_promedio_mm": 1.92, "espesor_teorico_mm": 2.0}   # E.1: lo que mide la funcion hoy
+RESULTADOS_ARBITRARIOS = {"tamano_pixel": {"X": 1.07, "Y": 1.07, "tam_px_teorico": 1.074},
                           "resolucion_contraste": {"resumen": {"rois_visibles_cnr": 5}},
                           "resolucion_espacial": {"regiones": {}}}
 
@@ -237,15 +238,32 @@ def test_lo_que_la_funcion_no_mide_igual_que_la_regla_queda_pendiente_y_lo_dice(
         assert "Pendiente de métrica" in j.criterio and MOTIVO_PENDIENTE[j.prueba] in j.criterio
 
 
-def test_el_espesor_del_tomografo_sigue_pendiente_por_decision_del_fisico():
-    """E.1 (24-09): la función ya mide el espesor como pylinac (±0.005 mm en las 5 series), así que el motivo de
-    G.3 ("la función lo sobreestima") dejó de ser cierto y no puede seguir guardándose con cada control nuevo.
-    El criterio TG-66 sigue sin conectarse hasta E.2; mientras tanto no hay veredicto, con la razón verdadera."""
-    for medido, nominal in ((2.82, 2.0), (4.2, 3.0), (1.92, 2.0)):
-        (j,) = juzgar("Tomógrafo", "espesor", {"espesor_promedio_mm": medido, "espesor_teorico_mm": nominal})
-        assert j.estado == ESTADO_PENDIENTE
-    assert "sobreestima" not in MOTIVO_PENDIENTE["espesor"]
-    assert "E.1" in MOTIVO_PENDIENTE["espesor"] and "pylinac" in MOTIVO_PENDIENTE["espesor"]
+def test_el_espesor_del_tomografo_se_juzga_contra_su_nominal():
+    """E.2 (24-09): tras E.1 la función mide el espesor como pylinac, así que el criterio de TG-66 (nominal ± 1 mm, en
+    `perfiles.py`) se conecta por la misma vía que las demás pruebas. La referencia es el nominal DICOM de la serie."""
+    estado = lambda medido, nominal: por_prueba(juzgar(
+        "Tomógrafo", "espesor", {"espesor_promedio_mm": medido, "espesor_teorico_mm": nominal}))["espesor"].estado
+    assert estado(1.92, 2.0) == CUMPLE and estado(3.0, 2.0) == CUMPLE and estado(1.0, 2.0) == CUMPLE   # límites inclusivos
+    assert estado(3.01, 2.0) == NO_CUMPLE and estado(0.99, 2.0) == NO_CUMPLE and estado(3.2, 2.0) == NO_CUMPLE
+    assert estado(4.2, 3.0) == NO_CUMPLE and estado(3.9, 3.0) == CUMPLE       # el nominal es el de la serie, no un 2.0 fijo
+    j = por_prueba(juzgar("Tomógrafo", "espesor", ESPESOR_TOMOGRAFO))["espesor"]
+    assert j.criterio == "2 ± 1 mm" and j.estado_regla == "norma" and "TG-66" in j.fuente and j.referencia == 2.0
+
+
+def test_el_espesor_sin_nominal_o_sin_medicion_no_da_veredicto():
+    (sin_nominal,) = juzgar("Tomógrafo", "espesor", {"espesor_promedio_mm": 1.92, "espesor_teorico_mm": None})
+    assert sin_nominal.estado == INFORMATIVO and sin_nominal.valor == 1.92 and "nominal" in sin_nominal.criterio
+    for res in ({"espesor_promedio_mm": None, "espesor_teorico_mm": 2.0}, {}, None):
+        (j,) = juzgar("Tomógrafo", "espesor", res)
+        assert j.estado == INFORMATIVO and j.valor is None and not j.es_veredicto
+
+
+def test_la_tolerancia_del_espesor_sale_del_perfil(monkeypatch):
+    regla = copy.copy(PERFILES["Tomógrafo"].reglas["espesor"])
+    regla.tolerancia = 0.05
+    monkeypatch.setitem(PERFILES["Tomógrafo"].reglas, "espesor", regla)
+    (j,) = juzgar("Tomógrafo", "espesor", ESPESOR_TOMOGRAFO)          # |1.92 - 2.0| = 0.08 > 0.05
+    assert j.estado == NO_CUMPLE and "0.05" in j.criterio
 
 
 @pytest.mark.parametrize("equipo", ["Clinac ix", "Halcyon"])
@@ -298,6 +316,7 @@ def test_los_textos_no_llevan_simbolos_de_correcto_incorrecto():
         juicios += juzgar(equipo, "uniformidad", uniformidad_con(45.0))
         juicios += juzgar(equipo, "valores_ct", valores_ct_con(HU_TOMOGRAFO))
         juicios += juzgar(equipo, "linealidad_ct", {"r_squared": 0.9})
+        juicios += juzgar(equipo, "espesor", ESPESOR_TOMOGRAFO)
         for categoria, res in RESULTADOS_ARBITRARIOS.items():
             juicios += juzgar(equipo, categoria, res)
     assert len(juicios) > 40
@@ -438,6 +457,37 @@ def test_la_pantalla_juzga_con_la_regla_de_su_equipo_y_lo_muestra(app, bd_tempor
     assert not any(s in texto for s in SIMBOLOS)
 
 
+@pytest.mark.parametrize("clave", sorted(FORMULARIOS))
+def test_la_pantalla_juzga_el_espesor_solo_en_el_tomografo(app, bd_temporal, clave):
+    constructor, equipo, _hoja = FORMULARIOS[clave]
+    obj = iniciar(constructor())
+    obj.criterios_por_categoria = {}
+    pestana = obj._crear_nueva_tab("Espesor de corte")
+    obj.tab_widget.setCurrentWidget(pestana["tab"])
+    (j,) = obj._mostrar_criterio("espesor", dict(ESPESOR_TOMOGRAFO))
+    assert j.estado == (CUMPLE if equipo == "Tomógrafo" else NO_APLICA)
+    texto = _panel(pestana).text()
+    if equipo == "Tomógrafo":
+        assert "2 ± 1 mm" in texto and "AAPM TG-66" in texto
+    else:
+        assert "acelerador" in texto
+
+
+def test_la_pantalla_pone_el_nominal_antes_de_juzgar_el_espesor():
+    """El criterio necesita `espesor_teorico_mm`: si la pantalla juzgara antes de ponerlo, el tomógrafo quedaría siempre
+    'Informativo'. Orden derivado del código, no de una lista."""
+    arbol = ast.parse(PANTALLA.read_text(encoding="utf-8"))
+    nominales, juicios = [], []
+    for nodo in ast.walk(arbol):
+        if (isinstance(nodo, ast.Assign) and isinstance(nodo.targets[0], ast.Subscript)
+                and isinstance(nodo.targets[0].slice, ast.Constant) and nodo.targets[0].slice.value == "espesor_teorico_mm"):
+            nominales.append(nodo.lineno)
+        if (isinstance(nodo, ast.Call) and getattr(nodo.func, "attr", None) == "_mostrar_criterio"
+                and nodo.args and getattr(nodo.args[0], "value", None) == "espesor"):
+            juicios.append(nodo.lineno)
+    assert nominales and juicios and max(nominales) < min(juicios), (nominales, juicios)
+
+
 def test_una_falla_al_juzgar_no_impide_mostrar_el_resultado(app, bd_temporal, monkeypatch):
     obj = iniciar(FORMULARIOS["tomografo"][0]())
     monkeypatch.setattr(criterios, "juzgar", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
@@ -573,7 +623,7 @@ def _texto(pdf):
 
 def _archivar_criterios(ruta, sesion=42, equipo="Tomógrafo"):
     """Archiva en la copia lo que la pantalla del tomógrafo habría guardado con mediciones reales."""
-    medidas = {"espesor": RESULTADOS_ARBITRARIOS["espesor"], "tamano_pixel": RESULTADOS_ARBITRARIOS["tamano_pixel"],
+    medidas = {"espesor": ESPESOR_TOMOGRAFO, "tamano_pixel": RESULTADOS_ARBITRARIOS["tamano_pixel"],
                "resolucion_contraste": RESULTADOS_ARBITRARIOS["resolucion_contraste"],
                "resolucion_espacial": RESULTADOS_ARBITRARIOS["resolucion_espacial"],
                "valores_ct": valores_ct_con(HU_TOMOGRAFO), "linealidad_ct": {"r_squared": 0.999},
@@ -729,3 +779,22 @@ def test_serie_real_la_tolerancia_que_se_le_pasa_a_la_funcion_es_la_que_se_aplic
 def test_serie_real_sin_regla_de_uniformidad_las_marcas_por_roi_quedan_sin_veredicto():
     res = _uniformidad_con_tolerancia("HALCYON_SEP", None)
     assert all(res[r]["pasa_tolerancia_rel_centro"] is None for r in ("Arriba", "Abajo", "Izquierda", "Derecha"))
+
+
+def test_serie_real_el_espesor_del_tomografo_cumple_su_regla():
+    """La función de E.1 sobre el corte CTP404 real del tomógrafo (1.92 mm, nominal 2.0) frente a la regla de TG-66."""
+    import warnings
+    from analisisImagenes.Analisis_Catphan_TAC import espesor_corte
+    from _catphan_oro import ESPESOR_MM
+    from test_d0_geometria_desde_hu import _ct_analizado, _hu_y_tam_px, _ventanear
+    ct = _ct_analizado("TOMOGRAFO")
+    hu, tam_px, _ = _hu_y_tam_px(ct, "ctp404")
+    i = int(ct.ctp404.slice_num)
+    vecinos = [np.asarray(ct.dicom_stack[i - 1].array, dtype=np.float32), np.asarray(ct.dicom_stack[i + 1].array, dtype=np.float32)]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = espesor_corte(_ventanear(hu, 40, 400), hu, tam_px, visualizar=False, combinar_slices=True, slices_adyacentes=vecinos)
+    res["espesor_teorico_mm"] = ESPESOR_MM["TOMOGRAFO"][1]
+    j = por_prueba(juzgar("Tomógrafo", "espesor", res))["espesor"]
+    assert j.estado == CUMPLE and abs(j.valor - 1.92) < 0.02, (j.valor, j.estado)
+

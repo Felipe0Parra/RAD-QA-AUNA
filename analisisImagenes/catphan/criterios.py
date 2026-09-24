@@ -56,7 +56,10 @@ CATEGORIA_A_PRUEBAS = {
 #   linealidad_r2     <- r² de `linealidad_ct` (la app guarda el coeficiente de correlación r, D-30; R² = r²)
 #   unif_max_dif_hu   <- máx |ROI - centro| sobre los cuatro ROI periféricos de `uniformidad`
 #   ruido_centro_hu   <- desviación estándar del ROI central de `uniformidad`
+#   espesor_mm        <- `espesor_promedio_mm` de `espesor_corte` (E.1/E.2, 24-09: mismo algoritmo y cortes que
+#                        pylinac, ±0.005 mm en las 5 series); la referencia es el nominal DICOM de la serie
 EQUIVALENCIAS = {
+    "espesor": ("espesor_mm",),
     "numeros_ct": ("hu_aire", "hu_pmp", "hu_ldpe", "hu_poliestireno", "hu_acrilico", "hu_delrin", "hu_teflon"),
     "linealidad": ("linealidad_r2",),
     "uniformidad": ("unif_max_dif_hu",),
@@ -65,9 +68,6 @@ EQUIVALENCIAS = {
 
 # Por qué cada una de las pruebas SIN equivalencia queda pendiente de métrica.
 MOTIVO_PENDIENTE = {
-    "espesor": (
-        "la función ya mide el espesor como pylinac (E.1, 24-09: ±0.005 mm en las 5 series del corpus), pero el "
-        "criterio TG-66 (±1 mm del nominal) sigue sin conectarse por decisión del físico"),
     "geometria": (
         "la regla mide cuatro distancias de 50 mm; la función actual mide el tamaño del píxel, no esas distancias"),
     "bajo_contraste": (
@@ -284,6 +284,16 @@ def juzgar(equipo: Optional[str], categoria: str, resultados, linea_base: Option
             juicios.append(_juicio(categoria, prueba, "ruido_centro_hu", _ETIQUETAS["ruido_centro_hu"],
                                    ruido_centro_hu(resultados or {}), regla,
                                    linea_base=linea_base.get("ruido_centro_hu")))
+        elif prueba == "espesor":
+            valor = (resultados or {}).get("espesor_promedio_mm")
+            nominal = (resultados or {}).get("espesor_teorico_mm")
+            if valor is not None and nominal is None:      # sin nominal DICOM no hay contra qué juzgar
+                juicios.append(Juicio(categoria, prueba, "espesor_mm", _ETIQUETAS["espesor"], float(valor),
+                                      regla.unidad, INFORMATIVO, texto_criterio(regla, "espesor_mm")
+                                      + " (la serie no trae espesor nominal)", regla.fuente, regla.estado))
+            else:
+                juicios.append(_juicio(categoria, prueba, "espesor_mm", _ETIQUETAS["espesor"],
+                                       None if valor is None else float(valor), regla, referencia=nominal))
     return juicios
 
 
