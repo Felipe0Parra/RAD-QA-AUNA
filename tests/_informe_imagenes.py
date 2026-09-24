@@ -37,6 +37,9 @@ def bd_copia(monkeypatch, tmp_path):
     shutil.copy2(BD_REBUILD_21_09, copia)
     monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: str(copia))
     conection_mod.Conexion._instance = None
+    # Como en la aplicación: `Conexion()` se crea al arrancar y ahí se aplican las migraciones
+    # (las columnas de identidad DICOM de `pruebas`, A.1). El informe nunca corre sobre una BD sin migrar.
+    conection_mod.Conexion()
     yield str(copia)
     if conection_mod.Conexion._instance is not None:
         conection_mod.Conexion._instance.con.close()

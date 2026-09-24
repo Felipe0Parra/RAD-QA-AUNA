@@ -24,6 +24,8 @@ Los resultados se organizan en las siguientes categorías:
 from PyQt5.QtSql import QSqlQuery
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
+import html
+import json
 import tempfile
 import pandas as pd
 from io import BytesIO
@@ -49,6 +51,7 @@ from models.PDF.PDFWindow import PdfViewer
 # Importar funciones de reconstrucción desde catphan_db
 from data.ManejoDatos.catphan_TAC.catphan_db import reconstruir_resultados_desde_bd
 from services.anulacion import filtro_activo
+from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad
 
 class ReporteControlSistemaImagenes:
     """
@@ -286,10 +289,13 @@ class ReporteControlSistemaImagenes:
         """
         query = QSqlQuery(db)
         # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas,
-        # las mismas 7 que devuelve el dict de abajo. Un campo nuevo se
+        # las mismas 12 que devuelve el dict de abajo. Un campo nuevo se
         # agrega en los DOS sitios -- aquí y en el dict --, no solo en uno.
+        # E.2: las 5 últimas son lo que A.1/A.2 guardan por prueba (identidad
+        # DICOM y desviación del protocolo); el PDF imprime LO GUARDADO.
         query.prepare(f"""
-            SELECT id_prueba, id_tipo, kv, ma, espesor_corte, imagen_path, imagen_resultado
+            SELECT id_prueba, id_tipo, kv, ma, espesor_corte, imagen_path, imagen_resultado,
+                   equipo_dicom, serie_uid, fecha_adquisicion, adquisicion_dicom, desviacion_protocolo
             FROM pruebas
             WHERE id_sesion = ? AND id_tipo = ?{filtro_activo('pruebas')}
             ORDER BY id_prueba DESC
@@ -307,6 +313,11 @@ class ReporteControlSistemaImagenes:
                 'espesor_corte': query.value('espesor_corte'),
                 'imagen_original': query.value('imagen_path'),
                 'imagen_resultado': query.value('imagen_resultado'),
+                'equipo_dicom': query.value('equipo_dicom'),
+                'serie_uid': query.value('serie_uid'),
+                'fecha_adquisicion': query.value('fecha_adquisicion'),
+                'adquisicion_dicom': query.value('adquisicion_dicom'),
+                'desviacion_protocolo': query.value('desviacion_protocolo'),
             }
         return {}
     
@@ -478,6 +489,7 @@ class ReporteControlSistemaImagenes:
             dict: Diccionario con DataFrames listos para el PDF
         """
         tablas_reporte = {}
+        infos_prueba = []   # E.2: (nombre de la categoría, info de su prueba) -> UNA tabla de parámetros
 
         # Mapeo de categoría a id_tipo (ajusta según tu base de datos)
         mapeo_id_tipo = {
@@ -498,8 +510,7 @@ class ReporteControlSistemaImagenes:
 
         # Tabla de espesor
         if 'espesor' in resultados and resultados['espesor']:
-            info_prueba = self._obtener_info_prueba(db, ref, mapeo_id_tipo['espesor'])
-            tablas_reporte[f'parametros_espesor'] = self._crear_tabla_parametros(info_prueba, "Espesor de corte")
+            infos_prueba.append(("Espesor de corte", self._obtener_info_prueba(db, ref, mapeo_id_tipo['espesor'])))
             tablas_reporte['espesor'] = self._crear_tabla_espesor_corte(
                 resultados['espesor']
             )
@@ -512,8 +523,7 @@ class ReporteControlSistemaImagenes:
         
         # Tabla de tamaño de pixel
         if 'tamano_pixel' in resultados and resultados['tamano_pixel']:
-            info_prueba = self._obtener_info_prueba(db, ref, mapeo_id_tipo['tamano_pixel'])
-            tablas_reporte[f'parametros_tamano_pixel'] = self._crear_tabla_parametros(info_prueba, "Tamaño de pixel")
+            infos_prueba.append(("Tamaño de pixel", self._obtener_info_prueba(db, ref, mapeo_id_tipo['tamano_pixel'])))
             tablas_reporte['tamano_pixel'] = self._crear_tabla_tamano_pixel(
                 resultados['tamano_pixel']
             )
@@ -525,8 +535,7 @@ class ReporteControlSistemaImagenes:
         
         # Tabla de resolución de contraste
         if 'resolucion_contraste' in resultados and resultados['resolucion_contraste']:
-            info_prueba = self._obtener_info_prueba(db, ref, mapeo_id_tipo['resolucion_contraste'])
-            tablas_reporte[f'parametros_resolucion_contraste'] = self._crear_tabla_parametros(info_prueba, "Resolución de contraste")
+            infos_prueba.append(("Resolución de contraste", self._obtener_info_prueba(db, ref, mapeo_id_tipo['resolucion_contraste'])))
             tablas_reporte['resolucion_contraste'] = self._crear_tabla_resolucion_contraste(
                 resultados['resolucion_contraste']
             )
@@ -538,8 +547,7 @@ class ReporteControlSistemaImagenes:
         
         # Tabla de resolución espacial
         if 'resolucion_espacial' in resultados and resultados['resolucion_espacial']:
-            info_prueba = self._obtener_info_prueba(db, ref, mapeo_id_tipo['resolucion_espacial'])
-            tablas_reporte[f'parametros_resolucion_espacial'] = self._crear_tabla_parametros(info_prueba, "Resolución espacial")
+            infos_prueba.append(("Resolución espacial", self._obtener_info_prueba(db, ref, mapeo_id_tipo['resolucion_espacial'])))
             tablas_reporte['resolucion_espacial'] = self._crear_tabla_resolucion_espacial(
                 resultados['resolucion_espacial']
             )
@@ -551,8 +559,7 @@ class ReporteControlSistemaImagenes:
         
         # Tabla de valores CT
         if 'valores_ct' in resultados and resultados['valores_ct']:
-            info_prueba = self._obtener_info_prueba(db, ref, mapeo_id_tipo['valores_ct'])
-            tablas_reporte[f'parametros_valores_ct'] = self._crear_tabla_parametros(info_prueba, "Valores CT")
+            infos_prueba.append(("Valores CT", self._obtener_info_prueba(db, ref, mapeo_id_tipo['valores_ct'])))
             tablas_reporte['valores_ct'] = self._crear_tabla_valores_ct(
                 resultados['valores_ct']
             )
@@ -564,8 +571,7 @@ class ReporteControlSistemaImagenes:
         
         # Tabla de linealidad CT
         if 'linealidad_ct' in resultados and resultados['linealidad_ct']:
-            info_prueba = self._obtener_info_prueba(db, ref, mapeo_id_tipo['linealidad_ct'])
-            tablas_reporte[f'parametros_linealidad_ct'] = self._crear_tabla_parametros(info_prueba, "Linealidad CT")
+            infos_prueba.append(("Linealidad CT", self._obtener_info_prueba(db, ref, mapeo_id_tipo['linealidad_ct'])))
             tablas_reporte['linealidad_ct'] = self._crear_tabla_linealidad_ct(
                 resultados['linealidad_ct']
             )
@@ -577,8 +583,7 @@ class ReporteControlSistemaImagenes:
         
         # Tabla de uniformidad
         if 'uniformidad' in resultados and resultados['uniformidad']:
-            info_prueba = self._obtener_info_prueba(db, ref, mapeo_id_tipo['uniformidad'])
-            tablas_reporte[f'parametros_uniformidad'] = self._crear_tabla_parametros(info_prueba, "Uniformidad")
+            infos_prueba.append(("Uniformidad", self._obtener_info_prueba(db, ref, mapeo_id_tipo['uniformidad'])))
             tablas_reporte['uniformidad'] = self._crear_tabla_uniformidad(
                 resultados['uniformidad']
             )
@@ -588,6 +593,13 @@ class ReporteControlSistemaImagenes:
                     imagenes_originales['uniformidad'], imagenes_resultados['uniformidad'], 'Uniformidad'
                 )
         
+        if infos_prueba:
+            # E.2: la tabla de parámetros va UNA vez, al inicio (anotación 10 del físico).
+            tablas_reporte = {
+                'parametros_adquisicion': self._crear_tabla_parametros_adquisicion(
+                    infos_prueba, info_sesion.get('equipo')),
+                **tablas_reporte,
+            }
         return tablas_reporte
 
     def _crear_tabla_imagen(self, imagen_original, imagen_analisis, titulo):
@@ -607,23 +619,89 @@ class ReporteControlSistemaImagenes:
 
         return pd.DataFrame(tabla, columns=['Imagen original', 'Imagen del análisis'])
     
-    def _crear_tabla_parametros(self, info_prueba, categoria):
-        """
-        Crea tabla con parámetros de adquisición del TAC
-        
-        Args:
-            info_prueba (dict): Información de la prueba
-        
-        Returns:
-            pd.DataFrame: Tabla con parámetros de adquisición
-        """
-        tabla = []
-        tabla.append(['Parámetro', 'Valor'])
-        tabla.append(['Voltaje (kV)', f"{info_prueba.get('kv', 'N/A')}"])
-        tabla.append(['Corriente (mA)', f"{info_prueba.get('ma', 'N/A')}"])
-        tabla.append(['Espesor de corte (mm)', f"{info_prueba.get('espesor_corte', 'N/A')}"])
+    # E.2: kV, mA y espesor de corte se guardan como columnas propias en TODA prueba (también en las
+    # anteriores a A.1); la identidad y el resto de la adquisición, solo desde A.1 (23-09-2026).
+    _CLAVES_ANTERIORES_A_A1 = ('kv', 'ma', 'espesor_mm')
+    LEGADO = 'no registrado (control anterior al 23-09-2026)'
 
-        return pd.DataFrame(tabla, columns=[f'Parámetros de adquisición {categoria}', ''])
+    def _filas_de_una_adquisicion(self, info, equipo):
+        """Una adquisición tal como está GUARDADA en `pruebas` (§12.4: el documento de un control
+        reabierto dice lo mismo que el del día). Devuelve `(pares, ancha)`: los pares (etiqueta, valor)
+        que van lado a lado y la fila de ancho completo con el veredicto (o con lo que no se guardó)."""
+        crudo = info.get('adquisicion_dicom')
+        adq = None
+        if crudo:
+            try:
+                adq = json.loads(crudo)
+            except (TypeError, ValueError):
+                adq = None
+            if not isinstance(adq, dict):
+                adq = None
+        if adq is not None:
+            desviacion = info.get('desviacion_protocolo')
+            return (filas_identidad(adq) + filas_adquisicion(adq),
+                    ('Frente al protocolo', desviacion or (
+                        f"Sin desviación registrada respecto del protocolo de {equipo or 'su equipo'}")))
+
+        # Sin identidad DICOM: un control anterior a A.1 o una fila ilegible. Lo que SÍ se guardó
+        # (kV, mA, espesor) se conserva; lo demás se dice, no se inventa ni se rellena con lo de hoy.
+        basicos = {'kv': info.get('kv'), 'ma': info.get('ma'), 'espesor_mm': info.get('espesor_corte')}
+        pares = [(etiqueta, 'N/A' if valor == NO_PUBLICADO else valor)
+                 for etiqueta, valor in filas_adquisicion(basicos, self._CLAVES_ANTERIORES_A_A1)]
+        return pares, ('Identidad y adquisición DICOM',
+                       'no se pudo leer lo guardado' if crudo else self.LEGADO)
+
+    @staticmethod
+    def _en_cuatro_columnas(pares, ancha):
+        """Los pares (etiqueta, valor) en dos columnas de pares -- se leen de arriba abajo por la
+        izquierda y luego por la derecha -- y la fila ancha al final. Ver `_spans_de_filas_completas`."""
+        mitad = (len(pares) + 1) // 2
+        izquierda, derecha = pares[:mitad], pares[mitad:]
+        filas = []
+        for i, (etiqueta, valor) in enumerate(izquierda):
+            etiqueta2, valor2 = derecha[i] if i < len(derecha) else ('', '')
+            filas.append([etiqueta, valor, etiqueta2, valor2])
+        filas.append([ancha[0], ancha[1], None, None])
+        return filas
+
+    def _crear_tabla_parametros_adquisicion(self, infos_prueba, equipo):
+        """E.2: la tabla de parámetros, UNA vez al inicio, con la información general del equipo
+        como sale de la metadata (identidad, adquisición) y el veredicto del protocolo.
+
+        Si las pruebas de la sesión se corrieron con adquisiciones DISTINTAS (kV, mA, espesor,
+        identidad o desviación), no se funden: la tabla lo dice y lista cada adquisición con las
+        categorías a las que corresponde -- es justo el caso que §0.4 del plan destapó.
+
+        Args:
+            infos_prueba: [(nombre de la categoría, dict de `_obtener_info_prueba`)]
+            equipo: el equipo del control, para el texto del veredicto
+        """
+        grupos = []   # [(firma, [categorías], info)]
+        for categoria, info in infos_prueba:
+            firma = tuple(info.get(c) for c in (
+                'kv', 'ma', 'espesor_corte', 'adquisicion_dicom', 'desviacion_protocolo'))
+            for grupo in grupos:
+                if grupo[0] == firma:
+                    grupo[1].append(categoria)
+                    break
+            else:
+                grupos.append((firma, [categoria], info))
+
+        tabla = [['Parámetro', 'Valor', 'Parámetro', 'Valor']]
+        if len(grupos) > 1:
+            tabla.append(['Atención', 'Las pruebas de esta sesión se corrieron con adquisiciones distintas',
+                          None, None])
+            for n, (_firma, categorias, info) in enumerate(grupos, 1):
+                tabla.append([f'Adquisición {n}', ', '.join(categorias), None, None])
+                tabla.extend(self._en_cuatro_columnas(*self._filas_de_una_adquisicion(info, equipo)))
+        else:
+            tabla.extend(self._en_cuatro_columnas(*self._filas_de_una_adquisicion(grupos[0][2], equipo)))
+
+        # Cada celda se vuelve un Paragraph en el generador: sin escapar, un `<` o un `&` de la
+        # metadata (o de una desviación archivada) rompería el marcado. Los `None` se conservan:
+        # marcan las filas de ancho completo.
+        tabla = [[None if celda is None else html.escape(str(celda)) for celda in fila] for fila in tabla]
+        return pd.DataFrame(tabla, columns=['Parámetros de adquisición', '', '', ''], dtype=object)
 
     def _crear_tabla_espesor_corte(self, resultado):
         """

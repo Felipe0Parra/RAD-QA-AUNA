@@ -192,13 +192,10 @@ BASELINE_D1_PENDIENTE = {
     ('models/PDF/Anual/reportes_anuales.py', 770, '%'),
     ('models/PDF/Anual/reportes_anuales.py', 777, 'nC'),
     ('models/PDF/Anual/reportes_anuales.py', 802, 'cm'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 622, 'kV'),  # E.3 (24-09): 606->622
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 623, 'mA'),  # E.3 (24-09): 607->623
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 624, 'mm'),  # E.3 (24-09): 608->624
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 730, 'mm'),  # E.3 (24-09): 714->730
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 763, 'mm'),  # E.3 (24-09): 747->763
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 783, 'cm'),  # E.3 (24-09): 767->783
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 867, '%'),  # E.3 (24-09): 851->867
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 808, 'mm'),  # E.3 (24-09): 714->730; E.2 (24-09): 730->808
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 841, 'mm'),  # E.3 (24-09): 747->763; E.2 (24-09): 763->841
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 861, 'cm'),  # E.3 (24-09): 767->783; E.2 (24-09): 783->861
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 945, '%'),  # E.3 (24-09): 851->867; E.2 (24-09): 867->945
     ('models/PDF/Mensuales/reportes_mensuales.py', 801, 'cm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1075, 'mm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1096, '%'),
@@ -250,16 +247,16 @@ BASELINE_D1_PENDIENTE = {
     ('models/PDF/Mensuales/reportes_mensuales.py', 1587, 's'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1633, 's'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1634, 's'),
-    ('models/PDF/pdf.py', 1546, 'mm'),  # E.1 (24-09): 1533->1546
-    ('models/PDF/pdf.py', 1547, 'mm'),  # E.1 (24-09): 1534->1547
-    ('models/PDF/pdf.py', 1612, 'mm'),  # E.1 (24-09): 1599->1612
-    ('models/PDF/pdf.py', 1613, 'mm'),  # E.1 (24-09): 1600->1613
-    ('models/PDF/pdf.py', 1667, 'mm'),  # E.1 (24-09): 1654->1667
-    ('models/PDF/pdf.py', 1983, 'mm'),  # E.1 (24-09): 1970->1983
-    ('models/PDF/pdf.py', 2159, '°'),  # E.1 (24-09): 2146->2159
-    ('models/PDF/pdf.py', 2160, '°'),  # E.1 (24-09): 2147->2160
-    ('models/PDF/pdf.py', 2211, '°'),  # E.1 (24-09): 2198->2211
-    ('models/PDF/pdf.py', 2212, '°'),  # E.1 (24-09): 2199->2212
+    ('models/PDF/pdf.py', 1581, 'mm'),  # E.1 (24-09): 1533->1546; E.2 (24-09): 1546->1581
+    ('models/PDF/pdf.py', 1582, 'mm'),  # E.1 (24-09): 1534->1547; E.2 (24-09): 1547->1582
+    ('models/PDF/pdf.py', 1647, 'mm'),  # E.1 (24-09): 1599->1612; E.2 (24-09): 1612->1647
+    ('models/PDF/pdf.py', 1648, 'mm'),  # E.1 (24-09): 1600->1613; E.2 (24-09): 1613->1648
+    ('models/PDF/pdf.py', 1702, 'mm'),  # E.1 (24-09): 1654->1667; E.2 (24-09): 1667->1702
+    ('models/PDF/pdf.py', 2018, 'mm'),  # E.1 (24-09): 1970->1983; E.2 (24-09): 1983->2018
+    ('models/PDF/pdf.py', 2194, '°'),  # E.1 (24-09): 2146->2159; E.2 (24-09): 2159->2194
+    ('models/PDF/pdf.py', 2195, '°'),  # E.1 (24-09): 2147->2160; E.2 (24-09): 2160->2195
+    ('models/PDF/pdf.py', 2246, '°'),  # E.1 (24-09): 2198->2211; E.2 (24-09): 2211->2246
+    ('models/PDF/pdf.py', 2247, '°'),  # E.1 (24-09): 2199->2212; E.2 (24-09): 2212->2247
     ('services/MLCs_calibration_service.py', 112, 'mm'),
     ('services/MLCs_calibration_service.py', 256, 'mm'),
     ('services/MLCs_calibration_service.py', 315, 'mm'),

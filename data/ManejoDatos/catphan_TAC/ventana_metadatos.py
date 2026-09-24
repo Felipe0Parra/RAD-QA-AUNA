@@ -41,11 +41,10 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QScrollArea, QVBoxLayout, QWidget)
 
+from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad  # noqa: F401  (NO_PUBLICADO: se sigue importando desde aquí)
 from analisisImagenes.catphan.protocolos import (
     COINCIDE, NO_IDENTIFICADO, OTRO_EQUIPO, ROTULO_FUERA_DE_PROTOCOLO, SIN_EQUIPO, SIN_PROTOCOLO,
     comparar_con_protocolo, texto_encontrado, texto_exigido)
-
-NO_PUBLICADO = "(no lo publica el equipo)"
 
 # Niveles de los avisos de la carpeta y del banner.
 INFO = "info"
@@ -67,16 +66,6 @@ _COLOR = {
     ATENCION: "#b9770e",
     INFO: "#566573",
 }
-
-
-def _txt(valor) -> str:
-    """Un valor DICOM para mostrar: lo que falta se dice, no se deja en blanco
-    ni se escribe 'None' (el iX no publica descripción, CTDIvol ni filtro)."""
-    if valor is None or valor == "":
-        return NO_PUBLICADO
-    if isinstance(valor, float):
-        return str(int(valor)) if valor == int(valor) else f"{valor:g}"
-    return str(valor)
 
 
 @dataclass
@@ -151,28 +140,10 @@ def construir_modelo_ventana(vol, equipo_seleccionado: Optional[str]) -> ModeloV
     adq = getattr(vol, "adquisicion", None) or {}
     c = comparar_con_protocolo(equipo_seleccionado, adq)
 
-    identidad = [
-        ("Fabricante", _txt(adq.get("fabricante"))),
-        ("Modelo", _txt(adq.get("modelo"))),
-        ("Estación", _txt(adq.get("estacion"))),
-        ("Número de serie del equipo", _txt(adq.get("numero_serie_equipo"))),
-        ("Software", _txt(adq.get("software"))),
-    ]
-    adquisicion = [
-        ("Descripción de la serie", _txt(adq.get("descripcion_serie"))),
-        ("Fecha de adquisición", _txt(adq.get("fecha_adquisicion"))),
-        ("kV", _txt(adq.get("kv"))),
-        ("mA", _txt(adq.get("ma"))),
-        ("mAs", _txt(adq.get("mas"))),
-        ("Tiempo de exposición [ms]", _txt(adq.get("tiempo_exposicion_ms"))),
-        ("CTDIvol [mGy]", _txt(adq.get("ctdi_vol_mgy"))),
-        ("Espesor de corte [mm]", _txt(adq.get("espesor_mm"))),
-        ("Kernel", _txt(adq.get("kernel"))),
-        ("Filtro", _txt(adq.get("filtro"))),
-        ("FOV [mm]", _txt(adq.get("fov_mm"))),
-        ("Píxel [mm]", _txt(adq.get("pixel_mm"))),
-        ("Cortes", _txt(adq.get("n_cortes"))),
-    ]
+    # E.2: las filas de identidad y de adquisición se definen en `descripcion.py` -- el PDF del
+    # informe muestra la MISMA metadata con las mismas etiquetas.
+    identidad = filas_identidad(adq)
+    adquisicion = filas_adquisicion(adq)
 
     filas = []
     for f in c.filas:

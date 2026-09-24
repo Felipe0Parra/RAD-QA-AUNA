@@ -29,6 +29,45 @@ ALTO_RECUADRO_IMAGEN_BRAQUI = 130
 CABECERA_TABLA_PT = 10
 CUERPO_TABLA_PT = 8
 
+# E.2 (PLAN_HANDOFF_IMAGENES_22-09.md): las tablas del informe de imágenes de CatPhan, en el orden en
+# que salen -- UNA sola lista. Antes eran cinco copias (el orden del mensual, el del anual de iX, el de
+# Halcyon, la lista blanca del anual y dos listas de estilo), y el generador ANUAL descarta en silencio
+# toda tabla cuya clave no conoce: una clave nueva del productor (`parametros_adquisicion`) habría
+# desaparecido del anual sin ningún error. El productor es
+# `ReporteControlSistemaImagenes._procesar_resultados_para_reporte`; una prueba exige que todo lo que
+# emite esté aquí.
+TABLAS_INFORME_IMAGENES = [
+    'parametros_adquisicion',
+    'espesor', 'imagen_espesor',
+    'tamano_pixel', 'imagen_tamano_pixel',
+    'resolucion_contraste', 'imagen_resolucion_contraste',
+    'resolucion_espacial', 'imagen_resolucion_espacial',
+    'valores_ct', 'imagen_valores_ct',
+    'linealidad_ct', 'imagen_linealidad_ct',
+    'uniformidad', 'imagen_uniformidad',
+]
+
+
+# Anchos [pt] de la tabla de parámetros: las columnas de VALOR más anchas que las de etiqueta, para que un
+# nombre de protocolo sin espacios ("Pelvis_iCBCT_2.0_IQ!", 100 pt a 10 pt de letra) no se parta a mitad de
+# palabra. Suma 462 pt (6.4 in), dentro del ancho útil de los dos generadores.
+ANCHOS_PARAMETROS_ADQUISICION_PT = [94, 137, 94, 137]
+
+
+def _spans_de_filas_completas(df_tabla):
+    """E.2: 'parametros_adquisicion' es una tabla de CUATRO columnas (etiqueta, valor, etiqueta, valor:
+    equipo y adquisición lado a lado, para que quepa en la primera página). Una fila cuyas dos últimas
+    celdas son `None` es una fila de ANCHO COMPLETO -- 'Frente al protocolo', 'Atención', 'Adquisición N':
+    texto largo que no cabe en una celda --: su valor ocupa las tres columnas de la derecha. `None` (no
+    una cadena vacía) para no confundirla con el hueco de una fila de pares con número impar.
+
+    Devuelve los `('SPAN', ...)` para el estilo de la tabla; la fila 0 de la tabla es el encabezado."""
+    spans = []
+    for i, fila in enumerate(df_tabla.values.tolist(), start=1):
+        if len(fila) == 4 and fila[2] is None and fila[3] is None:
+            spans.append(('SPAN', (1, i), (3, i)))
+    return spans
+
 
 def _extraer_imagen_a_png_temporal(blob):
     """R6/G2: decodifica un BLOB de imagen (JPEG/PNG/TIFF) a un PNG
@@ -568,10 +607,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
 
     elif es_informe_de_imagenes:
         print('Generando reporte de sistema de imágenes...')
-        orden_tablas = ['espesor', 'parametros_espesor','imagen_espesor', 'tamano_pixel', 'parametros_tamano_pixel', 'imagen_tamano_pixel',
-                        'parametros_resolucion_contraste', 'resolucion_contraste', 'imagen_resolucion_contraste', 'resolucion_espacial',
-                        'parametros_resolucion_espacial', 'imagen_resolucion_espacial', 'valores_ct', 'parametros_valores_ct', 'imagen_valores_ct',
-                        'linealidad_ct', 'parametros_linealidad_ct', 'imagen_linealidad_ct','uniformidad', 'parametros_uniformidad', 'imagen_uniformidad']
+        orden_tablas = list(TABLAS_INFORME_IMAGENES)
 
     elif maquina == 'Braquiterapia':
         print('Generando reporte de Braquiterapia...')
@@ -666,6 +702,10 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                     # Tabla dosimétrica de una columna
                     tabla = Table(data, colWidths=[7*inch])
 
+                elif nombre_tabla == 'parametros_adquisicion':
+                    # E.2: cuatro columnas (etiqueta, valor, etiqueta, valor) -- ver _spans_de_filas_completas
+                    tabla = Table(data, colWidths=ANCHOS_PARAMETROS_ADQUISICION_PT)
+
                 # Tablas de Braquiterapia
                 elif nombre_tabla in ['tipo_calibracion', 'sistema_medicion', 'condiciones_medicion',
                                     'sistema_medicion_linealidad', 'carga_colectada', 'resultados_linealidad',
@@ -731,9 +771,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                 elif nombre_tabla in ['equipos', 'aspectos_mecanicos_gantry', 'aspectos_mecanicos_colimador',
                                     'preguntas', 'seguridad', 'seguridad_cunas', 'analisis_imagen', 'indicadores_laser', 'desplazamiento_isocentro',
                                     'parametros', 'espesor', 'tamano_pixel', 'resolucion_espacial',
-                                    'valores_ct', 'linealidad_ct', 'uniformidad', 'parametros_espesor', 'parametros_tamano_pixel',
-                                    'parametros_resolucion_contraste', 'parametros_resolucion_espacial', 'parametros_valores_ct',
-                                    'parametros_linealidad_ct', 'parametros_uniformidad']:
+                                    'valores_ct', 'linealidad_ct', 'uniformidad', 'parametros_adquisicion']:
                     style.extend([
                         ('SPAN', (0, 0), (-1, 0)),
                         ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#bfeff6")),
@@ -816,9 +854,18 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                             style.append(('SPAN', (1, row_idx + 2), (-1, row_idx + 2)))
 
 
+                if nombre_tabla == 'parametros_adquisicion':
+                    style.extend(_spans_de_filas_completas(df_tabla))
                 tabla.setStyle(TableStyle(style))
                 from reportlab.platypus import KeepTogether
-                elements.append(KeepTogether(tabla))  # <-- Envuelve la tabla
+                if nombre_tabla == 'parametros_adquisicion':
+                    # E.2: es lo primero del informe. Si las pruebas se corrieron con adquisiciones distintas la
+                    # tabla es más alta que una página: KeepTogether la mandaría entera a la segunda y dejaría la
+                    # primera en blanco. Se deja partir, repitiendo sus dos filas de encabezado.
+                    tabla.repeatRows = 2
+                    elements.append(tabla)
+                else:
+                    elements.append(KeepTogether(tabla))  # <-- Envuelve la tabla
 
                 # Agregar espaciador entre tablas (excepto la última)
                 if i < len(orden_tablas) - 1:
@@ -978,15 +1025,7 @@ def generar_reporte_pdf_multitabla_anual(tablas_dict, fecha, user, tipo_reporte=
             'factores_sobre_eje', 'control_camaras'
         ]
         # Agregar tablas del sistema de imágenes si existen
-        orden_categorias_img = [
-            'espesor', 'parametros_espesor', 'imagen_espesor',
-            'tamano_pixel', 'parametros_tamano_pixel', 'imagen_tamano_pixel',
-            'parametros_resolucion_contraste', 'resolucion_contraste', 'imagen_resolucion_contraste',
-            'resolucion_espacial', 'parametros_resolucion_espacial', 'imagen_resolucion_espacial',
-            'valores_ct', 'parametros_valores_ct', 'imagen_valores_ct',
-            'linealidad_ct', 'parametros_linealidad_ct', 'imagen_linealidad_ct',
-            'uniformidad', 'parametros_uniformidad', 'imagen_uniformidad'
-        ]
+        orden_categorias_img = TABLAS_INFORME_IMAGENES
         # Agregar al final las tablas de imágenes si existen
         for cat_img in orden_categorias_img:
             if cat_img in tablas_dict:
@@ -1000,15 +1039,7 @@ def generar_reporte_pdf_multitabla_anual(tablas_dict, fecha, user, tipo_reporte=
             'tamanos_campo_dosis'
         ]
         # Agregar tablas del sistema de imágenes si existen
-        orden_categorias_img = [
-            'espesor', 'parametros_espesor', 'imagen_espesor',
-            'tamano_pixel', 'parametros_tamano_pixel', 'imagen_tamano_pixel',
-            'parametros_resolucion_contraste', 'resolucion_contraste', 'imagen_resolucion_contraste',
-            'resolucion_espacial', 'parametros_resolucion_espacial', 'imagen_resolucion_espacial',
-            'valores_ct', 'parametros_valores_ct', 'imagen_valores_ct',
-            'linealidad_ct', 'parametros_linealidad_ct', 'imagen_linealidad_ct',
-            'uniformidad', 'parametros_uniformidad', 'imagen_uniformidad'
-        ]
+        orden_categorias_img = TABLAS_INFORME_IMAGENES
         # Agregar al final las tablas de imágenes si existen
         for cat_img in orden_categorias_img:
             if cat_img in tablas_dict:
@@ -1040,17 +1071,17 @@ def generar_reporte_pdf_multitabla_anual(tablas_dict, fecha, user, tipo_reporte=
 
         contenido = tablas_dict[categoria]
 
-        if categoria in ['equipos', 'espesor', 'tamano_pixel', 'resolucion_contraste', 'resolucion_espacial',
-                        'valores_ct', 'linealidad_ct', 'uniformidad',
-                        'parametros_espesor', 'parametros_tamano_pixel', 'parametros_resolucion_contraste',
-                        'parametros_resolucion_espacial', 'parametros_valores_ct', 'parametros_linealidad_ct',
-                        'parametros_uniformidad', 'imagen_espesor', 'imagen_tamano_pixel', 'imagen_resolucion_contraste',
-                        'imagen_resolucion_espacial', 'imagen_valores_ct', 'imagen_linealidad_ct', 'imagen_uniformidad']:
+        if categoria in ['equipos'] + TABLAS_INFORME_IMAGENES:
             if isinstance(contenido, type(pd.DataFrame())) and not contenido.empty:
                 # Crear y agregar la tabla
                 tabla_pdf = _crear_tabla_pdf_anual(contenido, categoria, maquina)
                 if tabla_pdf:
-                    elements.append(KeepTogether(tabla_pdf))
+                    if categoria == 'parametros_adquisicion':
+                        # E.2: igual que en el mensual -- se deja partir en vez de mandarla entera a otra página
+                        tabla_pdf.repeatRows = 2
+                        elements.append(tabla_pdf)
+                    else:
+                        elements.append(KeepTogether(tabla_pdf))
                     elements.append(Spacer(1, 0.3*inch))
 
         # Si es una lista de tablas con títulos (factores de campo, transmisión, etc.)
@@ -1162,6 +1193,9 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
     elif tipo_tabla == 'control_camaras':
         # Tabla de control de cámaras: 2 columnas
         col_widths = [3*inch, 2.5*inch]
+    elif tipo_tabla == 'parametros_adquisicion':
+        # E.2: cuatro columnas (etiqueta, valor, etiqueta, valor)
+        col_widths = ANCHOS_PARAMETROS_ADQUISICION_PT
     elif tipo_tabla == 'indicadores_angulares_gantry':
         col_widths = [2*inch, 1.5*inch, 1.5*inch]
     elif tipo_tabla == 'indicadores_angulares_colimador':
@@ -1211,9 +1245,7 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
     if tipo_tabla in ('equipos', 'indicadores_angulares_gantry', 'indicadores_angulares_colimador',
             'indicadores_laser', 'velocidad_multilaminas',
             'precision_posicion_multilaminas', 'dosimetria', 'linealidad_unidades_monitor',
-            'parametros_espesor', 'parametros_tamano_pixel', 'parametros_resolucion_contraste',
-            'parametros_resolucion_espacial', 'parametros_valores_ct', 'parametros_linealidad_ct',
-            'parametros_uniformidad', 'espesor', 'tamano_pixel', 'resolucion_espacial',
+            'parametros_adquisicion', 'espesor', 'tamano_pixel', 'resolucion_espacial',
             'valores_ct', 'linealidad_ct', 'uniformidad'):
         # Resaltar la primera fila de encabezados
         style.extend([
@@ -1258,6 +1290,9 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
         for row_idx in range(1, len(data)):
             if row_idx % 2 == 0:
                 style.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor("#f0f0f0")))
+
+    if tipo_tabla == 'parametros_adquisicion':
+        style.extend(_spans_de_filas_completas(df_tabla))
 
     tabla.setStyle(TableStyle(style))
     return tabla
