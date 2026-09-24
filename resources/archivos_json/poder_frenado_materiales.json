@@ -1,11 +1,124 @@
 {
+    "_fuente": {
+        "referencia": "NIST XCOM / Hubbell y Seltzer (1995), 'Tables of X-Ray Mass Attenuation Coefficients and Mass Energy-Absorption Coefficients', NISTIR 5632, Tabla 3 (elementos) y Tabla 4 (compuestos, solo control). https://physics.nist.gov/PhysRefData/XrayMassCoef/ ; datos copiados el 24-09-2026.",
+        "metodo": "mu_rho = regla de mezclas sobre mu/rho elemental (NIST Tabla 3), interpolada log-log a la energía; mu = mu_rho * densidad",
+        "unidades": {
+            "mu_rho": "cm2/g",
+            "densidad": "g/cm3",
+            "mu": "1/cm"
+        },
+        "energia": "E [MeV] = kVp/1000 del protocolo de cada equipo (convención de constancia)",
+        "generado_por": "scripts/generar_tabla_mu.py -- no editar este archivo a mano"
+    },
+    "energia_0.1MeV": {
+        "Aire": {
+            "mu_rho": 0.1541,
+            "densidad": 0.0013,
+            "mu": 0.0002
+        },
+        "PMP": {
+            "mu_rho": 0.172,
+            "densidad": 0.83,
+            "mu": 0.14276
+        },
+        "LDPE": {
+            "mu_rho": 0.172,
+            "densidad": 0.92,
+            "mu": 0.15824
+        },
+        "Poliestireno": {
+            "mu_rho": 0.1625,
+            "densidad": 1.03,
+            "mu": 0.16738
+        },
+        "Acrilico": {
+            "mu_rho": 0.1641,
+            "densidad": 1.18,
+            "mu": 0.19364
+        },
+        "Delrin": {
+            "mu_rho": 0.163,
+            "densidad": 1.42,
+            "mu": 0.23146
+        },
+        "Teflon": {
+            "mu_rho": 0.15,
+            "densidad": 2.16,
+            "mu": 0.324
+        }
+    },
     "energia_0.12MeV": {
-        "Aire":         {"poder_frenado": 0.145,   "densidad": 0.0013, "coeficiente_atenuacion": 0.00089 },
-        "PMP":          {"poder_frenado": 0.164,   "densidad": 0.83,   "coeficiente_atenuacion": 0.136   },
-        "LDPE":         {"poder_frenado": 0.164,   "densidad": 0.92,   "coeficiente_atenuacion": 0.136   },
-        "Poliestireno": {"poder_frenado": 0.155,   "densidad": 1.03,   "coeficiente_atenuacion": 0.160   },
-        "Acrilico":     {"poder_frenado": 0.156,   "densidad": 1.18,   "coeficiente_atenuacion": 0.184   },
-        "Delrin":       {"poder_frenado": 0.154,   "densidad": 1.42,   "coeficiente_atenuacion": 0.213   },
-        "Teflon":       {"poder_frenado": 0.141,   "densidad": 2.16,   "coeficiente_atenuacion": 0.305   }
+        "Aire": {
+            "mu_rho": 0.1454,
+            "densidad": 0.0013,
+            "mu": 0.00019
+        },
+        "PMP": {
+            "mu_rho": 0.1634,
+            "densidad": 0.83,
+            "mu": 0.13562
+        },
+        "LDPE": {
+            "mu_rho": 0.1634,
+            "densidad": 0.92,
+            "mu": 0.15033
+        },
+        "Poliestireno": {
+            "mu_rho": 0.1543,
+            "densidad": 1.03,
+            "mu": 0.15893
+        },
+        "Acrilico": {
+            "mu_rho": 0.1555,
+            "densidad": 1.18,
+            "mu": 0.18349
+        },
+        "Delrin": {
+            "mu_rho": 0.1542,
+            "densidad": 1.42,
+            "mu": 0.21896
+        },
+        "Teflon": {
+            "mu_rho": 0.1411,
+            "densidad": 2.16,
+            "mu": 0.30478
+        }
+    },
+    "energia_0.125MeV": {
+        "Aire": {
+            "mu_rho": 0.1436,
+            "densidad": 0.0013,
+            "mu": 0.00019
+        },
+        "PMP": {
+            "mu_rho": 0.1615,
+            "densidad": 0.83,
+            "mu": 0.13404
+        },
+        "LDPE": {
+            "mu_rho": 0.1615,
+            "densidad": 0.92,
+            "mu": 0.14858
+        },
+        "Poliestireno": {
+            "mu_rho": 0.1525,
+            "densidad": 1.03,
+            "mu": 0.15707
+        },
+        "Acrilico": {
+            "mu_rho": 0.1537,
+            "densidad": 1.18,
+            "mu": 0.18137
+        },
+        "Delrin": {
+            "mu_rho": 0.1524,
+            "densidad": 1.42,
+            "mu": 0.21641
+        },
+        "Teflon": {
+            "mu_rho": 0.1392,
+            "densidad": 2.16,
+            "mu": 0.30067
+        }
     }
 }

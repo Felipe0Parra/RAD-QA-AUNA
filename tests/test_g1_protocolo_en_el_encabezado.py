@@ -46,34 +46,9 @@ RAIZ = pathlib.Path(__file__).resolve().parent.parent
 FRASE_ANTERIOR = "Atencion en Radioterapia"
 
 
-@pytest.fixture(scope="module")
-def app():
-    return QApplication.instance() or QApplication([])
-
-
-@pytest.fixture
-def bd_temporal(monkeypatch, tmp_path):
-    ruta = str(tmp_path / "test.db")
-    monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
-    Conexion._instance = None
-    conexion = Conexion()
-    conexion.con.execute("INSERT INTO users (fullname) VALUES ('Fisico Real')")
-    conexion.con.commit()
-    yield conexion.con
-    conexion.con.close()
-    Conexion._instance = None
-
-
-@pytest.fixture(autouse=True)
-def sin_dialogos(monkeypatch):
-    """Trampa 2: ningún QMessageBox real. `information` registra lo que se le pide."""
-    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
-    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: None)
-    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
-    llamadas = []
-    monkeypatch.setattr(QMessageBox, "information",
-                        lambda parent, titulo, texto, *a, **k: llamadas.append((titulo, texto)))
-    return llamadas
+# Fixtures y constructores de las cinco pantallas, compartidos con G.2 y G.3.
+from _formularios_imagenes import (  # noqa: F401  (fixtures)
+    FORMULARIOS, _hc_anual, _hc_mensual, _ix_anual, _ix_mensual, _tomografo, app, bd_temporal, sin_dialogos)
 
 
 def _celda_subtittle1(hoja):
@@ -135,40 +110,6 @@ def test_el_origen_dice_de_donde_sale_cuando_y_que_falta():
 # ---------------------------------------------------------------------------
 # 2. LAS CINCO PANTALLAS DE IMAGENES
 # ---------------------------------------------------------------------------
-
-def _tomografo():
-    from ui.paginasControles.PruebasMensuales.tac_mensual import PruebaMensualTAC
-    return PruebaMensualTAC(user_id=None)
-
-
-def _ix_mensual():
-    from ui.paginasControles.PruebasMensuales.ix_imagenes_mensual import PruebaImagenesIX
-    return PruebaImagenesIX(user_id=None)
-
-
-def _hc_mensual():
-    from ui.paginasControles.PruebasMensuales.HC_imagenes_mensual import PruebaImagenesHC
-    return PruebaImagenesHC(user_id=None)
-
-
-def _ix_anual():
-    from ui.paginasControles.PruebasAnuales.ix_anual import PruebaImagenesIX
-    return PruebaImagenesIX(user_id=None)
-
-
-def _hc_anual():
-    from ui.paginasControles.PruebasAnuales.halcyon_anual import PruebaImagenesHalcyon
-    return PruebaImagenesHalcyon(user_id=None)
-
-
-FORMULARIOS = {
-    "tomografo": (_tomografo, "Tomógrafo", "encabezado_mensu_TAC"),
-    "ix_mensual": (_ix_mensual, "Clinac ix", "encabezado_images_ix"),
-    "ix_anual": (_ix_anual, "Clinac ix", "encabezado_images_ix"),
-    "hc_mensual": (_hc_mensual, "Halcyon", "encabezado_images_HC"),
-    "hc_anual": (_hc_anual, "Halcyon", "encabezado_images_HC"),
-}
-
 
 @pytest.mark.parametrize("clave", sorted(FORMULARIOS))
 def test_cada_pantalla_de_imagenes_dice_el_protocolo_de_su_equipo_antes_de_iniciar(app, bd_temporal, clave):

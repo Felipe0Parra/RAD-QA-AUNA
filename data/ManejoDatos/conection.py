@@ -227,6 +227,7 @@ class Conexion():
             self._asegurar_identidad_sistema_medicion()
             self._asegurar_origen_referencia_dosimetria()  # B.4 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
             self._asegurar_identidad_dicom_pruebas()  # A.1 (PLAN_HANDOFF_IMAGENES_22-09.md)
+            self._asegurar_energia_linealidad()  # G.2 (PLAN_HANDOFF_IMAGENES_22-09.md)
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -997,6 +998,26 @@ class Conexion():
         for columna in ("equipo_dicom", "serie_uid", "fecha_adquisicion", "adquisicion_dicom",
                         "desviacion_protocolo"):
             _asegurar_columna(cur, "pruebas", columna, "TEXT")
+        self.con.commit()
+
+    def _asegurar_energia_linealidad(self):
+        """G.2 (PLAN_HANDOFF_IMAGENES_22-09.md): `linealidad_ct` gana la energia
+        con la que se ajusto la curva.
+
+        CAUSA: la energia (0.12 MeV, un selector con una sola opcion) nunca se
+        guardaba: el PDF de un control no podia decir contra que tabla de mu se
+        habia juzgado su linealidad. Ahora la energia es la del protocolo del
+        equipo (`protocolos.energia_linealidad_mev`) y viaja con la prueba, para
+        que el informe imprima lo GUARDADO y no lo que el catalogo diga hoy (§12.4).
+
+          energia_mev  REAL  MeV; NULL en toda prueba anterior (no hay forma
+                             honesta de saber con que energia se ajusto: el
+                             selector nunca la guardo)
+
+        Aditiva e idempotente; sin relleno retroactivo. Va despues de
+        `_asegurar_activo_bloque_qc` (`DP-80`: ADD COLUMN anade al final fisico)."""
+        cur = self.con.cursor()
+        _asegurar_columna(cur, "linealidad_ct", "energia_mev", "REAL")
         self.con.commit()
         cur.close()
 

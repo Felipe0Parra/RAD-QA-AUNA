@@ -411,7 +411,9 @@ def mapear_linealidad_ct(resultados_linealidad):
         "num_materiales": 7,        # Fijo: 7 materiales del CatPhan
         "rango_hu_min": -1000,      # Rango típico de análisis HU
         "rango_hu_max": 1000,       # Rango típico de análisis HU  
-        "linealidad_aceptable": resultados_linealidad.get("r_squared", 0) >= 0.99  # Criterio: R² ≥ 0.99
+        "linealidad_aceptable": resultados_linealidad.get("r_squared", 0) >= 0.99,  # Criterio: R² ≥ 0.99
+        # G.2: la energía con la que se ajustó la curva (la del protocolo del equipo), guardada con la prueba
+        "energia_mev": resultados_linealidad.get("energia_mev"),
     }
 
 # ------------------------------------ FUNCIONES DE GUARDADO -------------------------------------------
@@ -919,8 +921,8 @@ def guardar_linealidad_ct(cursor, id_prueba, resultados):
             INSERT INTO linealidad_ct (
                 id_prueba, pendiente, intercepto, r_cuadrado, 
                 referencia, escala_contraste, num_materiales, 
-                rango_hu_min, rango_hu_max, linealidad_aceptable
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                rango_hu_min, rango_hu_max, linealidad_aceptable, energia_mev
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
         valores = (
@@ -933,7 +935,8 @@ def guardar_linealidad_ct(cursor, id_prueba, resultados):
             datos_mapeados["num_materiales"],
             datos_mapeados["rango_hu_min"],
             datos_mapeados["rango_hu_max"],
-            datos_mapeados["linealidad_aceptable"]
+            datos_mapeados["linealidad_aceptable"],
+            datos_mapeados["energia_mev"],
         )
         
         cursor.execute(sql_insert, valores)
@@ -1482,7 +1485,7 @@ def reconstruir_linealidad_ct(cursor, id_prueba, imagen_resultado):
     try:
         cursor.execute(f"""
             SELECT pendiente, intercepto, r_cuadrado, referencia, escala_contraste,
-                    num_materiales, rango_hu_min, rango_hu_max, linealidad_aceptable
+                    num_materiales, rango_hu_min, rango_hu_max, linealidad_aceptable, energia_mev
             FROM linealidad_ct
             WHERE id_prueba = ?{filtro_activo('linealidad_ct')}
         """, (id_prueba,))
@@ -1501,6 +1504,7 @@ def reconstruir_linealidad_ct(cursor, id_prueba, imagen_resultado):
             "rango_hu_min": row[6], 
             "rango_hu_max": row[7],
             "linealidad_aceptable": bool(row[8]) if row[8] is not None else None,
+            "energia_mev": row[9],   # G.2; NULL en toda prueba anterior
             "imagen_analisis": imagen_resultado
         }
         
@@ -2032,6 +2036,10 @@ def tabla_resultados_linealidad_ct(resultados):
         lines.append(f"  Escala de contraste: {escala_contraste:.6f}")
     else:
         lines.append(f"  Escala de contraste: N/A")
+
+    energia_mev = resultados.get('energia_mev')   # G.2
+    lines.append(f"  Energía [MeV]: {energia_mev:g}" if energia_mev is not None
+                 else "  Energía [MeV]: no registrada")
     
     # Mostrar evaluación de calidad
     linealidad_aceptable = resultados.get('linealidad_aceptable')

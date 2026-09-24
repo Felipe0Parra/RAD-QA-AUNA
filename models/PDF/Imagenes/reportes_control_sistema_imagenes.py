@@ -623,6 +623,7 @@ class ReporteControlSistemaImagenes:
     # anteriores a A.1); la identidad y el resto de la adquisición, solo desde A.1 (23-09-2026).
     _CLAVES_ANTERIORES_A_A1 = ('kv', 'ma', 'espesor_mm')
     LEGADO = 'no registrado (control anterior al 23-09-2026)'
+    ENERGIA_NO_REGISTRADA = 'no registrada (control anterior al 24-09-2026)'   # G.2
 
     def _filas_de_una_adquisicion(self, info, equipo):
         """Una adquisición tal como está GUARDADA en `pruebas` (§12.4: el documento de un control
@@ -1013,6 +1014,11 @@ class ReporteControlSistemaImagenes:
         else:
             escala_str = str(escala_contraste)
         
+        # G.2: la energía con la que se ajustó la curva, tal como quedó GUARDADA con la prueba
+        energia_mev = resultado.get('energia_mev')
+        energia_str = f"{energia_mev:g}" if isinstance(energia_mev, (int, float)) else self.ENERGIA_NO_REGISTRADA
+
+        tabla.append(['Energía [MeV]', energia_str])
         tabla.append(['Pendiente', pendiente_str])
         tabla.append(['Intercepto', intercepto_str])
         tabla.append(['R² (coef. correlación)', r2_str])

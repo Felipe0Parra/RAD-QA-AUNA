@@ -8,6 +8,7 @@ from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.catphan_TAC.leer_dicom import VisualizadorDicom
 from analisisImagenes.catphan.protocolos import comparar_con_protocolo, texto_encabezado, texto_origen
+from analisisImagenes.catphan.atenuacion import energia_de_linealidad_mev, materiales_a_energia
 from analisisImagenes.Analisis_Catphan_TAC import *
 from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
@@ -635,6 +636,8 @@ class PruebaMensualTAC(PruebaMensual600):
 
         category6_layout.addLayout(contenedor_energia if contenedor_energia else QVBoxLayout())
         category6_layout.addWidget(self.tabla_linealidad_ct)
+        # G.2: la energía la fija el protocolo del equipo; la tabla de μ se llena sin que nadie elija nada
+        self._aplicar_energia_de_linealidad(con_analisis=False)
         #-----------------------------------------------------------
 
         # Asignar layouts a categorías
@@ -775,25 +778,21 @@ class PruebaMensualTAC(PruebaMensual600):
                     print("🔄 Valores CT cargados desde BD, se usarán para poblar la tabla de linealidad")
                 else:
                     print("⚠️ No se pudieron cargar valores CT desde BD")
-            # Entrada para Energía
+            # G.2: la energía NO se elige -- es la del protocolo del equipo (catálogo de A.2). Se muestra
+            # como texto; antes había un selector con una sola opción, la del tomógrafo, para los tres equipos.
             contenedor_energia = QHBoxLayout()
-            energia_lin_ct = QLabel("Energía (MeV):")
-            
-            self.energia_lin_ct_val = QLineEdit()
+            energia_lin_ct = QLabel("Energía [MeV]:")
+            self.energia_linealidad_texto = QLabel(self._texto_energia_de_linealidad())
+            self.energia_linealidad_texto.setObjectName("energia_linealidad_texto")
+            self.energia_linealidad_texto.setWordWrap(True)
+            self.energia_linealidad_texto.setToolTip(
+                "La energía de la linealidad es la del protocolo del equipo (E [keV] = kV): una convención de "
+                "constancia, igual para todos los controles del equipo; no es la energía efectiva del haz.")
 
-                # Elegir para confirmar la energía ingresada ↓
-            opciones = ["Seleccionar Energía", "0.12 MeV"]
-            self.energia_select = QComboBox()
-            self.energia_select.setFixedWidth(300)
-            self.energia_select.addItems(opciones)
-
-            self.energia_select.currentTextChanged.connect(self.on_energia_linealidad_cambio)
-
-            # Configurar el espacio para la energía
             contenedor_energia.addWidget(energia_lin_ct)
-            contenedor_energia.addWidget(self.energia_select)
+            contenedor_energia.addWidget(self.energia_linealidad_texto)
             contenedor_energia.addStretch()
-            return contenedor_energia, tabla # Retorna el layout de selección de energía y la tabla
+            return contenedor_energia, tabla # Retorna el layout con la energía del protocolo y la tabla
 
     def imagenUpLoader(self, titulo_prueba):
         # Crear una NUEVA instancia de visualizador DICOM para cada categoría
@@ -1222,51 +1221,44 @@ class PruebaMensualTAC(PruebaMensual600):
 
     # Estos métodos son específicos para crear la tabla de linealidad del CT 
     # (Energia, material, μ/ρ, ρ, μ, HU en la categoría 6 ▮▯)
-    def on_energia_linealidad_cambio(self, texto):
-        """
-        Carga desde JSON las propiedades de materiales para la energía seleccionada
-        y rellena la tabla de linealidad (μ/ρ, ρ, μ).
-        """
-        if not hasattr(self, "tabla_linealidad_ct"):
-            return
-        if not texto or "Seleccionar" in texto:
-            # Limpia columnas excepto Material
-            for i in range(self.tabla_linealidad_ct.rowCount()):
-                for j in range(1, self.tabla_linealidad_ct.columnCount()):
-                    self.tabla_linealidad_ct.setItem(i, j, QTableWidgetItem(""))
-            return
+    def _energia_linealidad_mev(self):
+        """La energía de la linealidad de ESTE equipo: la de su protocolo (G.2), o None si no tiene."""
+        return energia_de_linealidad_mev(getattr(self, 'equipo_f', None))
 
-        energia_num = texto.replace(" MeV", "").strip()  # p.ej. "0.12"
-        energia_key = f"energia_{energia_num}MeV"        # p.ej. "energia_0.12MeV"
+    def _texto_energia_de_linealidad(self):
+        energia = self._energia_linealidad_mev()
+        if energia is None:
+            return "Sin energía definida para este equipo: no hay protocolo de imagen en el catálogo"
+        return f"{energia:g} (fija, protocolo de {self.equipo_f})"
 
-        # Resolver ruta del JSON de forma robusta
-        base_dir = os.path.dirname(__file__)
-        json_path = None
+    def _aplicar_energia_de_linealidad(self, con_analisis=True):
+        """G.2: rellena la tabla de linealidad (μ/ρ, ρ, μ) con la energía del protocolo del equipo.
+
+        Antes esto lo disparaba un selector con una sola opción ("0.12 MeV") para los tres equipos; ahora la
+        energía es un dato del catálogo, y la tabla se llena al construir la pantalla (`con_analisis=False`:
+        solo rellena, sin cambiar de pestaña ni intentar el ajuste, que llega cuando llegan los HU)."""
+        tabla = getattr(self, "tabla_linealidad_ct", None)
+        if not isinstance(tabla, QTableWidget):
+            return          # los resultados ya están guardados: en su lugar hay un aviso, no una tabla
+        energia = self._energia_linealidad_mev()
+        self.energia_linealidad_mev = energia
         self.mu_lista = []
-        for up in range(1, 6):
-            candidate = os.path.abspath(os.path.join(base_dir, *[".."]*up, "resources", "archivos_json", "poder_frenado_materiales.json"))
-            if os.path.exists(candidate):
-                json_path = candidate
-                break
-        if not json_path:
-            QMessageBox.warning(self, "Error", "No se encontró el archivo de materiales poder_frenado_materiales.json")
-            return
 
+        def vaciar():
+            for i in range(tabla.rowCount()):
+                for j in range(1, tabla.columnCount()):
+                    tabla.setItem(i, j, QTableWidgetItem(""))
+
+        if energia is None:
+            vaciar()
+            return
         try:
-            with open(json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"No se pudo leer el archivo:\n{e}")
+            materiales_por_energia = materiales_a_energia(energia)
+        except (FileNotFoundError, KeyError, ValueError) as e:
+            QMessageBox.warning(self, "Error", f"No se pudo leer la tabla de materiales:\n{e}")
+            vaciar()
             return
-
-        materiales_por_energia = data.get(energia_key)
-        if not materiales_por_energia:
-            QMessageBox.information(self, "Aviso", f"No hay datos para la energía {texto} en el archivo JSON.")
-            # Limpia columnas excepto Material
-            for i in range(self.tabla_linealidad_ct.rowCount()):
-                for j in range(1, self.tabla_linealidad_ct.columnCount()):
-                    self.tabla_linealidad_ct.setItem(i, j, QTableWidgetItem(""))
-            return
+        energia_num = f"{energia:g}"
 
         # Mapeo nombres de tabla -> nombres en JSON
         normalizar = { "Acrílico": "Acrilico", "Teflón": "Teflon"}
@@ -1274,8 +1266,8 @@ class PruebaMensualTAC(PruebaMensual600):
         self.mu_lista = []  # reinicia μ (1/cm) en orden de la tabla
 
         # Rellenar tabla
-        for fila in range(self.tabla_linealidad_ct.rowCount()):
-            mat_item = self.tabla_linealidad_ct.item(fila, 0)
+        for fila in range(tabla.rowCount()):
+            mat_item = tabla.item(fila, 0)
             if not mat_item:
                 continue
             nombre_tabla = mat_item.text().strip()
@@ -1284,20 +1276,18 @@ class PruebaMensualTAC(PruebaMensual600):
             props = materiales_por_energia.get(nombre_json)
 
             # Escribe MeV
-            self.tabla_linealidad_ct.setItem(fila, 1, QTableWidgetItem(energia_num))
+            tabla.setItem(fila, 1, QTableWidgetItem(energia_num))
             if not props:
-                # Vaciar propiedades si el material no existe en JSON para esa energía
-                self.tabla_linealidad_ct.setItem(fila, 2, QTableWidgetItem(""))
-                self.tabla_linealidad_ct.setItem(fila, 3, QTableWidgetItem(""))
-                self.tabla_linealidad_ct.setItem(fila, 4, QTableWidgetItem(""))
+                # Vaciar propiedades si el material no existe en el JSON para esa energía
+                tabla.setItem(fila, 2, QTableWidgetItem(""))
+                tabla.setItem(fila, 3, QTableWidgetItem(""))
+                tabla.setItem(fila, 4, QTableWidgetItem(""))
                 continue
 
-            # μ/ρ (cm²/g) ← poder_frenado
-            mu_rho = props.get("poder_frenado", "")
-            # ρ (g/cm³) ← densidad
+            # μ/ρ (cm²/g), ρ (g/cm³) y μ (1/cm) de la tabla generada por scripts/generar_tabla_mu.py
+            mu_rho = props.get("mu_rho", "")
             rho = props.get("densidad", "")
-            # μ (1/cm) ← coeficiente_atenuacion
-            mu = props.get("coeficiente_atenuacion", "")
+            mu = props.get("mu", "")
 
             def fmt(x, nd=4):
                 try:
@@ -1305,9 +1295,9 @@ class PruebaMensualTAC(PruebaMensual600):
                 except Exception:
                     return str(x) if x is not None else ""
 
-            self.tabla_linealidad_ct.setItem(fila, 2, QTableWidgetItem(fmt(mu_rho)))
-            self.tabla_linealidad_ct.setItem(fila, 3, QTableWidgetItem(fmt(rho)))
-            self.tabla_linealidad_ct.setItem(fila, 4, QTableWidgetItem(fmt(mu)))
+            tabla.setItem(fila, 2, QTableWidgetItem(fmt(mu_rho)))
+            tabla.setItem(fila, 3, QTableWidgetItem(fmt(rho)))
+            tabla.setItem(fila, 4, QTableWidgetItem(fmt(mu)))
 
             # Guarda μ (1/cm) como float o None
             try:
@@ -1317,7 +1307,9 @@ class PruebaMensualTAC(PruebaMensual600):
 
         # Deja self.mu listo para usar en el análisis ↓
         self.mu = [m for m in self.mu_lista if m is not None]  # copia limpia
-        
+        if not con_analisis:
+            return
+
         # *** NUEVA LÓGICA: Si no hay HU en memoria pero sí valores CT en BD, cargarlos automáticamente ***
         if self.resultados_ct is None:
             valores_ct_cargados = self.cargar_valores_ct_desde_bd()
@@ -1462,8 +1454,8 @@ class PruebaMensualTAC(PruebaMensual600):
         # Requisitos básicos
         if not hasattr(self, "tabla_linealidad_ct"):
             return None
-        if not hasattr(self, "energia_select") or "Seleccionar Energía" in self.energia_select.currentText():
-            return None
+        if getattr(self, "energia_linealidad_mev", None) is None:
+            return None     # G.2: sin energía de protocolo no hay μ con qué ajustar
 
         # Asegurar que el canvas esté disponible
         try:
@@ -1532,6 +1524,8 @@ class PruebaMensualTAC(PruebaMensual600):
         # Ejecuta el análisis y muestra resultados
         try:
             linealidad = linealidad_ct(datos=mu_vals, hu_promedio=hu_vals, visualizar=True, canvas=self.canvas_resultados)
+            if isinstance(linealidad, dict):
+                linealidad["energia_mev"] = self.energia_linealidad_mev   # G.2: se guarda con la prueba
             texto = self.tabla_resultados_linealidad(linealidad)
             self.resultados_texto.setText(texto)
             self.resultados_texto.setStyleSheet("""QLabel { font-family: 'Segoe UI'; font-size: 15px; 
@@ -3137,7 +3131,7 @@ class PruebaMensualTAC(PruebaMensual600):
                 self.visualizador_principal.elegir_corte()
                 
         def automatizar_energia():
-            self.energia_select.setCurrentIndex(1)
+            self._aplicar_energia_de_linealidad()    # G.2: ya no hay selector; la energía es la del protocolo
         
         def automatizar_uniformidad():
             if hasattr(self, 'ln_uni') and self.ln_uni:
