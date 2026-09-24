@@ -44,6 +44,7 @@ from _catphan_oro import LIMITE_HOMOGENEIDAD_IX
 from _corpus import serie_catphan
 from analisisImagenes.catphan import motor
 from analisisImagenes.catphan.serie import leer_serie
+from analisisImagenes.catphan.criterios import PARAMETROS_HEREDADOS  # G.3: los umbrales viven en un solo sitio
 from analisisImagenes.Analisis_Catphan_TAC import resolucion_contraste
 from data.ManejoDatos.catphan_TAC.leer_dicom import DicomVolume, GeometriaCatphan
 from data.ManejoDatos.catphan_TAC.posicionador_manual import GeometriaCatphanCT
@@ -148,7 +149,7 @@ def test_a_resolucion_contraste_no_depende_de_la_ventana(clave):
             warnings.simplefilter("ignore")
             resultado = resolucion_contraste(
                 corte_255, hu, tam_px, visualizar=False,
-                cnr_lim=1.0, visibilidad_lim=0.1,
+                **PARAMETROS_HEREDADOS["resolucion_contraste"],
             )
         conteos.append(resultado["resumen"]["rois_visibles_cnr"])
 
@@ -210,7 +211,7 @@ def test_c_elegir_corte_dos_veces_con_deslizador_distinto_da_lo_mismo():
             warnings.simplefilter("ignore")
             resultado = resolucion_contraste(
                 corte_255, hu, tam_px, visualizar=False,
-                cnr_lim=1.0, visibilidad_lim=0.1,
+                **PARAMETROS_HEREDADOS["resolucion_contraste"],
             )
         resultados.append(resultado["resumen"]["rois_visibles_cnr"])
 
@@ -239,7 +240,7 @@ def test_d_resolucion_contraste_halcyon_junio_pasa_a_ser_confiable():
         warnings.simplefilter("ignore")
         resultado = resolucion_contraste(
             corte_255_inicial, hu, tam_px, visualizar=False,
-            cnr_lim=1.0, visibilidad_lim=0.1,
+            **PARAMETROS_HEREDADOS["resolucion_contraste"],
         )
 
     visibles = resultado["resumen"]["rois_visibles_cnr"]

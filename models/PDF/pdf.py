@@ -38,6 +38,7 @@ CUERPO_TABLA_PT = 8
 # emite esté aquí.
 TABLAS_INFORME_IMAGENES = [
     'parametros_adquisicion',
+    'criterios_veredictos',
     'espesor', 'imagen_espesor',
     'tamano_pixel', 'imagen_tamano_pixel',
     'resolucion_contraste', 'imagen_resolucion_contraste',
@@ -52,6 +53,9 @@ TABLAS_INFORME_IMAGENES = [
 # nombre de protocolo sin espacios ("Pelvis_iCBCT_2.0_IQ!", 100 pt a 10 pt de letra) no se parta a mitad de
 # palabra. Suma 462 pt (6.4 in), dentro del ancho útil de los dos generadores.
 ANCHOS_PARAMETROS_ADQUISICION_PT = [94, 137, 94, 137]
+
+# G.3: tabla de criterio y veredicto (prueba, métrica, valor, criterio, veredicto, fuente). Suma 486 pt (6.75 in).
+ANCHOS_CRITERIOS_VEREDICTOS_PT = [62, 80, 44, 118, 60, 122]
 
 
 def _spans_de_filas_completas(df_tabla):
@@ -706,6 +710,9 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                     # E.2: cuatro columnas (etiqueta, valor, etiqueta, valor) -- ver _spans_de_filas_completas
                     tabla = Table(data, colWidths=ANCHOS_PARAMETROS_ADQUISICION_PT)
 
+                elif nombre_tabla == 'criterios_veredictos':
+                    tabla = Table(data, colWidths=ANCHOS_CRITERIOS_VEREDICTOS_PT)
+
                 # Tablas de Braquiterapia
                 elif nombre_tabla in ['tipo_calibracion', 'sistema_medicion', 'condiciones_medicion',
                                     'sistema_medicion_linealidad', 'carga_colectada', 'resultados_linealidad',
@@ -771,7 +778,8 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                 elif nombre_tabla in ['equipos', 'aspectos_mecanicos_gantry', 'aspectos_mecanicos_colimador',
                                     'preguntas', 'seguridad', 'seguridad_cunas', 'analisis_imagen', 'indicadores_laser', 'desplazamiento_isocentro',
                                     'parametros', 'espesor', 'tamano_pixel', 'resolucion_espacial',
-                                    'valores_ct', 'linealidad_ct', 'uniformidad', 'parametros_adquisicion']:
+                                    'valores_ct', 'linealidad_ct', 'uniformidad', 'parametros_adquisicion',
+                                    'criterios_veredictos']:
                     style.extend([
                         ('SPAN', (0, 0), (-1, 0)),
                         ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#bfeff6")),
@@ -1196,6 +1204,8 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
     elif tipo_tabla == 'parametros_adquisicion':
         # E.2: cuatro columnas (etiqueta, valor, etiqueta, valor)
         col_widths = ANCHOS_PARAMETROS_ADQUISICION_PT
+    elif tipo_tabla == 'criterios_veredictos':
+        col_widths = ANCHOS_CRITERIOS_VEREDICTOS_PT
     elif tipo_tabla == 'indicadores_angulares_gantry':
         col_widths = [2*inch, 1.5*inch, 1.5*inch]
     elif tipo_tabla == 'indicadores_angulares_colimador':
@@ -1245,7 +1255,7 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
     if tipo_tabla in ('equipos', 'indicadores_angulares_gantry', 'indicadores_angulares_colimador',
             'indicadores_laser', 'velocidad_multilaminas',
             'precision_posicion_multilaminas', 'dosimetria', 'linealidad_unidades_monitor',
-            'parametros_adquisicion', 'espesor', 'tamano_pixel', 'resolucion_espacial',
+            'parametros_adquisicion', 'criterios_veredictos', 'espesor', 'tamano_pixel', 'resolucion_espacial',
             'valores_ct', 'linealidad_ct', 'uniformidad'):
         # Resaltar la primera fila de encabezados
         style.extend([

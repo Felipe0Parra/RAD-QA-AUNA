@@ -39,6 +39,7 @@ from _catphan_oro import LIMITE_HOMOGENEIDAD_IX
 from _corpus import serie_catphan
 from analisisImagenes.catphan import motor
 from analisisImagenes.catphan.serie import leer_serie
+from analisisImagenes.catphan.criterios import PARAMETROS_HEREDADOS  # G.3: los umbrales viven en un solo sitio
 from analisisImagenes.Analisis_Catphan_TAC import resolucion_contraste, resolucion_espacial
 from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_modulos_pylinac
 
@@ -104,10 +105,10 @@ def test_a_halcyon_sep_pasa_a_ser_confiable_con_orientacion():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         sin_orientacion = resolucion_contraste(
-            corte_255, hu, tam_px, visualizar=False, cnr_lim=1.0, visibilidad_lim=0.1,
+            corte_255, hu, tam_px, visualizar=False, **PARAMETROS_HEREDADOS["resolucion_contraste"],
         )
         con_orientacion = resolucion_contraste(
-            corte_255, hu, tam_px, visualizar=False, cnr_lim=1.0, visibilidad_lim=0.1,
+            corte_255, hu, tam_px, visualizar=False, **PARAMETROS_HEREDADOS["resolucion_contraste"],
             orientacion=resultado.orientacion, roll_deg=resultado.roll_deg,
         )
 
@@ -173,7 +174,7 @@ def _analizar_ctp515_rotado(giro_deg):
         tam_px = float(img.dpmm) ** -1
         corte_255 = _ventanear(hu, 40, 400)
         resultado = resolucion_contraste(
-            corte_255, hu, tam_px, visualizar=False, cnr_lim=1.0, visibilidad_lim=0.1,
+            corte_255, hu, tam_px, visualizar=False, **PARAMETROS_HEREDADOS["resolucion_contraste"],
             orientacion="normal", roll_deg=roll_medido,
         )
     return roll_medido, resultado["resumen"]["rois_visibles_cnr"]
@@ -221,10 +222,10 @@ def test_b_sin_compensar_el_giro_grande_si_cambia_el_resultado():
         corte_255_base = _ventanear(arr, 40, 400)
         corte_255_rot = _ventanear(arr_rot, 40, 400)
         sin_girar = resolucion_contraste(
-            corte_255_base, arr, tam_px, visualizar=False, cnr_lim=1.0, visibilidad_lim=0.1,
+            corte_255_base, arr, tam_px, visualizar=False, **PARAMETROS_HEREDADOS["resolucion_contraste"],
         )
         girado_sin_compensar = resolucion_contraste(
-            corte_255_rot, arr_rot, tam_px, visualizar=False, cnr_lim=1.0, visibilidad_lim=0.1,
+            corte_255_rot, arr_rot, tam_px, visualizar=False, **PARAMETROS_HEREDADOS["resolucion_contraste"],
         )
 
     assert (

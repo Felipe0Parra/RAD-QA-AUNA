@@ -9,6 +9,7 @@ from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.catphan_TAC.leer_dicom import VisualizadorDicom
 from analisisImagenes.catphan.protocolos import comparar_con_protocolo, texto_encabezado, texto_origen
 from analisisImagenes.catphan.atenuacion import energia_de_linealidad_mev, materiales_a_energia
+from analisisImagenes.catphan import criterios
 from analisisImagenes.Analisis_Catphan_TAC import *
 from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
@@ -424,6 +425,8 @@ class PruebaMensualTAC(PruebaMensual600):
         self.adquisicion_por_categoria = {}
         self.tam_px_teorico = None
         self.resultados_texto = None
+        self.criterios_por_categoria = {}      # G.3: criterio y veredicto de cada prueba (se guarda con ella)
+        self.criterio_texto = None
         self.reconstruido = False  # Mantenemos para compatibilidad backwards
         
         # Inicializar gestores de reconstrucción
@@ -1048,6 +1051,25 @@ class PruebaMensualTAC(PruebaMensual600):
                 getattr(self, 'equipo_f', None), adquisicion).desviacion_texto(),
         }
 
+    def _mostrar_criterio(self, categoria, resultados):
+        """G.3: juzga la prueba `categoria` con la regla de SU equipo (`perfiles.py`, vía `criterios.py`), la muestra
+        debajo de los resultados y la deja lista para guardarse con la prueba. Nunca lanza: una falla aquí no debe
+        impedir mostrar el resultado que el físico acaba de calcular."""
+        try:
+            juicios = criterios.juzgar(getattr(self, 'equipo_f', None), categoria, resultados)
+        except Exception as e:                                         # pragma: no cover - defensivo
+            print(f"Error juzgando {categoria}: {e}")
+            return None
+        self.criterios_por_categoria[categoria] = criterios.a_json_ready(juicios)
+        panel = None
+        pestana = self.tab_widget.currentWidget() if getattr(self, 'tab_widget', None) is not None else None
+        if pestana is not None:
+            panel = pestana.findChild(QLabel, "criterio_texto")
+        panel = panel or getattr(self, 'criterio_texto', None)
+        if panel is not None:
+            panel.setText(criterios.texto_html(juicios))
+        return juicios
+
     def _registrar_adquisicion_linealidad(self):
         """La linealidad sale de los HU de `valores_ct`, así que su adquisición
         es la de ESA prueba si se corrió en esta sesión (aunque después se haya
@@ -1537,6 +1559,7 @@ class PruebaMensualTAC(PruebaMensual600):
             #print(f"   Resultados: {linealidad}")
             self.resultados_linealidad_ct = linealidad  # Almacenar para guardado
             self._registrar_adquisicion_linealidad()
+            self._mostrar_criterio('linealidad_ct', linealidad)      # G.3
             if linealidad:
                 self._agregar_botones_guardado_post_analisis("linealidad_numero_ct")
             return linealidad
@@ -2116,7 +2139,7 @@ class PruebaMensualTAC(PruebaMensual600):
                 tabla_un.setSpan(fila_actual, 0, 1, 3)  # Combinar las 3 columnas
                 info_extra = (f"Máx diferencia: {u.get('max_diferencia','N/A')} HU | "
                             f"Desv. global: {u.get('desviacion_global','N/A')} | "
-                            f"Pasa (UI/INU): {u.get('pasa_global','N/A')}")
+                            f"UI/INU con el umbral heredado (informativo): {u.get('pasa_global','N/A')}")
                 item_extra = QTableWidgetItem(info_extra)
                 item_extra.setTextAlignment(Qt.AlignCenter)
                 font_extra = item_extra.font()
@@ -2161,6 +2184,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     espesor_teorico_mm = self.espesor_corte_val if self.espesor_corte_val else None
                     resultados_espesor['espesor_teorico_mm'] = espesor_teorico_mm
                     resultados_espesor['diferencia_mm'] = round(abs(espesor_teorico_mm - resultados_espesor.get("espesor_promedio_mm", 0)), 3) if espesor_teorico_mm else None
+                    self._mostrar_criterio('espesor', resultados_espesor)      # G.3
                     texto = tabla_resultados_espesor(resultados_espesor)
                     self.resultados_texto.setText(texto)
                     self.resultados_texto.setStyleSheet("""QLabel{ font-family: 'Segoe UI'; font-size: 15px; 
@@ -2193,6 +2217,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     self.resultados_tamano_pixel['diferencia_y'] = error_y
                     self.resultados_tamano_pixel['tam_px_teorico'] = round(tam_px, 3)
                     self.resultados_tamano_pixel['error_pct'] = error
+                    self._mostrar_criterio('tamano_pixel', resultados_tamano_pixel)      # G.3
 
                     texto = tabla_resultados_tamano_pixel(resultados_tamano_pixel)
                     self.resultados_texto.setText(texto)
@@ -2213,6 +2238,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     resultados_resolucion = resolucion_espacial(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados, orientacion=orientacion_serie, roll_deg=roll_deg_serie)
                     self.resultados_resolucion_espacial = resultados_resolucion  # Almacenar para guardado
                     self._registrar_adquisicion('resolucion_espacial')
+                    self._mostrar_criterio('resolucion_espacial', resultados_resolucion)      # G.3
                     texto = tabla_resultados_resolucion_espacial(resultados_resolucion)
                     self.reemplazar_resultados_texto_con_tabla(texto)
                     # Agregar botones de guardado después del análisis completado
@@ -2245,8 +2271,9 @@ class PruebaMensualTAC(PruebaMensual600):
                         visibilidad_manual=dlg.visibilidad_manual,
                         visualizar=True,
                         canvas=self.canvas_resultados,
-                        cnr_lim=1.0,
-                        visibilidad_lim=0.1,
+                        # G.3: qué cuenta como ROI visible (parámetros heredados, sin fuente normativa): un solo
+                        # sitio, `criterios.PARAMETROS_HEREDADOS`; el veredicto de esta prueba está pendiente de métrica
+                        **criterios.parametros_de_analisis('resolucion_contraste', self.equipo_f),
                         # D.1: mismos orientacion/roll_deg con los que se
                         # construyó `catphan` arriba -- las ROI de fondo
                         # los necesitan aparte (no pasan por `catphan`).
@@ -2255,6 +2282,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     )
                     self.resultados_resolucion_contraste = resolucion
                     self._registrar_adquisicion('resolucion_contraste')
+                    self._mostrar_criterio('resolucion_contraste', resolucion)      # G.3
                     imprimir_resultados_contraste_bajo(resolucion)
                     tabla_widget = tabla_resultados_resolucion_contraste(resolucion)
                     self.reemplazar_resultados_texto_con_tabla(tabla_widget)
@@ -2287,6 +2315,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         canvas=self.canvas_resultados,
                     )
                     self._registrar_adquisicion('valores_ct')
+                    self._mostrar_criterio('valores_ct', self.resultados_ct)      # G.3
                 
                     tabla_widget = tabla_resultados_ct(self.resultados_ct)
                     self.reemplazar_resultados_texto_con_tabla(tabla_widget)
@@ -2312,10 +2341,13 @@ class PruebaMensualTAC(PruebaMensual600):
                 elif categoria == 'uniformidad_ruido':
                     self.graficar.setCurrentText("Uniformidad y Ruido")
                     #print("Procesando corte para la categoría de UNIFORMIDAD Y RUIDO")
+                    # G.3: la tolerancia sale de la regla de uniformidad del equipo (`perfiles.py`)
                     uniformidad_resultados = uniformidad(imagen_grafica, imagen_analisis, tam_px, visualizar=True, 
-                                                        canvas=self.canvas_resultados)
+                                                        canvas=self.canvas_resultados,
+                                                        **criterios.parametros_de_analisis('uniformidad', self.equipo_f))
                     self.resultados_uniformidad = uniformidad_resultados  # Almacenar para guardado
                     self._registrar_adquisicion('uniformidad')
+                    self._mostrar_criterio('uniformidad', uniformidad_resultados)      # G.3
                     
                     # Reemplazar el QLabel con QTableWidget
                     tabla_widget = tabla_resultados_uniformidad(uniformidad_resultados)
@@ -2417,6 +2449,14 @@ class PruebaMensualTAC(PruebaMensual600):
         resultados_texto.setWordWrap(True)
         new_tab_layout.addWidget(resultados_texto, stretch=0)
 
+        # G.3: criterio y veredicto del equipo, debajo de los resultados. Es un widget propio: sobrevive cuando
+        # `reemplazar_resultados_texto_con_tabla` cambia el label de resultados por una tabla.
+        criterio_texto = QLabel()
+        criterio_texto.setObjectName("criterio_texto")
+        criterio_texto.setWordWrap(True)
+        criterio_texto.setTextFormat(Qt.RichText)
+        new_tab_layout.addWidget(criterio_texto, stretch=0)
+
         # Agregar pestaña al widget
         self.tab_widget.addTab(new_tab, text)
         self.dynamic_tabs[text] = new_tab
@@ -2426,6 +2466,7 @@ class PruebaMensualTAC(PruebaMensual600):
         self.canvas_resultados = canvas_resultados
         self.toolbar_tac = toolbar_tac
         self.resultados_texto = resultados_texto
+        self.criterio_texto = criterio_texto
 
         return {
             'tab': new_tab,
@@ -2433,6 +2474,7 @@ class PruebaMensualTAC(PruebaMensual600):
             'canvas': canvas_resultados,
             'toolbar': toolbar_tac,
             'label': resultados_texto,
+            'criterio': criterio_texto,
             'titulo': titulo
         }
 
@@ -2540,7 +2582,8 @@ class PruebaMensualTAC(PruebaMensual600):
                     kv = self.kv_actual, ma = self.ma_actual, espesor_corte = self.espesor_corte_val,
                     resultados_por_categoria = resultados_por_categoria, tam_px_teorico = self.tam_px_teorico,
                     id_sesion = self.ref, info_dicom = info_dicom, output_blob = output_blob,
-                    adquisicion_por_categoria = self.adquisicion_por_categoria
+                    adquisicion_por_categoria = self.adquisicion_por_categoria,
+                    criterios_por_categoria = self.criterios_por_categoria
                 )
             except Exception as db_error:
                 print(f"❌ Error específico de base de datos: {db_error}")
@@ -2724,7 +2767,8 @@ class PruebaMensualTAC(PruebaMensual600):
                     tam_px_teorico=self.tam_px_teorico,
                     id_sesion=self.ref,  # Usar el self.ref como id_sesion
                     info_dicom=info_dicom,
-                    adquisicion_por_categoria=self.adquisicion_por_categoria
+                    adquisicion_por_categoria=self.adquisicion_por_categoria,
+                    criterios_por_categoria=self.criterios_por_categoria
                 )
             except Exception as db_error:
                 print(f"❌ Error específico de base de datos: {db_error}")
@@ -2903,6 +2947,7 @@ class PruebaMensualTAC(PruebaMensual600):
             self.resultados_linealidad_ct = None
             self.resultados_uniformidad = None
             self.adquisicion_por_categoria = {}
+            self.criterios_por_categoria = {}
             #print("🧹 Todos los resultados CatPhan limpiados")
         else:
             # Limpiar solo la categoría específica (guardado individual)
@@ -2921,6 +2966,7 @@ class PruebaMensualTAC(PruebaMensual600):
             elif categoria == "uniformidad":
                 self.resultados_uniformidad = None
             self.adquisicion_por_categoria.pop(categoria, None)
+            self.criterios_por_categoria.pop(categoria, None)
             #print(f"🧹 Resultado de {categoria} limpiado")
 
     def generar_reporte_pdf(self):

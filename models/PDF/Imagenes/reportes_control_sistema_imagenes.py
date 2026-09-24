@@ -52,6 +52,7 @@ from models.PDF.PDFWindow import PdfViewer
 from data.ManejoDatos.catphan_TAC.catphan_db import reconstruir_resultados_desde_bd
 from services.anulacion import filtro_activo
 from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad
+from analisisImagenes.catphan.criterios import Juicio, texto_fuente, texto_valor
 
 class ReporteControlSistemaImagenes:
     """
@@ -289,13 +290,14 @@ class ReporteControlSistemaImagenes:
         """
         query = QSqlQuery(db)
         # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas,
-        # las mismas 12 que devuelve el dict de abajo. Un campo nuevo se
+        # las mismas 13 que devuelve el dict de abajo. Un campo nuevo se
         # agrega en los DOS sitios -- aquí y en el dict --, no solo en uno.
         # E.2: las 5 últimas son lo que A.1/A.2 guardan por prueba (identidad
         # DICOM y desviación del protocolo); el PDF imprime LO GUARDADO.
         query.prepare(f"""
             SELECT id_prueba, id_tipo, kv, ma, espesor_corte, imagen_path, imagen_resultado,
-                   equipo_dicom, serie_uid, fecha_adquisicion, adquisicion_dicom, desviacion_protocolo
+                   equipo_dicom, serie_uid, fecha_adquisicion, adquisicion_dicom, desviacion_protocolo,
+                   criterio_veredicto
             FROM pruebas
             WHERE id_sesion = ? AND id_tipo = ?{filtro_activo('pruebas')}
             ORDER BY id_prueba DESC
@@ -318,6 +320,7 @@ class ReporteControlSistemaImagenes:
                 'fecha_adquisicion': query.value('fecha_adquisicion'),
                 'adquisicion_dicom': query.value('adquisicion_dicom'),
                 'desviacion_protocolo': query.value('desviacion_protocolo'),
+                'criterio_veredicto': query.value('criterio_veredicto'),      # G.3
             }
         return {}
     
@@ -571,9 +574,10 @@ class ReporteControlSistemaImagenes:
         
         # Tabla de linealidad CT
         if 'linealidad_ct' in resultados and resultados['linealidad_ct']:
-            infos_prueba.append(("Linealidad CT", self._obtener_info_prueba(db, ref, mapeo_id_tipo['linealidad_ct'])))
+            info_lin = self._obtener_info_prueba(db, ref, mapeo_id_tipo['linealidad_ct'])
+            infos_prueba.append(("Linealidad CT", info_lin))
             tablas_reporte['linealidad_ct'] = self._crear_tabla_linealidad_ct(
-                resultados['linealidad_ct']
+                resultados['linealidad_ct'], con_criterio=bool(info_lin.get('criterio_veredicto'))
             )
             # Agregar imagen si está disponible
             if 'linealidad_ct' in imagenes_originales and 'linealidad_ct' in imagenes_resultados:
@@ -583,9 +587,10 @@ class ReporteControlSistemaImagenes:
         
         # Tabla de uniformidad
         if 'uniformidad' in resultados and resultados['uniformidad']:
-            infos_prueba.append(("Uniformidad", self._obtener_info_prueba(db, ref, mapeo_id_tipo['uniformidad'])))
+            info_uni = self._obtener_info_prueba(db, ref, mapeo_id_tipo['uniformidad'])
+            infos_prueba.append(("Uniformidad", info_uni))
             tablas_reporte['uniformidad'] = self._crear_tabla_uniformidad(
-                resultados['uniformidad']
+                resultados['uniformidad'], con_criterio=bool(info_uni.get('criterio_veredicto'))
             )
             # Agregar imagen si está disponible
             if 'uniformidad' in imagenes_originales and 'uniformidad' in imagenes_resultados:
@@ -600,6 +605,11 @@ class ReporteControlSistemaImagenes:
                     infos_prueba, info_sesion.get('equipo')),
                 **tablas_reporte,
             }
+            # G.3: el criterio y el veredicto de cada prueba, una sola tabla, tal como se archivaron. Un control
+            # anterior a G.3 no trae ninguno: no sale la tabla y su informe queda igual que antes.
+            tabla_criterios = self._crear_tabla_criterios(infos_prueba)
+            if tabla_criterios is not None:
+                tablas_reporte['criterios_veredictos'] = tabla_criterios     # su sitio lo fija TABLAS_INFORME_IMAGENES
         return tablas_reporte
 
     def _crear_tabla_imagen(self, imagen_original, imagen_analisis, titulo):
@@ -703,6 +713,32 @@ class ReporteControlSistemaImagenes:
         # marcan las filas de ancho completo.
         tabla = [[None if celda is None else html.escape(str(celda)) for celda in fila] for fila in tabla]
         return pd.DataFrame(tabla, columns=['Parámetros de adquisición', '', '', ''], dtype=object)
+
+    @staticmethod
+    def _juicios_guardados(info):
+        """Los `Juicio` que se archivaron con la prueba (o [] si no hay o no se pueden leer)."""
+        crudo = info.get('criterio_veredicto')
+        if not crudo:
+            return []
+        try:
+            lista = json.loads(crudo)
+        except (TypeError, ValueError):
+            return []
+        campos = set(Juicio.__dataclass_fields__)
+        return [Juicio(**{k: v for k, v in d.items() if k in campos}) for d in lista if isinstance(d, dict)]
+
+    def _crear_tabla_criterios(self, infos_prueba):
+        """G.3: UNA tabla con el criterio del equipo y el veredicto de cada prueba, LEÍDOS de lo archivado (§12.4: el
+        documento de un control reabierto dice lo mismo que el del día; no se recalcula con el perfil de hoy). Lleva la
+        fuente de cada regla y si es norma, propuesta o confirmada. `None` si ninguna prueba trae criterio."""
+        filas = [['Prueba', 'Métrica', 'Valor', 'Criterio', 'Veredicto', 'Fuente']]
+        for categoria, info in infos_prueba:
+            for j in self._juicios_guardados(info):
+                filas.append([categoria, j.etiqueta, texto_valor(j) or '---', j.criterio, j.estado, texto_fuente(j) or '---'])
+        if len(filas) == 1:
+            return None
+        filas = [[html.escape(str(c)) for c in fila] for fila in filas]
+        return pd.DataFrame(filas, columns=['Criterio y veredicto del equipo', '', '', '', '', ''], dtype=object)
 
     def _crear_tabla_espesor_corte(self, resultado):
         """
@@ -974,7 +1010,7 @@ class ReporteControlSistemaImagenes:
 
         return pd.DataFrame(tabla, columns=['Valores CT', '', '', '', ''])
     
-    def _crear_tabla_linealidad_ct(self, resultado):
+    def _crear_tabla_linealidad_ct(self, resultado, con_criterio=False):
         """
         Crea tabla con resultados de linealidad CT
         
@@ -1021,13 +1057,20 @@ class ReporteControlSistemaImagenes:
         tabla.append(['Energía [MeV]', energia_str])
         tabla.append(['Pendiente', pendiente_str])
         tabla.append(['Intercepto', intercepto_str])
-        tabla.append(['R² (coef. correlación)', r2_str])
-        tabla.append(['Escala de contraste', escala_str])
-        tabla.append(['Linealidad aceptable (R²≥0.99)', '✓' if linealidad_ok else '✗'])
+        if con_criterio:
+            # G.3: el valor guardado es el coeficiente de correlación r (D-30), no R²; la regla juzga R² = r².
+            tabla.append(['r (coeficiente de correlación)', r2_str])
+            if isinstance(r_cuadrado, (int, float)):
+                tabla.append(['R² (r al cuadrado)', f"{r_cuadrado ** 2:.6f}"])
+            tabla.append(['Escala de contraste', escala_str])
+        else:
+            tabla.append(['R² (coef. correlación)', r2_str])
+            tabla.append(['Escala de contraste', escala_str])
+            tabla.append(['Linealidad aceptable (R²≥0.99)', '✓' if linealidad_ok else '✗'])
         
         return pd.DataFrame(tabla, columns=['Linealidad CT', ''])
     
-    def _crear_tabla_uniformidad(self, resultado):
+    def _crear_tabla_uniformidad(self, resultado, con_criterio=False):
         """
         Crea tabla con resultados de uniformidad
         
@@ -1095,14 +1138,20 @@ class ReporteControlSistemaImagenes:
         else:
             inu_str = str(inu_pct)
         
-        tabla.append(['Diferencia máxima', max_dif_str, '---'])
+        # G.3: con criterio archivado, "Diferencia máxima" (máx - mín entre las cinco regiones) no es la métrica del
+        # veredicto (máx |región - centro|, en la tabla de criterios): el rótulo lo dice.
+        tabla.append(['Diferencia máxima entre regiones' if con_criterio else 'Diferencia máxima', max_dif_str, '---'])
         tabla.append(['Desviación global', desv_g_str, '---'])
         tabla.append(['Uniformity Index (UI)', ui_str, '---'])
         tabla.append(['Integral Non-Uniformity (INU)', inu_str, '---'])
         
         # Estado final
         pasa_global = uniformidad_global.get('pasa_global', False)
-        tabla.append(['Pasa prueba de uniformidad', '✓' if pasa_global else '✗', '---'])
+        if con_criterio:
+            # G.3: el veredicto está en la tabla de criterios; UI/INU con su umbral heredado quedan como dato.
+            tabla.append(['UI/INU con el umbral heredado (informativo)', 'Sí' if pasa_global else 'No', '---'])
+        else:
+            tabla.append(['Pasa prueba de uniformidad', '✓' if pasa_global else '✗', '---'])
         
         return pd.DataFrame(tabla, columns=['Uniformidad y ruido', '', ''])
     

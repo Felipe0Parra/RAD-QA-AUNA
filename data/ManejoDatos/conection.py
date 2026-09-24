@@ -228,6 +228,7 @@ class Conexion():
             self._asegurar_origen_referencia_dosimetria()  # B.4 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
             self._asegurar_identidad_dicom_pruebas()  # A.1 (PLAN_HANDOFF_IMAGENES_22-09.md)
             self._asegurar_energia_linealidad()  # G.2 (PLAN_HANDOFF_IMAGENES_22-09.md)
+            self._asegurar_criterio_veredicto()  # G.3 (PLAN_HANDOFF_IMAGENES_22-09.md)
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -1018,6 +1019,31 @@ class Conexion():
         `_asegurar_activo_bloque_qc` (`DP-80`: ADD COLUMN anade al final fisico)."""
         cur = self.con.cursor()
         _asegurar_columna(cur, "linealidad_ct", "energia_mev", "REAL")
+        self.con.commit()
+
+    def _asegurar_criterio_veredicto(self):
+        """G.3 (PLAN_HANDOFF_IMAGENES_22-09.md): `pruebas` gana el criterio y el
+        veredicto con que se juzgo cada prueba de imagen.
+
+        CAUSA: los criterios eran constantes escritas en la pantalla, iguales
+        para tres equipos, y lo que se archivaba era un booleano (`pasa_*`) sin
+        decir contra que regla ni de que fuente. Ahora cada prueba se juzga con
+        la regla de SU equipo (`perfiles.py` via `criterios.py`) y el resultado
+        -- estado, criterio, fuente y si esa fuente es norma, propuesta o
+        confirmada -- viaja con la prueba, para que el informe de un control
+        reabierto diga lo mismo que el del dia (§12.4).
+
+          criterio_veredicto  TEXT  JSON: lista de `criterios.Juicio`; NULL en
+                                    toda prueba anterior (no se recalcula: los
+                                    booleanos `pasa_*` historicos siguen siendo
+                                    lo que se firmo)
+
+        Las columnas `pasa_*` existentes NO cambian de significado (algunas son
+        NOT NULL y las lee "Ver tabla"). Aditiva e idempotente, sin relleno
+        retroactivo; va despues de `_asegurar_identidad_dicom_pruebas` (`DP-80`:
+        ADD COLUMN anade al final fisico)."""
+        cur = self.con.cursor()
+        _asegurar_columna(cur, "pruebas", "criterio_veredicto", "TEXT")
         self.con.commit()
         cur.close()
 

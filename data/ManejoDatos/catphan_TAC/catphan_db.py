@@ -522,7 +522,7 @@ def mapear_identidad_dicom(adquisicion):
 
 def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_corte, resultados_por_categoria, 
                                     tam_px_teorico=None, id_sesion=None, info_dicom=None, output_blob=None,
-                                    adquisicion_por_categoria=None):
+                                    adquisicion_por_categoria=None, criterios_por_categoria=None):
     """Guarda las categorías de una sesión de CatPhan: una fila de `pruebas`
     por categoría (anular+insertar, EB2c) y sus tablas hijas.
 
@@ -537,6 +537,11 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
     cargar la última carpeta: con dos carpetas en una misma sesión, las
     pruebas de la primera quedaban grabadas con los parámetros de la segunda
     (§0.4, "segundo camino").
+
+    `criterios_por_categoria` (G.3): `{categoria: [dict de criterios.Juicio, ...]}` -- el criterio del equipo y el
+    veredicto con que se juzgó cada prueba, archivados como JSON en `pruebas.criterio_veredicto` para que el PDF de un
+    control reabierto diga lo mismo que el del día (§12.4: lo archivado no se recalcula). Sin él (llamadores anteriores)
+    queda en `NULL`.
     """
     conn = None
     print("Guardando")
@@ -625,6 +630,10 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             # A.2: por que esta adquisicion no es la del protocolo fijo del
             # equipo (o NULL si lo es / no se comparo). No bloquea, se archiva.
             desviacion = adq_categoria.get("desviacion_protocolo") if adq_categoria else None
+            # G.3: el criterio y el veredicto de ESTA categoría, tal como se juzgó (o NULL)
+            juicios_categoria = (criterios_por_categoria or {}).get(categoria)
+            criterio_json = (json.dumps(juicios_categoria, ensure_ascii=False, sort_keys=True)
+                             if juicios_categoria else None)
 
             reemplazar_bloque(
                 cursor, "pruebas", [("id_sesion", id_sesion), ("id_tipo", id_tipo)],
@@ -633,11 +642,11 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
                     (id_sesion, id_tipo, kv, ma, espesor_corte, created_at,
                      imagen_path, imagen_resultado, equipo,
                      equipo_dicom, serie_uid, fecha_adquisicion, adquisicion_dicom,
-                     desviacion_protocolo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     desviacion_protocolo, criterio_veredicto)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [(id_sesion, id_tipo, kv_categoria, ma_categoria, espesor_categoria, fecha,
-                  imagen_path_usar, imagen_resultado_usar, equipo, *identidad, desviacion)],
+                  imagen_path_usar, imagen_resultado_usar, equipo, *identidad, desviacion, criterio_json)],
                 _nombre_usuario, auditar=False)
             id_prueba = cursor.lastrowid
 
@@ -2143,7 +2152,7 @@ def tabla_resultados_uniformidad(uniformidad):
         tabla_un.setSpan(fila_actual, 0, 1, 3)  # Combinar las 3 columnas
         info_extra = (f"Máx diferencia: {u.get('max_diferencia','N/A')} HU | "
                     f"Desv. global: {u.get('desviacion_global','N/A')} | "
-                    f"Pasa (UI/INU): {u.get('pasa_global','N/A')}")
+                    f"UI/INU con el umbral heredado (informativo): {u.get('pasa_global','N/A')}")
         item_extra = QTableWidgetItem(info_extra)
         item_extra.setTextAlignment(Qt.AlignCenter)
         font_extra = item_extra.font()

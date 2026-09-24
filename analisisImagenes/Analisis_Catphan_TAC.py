@@ -398,12 +398,19 @@ def resolucion_contraste(corte_255, corte_hu, tam_px: float,
                          catphan=None,
                          visualizar: bool = True,
                          canvas=None,
-                         cnr_lim: float = 1.0,
-                         visibilidad_lim: float = 0.1,
+                         *,
+                         cnr_lim: float,
+                         visibilidad_lim: float,
+                         min_rois_visibles: int,
                          visibilidad_manual: dict | None = None,
                          orientacion: str = "normal",
                          roll_deg: float = 0.0) -> dict:
-    """`orientacion`/`roll_deg` (D.1, 23-09): del motor pylinac (B.2, plan
+    """`cnr_lim`, `visibilidad_lim` y `min_rois_visibles` (G.3, 24-09): OBLIGATORIOS y sin valor por defecto. Definen
+    qué cuenta como ROI visible en esta métrica y cuántos hacen falta para el `pasa_test_*` heredado; no tienen fuente
+    normativa (D-18) y no son el veredicto de la prueba. Viven en un solo sitio,
+    `criterios.PARAMETROS_HEREDADOS["resolucion_contraste"]`; ningún literal de umbral se escribe en la pantalla ni aquí.
+
+    `orientacion`/`roll_deg` (D.1, 23-09): del motor pylinac (B.2, plan
     del 18-09) para esta serie. Si `catphan` no se pasa, la instancia que
     esta función construye ya los usa (vía `GeometriaCatphan`, para el ROI
     principal de cada inserto); las 6 ROI de fondo, que se ubican con
@@ -569,8 +576,9 @@ def resolucion_contraste(corte_255, corte_hu, tam_px: float,
         "total_rois":                len(contraste_rois),
         "cnr_lim":                   cnr_lim,
         "visibilidad_lim":           visibilidad_lim,   # ← parámetro, no variable de loop
-        "pasa_test_cnr":             rois_visibles_cnr         >= 4,
-        "pasa_test_visibilidad":     rois_visibles_visibilidad >= 4,
+        "min_rois_visibles":         min_rois_visibles,
+        "pasa_test_cnr":             rois_visibles_cnr         >= min_rois_visibles,
+        "pasa_test_visibilidad":     rois_visibles_visibilidad >= min_rois_visibles,
     }
 
     # ── Visualización ─────────────────────────────────────────────────────────
@@ -1337,12 +1345,19 @@ def linealidad_ct(datos, hu_promedio, visualizar=True, canvas=None):
 
 # ---------------------------------------------- Uniformidad ----------------------------------------------
 
-def uniformidad(corte_255, corte_hu, tam_px, visualizar:bool=True, canvas=None,
-                        hu_tolerancia: float = 40.0, ui_threshold_pct: float = 2.0, inu_threshold_pct: float = 2.0,
+def uniformidad(corte_255, corte_hu, tam_px, visualizar:bool=True, canvas=None, *,
+                        hu_tolerancia, ui_threshold_pct: float, inu_threshold_pct: float,
                         roi_shrink: float = 0.8) -> dict:
     """
     Analiza la uniformidad (CTP486).
-    Pasa si |UI|max <= ui_threshold_pct y INU*100 <= inu_threshold_pct.
+
+    G.3 (24-09): `hu_tolerancia`, `ui_threshold_pct` e `inu_threshold_pct` son OBLIGATORIOS y sin valor por defecto.
+    `hu_tolerancia` es la tolerancia de la regla de uniformidad del equipo (`perfiles.py`; `None` si el equipo no tiene
+    regla: entonces la marca por ROI queda `None`). Los umbrales de UI e INU no tienen fuente normativa (D-18): con ellos
+    se calculan `pasa_ui`/`pasa_inu`/`pasa_global`, columnas heredadas que la BD sigue guardando; NO son el veredicto
+    (ese sale de `criterios.py`). Ver `criterios.parametros_de_analisis`.
+
+    `pasa_global` (heredado): |UI|max <= ui_threshold_pct y INU*100 <= inu_threshold_pct.
     Además marca por-ROI si |ROI-Centro| <= hu_tolerancia.
     """
     import cv2
@@ -1406,7 +1421,7 @@ def uniformidad(corte_255, corte_hu, tam_px, visualizar:bool=True, canvas=None,
             ui = 100.0 * (res["promedio_hu"] - center_hu) / denom if denom != 0 else None  # % ya
             res["ui"] = round(ui, 3) if ui is not None else None
             diff_centro = abs(res["promedio_hu"] - center_hu)
-            res["pasa_tolerancia_rel_centro"] = (diff_centro <= hu_tolerancia)
+            res["pasa_tolerancia_rel_centro"] = (None if hu_tolerancia is None else diff_centro <= hu_tolerancia)
             if ui is not None and (ui_max_val is None or abs(ui) > abs(ui_max_val)):
                 ui_max_val, ui_max_roi = ui, nombre
 
@@ -1479,6 +1494,7 @@ def uniformidad(corte_255, corte_hu, tam_px, visualizar:bool=True, canvas=None,
     return resultados
 
 if __name__ == "__main__":
+    from analisisImagenes.catphan.criterios import PARAMETROS_HEREDADOS
     # Cargar volumen DICOM
     ruta = "C:/Users/penak/OneDrive/Documents/SEMESTRE 8/PRUEBA_IMAGEN_KAROL/CATPHANKV"
     vol = DicomVolume(ruta)
@@ -1497,9 +1513,7 @@ if __name__ == "__main__":
         imagen_contraste_hu, 
         tam_px=tam_px[0], 
         visualizar=True,
-        cnr_lim=1.0,
-        visibilidad_lim=0.1,
-      
+        **PARAMETROS_HEREDADOS["resolucion_contraste"],
     )
     
     imprimir_resultados_contraste_bajo(resultados_contraste)

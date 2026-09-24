@@ -548,6 +548,7 @@ def _pantalla(app):
     obj = PruebaMensualTAC.__new__(PruebaMensualTAC)
     QWidget.__init__(obj)
     obj.adquisicion_por_categoria = {}
+    obj.criterios_por_categoria = {}      # G.3: lo que `__init__` inicializa junto a la adquisicion
     return obj
 
 
