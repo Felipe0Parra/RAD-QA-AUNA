@@ -2175,9 +2175,28 @@ class PruebaMensualTAC(PruebaMensual600):
                     self.graficar.setCurrentText("Espesor de corte")
                     #print("\nProcesando corte para la categoría de ESPESOR DE CORTE")
 
-                    resultados_espesor = espesor_corte(imagen_grafica, imagen_analisis, tam_px, visualizar=True, 
-                                                                canvas=self.canvas_resultados)
-                    
+                    # E.1 (PLAN_ESPESOR_CORTE_24-09.md): como pylinac, el corte elegido y sus dos
+                    # vecinos si el nominal es < 3.5 mm (la regla vive en `cortes_vecinos_espesor`).
+                    # Solo si `imagen_analisis` ES el corte `indice_corte` del volumen del visor.
+                    import numpy as np
+                    _idx_espesor = (getattr(self, 'corte_seleccionado_info', None) or {}).get('indice_corte')
+                    _vol_hu = visualizador_principal.vol.volumen_hu
+                    _vecinos_espesor = []
+                    if _idx_espesor is not None and np.shares_memory(_vol_hu[_idx_espesor], imagen_analisis):
+                        _vecinos_espesor = cortes_vecinos_espesor(_vol_hu, _idx_espesor, self.espesor_corte_val)
+                    resultados_espesor = espesor_corte(imagen_grafica, imagen_analisis, tam_px, visualizar=True,
+                                                       combinar_slices=bool(_vecinos_espesor),
+                                                       slices_adyacentes=_vecinos_espesor,
+                                                       canvas=self.canvas_resultados)
+                    if resultados_espesor.get("espesor_promedio_mm") is None:
+                        # Guarda de E.1: sin alambre medible en este corte no hay número (ni guardado).
+                        self.resultados_espesor = None
+                        self.resultados_texto.setText(
+                            "Espesor de corte: no se detectaron las rampas de alambre en este corte "
+                            f"({resultados_espesor.get('num_rampas_detectadas', 0)} de 4 válidas; hacen falta 3). "
+                            "Elija el corte del módulo CTP404 que sugiere la detección automática.")
+                        continue
+
                     self.resultados_espesor = resultados_espesor  # Almacenar para guardado
                     self._registrar_adquisicion('espesor')
                     error = (abs((self.espesor_corte_val) - resultados_espesor.get("espesor_promedio_mm", None)) / self.espesor_corte_val) * 100 if self.espesor_corte_val and resultados_espesor.get("espesor_promedio_mm", None) else None

@@ -66,9 +66,8 @@ EQUIVALENCIAS = {
 # Por qué cada una de las pruebas SIN equivalencia queda pendiente de métrica.
 MOTIVO_PENDIENTE = {
     "espesor": (
-        "la regla pide el espesor de corte real (±1 mm del nominal); la función actual lo sobreestima 40-60 % "
-        "(umbral del FWHM contra el 0 de la máscara, ROI en píxeles: sesiones archivadas del tomógrafo, 2.82 mm medidos "
-        "con 2.0 nominal y 4.2 con 3.0, cuando pylinac mide 1.92 mm), así que con ella ±1 mm daría una alarma falsa"),
+        "la función ya mide el espesor como pylinac (E.1, 24-09: ±0.005 mm en las 5 series del corpus), pero el "
+        "criterio TG-66 (±1 mm del nominal) sigue sin conectarse por decisión del físico"),
     "geometria": (
         "la regla mide cuatro distancias de 50 mm; la función actual mide el tamaño del píxel, no esas distancias"),
     "bajo_contraste": (

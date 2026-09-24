@@ -19,242 +19,212 @@ def _angulo_efectivo(angulo_nominal, orientacion, roll_deg):
 
 
 # ---------------------------------------------- Espesor de corte ----------------------------------------------
+# E.1 (PLAN_ESPESOR_CORTE_24-09.md): mismo algoritmo que pylinac 3.45 (CTP404CP504 / ThicknessROI), calculado
+# sobre el corte que eligio el fisico y sus dos vecinos. Causa medida del sesgo de +40-60 % y del 11.66 / 17.48:
+# la media altura se tomaba contra el 0 que la mascara ponia fuera de la ROI (DIAGNOSTICO_ESPESOR.md).
+# --- constantes del metodo (fuente: pylinac 3.45 CTP404CP504 / ThicknessROI) ---
+RAMP_ANGLE_RATIO = 0.42           # tan(23 grados) = 0.4245; 0.42 es el del manual Catphan y el de pylinac
+ESPESOR_ROI_ANCHO_MM = 10.0       # perpendicular al alambre
+ESPESOR_ROI_LARGO_MM = 40.0       # a lo largo del alambre
+ESPESOR_ROI_DISTANCIA_MM = 38.0   # del centro del fantoma al centro de la ROI
+ESPESOR_SIGMA_FILTRO_PX = 1.0     # gaussiano 2D, pylinac `img.filter(size=1, kind="gaussian")`
+ESPESOR_MAX_COMBINAR_MM = 3.5     # pylinac thickness_slice_straddle="auto": combina +-1 corte si nominal < 3.5 mm
+# --- guarda de validez (medida en el corpus; NO es un criterio de aceptacion clinico) ---
+ESPESOR_MIN_SIGMAS_PICO = 8.0     # prominencia del pico / sigma del ruido, en el corte elegido
+                                  # (medido: rampas validas >= 15.4, cortes sin alambre <= 6.0)
+ESPESOR_MARGEN_MIN_MM = 3.0       # fondo minimo a cada lado del FWHM dentro de la ROI
+ESPESOR_MIN_ENSANCHE = 1.6        # FWHM combinado / FWHM del corte elegido, si se combinan cortes
+                                  # (medido: validas 1.78-3.02; solape T/2 1.46-1.54)
+ESPESOR_MIN_RAMPAS = 3            # rampas validas necesarias para dar un espesor
+
+_RAMPAS = {"Izquierda": 180.0, "Abajo": 90.0, "Derecha": 0.0, "Arriba": -90.0}
+
+
 def calcular_fwhm_interpolado(perfil):
-    """Calcula el FWHM con interpolación lineal entre los puntos que cruzan el medio máximo.
-    
-    Args:
-        perfil: Array con los valores del perfil (sin normalizar)
-    
-    Returns:
-        tuple: (fwhm, left_cross, right_cross)
+    """FWHM del pico principal de `perfil`, a media PROMINENCIA.
+
+    La media altura se mide sobre el fondo LOCAL del pico (el mas alto de los
+    dos minimos que lo encierran, definicion de `scipy.signal.peak_widths`, la
+    misma que usa pylinac `FWXMProfile`), con cruces interpolados. Antes era
+    `(max + min) / 2` del perfil entero, y el minimo era el 0 que la mascara
+    ponia fuera de la ROI: el umbral quedaba ~100 HU (TAC/Halcyon) o ~540 HU
+    (iX) por debajo del correcto.
+
+    Returns: (fwhm_px, cruce_izq, cruce_der, umbral, prominencia); umbral y
+    prominencia en unidades del perfil. Sin pico: (0.0, 0.0, 0.0, None, 0.0).
     """
     import numpy as np
-    
-    # Calcular el valor de medio máximo basado en los valores reales del perfil
-    max_val = np.max(perfil)
-    min_val = np.min(perfil)
-    half_max = (max_val + min_val) / 2  # Valor medio entre el máximo y el mínimo
-    
-    indices = np.where(perfil > half_max)[0]
-    if len(indices) == 0:
-        return 0, 0, 0  # No hay cruce
+    from scipy.signal import find_peaks
+    perfil = np.asarray(perfil, dtype=float)
+    picos, props = find_peaks(perfil, rel_height=0.5, width=0, prominence=0)
+    if len(picos) == 0:
+        return 0.0, 0.0, 0.0, None, 0.0
+    k = int(np.argmax(props["prominences"]))
+    izq, der = float(props["left_ips"][k]), float(props["right_ips"][k])
+    return der - izq, izq, der, float(props["width_heights"][k]), float(props["prominences"][k])
 
-    # Buscar el primer cruce por debajo del medio máximo antes del primer índice
-    left_idx = indices[0]
-    if left_idx == 0:
-        left_cross = left_idx
-    else:
-        x0, x1 = left_idx - 1, left_idx
-        y0, y1 = perfil[x0], perfil[x1]
-        left_cross = x0 + (half_max - y0) / (y1 - y0)
 
-    # Buscar el último cruce por debajo del medio máximo después del último índice
-    right_idx = indices[-1]
-    if right_idx == len(perfil) - 1:
-        right_cross = right_idx
-    else:
-        x0, x1 = right_idx, right_idx + 1
-        y0, y1 = perfil[x0], perfil[x1]
-        right_cross = x0 + (half_max - y0) / (y1 - y0)
-    
-    fwhm = right_cross - left_cross
-    return fwhm, left_cross, right_cross
+def _sigma_ruido(sub):
+    """Desviacion robusta (1.4826*MAD) del recorte tras quitarle un plano
+    (el cupping del iX es un gradiente suave). El alambre ocupa pocos
+    pixeles del recorte, asi que no pesa en la mediana."""
+    import numpy as np
+    yy, xx = np.mgrid[0:sub.shape[0], 0:sub.shape[1]]
+    a = np.c_[xx.ravel(), yy.ravel(), np.ones(xx.size)]
+    coef, *_ = np.linalg.lstsq(a, sub.ravel(), rcond=None)
+    res = sub.ravel() - a @ coef
+    return float(1.4826 * np.median(np.abs(res - np.median(res))))
 
-def espesor_corte(corte_255, corte_hu, tam_px: float, visualizar: bool = True, 
-                            combinar_slices: bool = False, slices_adyacentes: list = None, canvas = None) -> dict:
-    """
-    Calcula el espesor de corte utilizando las rampas de alambre del módulo CTP404.
-    
+
+def cortes_vecinos_espesor(volumen_hu, indice, espesor_nominal_mm):
+    """Los cortes HU a combinar con `volumen_hu[indice]` para medir el espesor:
+    uno a cada lado si el espesor nominal es < 3.5 mm (regla de pylinac,
+    `thickness_slice_straddle="auto"`); ninguno si es mayor, si no se conoce,
+    o si el corte esta en un extremo del volumen. Devuelve una lista (vacia o
+    de dos cortes); la pantalla la pasa tal cual a `espesor_corte`."""
+    if volumen_hu is None or indice is None or espesor_nominal_mm is None:
+        return []
+    try:
+        nominal = float(espesor_nominal_mm)
+    except (TypeError, ValueError):
+        return []
+    if not (0.0 < nominal < ESPESOR_MAX_COMBINAR_MM):
+        return []
+    if indice - 1 < 0 or indice + 1 >= len(volumen_hu):
+        return []
+    return [volumen_hu[indice - 1], volumen_hu[indice + 1]]
+
+
+def espesor_corte(corte_255, corte_hu, tam_px: float, visualizar: bool = True,
+                  combinar_slices: bool = False, slices_adyacentes: list = None, canvas=None) -> dict:
+    """Espesor de corte con las 4 rampas de alambre de 23 grados del CTP404.
+
+    Mide SIEMPRE sobre `corte_hu` (HU, float). `corte_255` (8 bits,
+    ventaneado) solo se usa para DIBUJAR: el resultado no depende de la
+    ventana de visualizacion.
+
     Args:
-        corte_255: Imagen normalizada (0-255) del corte que contiene el módulo CTP404.
-        tam_px: Tamaño de píxel en mm.
-        visualizar: Si se muestran visualizaciones.
-        combinar_slices: Si se combinan cortes adyacentes para mejorar SNR.
-        slices_adyacentes: Lista de arrays de cortes adyacentes para combinar si combinar_slices=True.
-    
-    Returns:
-        dict: Resultados con el espesor medido y valores individuales de cada rampa.
+        corte_255: imagen 0-255 del corte, solo para dibujar.
+        corte_hu: corte en HU (float) -- de aqui sale todo el calculo.
+        tam_px: tamano de pixel en mm.
+        visualizar: dibuja ROIs y perfiles (en `canvas` si se da).
+        combinar_slices / slices_adyacentes: si True y hay vecinos, se promedian
+            con el corte (en HU) y el FWHM se divide por el numero de cortes
+            (pylinac `thickness_slice_straddle`). Usar `cortes_vecinos_espesor`.
+
+    Returns: dict con espesor_promedio_mm (None si hay menos de
+        ESPESOR_MIN_RAMPAS rampas validas), espesores_individuales (solo las
+        validas), factor_correccion, num_rampas_detectadas (validas),
+        combinacion_slices, imagen_analisis.
     """
     import cv2
     import numpy as np
-    
-    # Factor de corrección para el ángulo de 23° de las rampas de alambre
-    RAMP_ANGLE_RATIO = 0.42
-    print(f"Tamño de px que entra a la función {tam_px}")
-    # Imagen a procesar (original o combinada)
+    from scipy import ndimage
+
+    corte_hu = np.asarray(corte_hu, dtype=np.float32)
     imagen_analisis = corte_hu
-    
-    # Si se solicita combinar cortes para mejorar SNR
+    n_cortes = 1
     if combinar_slices and slices_adyacentes:
-        # Apilar y promediar los cortes
-        slices_stack = np.dstack([corte_hu] + slices_adyacentes)
-        imagen_analisis = np.mean(slices_stack, axis=2).astype(np.uint8)
-    
-    # Obtener geometría del phantom
-    catphan = GeometriaCatphan(corte_hu, tam_px)  # D.0: geometría desde HU
+        pila = [corte_hu] + [np.asarray(s, dtype=np.float32) for s in slices_adyacentes]
+        imagen_analisis = np.mean(np.stack(pila), axis=0)   # en HU; nunca a uint8
+        n_cortes = len(pila)
 
-    # Configuración de ROIs para las rampas
-    # width: dimensión perpendicular al alambre (dirección del ángulo)
-    # height: dimensión paralela al alambre (perpendicular al ángulo)
-    thickness_roi_width = 10   # Ancho perpendicular al alambre
-    thickness_roi_height = 43  # Longitud paralela al alambre
-    thickness_roi_distance_mm = 38  # Distancia del centro en mm
-    
-    # Definir las 4 rampas (izquierda, abajo, derecha, arriba)
-    # Para cada ROI: width es la dimensión en la dirección del ángulo,
-    # height es la dimensión perpendicular al ángulo
-    thickness_rois = {
-    "Izquierda": {"angulo": 180, "width": thickness_roi_width, "height": thickness_roi_height, "distancia": thickness_roi_distance_mm},
-    "Abajo":     {"angulo": 90,  "width": thickness_roi_height, "height": thickness_roi_width, "distancia": thickness_roi_distance_mm},
-    "Derecha":   {"angulo": 0,   "width": thickness_roi_width, "height": thickness_roi_height, "distancia": thickness_roi_distance_mm},
-    "Arriba":    {"angulo": -90, "width": thickness_roi_height, "height": thickness_roi_width, "distancia": thickness_roi_distance_mm}
-    }
+    catphan = GeometriaCatphan(corte_hu, tam_px)             # D.0: geometria desde HU
+    cx0, cy0 = float(catphan.centro[0]), float(catphan.centro[1])
+    dist_px = ESPESOR_ROI_DISTANCIA_MM / tam_px
+    corto_px = ESPESOR_ROI_ANCHO_MM / tam_px
+    largo_px = ESPESOR_ROI_LARGO_MM / tam_px
+    alto_img, ancho_img = imagen_analisis.shape[:2]
 
-    # Resultados para cada rampa
-    resultados_rampas = {}
-    espesores = []
-    
-    # Preparar visualización
+    resultados_rampas = {}      # todas las rampas medidas (validas o no), para dibujar
+    rectangulos = {}
+    for nombre, angulo_nominal in _RAMPAS.items():
+        ang = np.deg2rad(angulo_nominal)
+        cx = cx0 + dist_px * np.cos(ang)
+        cy = cy0 + dist_px * np.sin(ang)
+        # recorte alineado a los ejes (como pylinac): las rampas izquierda/derecha
+        # corren en vertical, las de arriba/abajo en horizontal
+        if nombre in ("Izquierda", "Derecha"):
+            w, h = corto_px, largo_px
+        else:
+            w, h = largo_px, corto_px
+        y0, y1 = int(round(cy - h / 2)), int(round(cy + h / 2))
+        x0, x1 = int(round(cx - w / 2)), int(round(cx + w / 2))
+        rectangulos[nombre] = (x0, y0, x1, y1)
+        if x0 < 0 or y0 < 0 or x1 > ancho_img or y1 > alto_img or (x1 - x0) < 2 or (y1 - y0) < 2:
+            continue                                         # ROI fuera de la imagen: rampa no medible
+        sub = ndimage.gaussian_filter(imagen_analisis[y0:y1, x0:x1].astype(float),
+                                      sigma=ESPESOR_SIGMA_FILTRO_PX)
+        perfil = sub.max(axis=int(np.argmin(sub.shape)))    # perfil a lo largo del alambre
+        fwhm_px, izq, der, umbral, prominencia = calcular_fwhm_interpolado(perfil)
+        if umbral is None or fwhm_px <= 0:
+            continue
+        # (a) hay alambre en el corte ELEGIDO: se juzga sin promediar vecinos
+        # (promediar baja el contraste del alambre 3 veces y el criterio pierde margen)
+        ensanche = None
+        if n_cortes > 1:
+            sub_c = ndimage.gaussian_filter(corte_hu[y0:y1, x0:x1].astype(float), sigma=ESPESOR_SIGMA_FILTRO_PX)
+            fwhm_c, _, _, _, prominencia_c = calcular_fwhm_interpolado(sub_c.max(axis=int(np.argmin(sub_c.shape))))
+            ensanche = fwhm_px / fwhm_c if fwhm_c > 0 else 0.0
+        else:
+            sub_c, prominencia_c = sub, prominencia
+        sigma = _sigma_ruido(sub_c)
+        sigmas_pico = prominencia_c / sigma if sigma > 0 else float("inf")
+        margen_mm = min(izq, len(perfil) - 1 - der) * tam_px
+        valida = (sigmas_pico >= ESPESOR_MIN_SIGMAS_PICO and margen_mm >= ESPESOR_MARGEN_MIN_MM
+                  and (ensanche is None or ensanche >= ESPESOR_MIN_ENSANCHE))
+        resultados_rampas[nombre] = {
+            "fwhm_px": fwhm_px,
+            "espesor_mm": fwhm_px * tam_px * RAMP_ANGLE_RATIO / n_cortes,
+            "perfil": perfil,
+            "indices_fwhm": (izq, der),
+            "umbral": umbral,
+            "valida": valida,
+            "sigmas_pico": sigmas_pico,
+            "margen_mm": margen_mm,
+            "ensanche": ensanche,
+        }
+
+    validas = {n: r for n, r in resultados_rampas.items() if r["valida"]}
+    espesores = [r["espesor_mm"] for r in validas.values()]
+    espesor_promedio = float(np.mean(espesores)) if len(espesores) >= ESPESOR_MIN_RAMPAS else None
+
+    output_blob = None
     if visualizar:
         output = cv2.cvtColor(corte_255, cv2.COLOR_GRAY2BGR)
         cv2.circle(output, catphan.centro_int, catphan.radio_int, (141, 60, 60), 1)
-    
-    # Analizar cada rampa
-    for nombre, roi_info in thickness_rois.items():
-        # Obtener posición de la ROI
-        distancia_px = roi_info["distancia"] / tam_px
-        centro_x = int(catphan.centro[0] + distancia_px * np.cos(np.deg2rad(roi_info["angulo"])))
-        centro_y = int(catphan.centro[1] + distancia_px * np.sin(np.deg2rad(roi_info["angulo"])))
-        
-        # Crear ROI rectangular rotada
-        # width: dimensión en la dirección del ángulo (perpendicular al alambre)
-        # height: dimensión perpendicular al ángulo (paralela al alambre)
-        width_px = roi_info["width"]
-        height_px = roi_info["height"]
-        angulo_rad = np.deg2rad(roi_info["angulo"])
-
-        # Para ángulos verticales (90° y -90°), intercambiar width y height
-        # porque el cálculo de vértices asume que width va en dirección del ángulo
-        angulo_norm = roi_info["angulo"] % 360
-        if 45 < angulo_norm < 135 or 225 < angulo_norm < 315:
-            # Ángulos verticales: intercambiar dimensiones para que el ROI quede horizontal
-            width_px, height_px = height_px, width_px
-        
-        # Vectores unitarios para el sistema rotado
-        # Vector en dirección del ángulo (width)
-        cos_a = np.cos(angulo_rad)
-        sin_a = np.sin(angulo_rad)
-        # Vector perpendicular (height)
-        cos_perp = -sin_a
-        sin_perp = cos_a
-        
-        # Calcular los 4 vértices del rectángulo rotado
-        # Desde el centro, nos movemos ±width/2 en dirección del ángulo
-        # y ±height/2 en dirección perpendicular
-        x1 = int(centro_x - width_px/2 * cos_a - height_px/2 * cos_perp)
-        y1 = int(centro_y - width_px/2 * sin_a - height_px/2 * sin_perp)
-        x2 = int(centro_x + width_px/2 * cos_a - height_px/2 * cos_perp)
-        y2 = int(centro_y + width_px/2 * sin_a - height_px/2 * sin_perp)
-        x3 = int(centro_x + width_px/2 * cos_a + height_px/2 * cos_perp)
-        y3 = int(centro_y + width_px/2 * sin_a + height_px/2 * sin_perp)
-        x4 = int(centro_x - width_px/2 * cos_a + height_px/2 * cos_perp)
-        y4 = int(centro_y - width_px/2 * sin_a + height_px/2 * sin_perp)
-
-        # Imprimir los vértices para depuración
-        #print(f"ROI {nombre}: Vértices = ({x1}, {y1}), ({x2}, {y2}), ({x3}, {y3}), ({x4}, {y4})")
-
-        # Crear máscara y extraer región
-        h, w = imagen_analisis.shape[:2]
-        mask = np.zeros((h, w), dtype=np.uint8)
-        pts = np.array([[x1, y1], [x2, y2], [x3, y3], [x4, y4]], np.int32)
-        pts = pts.reshape((-1, 1, 2))
-        cv2.fillPoly(mask, [pts], 255)
-        roi_array = imagen_analisis.copy()
-        roi_array[mask == 0] = 0
-        
-        # Extraer el perfil colapsando en la dimensión más corta (width)
-        # El perfil debe ser a lo largo del alambre (height)
-        # Determinamos qué eje colapsar basándonos en el ángulo
-        angulo_norm = roi_info["angulo"] % 360
-        
-        # Para ángulos cercanos a 0° o 180° (horizontales): el alambre es vertical, colapsar en X (axis=1)
-        # Para ángulos cercanos a 90° o 270° (verticales): el alambre es horizontal, colapsar en Y (axis=0)
-        if (angulo_norm < 45) or (angulo_norm > 315) or (135 < angulo_norm < 225):
-            perfil = np.max(roi_array, axis=1)  # Colapsar columnas, perfil vertical
-        else:
-            perfil = np.max(roi_array, axis=0)  # Colapsar filas, perfil horizontal
-        
-        # Filtrar el perfil para reducir ruido (sigma=1 como en pylinac)
-        from scipy.ndimage import gaussian_filter1d
-        perfil_filtrado = gaussian_filter1d(perfil.astype(float), sigma=0.8)
-        
-        # Calcular FWHM directamente sobre valores filtrados (sin normalizar)
-        fwhm_px, left_cross, right_cross = calcular_fwhm_interpolado(perfil_filtrado)
-                
-        # Calcular espesor de corte aplicando el factor de corrección del ángulo
-        espesor_mm = fwhm_px * tam_px * RAMP_ANGLE_RATIO
-        espesores.append(espesor_mm)
-        
-        resultados_rampas[nombre] = {
-            "fwhm_px": fwhm_px,
-            "espesor_mm": espesor_mm,
-            "perfil": perfil_filtrado,
-            "indices_fwhm": (left_cross, right_cross)
-        }
-    
-        #print(f"Espesor en px en {nombre}: {fwhm_px}")
-        
-        # Visualización
-        if visualizar:
-            # Dibujar el ROI
-            cv2.polylines(output, [pts], True, (0, 255, 0), 2)
-            cv2.putText(output, nombre, (centro_x - 30, centro_y - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-            
-            # Si se calculó FWHM, mostrar el valor
-            if nombre in resultados_rampas:
-                cv2.putText(output, f"{resultados_rampas[nombre]['espesor_mm']:.2f} mm", 
-                            (centro_x - 30, centro_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-    
-    # Calcular el espesor de corte promedio
-    espesor_promedio = None
-    if espesores:
-        espesor_promedio = np.mean(espesores)
-    
-    # Mostrar resultado visual
-    if visualizar and (output is not None):
-        num_rampas = len(resultados_rampas)
-        filas, columnas = 2, 3  # 2 filas, 3 columnas
-        
+        for nombre, (x0, y0, x1, y1) in rectangulos.items():
+            res = resultados_rampas.get(nombre)
+            color = (0, 255, 0) if (res and res["valida"]) else (0, 0, 255)
+            cv2.rectangle(output, (x0, y0), (x1, y1), color, 1)
+            cv2.putText(output, nombre, (x0, y0 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+            texto = f"{res['espesor_mm']:.2f} mm" if (res and res["valida"]) else "no detectada"
+            cv2.putText(output, texto, (x0, y1 + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+        filas, columnas = 2, 3
         if canvas is not None:
-            # Usar la figura del canvas existente
             canvas.figure.clear()
-            axs = canvas.figure.subplots(filas, columnas)
-            axs = axs.flatten()
+            axs = canvas.figure.subplots(filas, columnas).flatten()
         else:
-            # Crear nueva figura solo si no hay canvas
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(filas, columnas, figsize=(9, 6))
             axs = axs.flatten()
-        
-        # Primer subplot: imagen con ROIs
         axs[0].imshow(output)
-        axs[0].set_title("ROIs de Espesor de Corte")
+        titulo = "ROIs de Espesor de Corte"
+        if n_cortes > 1:
+            titulo += f" ({n_cortes} cortes)"
+        axs[0].set_title(titulo)
         axs[0].axis('off')
-        # Siguientes subplots: perfiles de rampas
         for i, (nombre, res) in enumerate(resultados_rampas.items(), start=1):
             axs[i].plot(res['perfil'], 'b-')
-            if 'indices_fwhm' in res:
-                first, last = res['indices_fwhm']
-                axs[i].axvline(x=first, color='r', linestyle='--')
-                axs[i].axvline(x=last, color='r', linestyle='--')
-                axs[i].axhline(y=np.max(res['perfil']) / 2, color='g', linestyle='--')
-            axs[i].set_title(f"{nombre}: {res['espesor_mm']:.2f} mm")
+            izq, der = res['indices_fwhm']
+            axs[i].axvline(x=izq, color='r', linestyle='--')
+            axs[i].axvline(x=der, color='r', linestyle='--')
+            axs[i].axhline(y=res['umbral'], color='g', linestyle='--')   # la media altura REAL usada
+            axs[i].set_title(f"{nombre}: {res['espesor_mm']:.2f} mm" if res["valida"]
+                             else f"{nombre}: rampa no detectada")
             axs[i].grid(True)
-        # Ocultar los subplots vacíos
-        for j in range(1 + num_rampas, filas * columnas):
+        for j in range(1 + len(resultados_rampas), filas * columnas):
             axs[j].axis('off')
-        
         if canvas is not None:
             canvas.figure.tight_layout()
             canvas.draw()
@@ -262,22 +232,16 @@ def espesor_corte(corte_255, corte_hu, tam_px: float, visualizar: bool = True,
             import matplotlib.pyplot as plt
             plt.tight_layout()
             plt.show()
+        _, buffer = cv2.imencode('.png', output)
+        output_blob = buffer.tobytes()
 
-        # Convertir output a formato BLOB para devolver
-        if output is not None:
-            _, buffer = cv2.imencode('.png', output)
-            output_blob = buffer.tobytes() # Imagen en formato BLOB 
-        else:
-            output_blob = None
-
-    # Devolver resultados
     return {
         "espesor_promedio_mm": round(espesor_promedio, 2) if espesor_promedio else None,
-        "espesores_individuales": {nombre: round(res["espesor_mm"], 2) for nombre, res in resultados_rampas.items()},
+        "espesores_individuales": {n: round(r["espesor_mm"], 2) for n, r in validas.items()},
         "factor_correccion": RAMP_ANGLE_RATIO,
         "num_rampas_detectadas": len(espesores),
-        "combinacion_slices": combinar_slices,
-        "imagen_analisis": output_blob if visualizar else None # Imagen con ROIs dibujadas en formato BLOB
+        "combinacion_slices": n_cortes > 1,
+        "imagen_analisis": output_blob,
     }
 
 # ---------------------------------------------- Tamaño de pixel  ----------------------------------------------

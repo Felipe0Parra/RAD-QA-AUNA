@@ -237,13 +237,15 @@ def test_lo_que_la_funcion_no_mide_igual_que_la_regla_queda_pendiente_y_lo_dice(
         assert "Pendiente de métrica" in j.criterio and MOTIVO_PENDIENTE[j.prueba] in j.criterio
 
 
-def test_el_espesor_es_pendiente_en_el_tomografo_porque_la_funcion_lo_sobreestima():
-    """Sesiones archivadas del tomógrafo: 2.82 mm con 2.0 nominal y 4.2 con 3.0 -- con ±1 mm, el segundo sería un
-    "No cumple" falso sobre una medición que sobreestima 40-60 %."""
-    for medido, nominal in ((2.82, 2.0), (4.2, 3.0)):
+def test_el_espesor_del_tomografo_sigue_pendiente_por_decision_del_fisico():
+    """E.1 (24-09): la función ya mide el espesor como pylinac (±0.005 mm en las 5 series), así que el motivo de
+    G.3 ("la función lo sobreestima") dejó de ser cierto y no puede seguir guardándose con cada control nuevo.
+    El criterio TG-66 sigue sin conectarse hasta E.2; mientras tanto no hay veredicto, con la razón verdadera."""
+    for medido, nominal in ((2.82, 2.0), (4.2, 3.0), (1.92, 2.0)):
         (j,) = juzgar("Tomógrafo", "espesor", {"espesor_promedio_mm": medido, "espesor_teorico_mm": nominal})
         assert j.estado == ESTADO_PENDIENTE
-    assert "sobreestima" in MOTIVO_PENDIENTE["espesor"]
+    assert "sobreestima" not in MOTIVO_PENDIENTE["espesor"]
+    assert "E.1" in MOTIVO_PENDIENTE["espesor"] and "pylinac" in MOTIVO_PENDIENTE["espesor"]
 
 
 @pytest.mark.parametrize("equipo", ["Clinac ix", "Halcyon"])

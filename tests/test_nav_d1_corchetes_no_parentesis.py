@@ -87,7 +87,7 @@ BASELINE_D1_PENDIENTE = {
     ('analisisImagenes/ActividadFuente.py', 52, 'nA'),
     ('analisisImagenes/ActividadFuente.py', 140, 's'),
     ('analisisImagenes/ActividadFuente.py', 141, 's'),
-    ('analisisImagenes/Analisis_Catphan_TAC.py', 1093, 'HU'),  # D.0 (23-09): 1008->1017; D.1 (23-09): 1017->1063; B.1 (23-09): 1063->1085; G.3 (24-09): 1085->1093
+    ('analisisImagenes/Analisis_Catphan_TAC.py', 1057, 'HU'),  # D.0 (23-09): 1008->1017; D.1 (23-09): 1017->1063; B.1 (23-09): 1063->1085; G.3 (24-09): 1085->1093; E.1 (24-09): 1093->1057
     ('analisisImagenes/Analisis_PlacaCuadrada.py', 257, 'mm'),
     ('analisisImagenes/Analisis_PlacaCuadrada.py', 267, 'mm'),
     ('analisisImagenes/Analisis_PlacaRC.py', 213, 'mm'),
