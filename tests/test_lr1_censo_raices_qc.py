@@ -185,11 +185,11 @@ CENSO_RAICES = {
     # -- models/PDF ------------------------------------------------------
     ("models/PDF/Anual/reportes_anuales.py", 140, "controles"):
         (LISTA, "referencia del control ANUAL por (fecha, equipo, control)"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 199, "controles"):
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 201, "controles"):  # E.3 (24-09): 199->201
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 249, "controles"):
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 251, "controles"):  # E.3 (24-09): 249->251
         (IDENTIDAD, "_obtener_info_sesion del PDF de imágenes: WHERE c.id = ?"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 413, "controles"):
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 417, "controles"):  # E.3 (24-09): 413->417
         (IDENTIDAD, "_obtener_datos_tabla_principal del PDF: WHERE id = ?"),
     ("models/PDF/Mensuales/reportes_mensuales.py", 165, "controles"):
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),

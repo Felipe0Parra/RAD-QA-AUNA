@@ -192,13 +192,13 @@ BASELINE_D1_PENDIENTE = {
     ('models/PDF/Anual/reportes_anuales.py', 770, '%'),
     ('models/PDF/Anual/reportes_anuales.py', 777, 'nC'),
     ('models/PDF/Anual/reportes_anuales.py', 802, 'cm'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 606, 'kV'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 607, 'mA'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 608, 'mm'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 714, 'mm'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 747, 'mm'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 767, 'cm'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 851, '%'),
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 622, 'kV'),  # E.3 (24-09): 606->622
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 623, 'mA'),  # E.3 (24-09): 607->623
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 624, 'mm'),  # E.3 (24-09): 608->624
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 730, 'mm'),  # E.3 (24-09): 714->730
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 763, 'mm'),  # E.3 (24-09): 747->763
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 783, 'cm'),  # E.3 (24-09): 767->783
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 867, '%'),  # E.3 (24-09): 851->867
     ('models/PDF/Mensuales/reportes_mensuales.py', 801, 'cm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1075, 'mm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1096, '%'),

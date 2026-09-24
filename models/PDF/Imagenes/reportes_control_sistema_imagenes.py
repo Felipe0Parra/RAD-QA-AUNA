@@ -131,6 +131,7 @@ class ReporteControlSistemaImagenes:
             
             # 5. Obtener información del usuario (nombre completo y firma)
             usuario_info = self._obtener_info_usuario(db, datos_tabla_principal['user_id'])
+            usuario_info2 = self._obtener_info_segundo_fisico(db, info_sesion.get('user_id_f2'))
             
             # 6. Obtener imágenes BLOB de la base de datos
             imagenes_originales, imagenes_resultados = self._obtener_imagenes_blob(db, ref)
@@ -166,7 +167,8 @@ class ReporteControlSistemaImagenes:
                 tipo_reporte,
                 usuario_info,
                 info_sesion,
-                sistema_imagenes=sistema_imagenes
+                sistema_imagenes=sistema_imagenes,
+                usuario_info2=usuario_info2
             )
             
             db.close()
@@ -247,7 +249,7 @@ class ReporteControlSistemaImagenes:
         # primaria ya devuelve como mucho una fila, y un LIMIT sin ORDER BY
         # sobre una tabla versionada es justo lo que AN1 marca.
         query.prepare("""
-            SELECT c.equipo, c.fecha, c.user_id
+            SELECT c.equipo, c.fecha, c.user_id, c.user_id_f2
             FROM controles c
             WHERE c.id = ?
         """)
@@ -256,7 +258,8 @@ class ReporteControlSistemaImagenes:
         info = {
             'equipo': 'N/A',
             'fecha': 'N/A',
-            'user_id': 'N/A'
+            'user_id': 'N/A',
+            'user_id_f2': None
         }
         info['db'] = db
         info['ref'] = ref
@@ -264,6 +267,7 @@ class ReporteControlSistemaImagenes:
             info['equipo'] = query.value(0)
             info['fecha'] = query.value(1)
             info['user_id'] = query.value(2)
+            info['user_id_f2'] = query.value(3)
 
         return info
     
@@ -424,7 +428,7 @@ class ReporteControlSistemaImagenes:
     def _obtener_info_usuario(self, db, user_id):
         """Obtiene información del usuario incluyendo firma"""
         query = QSqlQuery(db)
-        query.prepare("SELECT firma, role FROM users WHERE fullname = ?")
+        query.prepare("SELECT firma, role FROM users WHERE TRIM(fullname) = TRIM(?)")
         query.addBindValue(user_id)
         print(f"Buscando información del usuario: {user_id}")
         
@@ -449,6 +453,18 @@ class ReporteControlSistemaImagenes:
         
         return {'usuario': user_id, 'rol': '', 'firma_path': None}
     
+    def _obtener_info_segundo_fisico(self, db, user_id_f2):
+        """E.3: nombre, rol y firma del segundo físico del control, o None si no hubo.
+
+        `controles.user_id_f2` es NULL cuando no hubo segundo físico; una BD vieja puede traer el
+        centinela `' ---- '` (la migración lo normaliza a NULL): tampoco cuenta como un físico. El
+        nombre se recorta solo para MOSTRARLO -- el dato de la BD no se toca, `users.fullname` tiene
+        un caso real con espacio inicial -- y `_obtener_info_usuario` lo busca comparando con TRIM."""
+        nombre = str(user_id_f2 or '').strip()
+        if not nombre or set(nombre) == {'-'}:
+            return None
+        return self._obtener_info_usuario(db, nombre)
+
     def _procesar_resultados_para_reporte(self, resultados, info_sesion, imagenes_originales, imagenes_resultados):
         """
         Procesa los resultados reconstruidos y los convierte en tablas para el PDF
@@ -1007,7 +1023,8 @@ class ReporteControlSistemaImagenes:
         return pd.DataFrame(tabla, columns=['Uniformidad y ruido', '', ''])
     
     def _generar_mostrar_pdf(self, parent_widget, tablas_reporte, fecha, equipo,
-                            tipo_reporte, usuario_info, info_sesion, sistema_imagenes=False):
+                            tipo_reporte, usuario_info, info_sesion, sistema_imagenes=False,
+                            usuario_info2=None):
         """
         Genera el PDF y lo muestra en el visor
         
@@ -1040,6 +1057,9 @@ class ReporteControlSistemaImagenes:
                 logo_path=logo_path,
                 firma=usuario_info['firma_path'],
                 role=usuario_info['rol'],
+                user2=usuario_info2['usuario'] if usuario_info2 else None,
+                firma2=usuario_info2['firma_path'] if usuario_info2 else None,
+                role2=usuario_info2['rol'] if usuario_info2 else None,
                 temp=True,
                 sistema_imagenes=sistema_imagenes,
                 # E.1: el generador solo lo usa si este informe imprime de verdad las

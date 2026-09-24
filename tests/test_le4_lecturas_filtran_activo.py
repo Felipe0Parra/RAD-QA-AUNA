@@ -217,7 +217,7 @@ EXCEPCIONES_LITERALES = {
         "uniformidad_ruido -- filtro_activo('uniformidad_ruido') se califica "
         "con el alias 'ur.' del JOIN (variable `filtro_ur`) en "
         "reconstruir_uniformidad",
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 326):
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 330):  # E.3 (24-09): 326->330
         "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
         "del JOIN (variable `filtro_p`) en _obtener_imagenes_blob",
     # LF1b (§6-LF1): 'pruebas' se une con LEFT JOIN a 'controles' (raíz) --
@@ -299,7 +299,7 @@ SITIOS_CLAVE_INCOMPLETA_PERMITIDOS = {
         "específico del vértice de esa fila -- las 4 filas de un mismo ref "
         "cargan el mismo valor en esas columnas (ver esquema en "
         "conection.py:1441). Cualquiera de las 4 sirve igual.",
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 224):
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 226):  # E.3 (24-09): 224->226
         "pruebas -- COUNT(*): solo pregunta '¿existe al menos una prueba "
         "para esta sesión?', sin importar id_tipo -- un COUNT no elige "
         "fila, cuenta todas.",

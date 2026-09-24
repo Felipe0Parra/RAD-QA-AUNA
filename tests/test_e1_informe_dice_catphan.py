@@ -28,7 +28,6 @@ Lo que este archivo garantiza:
 import ast
 import os
 import pathlib
-import shutil
 
 import pytest
 
@@ -36,16 +35,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import fitz
 import pandas as pd
-from PyQt5.QtSql import QSqlDatabase
-from PyQt5.QtWidgets import QApplication, QMessageBox, QWidget
 
-import data.ManejoDatos.conection as conection_mod
 import models.PDF.Imagenes.reportes_control_sistema_imagenes as rep_mod
 from models.PDF.Imagenes.reportes_control_sistema_imagenes import (
-    NOMBRE_ANALISIS, generar_reporte_sistema_imagenes, nombre_archivo_pdf,
-    titulo_del_informe)
+    NOMBRE_ANALISIS, nombre_archivo_pdf, titulo_del_informe)
 from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
-from _bd_referencia import BD_REBUILD_21_09  # DP-104: fuente única de rutas de BD
+# Fixtures y ayudas compartidas con E.3 y E.2 (BD copia, avisos sin diálogos, visor falso).
+from _informe_imagenes import app, avisos, bd_copia, generar, paginas  # noqa: F401  (fixtures)
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 
@@ -60,77 +56,12 @@ SESIONES = [
 ]
 
 
-@pytest.fixture(scope="module")
-def app():
-    return QApplication.instance() or QApplication([])
-
-
-@pytest.fixture
-def bd_copia(monkeypatch, tmp_path):
-    """COPIA de la BD del 21-09 (nunca la de referencia: `Conexion()` commitea
-    aunque no cambie nada y altera el md5)."""
-    if not BD_REBUILD_21_09.exists():
-        pytest.skip(f"falta la BD de referencia {BD_REBUILD_21_09.name}")
-    copia = tmp_path / "copia.db"
-    shutil.copy2(BD_REBUILD_21_09, copia)
-    monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: str(copia))
-    conection_mod.Conexion._instance = None
-    yield str(copia)
-    if conection_mod.Conexion._instance is not None:
-        conection_mod.Conexion._instance.con.close()
-    conection_mod.Conexion._instance = None
-
-
-@pytest.fixture
-def avisos(monkeypatch):
-    """Trampa 2: ningún diálogo modal real. Se anotan para exigir que la
-    generación NO haya fallado en silencio detrás de un aviso."""
-    vistos = []
-    for nombre in ("critical", "warning", "information", "question"):
-        monkeypatch.setattr(
-            QMessageBox, nombre,
-            staticmethod(lambda *a, _n=nombre, **k: vistos.append((_n, a[1:3])) or QMessageBox.Ok))
-    return vistos
-
-
-class _FalsoVisor:
-    """Sustituye al visor: guarda los bytes del PDF en vez de abrir una ventana."""
-    ultimo = {}
-
-    def __init__(self, pdf_data=None, fecha="", maquina="", tipo_reporte=""):
-        _FalsoVisor.ultimo = {"pdf": bytes(pdf_data), "fecha": fecha,
-                              "maquina": maquina, "tipo_reporte": tipo_reporte}
-
-    def show(self):
-        pass
-
-
-class _Padre(QWidget):
-    def __init__(self, ruta):
-        super().__init__()
-        self._ruta = ruta
-
-    def opeenDatabase(self):
-        if not QSqlDatabase.contains("qt_sql_default_connection"):
-            db = QSqlDatabase.addDatabase("QSQLITE")
-            db.setDatabaseName(self._ruta)
-        else:
-            db = QSqlDatabase.database("qt_sql_default_connection")
-        db.open()
-        return db
-
-
 def _paginas(pdf_bytes):
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    return [p.get_text() for p in doc]
+    return paginas(pdf_bytes)
 
 
 def _generar(app, bd_copia, monkeypatch, ref, equipo, fecha, flag=True):
-    monkeypatch.setattr(rep_mod, "PdfViewer", _FalsoVisor)
-    _FalsoVisor.ultimo = {}
-    ok = generar_reporte_sistema_imagenes(
-        _Padre(bd_copia), fecha, equipo, "x", ref=ref, sistema_imagenes=flag)
-    return ok, _FalsoVisor.ultimo
+    return generar(bd_copia, monkeypatch, ref, equipo, fecha, flag)
 
 
 # ---------------------------------------------------------------------------
