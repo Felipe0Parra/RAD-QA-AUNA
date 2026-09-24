@@ -349,10 +349,10 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1532, 'mm'),  # A.2 (21-09): 1518->1531; B.3 (21-09): 1531->1532
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1705, '°'),  # A.2 (21-09): 1691->1704; B.3 (21-09): 1704->1705
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2497, 'cm'),  # A.2 (21-09): 2305->2364; B.3 (21-09): 2364->2425; B.4 (21-09): 2425->2497
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 774, 'MeV'),  # A.1 (23-09): 760->773; A.2 (23-09): 773->774
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1653, 'mm'),  # D.1 (23-09): 1595->1602; A.1 (23-09): 1602->1645; A.2 (23-09): 1645->1651; A.3 (23-09): 1651->1653
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1796, 'cm'),  # D.1 (23-09): 1738->1745; A.1 (23-09): 1745->1788; A.2 (23-09): 1788->1794; A.3 (23-09): 1794->1796
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1923, 'HU'),  # D.1 (23-09): 1865->1872; A.1 (23-09): 1872->1915; A.2 (23-09): 1915->1921; A.3 (23-09): 1921->1923
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 780, 'MeV'),  # A.1 (23-09): 760->773; A.2 (23-09): 773->774; G.1 (24-09): 774->780
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1688, 'mm'),  # D.1 (23-09): 1595->1602; A.1 (23-09): 1602->1645; A.2 (23-09): 1645->1651; A.3 (23-09): 1651->1653; G.1 (24-09): 1653->1688
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1831, 'cm'),  # D.1 (23-09): 1738->1745; A.1 (23-09): 1745->1788; A.2 (23-09): 1788->1794; A.3 (23-09): 1794->1796; G.1 (24-09): 1796->1831
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1958, 'HU'),  # D.1 (23-09): 1865->1872; A.1 (23-09): 1872->1915; A.2 (23-09): 1915->1921; A.3 (23-09): 1921->1923; G.1 (24-09): 1923->1958
     ('ui/paginasGuia/SQLtoEXCEL.py', 317, 'cGy/UM'),
     ('ui/paginasGuia/SQLtoEXCEL.py', 318, '%'),
     ('ui/paginasGuia/SQLtoEXCEL.py', 319, '%'),

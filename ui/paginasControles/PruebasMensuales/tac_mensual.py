@@ -7,14 +7,14 @@ from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensu
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.catphan_TAC.leer_dicom import VisualizadorDicom
-from analisisImagenes.catphan.protocolos import comparar_con_protocolo
+from analisisImagenes.catphan.protocolos import comparar_con_protocolo, texto_encabezado, texto_origen
 from analisisImagenes.Analisis_Catphan_TAC import *
 from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from datetime import datetime
 from enum import Enum
 from PyQt5.QtCore import QTimer
-import traceback, os, json
+import traceback, os, json, html
 import time    
 import sys
 
@@ -464,6 +464,9 @@ class PruebaMensualTAC(PruebaMensual600):
         
         
         self.preINIGI(user_id, self.lista_maquina)
+        # G.1: el protocolo obligatorio en el encabezado de la pantalla previa
+        # (donde se elige fecha y físicos), ANTES de irradiar.
+        self._escribir_protocolo_en_encabezado()
         
         
         
@@ -588,6 +591,9 @@ class PruebaMensualTAC(PruebaMensual600):
         # Encabezado general
         _ = self.setupBox(archivo, self.lista_maquina[0])
         self.date_box.setDisplayFormat("yyyy/MM")
+        # G.1: `setupBox` reconstruye el encabezado (DP-54) y con él `Subtittle1`:
+        # se vuelve a escribir el protocolo obligatorio en el widget nuevo.
+        self._escribir_protocolo_en_encabezado()
         
         # Cargar widgets de la hoja correspondiente
         self.df_tac, n, layouts, _ = self.setupBox(archivo, sheet_name, main=False)
@@ -988,6 +994,35 @@ class PruebaMensualTAC(PruebaMensual600):
         
         return widget_categoria
     
+    def _escribir_protocolo_en_encabezado(self):
+        """G.1 (PLAN_HANDOFF_IMAGENES_22-09.md, ajuste 23-09): el protocolo
+        obligatorio del equipo, arriba de la fecha, EN LUGAR de la frase "Atencion
+        en Radioterapia" que la hoja de encabezado trae para las nueve pantallas.
+
+        Solo las tres hojas de imágenes llegan aquí (esta clase y sus cuatro
+        subclases). El texto sale del catálogo de `A.2` -- nunca de las celdas del
+        Excel, que serían una segunda copia --, así que cambia con el equipo y con
+        el catálogo. Los formularios de dosimetría no pasan por aquí y siguen
+        diciendo lo que decían. Lleva un enlace, "de dónde sale", con el origen del
+        valor, cuándo se fijó y lo que falta confirmar en la consola."""
+        etiqueta = getattr(self, 'Subtittle1', None)
+        if etiqueta is None:
+            return
+        etiqueta.setTextFormat(Qt.RichText)
+        etiqueta.setWordWrap(True)
+        etiqueta.setText(
+            f"{html.escape(texto_encabezado(getattr(self, 'equipo_f', None)))}"
+            f" · <a href='origen'>de dónde sale</a>")
+        # `setupBox` crea un QLabel NUEVO cada vez: se conecta una vez por widget
+        # (llamarlo dos veces sobre el mismo no debe duplicar el aviso).
+        if not etiqueta.property("g1_enlace"):
+            etiqueta.linkActivated.connect(self._mostrar_origen_protocolo)
+            etiqueta.setProperty("g1_enlace", True)
+
+    def _mostrar_origen_protocolo(self, _enlace=None):
+        equipo = getattr(self, 'equipo_f', None)
+        QMessageBox.information(self, f"Protocolo de {equipo}", texto_origen(equipo))
+
     def _registrar_adquisicion(self, categoria):
         """A.1 (PLAN_HANDOFF_IMAGENES_22-09.md §0.4, "segundo camino"): fija la
         adquisición del volumen CON EL QUE SE ACABA DE CORRER la prueba

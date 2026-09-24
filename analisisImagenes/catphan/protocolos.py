@@ -287,6 +287,48 @@ def _texto_fila(f: FilaProtocolo) -> str:
     return f"{f.etiqueta}: {texto_encontrado(f)} (exigido {texto_exigido(f)})"
 
 
+# G.1 (PLAN_HANDOFF_IMAGENES_22-09.md, ajuste 23-09): el encabezado del formulario
+# de imagenes dice el protocolo obligatorio ANTES de adquirir, en lugar de "Atencion
+# en Radioterapia". El texto sale SOLO de este catalogo -- no se escribe en las
+# celdas de `widgets.xlsx`, que serian una segunda copia que se desfasa el dia que
+# el protocolo cambie.
+SIN_PROTOCOLO_ENCABEZADO = "Sin protocolo de imagen definido para este equipo"
+
+
+def texto_encabezado(equipo: Optional[str]) -> str:
+    """El protocolo obligatorio de `equipo`, en una linea, para el encabezado del
+    formulario. Si el catalogo lo marca con condiciones de consola SIN confirmar,
+    el texto lo dice. Un equipo sin protocolo (p. ej. `Clinac 600`, que no tiene
+    sistema de imagen) lo dice tambien: no se inventa uno."""
+    p = PROTOCOLOS.get(equipo)
+    if p is None:
+        return SIN_PROTOCOLO_ENCABEZADO
+    partes = []
+    if p.descripcion_serie:
+        partes.append(p.descripcion_serie)
+    partes += [f"{_fmt(p.kv)} kV", f"{_fmt(p.ma)} mA", f"{p.espesor_mm:.1f} mm",
+               f"FOV {_fmt(p.fov_mm)} mm", f"fantoma {p.posicion_fantoma}"]
+    texto = "Protocolo obligatorio: " + " · ".join(partes)
+    if p.condiciones_pendientes:
+        texto += " · con condiciones de consola sin confirmar"
+    return texto
+
+
+def texto_origen(equipo: Optional[str]) -> str:
+    """De dónde salió el protocolo de `equipo` y cuándo se fijó, más lo que falta
+    confirmar (la misma trazabilidad que `referencias_qc`)."""
+    p = PROTOCOLOS.get(equipo)
+    if p is None:
+        return (f"{SIN_PROTOCOLO_ENCABEZADO}: el catálogo no tiene un protocolo para "
+                f"{equipo!r} y no se inventa uno.")
+    lineas = [f"Protocolo fijo de {p.equipo}.", "", p.origen, "",
+              "Cambiar este protocolo corta la línea base del equipo: es una decisión "
+              "deliberada, que se hace editando el catálogo con su motivo, no desde esta pantalla."]
+    if p.condiciones_pendientes:
+        lineas += ["", "Condiciones de consola sin confirmar:"] + [f"- {c}" for c in p.condiciones_pendientes]
+    return "\n".join(lineas)
+
+
 def _cumple(esperado, encontrado, tolerancia: float, numerico: bool) -> Optional[bool]:
     if esperado is None:
         return None  # el protocolo no lo exige
