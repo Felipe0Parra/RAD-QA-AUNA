@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import pyqtgraph as pg
 from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modulos
 from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie
+from data.ManejoDatos.catphan_TAC.ventana_metadatos import mostrar_ventana_metadatos
 import pydicom
 import pydicom.data
 
@@ -188,6 +189,7 @@ class DicomVolume:
         # vez por `leer_serie` (el mismo corte de donde salen kv/ma).
         self.adquisicion = None
         self.series_descartadas = {}
+        self.detalle_series_descartadas = {}
         self.no_imagen = 0
         self.avisos = []
 
@@ -198,6 +200,7 @@ class DicomVolume:
             self.serie_uid = serie.serie_uid
             self.adquisicion = adquisicion_de_serie(serie)
             self.series_descartadas = serie.series_descartadas
+            self.detalle_series_descartadas = serie.detalle_series_descartadas
             self.no_imagen = serie.no_imagen
             self.avisos = serie.avisos
 
@@ -841,6 +844,15 @@ class VisualizadorDicom(QWidget):
     corte_seleccionado = pyqtSignal(int)
     imagen_cargada = pyqtSignal(object)
 
+    # A.3 (23-09): el equipo que el físico seleccionó en la pantalla (lo pone
+    # quien crea el visualizador) y la función que pide su confirmación al
+    # cargar una carpeta. `confirmador_de_carga(parent, vol, equipo) -> bool`
+    # es la ventana de metadatos; se puede sustituir POR INSTANCIA para decidir
+    # sin una persona (un `exec_()` modal sin nadie que lo conteste cuelga la
+    # suite: Trampa 2 de CLAUDE.md).
+    equipo_seleccionado = None
+    confirmador_de_carga = staticmethod(mostrar_ventana_metadatos)
+
 
     def __init__(self, parent=None, target_canvas=None):
         #print("VisualizadorDicom __init__ called")
@@ -982,12 +994,25 @@ class VisualizadorDicom(QWidget):
 
 
         # Cargar volumen DICOM
-        self.vol = DicomVolume(self.ruta_carpeta)
-        if self.vol.volumen_hu is None:
+        vol_nuevo = DicomVolume(self.ruta_carpeta)
+        if vol_nuevo.volumen_hu is None:
+            self.vol = vol_nuevo
             print("Error: No se pudo cargar el volumen DICOM.")
             return
-        else:
-            self.sel_imagen_btn.hide()
+
+        # A.3 (23-09): la ventana de metadatos, ANTES de detectar módulos, de
+        # emitir `imagen_cargada` y de mostrar el cuadro de cortes: solo
+        # necesita el encabezado DICOM, así que Cancelar no paga los segundos
+        # de pylinac y no deja nada a medias -- el volumen rechazado nunca llega
+        # a `self.vol`, ni a ninguna señal, ni a la pantalla. Cancelar deja
+        # todo como estaba antes de elegir la carpeta (un volumen anterior, si
+        # lo había, sigue siendo el activo).
+        if not bool(self.confirmador_de_carga(self, vol_nuevo, self.equipo_seleccionado)):
+            self.ruta_carpeta = self.vol.ruta_carpeta if self.vol is not None else None
+            return
+
+        self.vol = vol_nuevo
+        self.sel_imagen_btn.hide()
 
         ##############################################################################
         """                          INTERFAZ D CARGA                              """

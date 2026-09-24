@@ -84,6 +84,13 @@ class SerieCT:
     # propio CAMBIO exige avisar del paso no uniforme "sin fallar", y una
     # SerieCT es el único objeto que viaja hasta el llamador para hacerlo.
     avisos: list = field(default_factory=list)
+    # A.3 (23-09): de QUE eran las series descartadas -- `series_descartadas`
+    # solo cuenta archivos, y la ventana de metadatos tiene que poder decir
+    # "123 cortes de otra serie (Halcyon - PVA / Halcyon)" para que una carpeta
+    # mixta (tomografo + Halcyon) se vea como lo que es. Se mantiene aparte:
+    # `series_descartadas` conserva su forma para lo que ya la usa.
+    # {serie_uid: {"n", "modelo", "estacion", "descripcion_serie"}}
+    detalle_series_descartadas: dict = field(default_factory=dict)
 
 
 def _normal_desde_orientacion(iop):
@@ -203,6 +210,16 @@ def leer_serie(carpeta: str) -> SerieCT:
     primero_espacial = ds_por_ruta[cortes[0].ruta]
     etiquetas = {clave: getattr(primero_espacial, clave, None) for clave in ETIQUETAS_SERIE}
 
+    detalle_series_descartadas = {
+        uid: {
+            "n": n,
+            "modelo": _valor_simple(getattr(por_serie[uid][0][1], "ManufacturerModelName", None)),
+            "estacion": _valor_simple(getattr(por_serie[uid][0][1], "StationName", None)),
+            "descripcion_serie": _valor_simple(getattr(por_serie[uid][0][1], "SeriesDescription", None)),
+        }
+        for uid, n in series_descartadas.items()
+    }
+
     return SerieCT(
         carpeta=carpeta,
         serie_uid=serie_uid,
@@ -215,6 +232,7 @@ def leer_serie(carpeta: str) -> SerieCT:
         columnas=columnas,
         etiquetas=etiquetas,
         avisos=avisos,
+        detalle_series_descartadas=detalle_series_descartadas,
     )
 
 

@@ -276,6 +276,12 @@ def test_e_un_solo_volumen_vivo_siempre():
 
     v = VisualizadorDicom(target_canvas=canvas)
     assert v.use_external_canvas is True
+    # A.3 (23-09): cada carga pasa por la ventana de metadatos (un QDialog
+    # modal). Aqui se prueba la MEMORIA, no la ventana: se decide sin una
+    # persona (Trampa 2 de CLAUDE.md -- un exec_() sin nadie que lo conteste
+    # cuelga la suite). La ventana tiene sus propias pruebas en
+    # test_a3_ventana_de_metadatos.py.
+    v.confirmador_de_carga = lambda parent, vol, equipo: True
 
     v.visualizar_imagen_cargada(ruta1)
     assert v.vol is not None

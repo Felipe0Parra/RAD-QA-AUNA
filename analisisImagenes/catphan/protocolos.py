@@ -208,6 +208,10 @@ class FilaProtocolo:
     cumple: Optional[bool]
 
 
+# El rótulo del aviso, con UNA sola definición: lo usa el texto que se archiva
+# con cada prueba y el título de la confirmación de la ventana de A.3.
+ROTULO_FUERA_DE_PROTOCOLO = "Adquisición fuera de protocolo"
+
 # Estados de la identidad (`ComparacionProtocolo.identidad`):
 COINCIDE = "coincide"                # el DICOM es del equipo seleccionado
 OTRO_EQUIPO = "otro_equipo"          # el DICOM es de otro equipo conocido
@@ -254,7 +258,7 @@ class ComparacionProtocolo:
         if self.advertencia_identidad:
             lineas.append(f"Identidad: {self.advertencia_identidad}")
         if self.fuera_de_protocolo:
-            lineas.append("Adquisición fuera de protocolo: "
+            lineas.append(ROTULO_FUERA_DE_PROTOCOLO + ": "
                           + "; ".join(_texto_fila(f) for f in self.fuera_de_protocolo))
         return ". ".join(lineas) if lineas else None
 
@@ -267,9 +271,20 @@ def _fmt(valor) -> str:
     return str(valor)
 
 
+def texto_exigido(f: FilaProtocolo) -> str:
+    """Lo que el protocolo exige en esa fila, con su tolerancia si la tiene."""
+    if f.esperado is None:
+        return "no se exige"
+    return _fmt(f.esperado) + (f" ± {_fmt(f.tolerancia)}" if f.tolerancia else "")
+
+
+def texto_encontrado(f: FilaProtocolo) -> str:
+    """Lo que dice el DICOM en esa fila ('no publicado' si falta)."""
+    return _fmt(f.encontrado)
+
+
 def _texto_fila(f: FilaProtocolo) -> str:
-    exigido = _fmt(f.esperado) + (f" ± {_fmt(f.tolerancia)}" if f.tolerancia else "")
-    return f"{f.etiqueta}: {_fmt(f.encontrado)} (exigido {exigido})"
+    return f"{f.etiqueta}: {texto_encontrado(f)} (exigido {texto_exigido(f)})"
 
 
 def _cumple(esperado, encontrado, tolerancia: float, numerico: bool) -> Optional[bool]:

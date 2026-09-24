@@ -1,0 +1,330 @@
+"""A.3 (PLAN_HANDOFF_IMAGENES_22-09.md, reformulada el 23-09 a pedido del
+físico): una ventana de metadatos en CADA carga de una carpeta DICOM.
+
+El físico pidió *"que al seleccionar la carpeta, además de mostrar el cuadro de
+los cortes recomendados, primero muestre una ventana emergente con la
+información de metadatos del equipo"*. La ventana junta en un solo sitio lo
+que el plan repartía en dos avisos (el modal de identidad de A.2 y la franja de
+carpeta mixta de A.3), y lo hace ANTES de cualquier análisis:
+
+  1. EQUIPO -- lo que el propio DICOM dice: fabricante, modelo, estación, número
+     de serie, software.
+  2. ADQUISICION -- descripción de la serie, fecha, kV, mA, mAs, CTDIvol,
+     espesor, kernel/filtro, FOV, píxel, número de cortes.
+  3. PROTOCOLO EXIGIDO para el equipo seleccionado (catálogo de A.2), al lado y
+     fila por fila. Si las imágenes son de otro equipo, la ventana lo dice
+     arriba y en rojo.
+  4. LA CARPETA -- series descartadas (y de qué modelo), archivos que no son
+     imagen CT, paso no uniforme. Dos niveles: informativo (un RTSTRUCT es
+     normal y no debe gritar) y atención (más de una serie).
+
+Botones Continuar y Cancelar. Cancelar no carga nada. Continuar con alguna fila
+que no cumple pide una confirmación explícita; la desviación queda archivada
+con cada prueba (A.2). Una adquisición que no cumple el protocolo NO bloquea: la
+toma no la controla la aplicación.
+
+DA-18: sin símbolos de correcto/incorrecto en los textos del usuario -- los
+estados se dicen con palabras ("Cumple", "No cumple", "No se exige") y color.
+
+El CONTENIDO se arma en una función pura (`construir_modelo_ventana`), probable
+sin Qt; el diálogo solo lo dibuja. La decisión se puede tomar sin una persona
+(Trampa 2 de CLAUDE.md: un `exec_()` sin nadie que lo conteste cuelga la suite):
+`VisualizadorDicom.confirmador_de_carga` es reemplazable por instancia.
+"""
+from __future__ import annotations
+
+import html
+from dataclasses import dataclass, field
+from typing import Optional
+
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (QDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+                             QScrollArea, QVBoxLayout, QWidget)
+
+from analisisImagenes.catphan.protocolos import (
+    COINCIDE, NO_IDENTIFICADO, OTRO_EQUIPO, ROTULO_FUERA_DE_PROTOCOLO, SIN_EQUIPO, SIN_PROTOCOLO,
+    comparar_con_protocolo, texto_encontrado, texto_exigido)
+
+NO_PUBLICADO = "(no lo publica el equipo)"
+
+# Niveles de los avisos de la carpeta y del banner.
+INFO = "info"
+ATENCION = "atencion"
+ERROR = "error"
+AVISO = "aviso"
+
+# Estados de una fila de protocolo (palabras, no símbolos: DA-18).
+CUMPLE = "Cumple"
+NO_CUMPLE = "No cumple"
+NO_SE_EXIGE = "No se exige"
+
+_COLOR = {
+    CUMPLE: "#1e8449",
+    NO_CUMPLE: "#c0392b",
+    NO_SE_EXIGE: "#7f8c8d",
+    ERROR: "#c0392b",
+    AVISO: "#b9770e",
+    ATENCION: "#b9770e",
+    INFO: "#566573",
+}
+
+
+def _txt(valor) -> str:
+    """Un valor DICOM para mostrar: lo que falta se dice, no se deja en blanco
+    ni se escribe 'None' (el iX no publica descripción, CTDIvol ni filtro)."""
+    if valor is None or valor == "":
+        return NO_PUBLICADO
+    if isinstance(valor, float):
+        return str(int(valor)) if valor == int(valor) else f"{valor:g}"
+    return str(valor)
+
+
+@dataclass
+class FilaVentana:
+    etiqueta: str
+    exigido: str
+    encontrado: str
+    estado: str  # CUMPLE | NO_CUMPLE | NO_SE_EXIGE
+
+
+@dataclass
+class ModeloVentana:
+    equipo_seleccionado: Optional[str]
+    identidad: list = field(default_factory=list)        # [(etiqueta, valor)]
+    adquisicion: list = field(default_factory=list)      # [(etiqueta, valor)]
+    banner: Optional[tuple] = None                       # (nivel, texto) o None
+    protocolo_titulo: str = "Protocolo exigido"
+    protocolo: list = field(default_factory=list)        # [FilaVentana]
+    protocolo_nota: Optional[str] = None
+    carpeta: list = field(default_factory=list)          # [(nivel, texto)]
+    requiere_confirmacion: bool = False
+    resumen_desviacion: Optional[str] = None
+    identidad_estado: str = SIN_EQUIPO
+
+    def texto_confirmacion(self) -> str:
+        cuerpo = (self.resumen_desviacion or "").rstrip(".")
+        if self.identidad_estado == OTRO_EQUIPO:
+            cola = (f"Si continúa, las pruebas se guardarán como de '{self.equipo_seleccionado}', "
+                    f"con la marca de desviación.")
+        else:
+            cola = ("Se puede analizar igual, pero cada prueba quedará marcada con esa desviación "
+                    "y no será comparable con la línea base.")
+        return f"{cuerpo}.\n\n{cola}\n\n¿Desea continuar?"
+
+
+def _carpeta(vol, adq: dict) -> list:
+    filas = []
+    n_cortes = adq.get("n_cortes")
+    if n_cortes is not None:
+        filas.append((INFO, f"Se leyeron {n_cortes} cortes de una sola serie."))
+
+    detalle = getattr(vol, "detalle_series_descartadas", None) or {}
+    descartadas = getattr(vol, "series_descartadas", None) or {}
+    modelo_principal = adq.get("modelo")
+    for uid, n in descartadas.items():
+        d = detalle.get(uid) or {}
+        origen = " / ".join(str(p) for p in (d.get("modelo"), d.get("estacion")) if p)
+        descripcion = d.get("descripcion_serie")
+        detalle_txt = ", ".join(p for p in (origen, descripcion) if p)
+        if d.get("modelo") and modelo_principal and d.get("modelo") != modelo_principal:
+            filas.append((ATENCION,
+                          f"Carpeta mixta de equipos distintos: se descartaron {n} cortes de otra serie "
+                          f"({detalle_txt}); se analiza la serie de {modelo_principal}."))
+        else:
+            filas.append((ATENCION,
+                          f"La carpeta trae más de una serie: se descartaron {n} cortes de otra serie"
+                          + (f" ({detalle_txt})." if detalle_txt else ".")))
+
+    no_imagen = getattr(vol, "no_imagen", 0) or 0
+    if no_imagen:
+        filas.append((INFO, f"{no_imagen} archivo(s) que no son imagen CT (por ejemplo, un RTSTRUCT) "
+                            f"se ignoraron: es normal."))
+    for aviso in getattr(vol, "avisos", None) or []:
+        filas.append((ATENCION, str(aviso)))
+    return filas
+
+
+def construir_modelo_ventana(vol, equipo_seleccionado: Optional[str]) -> ModeloVentana:
+    """El contenido de la ventana para `vol` (un `DicomVolume` o cualquier
+    objeto con `adquisicion`, `series_descartadas`, `detalle_series_descartadas`,
+    `no_imagen` y `avisos`) frente al `equipo_seleccionado`. Función pura."""
+    adq = getattr(vol, "adquisicion", None) or {}
+    c = comparar_con_protocolo(equipo_seleccionado, adq)
+
+    identidad = [
+        ("Fabricante", _txt(adq.get("fabricante"))),
+        ("Modelo", _txt(adq.get("modelo"))),
+        ("Estación", _txt(adq.get("estacion"))),
+        ("Número de serie del equipo", _txt(adq.get("numero_serie_equipo"))),
+        ("Software", _txt(adq.get("software"))),
+    ]
+    adquisicion = [
+        ("Descripción de la serie", _txt(adq.get("descripcion_serie"))),
+        ("Fecha de adquisición", _txt(adq.get("fecha_adquisicion"))),
+        ("kV", _txt(adq.get("kv"))),
+        ("mA", _txt(adq.get("ma"))),
+        ("mAs", _txt(adq.get("mas"))),
+        ("Tiempo de exposición [ms]", _txt(adq.get("tiempo_exposicion_ms"))),
+        ("CTDIvol [mGy]", _txt(adq.get("ctdi_vol_mgy"))),
+        ("Espesor de corte [mm]", _txt(adq.get("espesor_mm"))),
+        ("Kernel", _txt(adq.get("kernel"))),
+        ("Filtro", _txt(adq.get("filtro"))),
+        ("FOV [mm]", _txt(adq.get("fov_mm"))),
+        ("Píxel [mm]", _txt(adq.get("pixel_mm"))),
+        ("Cortes", _txt(adq.get("n_cortes"))),
+    ]
+
+    filas = []
+    for f in c.filas:
+        estado = NO_SE_EXIGE if f.cumple is None else (CUMPLE if f.cumple else NO_CUMPLE)
+        filas.append(FilaVentana(f.etiqueta, texto_exigido(f), texto_encontrado(f), estado))
+
+    banner = None
+    nota = None
+    if c.identidad == OTRO_EQUIPO:
+        banner = (ERROR, f"Estas imágenes son de {c.imagenes_de} (equipo identificado: "
+                         f"{c.equipo_identificado}) y usted seleccionó {c.equipo_seleccionado}.")
+    elif c.identidad == NO_IDENTIFICADO:
+        banner = (AVISO, f"No se reconoce el equipo de estas imágenes ({c.imagenes_de}): no se puede "
+                         f"confirmar que sean de {c.equipo_seleccionado}.")
+    elif c.identidad == SIN_PROTOCOLO:
+        banner = (AVISO, f"El equipo seleccionado ({c.equipo_seleccionado}) no tiene protocolo de imagen "
+                         f"definido: no hay con qué comparar.")
+        nota = "Sin protocolo definido para este equipo."
+    elif c.identidad == SIN_EQUIPO:
+        nota = "No hay un equipo seleccionado con el que comparar."
+    elif c.advertencia_identidad:
+        banner = (AVISO, f"Identidad: {c.advertencia_identidad}")
+
+    requiere = c.identidad in (OTRO_EQUIPO, NO_IDENTIFICADO) or any(f.cumple is False for f in c.filas)
+    titulo = (f"Protocolo exigido para {equipo_seleccionado}" if equipo_seleccionado else "Protocolo exigido")
+
+    return ModeloVentana(
+        equipo_seleccionado=equipo_seleccionado, identidad=identidad, adquisicion=adquisicion,
+        banner=banner, protocolo_titulo=titulo, protocolo=filas, protocolo_nota=nota,
+        carpeta=_carpeta(vol, adq), requiere_confirmacion=requiere,
+        resumen_desviacion=c.desviacion_texto(), identidad_estado=c.identidad)
+
+
+# ---------------------------------------------------------------------------
+# El diálogo: solo dibuja el modelo
+# ---------------------------------------------------------------------------
+
+def _tabla_clave_valor(pares) -> str:
+    filas = "".join(
+        f"<tr><td style='padding-right:14px;color:#566573'>{html.escape(k)}</td>"
+        f"<td><b>{html.escape(v)}</b></td></tr>" for k, v in pares)
+    return f"<table cellspacing='2'>{filas}</table>"
+
+
+def _tabla_protocolo(filas) -> str:
+    cab = ("<tr><th align='left'>Campo</th><th align='left'>Exigido</th>"
+           "<th align='left'>Encontrado</th><th align='left'>Estado</th></tr>")
+    cuerpo = "".join(
+        f"<tr><td style='padding-right:14px'>{html.escape(f.etiqueta)}</td>"
+        f"<td style='padding-right:14px'>{html.escape(f.exigido)}</td>"
+        f"<td style='padding-right:14px'><b>{html.escape(f.encontrado)}</b></td>"
+        f"<td><b style='color:{_COLOR[f.estado]}'>{f.estado}</b></td></tr>" for f in filas)
+    return f"<table cellspacing='2'>{cab}{cuerpo}</table>"
+
+
+def _lista_carpeta(filas) -> str:
+    return "".join(
+        f"<p style='margin:2px 0;color:{_COLOR[nivel]}'>"
+        f"{'<b>Atención: </b>' if nivel == ATENCION else ''}{html.escape(texto)}</p>"
+        for nivel, texto in filas)
+
+
+class VentanaMetadatos(QDialog):
+    """La ventana. `exec_()` devuelve `Accepted` (Continuar) o `Rejected`
+    (Cancelar); no hay más lógica aquí, para que se pueda decidir con un
+    `exec_` sustituido en las pruebas."""
+
+    def __init__(self, parent, modelo: ModeloVentana):
+        super().__init__(parent)
+        self.modelo = modelo
+        self.setWindowTitle("Datos de la adquisición")
+        self.setModal(True)
+        self.setMinimumWidth(640)
+
+        raiz = QVBoxLayout(self)
+        if modelo.banner:
+            nivel, texto = modelo.banner
+            banner = QLabel(texto)
+            banner.setTextFormat(Qt.PlainText)
+            banner.setWordWrap(True)
+            banner.setObjectName("banner")
+            banner.setStyleSheet(
+                f"background:{_COLOR[nivel]};color:white;padding:8px;font-weight:bold;")
+            raiz.addWidget(banner)
+
+        contenido = QWidget()
+        cuerpo = QVBoxLayout(contenido)
+        self._bloques = {}
+        self._agregar(cuerpo, "equipo", "Equipo (leído del DICOM)", _tabla_clave_valor(modelo.identidad))
+        self._agregar(cuerpo, "adquisicion", "Adquisición", _tabla_clave_valor(modelo.adquisicion))
+        if modelo.protocolo:
+            proto = _tabla_protocolo(modelo.protocolo)
+        else:
+            proto = f"<p>{html.escape(modelo.protocolo_nota or '')}</p>"
+        self._agregar(cuerpo, "protocolo", modelo.protocolo_titulo, proto)
+        self._agregar(cuerpo, "carpeta", "La carpeta", _lista_carpeta(modelo.carpeta))
+        cuerpo.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(contenido)
+        raiz.addWidget(scroll)
+
+        botones = QHBoxLayout()
+        botones.addStretch()
+        self.boton_cancelar = QPushButton("Cancelar")
+        self.boton_continuar = QPushButton("Continuar")
+        self.boton_continuar.setDefault(True)
+        self.boton_cancelar.clicked.connect(self.reject)
+        self.boton_continuar.clicked.connect(self.accept)
+        botones.addWidget(self.boton_cancelar)
+        botones.addWidget(self.boton_continuar)
+        raiz.addLayout(botones)
+        self.resize(720, 640)
+
+    def _agregar(self, layout, clave, titulo, html_cuerpo):
+        caja = QGroupBox(titulo)
+        interior = QVBoxLayout(caja)
+        etiqueta = QLabel(html_cuerpo)
+        etiqueta.setTextFormat(Qt.RichText)
+        etiqueta.setWordWrap(True)
+        interior.addWidget(etiqueta)
+        layout.addWidget(caja)
+        self._bloques[clave] = (titulo, html_cuerpo)
+
+    def texto_visible(self) -> str:
+        """Todo el texto que ve el usuario (títulos, banner, cuerpos y botones),
+        para que una prueba pueda afirmar sobre él."""
+        partes = [self.windowTitle()]
+        for etiqueta in self.findChildren(QLabel):
+            partes.append(etiqueta.text())
+        for caja in self.findChildren(QGroupBox):
+            partes.append(caja.title())
+        for boton in self.findChildren(QPushButton):
+            partes.append(boton.text())
+        return "\n".join(partes)
+
+
+def mostrar_ventana_metadatos(parent, vol, equipo_seleccionado: Optional[str]) -> bool:
+    """Muestra la ventana y devuelve `True` si el físico decide continuar.
+
+    Cancelar devuelve `False`. Continuar con alguna fila que no cumple (o con
+    imágenes de otro equipo) pide una segunda confirmación explícita, que
+    también puede negar; sin filas que incumplan, Continuar basta.
+    """
+    modelo = construir_modelo_ventana(vol, equipo_seleccionado)
+    dialogo = VentanaMetadatos(parent, modelo)
+    if dialogo.exec_() != QDialog.Accepted:
+        return False
+    if not modelo.requiere_confirmacion:
+        return True
+    respuesta = QMessageBox.question(
+        parent, ROTULO_FUERA_DE_PROTOCOLO, modelo.texto_confirmacion(),
+        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+    return respuesta == QMessageBox.Yes

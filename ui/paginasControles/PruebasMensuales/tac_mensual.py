@@ -797,6 +797,8 @@ class PruebaMensualTAC(PruebaMensual600):
         # Inicializar el visualizador principal si no existe (para self.col2)
         if not hasattr(self, 'visualizador_principal'):
             self.visualizador_principal = VisualizadorDicom(target_canvas=self.canvas)
+            # A.3: la ventana de metadatos compara contra ESTE equipo
+            self.visualizador_principal.equipo_seleccionado = getattr(self, 'equipo_f', None)
             # Agregar solo los controles (sliders y botón elegir corte) a self.col2
             self.col2.addWidget(self.visualizador_principal.contenedor_grafica)
             # Conectar señales del visualizador principal
