@@ -250,16 +250,16 @@ BASELINE_D1_PENDIENTE = {
     ('models/PDF/Mensuales/reportes_mensuales.py', 1587, 's'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1633, 's'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1634, 's'),
-    ('models/PDF/pdf.py', 1533, 'mm'),
-    ('models/PDF/pdf.py', 1534, 'mm'),
-    ('models/PDF/pdf.py', 1599, 'mm'),
-    ('models/PDF/pdf.py', 1600, 'mm'),
-    ('models/PDF/pdf.py', 1654, 'mm'),
-    ('models/PDF/pdf.py', 1970, 'mm'),
-    ('models/PDF/pdf.py', 2146, '°'),
-    ('models/PDF/pdf.py', 2147, '°'),
-    ('models/PDF/pdf.py', 2198, '°'),
-    ('models/PDF/pdf.py', 2199, '°'),
+    ('models/PDF/pdf.py', 1546, 'mm'),  # E.1 (24-09): 1533->1546
+    ('models/PDF/pdf.py', 1547, 'mm'),  # E.1 (24-09): 1534->1547
+    ('models/PDF/pdf.py', 1612, 'mm'),  # E.1 (24-09): 1599->1612
+    ('models/PDF/pdf.py', 1613, 'mm'),  # E.1 (24-09): 1600->1613
+    ('models/PDF/pdf.py', 1667, 'mm'),  # E.1 (24-09): 1654->1667
+    ('models/PDF/pdf.py', 1983, 'mm'),  # E.1 (24-09): 1970->1983
+    ('models/PDF/pdf.py', 2159, '°'),  # E.1 (24-09): 2146->2159
+    ('models/PDF/pdf.py', 2160, '°'),  # E.1 (24-09): 2147->2160
+    ('models/PDF/pdf.py', 2211, '°'),  # E.1 (24-09): 2198->2211
+    ('models/PDF/pdf.py', 2212, '°'),  # E.1 (24-09): 2199->2212
     ('services/MLCs_calibration_service.py', 112, 'mm'),
     ('services/MLCs_calibration_service.py', 256, 'mm'),
     ('services/MLCs_calibration_service.py', 315, 'mm'),

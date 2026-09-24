@@ -40,3 +40,8 @@ BD_REBUILD_11_09 = CARPETA_BD / "BaseDatosQA(Rebuild_11-09-2026).db"
 # (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md), que exige ensayar toda
 # migración de esquema sobre una copia de la producción real.
 BD_REBUILD_14_09 = CARPETA_BD / "BaseDatosQA(Rebuild_14-09-2026).db"
+
+# Rebuild del 21-09-2026: la copia con las sesiones de imágenes 47 (Halcyon) y 48
+# (Tomógrafo) que el físico analizó ese día, y la 42 (Tomógrafo, 07/2026). La usa
+# el informe PDF de CatPhan (E.1/E.3/E.2 de PLAN_HANDOFF_IMAGENES_22-09.md).
+BD_REBUILD_21_09 = CARPETA_BD / "BaseDatosQA(Rebuild_21-09-2026).db"

@@ -21,7 +21,7 @@ from models.PDF.PDFWindow import PdfViewer
 from models.PDF.Mensuales.reportes_mensuales import (_obtener_datos_tabla_relacionada, _obtener_info_usuario, 
                                                     _obtener_datos_tabla_principal, 
                                                     _crear_tabla_equipos)
-from models.PDF.Imagenes.reportes_control_sistema_imagenes import ReporteControlSistemaImagenes
+from models.PDF.Imagenes.reportes_control_sistema_imagenes import ReporteControlSistemaImagenes, titulo_del_informe
 from services.anulacion import filtro_activo
 from data.ManejoDatos.catphan_TAC.catphan_db import reconstruir_resultados_desde_bd
 
@@ -116,7 +116,7 @@ def reporte_anual(self, fecha, maquina="", id_maquina="",
             if tablas_img:
                 print(f"Se encontraron {len(tablas_img)} tablas del sistema de imágenes")
                 # Añadir las tablas del sistema de imágenes al diccionario principal
-                tablas_reporte['titulo_sistema_imagenes'] = 'Control de Calidad del sistema de imágenes'
+                tablas_reporte['titulo_sistema_imagenes'] = titulo_del_informe()
                 tablas_reporte.update(tablas_img)
             else:
                 print("No se encontraron datos del sistema de imágenes para esta sesión")

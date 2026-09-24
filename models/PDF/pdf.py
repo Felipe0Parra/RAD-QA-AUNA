@@ -430,7 +430,8 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
         return qbyte_array
 
 def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" ", maquina=" ", id_maquina=" ", nombre_pdf="reporte_multitabla.pdf",
-                                    logo_path="logo.png", firma=None, role="", user2=None, firma2=None, role2=None, temp=False, sistema_imagenes=False):
+                                    logo_path="logo.png", firma=None, role="", user2=None, firma2=None, role2=None, temp=False, sistema_imagenes=False,
+                                    titulo_informe=None, sesion=None):
 
     """Genera un PDF con múltiples tablas separadas
 
@@ -438,6 +439,9 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
         user2: Nombre del segundo usuario (físico 2), opcional
         firma2: Ruta de la firma del segundo usuario, opcional
         role2: Rol del segundo usuario, opcional
+        titulo_informe: (E.1) título completo del informe de imágenes de CatPhan; solo
+            se usa si este PDF imprime de verdad las tablas de ese informe
+        sesion: (E.1) número de la sesión de control, junto a la fecha; mismo criterio
     """
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.platypus import SimpleDocTemplate, Spacer
@@ -449,6 +453,13 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
         doc = SimpleDocTemplate(pdf_bytes, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=245, bottomMargin=100)
     else:
         doc = SimpleDocTemplate(nombre_pdf, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=245, bottomMargin=100)
+
+    # E.1: UN predicado decide si este PDF es el informe de imágenes de CatPhan. Lo leen
+    # la elección de tablas (abajo) y el encabezado: uno no puede decir CatPhan mientras
+    # el otro imprime dosimetría.
+    es_informe_de_imagenes = bool(sistema_imagenes) and maquina in ('Tomógrafo', 'Halcyon', 'Clinac ix')
+    if not es_informe_de_imagenes:
+        titulo_informe, sesion = None, None
 
     # Función para agregar encabezado y pie de página
     def add_header_footer(canvas, doc):
@@ -465,7 +476,9 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
         canvas.setFont("Helvetica-Bold", 10)
         canvas.drawRightString(width - 40, height - 50, "Instituto de Cancerología Las Américas")
         canvas.setFont("Helvetica", 10)
-        canvas.drawRightString(width - 40, height - 65, f"Control de calidad {tipo_reporte} {id_maquina}")
+        canvas.drawRightString(width - 40, height - 65,
+                               f"{titulo_informe} {id_maquina}" if titulo_informe
+                               else f"Control de calidad {tipo_reporte} {id_maquina}")
 
         # Rectángulo del título
         canvas.setStrokeColor(colors.black)
@@ -475,7 +488,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
         # Título dentro del rectángulo
         canvas.setFillColor(colors.black)
         canvas.setFont("Helvetica-Bold", 14)
-        canvas.drawCentredString(width/2, height - 110, f"Control de calidad {tipo_reporte}")
+        canvas.drawCentredString(width/2, height - 110, titulo_informe or f"Control de calidad {tipo_reporte}")
         canvas.setFont("Helvetica", 12)
         canvas.drawCentredString(width/2, height - 125, "Clínica Las Américas AUNA")
         canvas.setFont("Helvetica-Oblique", 10)
@@ -486,7 +499,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
         canvas.drawString(40, height - 180, "Información general")
         canvas.setFont("Helvetica", 10)
         canvas.drawString(40, height - 195, f"Máquina: {'GammaMedPlus iX' if maquina == 'Braquiterapia' else maquina}")
-        canvas.drawString(40, height - 210, f"Fecha: {fecha}")
+        canvas.drawString(40, height - 210, f"Fecha: {fecha}" + (f"     Sesión N° {sesion}" if sesion is not None else ""))
         canvas.drawString(40, height - 225, f"Físico Médico: {user}")
         canvas.drawString(40, height - 240, f"Físico Médico 2: {user2}" if user2 else "")
 
@@ -553,7 +566,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
         orden_tablas = ['equipos', 'aspectos_mecanicos_gantry', 'aspectos_mecanicos_colimador', 'indicadores_laser', 'indicadores_camilla',
                         'desplazamiento_isocentro', 'tamanos_campo', 'dosimetricos']
 
-    elif (maquina ==  'Tomógrafo' and sistema_imagenes) or (maquina == 'Halcyon' and sistema_imagenes) or (maquina == 'Clinac ix' and sistema_imagenes):
+    elif es_informe_de_imagenes:
         print('Generando reporte de sistema de imágenes...')
         orden_tablas = ['espesor', 'parametros_espesor','imagen_espesor', 'tamano_pixel', 'parametros_tamano_pixel', 'imagen_tamano_pixel',
                         'parametros_resolucion_contraste', 'resolucion_contraste', 'imagen_resolucion_contraste', 'resolucion_espacial',

@@ -1036,12 +1036,16 @@ class ReporteControlSistemaImagenes:
                 tipo_reporte=tipo_reporte,
                 maquina=equipo,
                 id_maquina=equipo,
-                nombre_pdf=f"reporte_catphan_{equipo}_{fecha}.pdf",
+                nombre_pdf=nombre_archivo_pdf(equipo, fecha),
                 logo_path=logo_path,
                 firma=usuario_info['firma_path'],
                 role=usuario_info['rol'],
                 temp=True,
-                sistema_imagenes=sistema_imagenes
+                sistema_imagenes=sistema_imagenes,
+                # E.1: el generador solo lo usa si este informe imprime de verdad las
+                # tablas de imágenes (mismo predicado que elige las tablas).
+                titulo_informe=titulo_del_informe(),
+                sesion=info_sesion.get('ref')
             )
             
             # Mostrar PDF en visor
@@ -1063,6 +1067,25 @@ class ReporteControlSistemaImagenes:
             import traceback
             traceback.print_exc()
             return False
+
+# E.1 (PLAN_HANDOFF_IMAGENES_22-09.md §6): la IDENTIDAD del informe, en un solo sitio.
+# El documento decía "Control de calidad Control Sistema de Imágenes" y en ningún lado
+# CatPhan. El título de la caja y del encabezado, el título de la sección de imágenes del
+# PDF anual (`reportes_anuales.py`) y el nombre del archivo salen de estas líneas: si el
+# análisis cambia de nombre, cambia aquí y en ningún otro sitio.
+NOMBRE_ANALISIS = "CatPhan"
+NOMBRE_CONTROL = "Control de calidad del sistema de imágenes"
+
+
+def titulo_del_informe():
+    """Título del informe: 'Análisis de CatPhan — Control de calidad del sistema de imágenes'."""
+    return f"Análisis de {NOMBRE_ANALISIS} — {NOMBRE_CONTROL}"
+
+
+def nombre_archivo_pdf(equipo, fecha):
+    """Nombre del PDF, derivado del mismo nombre del análisis que el título."""
+    return f"reporte_{NOMBRE_ANALISIS.lower()}_{equipo}_{fecha}.pdf"
+
 
 # Función de conveniencia para uso directo
 def generar_reporte_sistema_imagenes(parent_widget, fecha, equipo, user_id, ref=None, sistema_imagenes=True):
