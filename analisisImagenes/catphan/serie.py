@@ -13,6 +13,7 @@ CLAUDE.md: "una operación, una definición").
 """
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass, field
 from typing import Optional
@@ -52,6 +53,10 @@ ETIQUETAS_SERIE = (
     # El Halcyon publica su "filtro" aquí (`'Tit V2,HF V2'`) y deja
     # `ConvolutionKernel` en la cadena `'None'`; el tomógrafo trae los dos.
     "FilterType",
+    # B.2 (23-09): la ventana que el propio equipo propone para mostrar esta serie (iX 402/364, Halcyon -21/144,
+    # tomografo 40/200). El visor arranca con ella; se lee aqui, una vez, como el resto.
+    "WindowCenter",
+    "WindowWidth",
 )
 
 
@@ -266,6 +271,30 @@ def _fecha_iso(valor):
     if len(s) == 8 and s.isdigit():
         return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
     return s or None
+
+
+def _primer_numero(valor):
+    """El primer valor numerico de una etiqueta DICOM (que puede venir multivalor), o `None`."""
+    if valor is None:
+        return None
+    if not isinstance(valor, (str, bytes)) and hasattr(valor, "__iter__"):
+        valor = next(iter(valor), None)
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if math.isfinite(numero) else None
+
+
+def ventana_de_serie(serie):
+    """`(WindowCenter, WindowWidth)` que el equipo propone para esta serie, o `None` si no las trae o no tienen sentido
+    (ancho no positivo). B.2: es el valor inicial de los deslizadores del visor. Si vienen multivalor se toma el primero
+    de cada una, que es el par que el equipo pone de primero."""
+    centro = _primer_numero(serie.etiquetas.get("WindowCenter"))
+    ancho = _primer_numero(serie.etiquetas.get("WindowWidth"))
+    if centro is None or ancho is None or ancho <= 0:
+        return None
+    return (centro, ancho)
 
 
 def adquisicion_de_serie(serie: SerieCT) -> dict:

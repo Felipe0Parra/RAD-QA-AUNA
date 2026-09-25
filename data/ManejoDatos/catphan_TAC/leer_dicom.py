@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSlider, QWidget,
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import pyqtgraph as pg
 from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modulos
-from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie
+from analisisImagenes.catphan import ventana as ventana_mod
+from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie, ventana_de_serie
 from data.ManejoDatos.catphan_TAC.ventana_metadatos import mostrar_ventana_metadatos
 import pydicom
 import pydicom.data
@@ -188,6 +189,8 @@ class DicomVolume:
         # A.1 (23-09): identidad y adquisicion de ESTA serie, leidas una sola
         # vez por `leer_serie` (el mismo corte de donde salen kv/ma).
         self.adquisicion = None
+        # B.2 (23-09): la ventana (WindowCenter, WindowWidth) que el equipo propone para esta serie, o None.
+        self.ventana_dicom = None
         self.series_descartadas = {}
         self.detalle_series_descartadas = {}
         self.no_imagen = 0
@@ -199,6 +202,7 @@ class DicomVolume:
             serie = leer_serie(self.ruta_carpeta)
             self.serie_uid = serie.serie_uid
             self.adquisicion = adquisicion_de_serie(serie)
+            self.ventana_dicom = ventana_de_serie(serie)
             self.series_descartadas = serie.series_descartadas
             self.detalle_series_descartadas = serie.detalle_series_descartadas
             self.no_imagen = serie.no_imagen
@@ -926,18 +930,20 @@ class VisualizadorDicom(QWidget):
         self.slider_corte.setRange(0, 381)
         slider_layout.addWidget(self.slider_corte)
         # Control de nivel (brillo)
+        # B.2: estos son los valores de ANTES de cargar nada; al cargar una carpeta el rango y el valor inicial salen del
+        # volumen (`_ajustar_ventana_al_volumen`).
         self.slider_wl = QSlider(Qt.Horizontal)
-        self.slider_wl.setRange(-1000, 500)
-        self.slider_wl.setValue(40)
-        self.slider_wl_label = QLabel("Nivel (brillo): 40")
+        self.slider_wl.setRange(ventana_mod.WL_MIN_ANTERIOR, ventana_mod.WL_MAX_ANTERIOR)
+        self.slider_wl.setValue(ventana_mod.WL_INICIAL_ANTERIOR)
+        self.slider_wl_label = QLabel(f"Nivel (brillo): {ventana_mod.WL_INICIAL_ANTERIOR}")
         slider_layout.addWidget(self.slider_wl_label)
         slider_layout.addWidget(self.slider_wl)
 
         # Control de ventana (contraste)
         self.slider_ww = QSlider(Qt.Horizontal)
-        self.slider_ww.setRange(1, 2000)
-        self.slider_ww.setValue(400)
-        self.slider_ww_label = QLabel("Ventana (contraste): 400")
+        self.slider_ww.setRange(1, ventana_mod.WW_MAX_ANTERIOR)
+        self.slider_ww.setValue(ventana_mod.WW_INICIAL_ANTERIOR)
+        self.slider_ww_label = QLabel(f"Ventana (contraste): {ventana_mod.WW_INICIAL_ANTERIOR}")
         slider_layout.addWidget(self.slider_ww_label)
         slider_layout.addWidget(self.slider_ww)
 
@@ -1036,6 +1042,9 @@ class VisualizadorDicom(QWidget):
         self.info_label.show()
         self.elegir_corte_btn.show()
 
+        # B.2: el rango de los deslizadores y su valor inicial salen del volumen y de la ventana del DICOM
+        self._ajustar_ventana_al_volumen()
+
         # Aplicar ventana inicial
         self.actualizar_ventana()
 
@@ -1082,6 +1091,29 @@ class VisualizadorDicom(QWidget):
 
 
 ##########################################################################################################################################
+
+    def _ajustar_ventana_al_volumen(self):
+        """B.2: el rango de los deslizadores de nivel y ventana y su valor inicial salen del volumen cargado y de la
+        ventana que propone el DICOM (`ventana.rango_de_ventana`), no de constantes. Sin señales: no es un cambio del
+        físico, y el redibujado lo hace quien llama (`actualizar_ventana`) una sola vez."""
+        rango = ventana_mod.rango_de_ventana(self.vol.volumen_hu, self.vol.ventana_dicom)
+        for s in (self.slider_wl, self.slider_ww):
+            s.blockSignals(True)
+        try:
+            self.slider_wl.setRange(rango.wl_min, rango.wl_max)
+            self.slider_ww.setRange(1, rango.ww_max)
+            self.slider_wl.setValue(rango.wl_inicial)
+            self.slider_ww.setValue(rango.ww_inicial)
+        finally:
+            for s in (self.slider_wl, self.slider_ww):
+                s.blockSignals(False)
+        if rango.origen_inicial == "dicom":
+            origen = f"Valor inicial: la ventana del DICOM ({rango.wl_inicial} / {rango.ww_inicial})."
+        else:
+            origen = "Valor inicial: el predeterminado (el DICOM no trae ventana)."
+        self.slider_wl.setToolTip(f"Rango derivado del volumen cargado: {rango.wl_min} a {rango.wl_max} HU. {origen}")
+        self.slider_ww.setToolTip(f"Rango derivado del volumen cargado: 1 a {rango.ww_max} HU. {origen}")
+        self.rango_ventana = rango
 
     def _on_slider_changed(self):
         """Maneja cambios en sliders con debouncing optimizado para mejor rendimiento."""
