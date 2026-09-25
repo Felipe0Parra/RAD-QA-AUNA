@@ -55,7 +55,14 @@ MENSAJES_RECHAZO = {
     _datos.FUENTE_OBLIGATORIA: "Debe indicar de dónde sale el número (fuente).",
     _datos.OBSERVACIONES_OBLIGATORIAS: "Debe escribir una observación.",
     _datos.VALOR_INVALIDO: "El valor debe ser un número mayor que cero.",
+    _datos.UNIDAD_OBLIGATORIA: "Debe indicar la unidad de la referencia.",
+    _datos.RESPONSABLE_OBLIGATORIO: "Elija el físico responsable de esta referencia.",
+    _datos.RESPONSABLE_INVALIDO: "El responsable debe ser un físico médico activo.",
 }
+
+# F.1: lo que dice la tabla de una referencia fijada antes de que la unidad fuera obligatoria (las del 22-09).
+SIN_UNIDAD_REGISTRADA = "sin registrar"
+PLACEHOLDER_RESPONSABLE = "---- Selecciona el físico responsable"
 
 
 def _texto_energia(energia):
@@ -134,7 +141,17 @@ class Referencias(QWidget):
         self.in_valor = QLineEdit()
         self.in_valor.setPlaceholderText("Número mayor que cero, p. ej. 0.627")
         self.in_unidad = QLineEdit()
-        self.in_unidad.setPlaceholderText("Opcional")
+        self.in_unidad.setPlaceholderText("Obligatoria (calidad: 1, adimensional)")
+        self.in_unidad.setText(self._unidad_por_defecto())
+        # F.1: quién firma la referencia. La propia cuenta si es un físico médico; si no (un administrador), hay que
+        # elegirlo, igual que se elige el segundo físico en los controles.
+        self.cb_responsable = QComboBox()
+        self.cb_responsable.addItem(PLACEHOLDER_RESPONSABLE, None)
+        for nombre in _datos.fisicos_responsables():
+            self.cb_responsable.addItem(nombre.strip(), nombre)
+        propio = self.cb_responsable.findData(self._nombre_de_la_sesion())
+        if propio > 0:
+            self.cb_responsable.setCurrentIndex(propio)
         self.in_fuente = QLineEdit()
         self.in_fuente.setPlaceholderText(
             "Obligatoria: de dónde sale el número (p. ej. medición de puesta en servicio)")
@@ -147,6 +164,7 @@ class Referencias(QWidget):
         form.addRow("Energía:", self.cb_energia)
         form.addRow("Valor nuevo:", self.in_valor)
         form.addRow("Unidad:", self.in_unidad)
+        form.addRow("Físico responsable:", self.cb_responsable)
         form.addRow("Fuente:", self.in_fuente)
         form.addRow("Observaciones:", self.in_observaciones)
 
@@ -159,11 +177,20 @@ class Referencias(QWidget):
 
         self._controles_edicion = (
             self.cb_equipo, self.cb_magnitud, self.cb_energia, self.in_valor,
-            self.in_unidad, self.in_fuente, self.in_observaciones, self.btn_fijar)
+            self.in_unidad, self.cb_responsable, self.in_fuente, self.in_observaciones, self.btn_fijar)
         if not self._es_jefe:
             for control in self._controles_edicion:
                 control.setEnabled(False)
         return form
+
+    def _unidad_por_defecto(self):
+        """La unidad de la magnitud elegida (`calidad`: 1, adimensional), o vacío si el servicio no declara ninguna."""
+        magnitud = self.cb_magnitud.currentData() if hasattr(self, "cb_magnitud") else MAGNITUDES[0][0]
+        return _datos.UNIDAD_POR_MAGNITUD.get(magnitud, "")
+
+    def _nombre_de_la_sesion(self):
+        """El nombre completo de la cuenta con sesión abierta (el que figura en `users.fullname`), o None."""
+        return _datos.nombre_de_usuario(self._username_solicitante)
 
     def _llenar_energias(self):
         equipo = self.cb_equipo.currentText()
@@ -188,7 +215,7 @@ class Referencias(QWidget):
             self._tabla.insertRow(idx)
             valores = [
                 fila["equipo"], fila["magnitud"], _texto_energia(fila["energia"]),
-                f"{fila['valor']:g}", fila["unidad"] or "", fila["fuente"] or "",
+                f"{fila['valor']:g}", fila["unidad"] or SIN_UNIDAD_REGISTRADA, fila["fuente"] or "",
                 fila["observaciones"] or "", fila["fijada_por"] or "",
                 fila["fecha"] or "",
             ]
@@ -260,6 +287,7 @@ class Referencias(QWidget):
         fuente = self.in_fuente.text().strip()
         observaciones = self.in_observaciones.text().strip()
         unidad = self.in_unidad.text().strip() or None
+        responsable = self.cb_responsable.currentData()
 
         if QMessageBox.question(
                 self, "Fijar referencia",
@@ -272,7 +300,7 @@ class Referencias(QWidget):
 
         exito, motivo = _datos.fijar_referencia(
             equipo, magnitud, energia, valor_texto, fuente, observaciones,
-            self._username_solicitante, unidad=unidad)
+            self._username_solicitante, unidad=unidad, responsable=responsable)
         if not exito:
             QMessageBox.warning(
                 self, "No se pudo fijar la referencia",
@@ -284,7 +312,7 @@ class Referencias(QWidget):
             f"Se fijó {magnitud} de {equipo} ({_texto_energia(energia)}) en "
             f"{valor_texto}. Quedó registrado quién la cambió y cuándo.")
         self.in_valor.clear()
-        self.in_unidad.clear()
+        self.in_unidad.setText(self._unidad_por_defecto())
         self.in_fuente.clear()
         self.in_observaciones.clear()
         self._cargar_tabla()

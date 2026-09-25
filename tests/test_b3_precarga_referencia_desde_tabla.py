@@ -67,7 +67,7 @@ def _sin_avisos(monkeypatch):
 def _fijar(equipo, energia, valor, magnitud="calidad"):
     ok, motivo = fijar_referencia(
         equipo, magnitud, energia, valor, "puesta en servicio",
-        "valor medido en la puesta en servicio", "lamaya")
+        "valor medido en la puesta en servicio", "lamaya", unidad="1")    # F.1: la unidad es obligatoria
     assert ok, motivo
 
 

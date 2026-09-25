@@ -70,14 +70,14 @@ RAICES = lv.RAICES_QC
 # ---------------------------------------------------------------------------
 CENSO_RAICES = {
     # -- B.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md) -----------------------
-    ("services/referencias_qc.py", 70, "referencias_qc"):
+    ("services/referencias_qc.py", 127, "referencias_qc"):  # F.1 (25-09): 70->127
         (LISTA, "leer_referencia: WHERE equipo=? AND magnitud=? AND energia=? "
          "-- la CLAVE DE BLOQUE completa (no una fila física), así que filtra "
          "activo con filtro_activo() dentro del propio f-string"),
-    ("services/referencias_qc.py", 83, "referencias_qc"):
+    ("services/referencias_qc.py", 140, "referencias_qc"):  # F.1 (25-09): 83->140
         (LISTA, "listar_vigentes: lista TODAS las referencias vigentes para "
          "la pestaña; filtra activo con filtro_activo() en el f-string"),
-    ("services/referencias_qc.py", 98, "referencias_qc"):
+    ("services/referencias_qc.py", 155, "referencias_qc"):  # F.1 (25-09): 98->155
         (CENSO, "historial: lee las filas vigentes E históricas de una clave "
          "de bloque A PROPÓSITO -- es el rastro de quién cambió qué y cuándo "
          "(paso 8 de la puerta de salida); filtrar activo lo dejaría vacío"),
@@ -185,11 +185,11 @@ CENSO_RAICES = {
     # -- models/PDF ------------------------------------------------------
     ("models/PDF/Anual/reportes_anuales.py", 140, "controles"):
         (LISTA, "referencia del control ANUAL por (fecha, equipo, control)"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 206, "controles"):  # E.3 (24-09): 199->201; E.2 (24-09): 201->204; G.3 (24-09): 204->205; C.1 (25-09): 205->206
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 206, "controles"):  # E.3 (24-09): 199->201; E.2 (24-09): 201->204; G.3 (24-09): 204->205; B.3 (25-09): 205->206
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 256, "controles"):  # E.3 (24-09): 249->251; E.2 (24-09): 251->254; G.3 (24-09): 254->255; C.1 (25-09): 255->256
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 256, "controles"):  # E.3 (24-09): 249->251; E.2 (24-09): 251->254; G.3 (24-09): 254->255; B.3 (25-09): 255->256
         (IDENTIDAD, "_obtener_info_sesion del PDF de imágenes: WHERE c.id = ?"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 432, "controles"):  # E.3 (24-09): 413->417; E.2 (24-09): 417->428; G.3 (24-09): 428->431; C.1 (25-09): 431->432
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 432, "controles"):  # E.3 (24-09): 413->417; E.2 (24-09): 417->428; G.3 (24-09): 428->431; B.3 (25-09): 431->432
         (IDENTIDAD, "_obtener_datos_tabla_principal del PDF: WHERE id = ?"),
     ("models/PDF/Mensuales/reportes_mensuales.py", 165, "controles"):
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),

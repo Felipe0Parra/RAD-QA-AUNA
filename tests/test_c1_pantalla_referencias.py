@@ -316,7 +316,10 @@ class TestSinSQLYSinSimbolos:
         llamadas = {n.func.attr for n in ast.walk(arbol)
                     if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                     and isinstance(n.func.value, ast.Name) and n.func.value.id == "_datos"}
-        assert llamadas == {"listar_vigentes", "historial", "fijar_referencia"}
+        # F.1 (25-09): además lista los físicos que pueden firmar y resuelve el nombre de la cuenta con sesión: todo por el
+        # servicio, la pantalla sigue sin SQL propio.
+        assert llamadas == {"listar_vigentes", "historial", "fijar_referencia", "fisicos_responsables",
+                            "nombre_de_usuario"}
 
     def test_ningun_texto_lleva_simbolos_de_correcto_o_incorrecto(self):
         """DA-18: ni en las cadenas del módulo ni en lo que la pantalla
@@ -327,7 +330,8 @@ class TestSinSQLYSinSimbolos:
 
     def test_los_mensajes_de_rechazo_cubren_cada_motivo_del_servicio(self):
         motivos = {servicio.DENEGADO_SIN_PERMISO, servicio.FUENTE_OBLIGATORIA,
-                   servicio.OBSERVACIONES_OBLIGATORIAS, servicio.VALOR_INVALIDO}
+                   servicio.OBSERVACIONES_OBLIGATORIAS, servicio.VALOR_INVALIDO,
+                   servicio.UNIDAD_OBLIGATORIA, servicio.RESPONSABLE_OBLIGATORIO, servicio.RESPONSABLE_INVALIDO}
         assert set(pantalla.MENSAJES_RECHAZO) == motivos
 
 

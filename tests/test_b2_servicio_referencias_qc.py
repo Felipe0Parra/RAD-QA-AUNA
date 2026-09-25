@@ -75,9 +75,11 @@ def _filas_audit_ref(ruta):
 
 def _fijar(usuario="lamaya", valor=0.627, energia="6mv", equipo="Halcyon",
            magnitud="calidad", fuente="puesta en servicio",
-           observaciones="valor medido en la puesta en servicio"):
+           observaciones="valor medido en la puesta en servicio", unidad="1"):
+    # F.1 (25-09): la unidad es obligatoria; `calidad` la trae por omisión, las demás magnitudes de estas pruebas
+    # ("tol_dosis") la dicen. El aviso propio de F.1 vive en tests/test_f1_unidad_y_autoria_de_referencias.py.
     return fijar_referencia(equipo, magnitud, energia, valor, fuente,
-                             observaciones, usuario)
+                             observaciones, usuario, unidad=unidad)
 
 
 class TestLeerSinPermiso:

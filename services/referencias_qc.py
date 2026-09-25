@@ -18,6 +18,16 @@ valor por defecto silencioso; ese respaldo ya existe donde corresponde
 inserta la nueva vía `reemplazar_bloque` (EB1, DA-52) -- la anterior queda
 recuperable en `historial()`, y la auditoría se escribe en la MISMA
 transacción que el reemplazo.
+
+F.1 (PLAN_HANDOFF_IMAGENES_22-09.md): una referencia dice EN QUÉ UNIDAD está y
+QUIÉN LA FIRMA. Las 10 filas fijadas el 22-09 quedaron con `unidad = NULL` y
+`fijada_por = 'Administrador'` (una cuenta que no es un físico: `role = NULL`).
+Ahora la unidad es obligatoria (con la de la magnitud por omisión) y
+`fijada_por` es siempre un FÍSICO MÉDICO ACTIVO: la propia cuenta si lo es, o el
+que se elija como responsable -- igual que la aplicación ya pide el segundo
+físico. Quién PUEDE escribir sigue siendo `es_fisico_jefe` de la cuenta que
+actúa, y la auditoría sigue registrando a esa cuenta: cambiar quién firma no
+afloja quién escribe.
 """
 import math
 from datetime import datetime
@@ -35,6 +45,15 @@ DENEGADO_SIN_PERMISO = "denegado: solo el físico jefe puede fijar una referenci
 FUENTE_OBLIGATORIA = "la fuente es obligatoria"
 OBSERVACIONES_OBLIGATORIAS = "las observaciones son obligatorias"
 VALOR_INVALIDO = "el valor debe ser un número mayor que cero"
+UNIDAD_OBLIGATORIA = "la unidad es obligatoria"
+RESPONSABLE_OBLIGATORIO = "debe indicar el físico responsable"
+RESPONSABLE_INVALIDO = "el responsable no es un físico médico activo"
+
+# La unidad de cada magnitud que la pestaña ofrece, escrita SIN corchetes (los corchetes son de presentación). La
+# calidad del haz (PDD 20/10 en fotones, J2/J1 en electrones) es un cociente: adimensional, "1".
+UNIDAD_POR_MAGNITUD = {"calidad": "1"}
+
+CARGO_FISICO = "Físico Médico"       # `users.role`: el cargo mostrado (no `rol_sistema`, que es el permiso)
 
 
 def _nombre_completo(cursor, username):
@@ -45,6 +64,44 @@ def _nombre_completo(cursor, username):
     cursor.execute("SELECT fullname FROM users WHERE user=?", (username,))
     fila = cursor.fetchone()
     return fila[0] if fila else username
+
+
+def _fisicos_activos(cursor):
+    """{nombre sin espacios sobrantes: nombre tal como se guarda} de los físicos médicos ACTIVOS. `COALESCE(active,1)`: un
+    NULL histórico no oculta a nadie (mismo criterio que el selector de físicos del mensual, U2)."""
+    cursor.execute("SELECT fullname FROM users WHERE role = ? AND COALESCE(active,1)=1 ORDER BY fullname",
+                   (CARGO_FISICO,))
+    return {nombre.strip(): nombre for (nombre,) in cursor.fetchall() if nombre}
+
+
+def nombre_de_usuario(username):
+    """El `fullname` de la cuenta `username` (como figura en `users`), o `None` si no existe."""
+    if not username:
+        return None
+    with Conexion().conectar() as db:
+        cursor = db.cursor()
+        cursor.execute("SELECT fullname FROM users WHERE user=?", (username,))
+        fila = cursor.fetchone()
+        return fila[0] if fila else None
+
+
+def fisicos_responsables():
+    """Los físicos médicos activos que pueden figurar como responsables de una referencia, con su nombre tal como se
+    guarda en `fijada_por`. La pestaña los ofrece; el servicio los vuelve a comprobar."""
+    with Conexion().conectar() as db:
+        return list(_fisicos_activos(db.cursor()).values())
+
+
+def _resolver_firmante(cursor, username_solicitante, responsable):
+    """`(nombre, None)` con el físico que firma la referencia, o `(None, motivo)`. Si se eligió un responsable, debe ser un
+    físico médico activo; si no, firma la propia cuenta, y solo si ES un físico médico activo (un administrador sin cargo
+    de físico debe elegir a quién)."""
+    activos = _fisicos_activos(cursor)
+    elegido = str(responsable).strip() if responsable is not None else ""
+    if elegido:
+        return (activos[elegido], None) if elegido in activos else (None, RESPONSABLE_INVALIDO)
+    propio = _nombre_completo(cursor, username_solicitante).strip()
+    return (activos[propio], None) if propio in activos else (None, RESPONSABLE_OBLIGATORIO)
 
 
 def _normalizar_energia(energia):
@@ -117,7 +174,7 @@ def _valor_valido(valor):
 
 
 def fijar_referencia(equipo, magnitud, energia, valor, fuente, observaciones,
-                      username_solicitante, unidad=None):
+                      username_solicitante, unidad=None, responsable=None):
     """Anula la referencia vigente para (equipo, magnitud, energia), si la
     hay, e inserta la nueva. Exige `es_fisico_jefe(username_solicitante)` --
     si el rol no resuelve o no es jefe/admin, se deniega y se audita el
@@ -126,8 +183,15 @@ def fijar_referencia(equipo, magnitud, energia, valor, fuente, observaciones,
     `fuente` y `observaciones` son obligatorias (C.1: el jefe debe decir de
     dónde salió el número, no solo teclearlo) -- validado aquí y no solo en
     la pantalla, por la misma razón que el permiso. `valor` debe ser un
-    número finito mayor que cero (`VALOR_INVALIDO` si no). `unidad` es
-    opcional y solo informativa.
+    número finito mayor que cero (`VALOR_INVALIDO` si no).
+
+    F.1: `unidad` es OBLIGATORIA -- si no se da, se usa la de la magnitud
+    (`UNIDAD_POR_MAGNITUD`), y sin ninguna se rechaza (`UNIDAD_OBLIGATORIA`).
+    `responsable` es el físico médico que firma; si no se da, firma la propia
+    cuenta solo si es un físico médico activo (`RESPONSABLE_OBLIGATORIO` si no
+    lo es), y uno que no es físico activo se rechaza (`RESPONSABLE_INVALIDO`).
+    El permiso NO cambia: lo decide `es_fisico_jefe` de la cuenta que actúa,
+    y la auditoría registra a esa cuenta, no al responsable.
 
     Devuelve `(True, None)` si se fijó, o `(False, motivo)` si no."""
     energia = _normalizar_energia(energia)
@@ -148,6 +212,12 @@ def fijar_referencia(equipo, magnitud, energia, valor, fuente, observaciones,
         valor = _valor_valido(valor)
         if valor is None:
             return False, VALOR_INVALIDO
+        unidad = (str(unidad).strip() if unidad is not None else "") or UNIDAD_POR_MAGNITUD.get(magnitud)
+        if not unidad:
+            return False, UNIDAD_OBLIGATORIA
+        firmante, motivo = _resolver_firmante(cursor, username_solicitante, responsable)
+        if firmante is None:
+            return False, motivo
 
         clave = [("equipo", equipo), ("magnitud", magnitud), ("energia", energia)]
         sql_insert = (
@@ -155,11 +225,12 @@ def fijar_referencia(equipo, magnitud, energia, valor, fuente, observaciones,
             "fuente, observaciones, fijada_por, fecha) VALUES (?,?,?,?,?,?,?,?,?)")
         fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         fila = (equipo, magnitud, energia, valor, unidad, fuente, observaciones,
-                 nombre_solicitante, fecha)
+                 firmante, fecha)
+        quien = "" if firmante == nombre_solicitante else f"; responsable: {firmante}"
 
         reemplazar_bloque(
             cursor, TABLA, clave, sql_insert, [fila], nombre_solicitante,
             ref=f"{equipo}/{magnitud}/{energia}",
-            detalle=f"{magnitud} {equipo} {energia or '(global)'}: {valor} ({fuente})")
+            detalle=f"{magnitud} {equipo} {energia or '(global)'}: {valor} [{unidad}] ({fuente}){quien}")
         db.commit()
         return True, None

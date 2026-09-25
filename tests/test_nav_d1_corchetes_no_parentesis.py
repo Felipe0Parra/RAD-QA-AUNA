@@ -136,7 +136,7 @@ BASELINE_D1_PENDIENTE = {
     ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1657, 'mm'),  # A.1 (23-09): 1591->1638; A.2 (23-09): 1638->1644; G.2 (24-09): 1644->1648; G.3 (24-09): 1648->1657
     ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1800, 'cm'),  # A.1 (23-09): 1734->1781; A.2 (23-09): 1781->1787; G.2 (24-09): 1787->1791; G.3 (24-09): 1791->1800
     ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1927, 'HU'),  # A.1 (23-09): 1861->1908; A.2 (23-09): 1908->1914; G.2 (24-09): 1914->1918; G.3 (24-09): 1918->1927
-    ('data/ManejoDatos/catphan_TAC/leer_dicom.py', 1366, 'mm'),  # A.1 (18-09): 951->956; C.2 (22-09): 956->1142->1164; D.0 (23-09): 1164->1258; D.1 (23-09): 1258->1290; A.1 (23-09): 1290->1294; A.3 (23-09): 1294->1319; C.1 (25-09): 1319->1351; C.1 (25-09): 1351->1366
+    ('data/ManejoDatos/catphan_TAC/leer_dicom.py', 1366, 'mm'),  # A.1 (18-09): 951->956; C.2 (22-09): 956->1142->1164; D.0 (23-09): 1164->1258; D.1 (23-09): 1258->1290; A.1 (23-09): 1290->1294; A.3 (23-09): 1294->1319; B.2 (25-09): 1319->1351; B.3 (25-09): 1351->1366
     ('data/ManejoDatos/conection.py', 1908, 'HU'),  # R.1 (11-09): 1649->1734; T.0 (16-09): 1734->1788; B.1 (21-09): 1788->1817; A.1 (23-09): 1817->1857; A.2 (23-09): 1857->1861; G.2 (24-09): 1861->1882; G.3 (24-09): 1882->1908
     ('data/ManejoDatos/conection.py', 1931, 'HU'),  # R.1 (11-09): 1672->1757; T.0 (16-09): 1757->1811; B.1 (21-09): 1811->1840; A.1 (23-09): 1840->1880; A.2 (23-09): 1880->1884; G.2 (24-09): 1884->1905; G.3 (24-09): 1905->1931
     ('data/ManejoDatos/conection.py', 1945, '%'),  # R.1 (11-09): 1686->1771; T.0 (16-09): 1771->1825; B.1 (21-09): 1825->1854; A.1 (23-09): 1854->1894; A.2 (23-09): 1894->1898; G.2 (24-09): 1898->1919; G.3 (24-09): 1919->1945
@@ -192,10 +192,10 @@ BASELINE_D1_PENDIENTE = {
     ('models/PDF/Anual/reportes_anuales.py', 770, '%'),
     ('models/PDF/Anual/reportes_anuales.py', 777, 'nC'),
     ('models/PDF/Anual/reportes_anuales.py', 802, 'cm'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 854, 'mm'),  # E.3 (24-09): 714->730; E.2 (24-09): 730->808; G.2 (24-09): 808->809; G.3 (24-09): 809->845; C.1 (25-09): 845->854
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 887, 'mm'),  # E.3 (24-09): 747->763; E.2 (24-09): 763->841; G.2 (24-09): 841->842; G.3 (24-09): 842->878; C.1 (25-09): 878->887
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 907, 'cm'),  # E.3 (24-09): 767->783; E.2 (24-09): 783->861; G.2 (24-09): 861->862; G.3 (24-09): 862->898; C.1 (25-09): 898->907
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 991, '%'),  # E.3 (24-09): 851->867; E.2 (24-09): 867->945; G.2 (24-09): 945->946; G.3 (24-09): 946->982; C.1 (25-09): 982->991
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 854, 'mm'),  # E.3 (24-09): 714->730; E.2 (24-09): 730->808; G.2 (24-09): 808->809; G.3 (24-09): 809->845; B.3 (25-09): 845->854
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 887, 'mm'),  # E.3 (24-09): 747->763; E.2 (24-09): 763->841; G.2 (24-09): 841->842; G.3 (24-09): 842->878; B.3 (25-09): 878->887
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 907, 'cm'),  # E.3 (24-09): 767->783; E.2 (24-09): 783->861; G.2 (24-09): 861->862; G.3 (24-09): 862->898; B.3 (25-09): 898->907
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 991, '%'),  # E.3 (24-09): 851->867; E.2 (24-09): 867->945; G.2 (24-09): 945->946; G.3 (24-09): 946->982; B.3 (25-09): 982->991
     ('models/PDF/Mensuales/reportes_mensuales.py', 801, 'cm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1075, 'mm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1096, '%'),
