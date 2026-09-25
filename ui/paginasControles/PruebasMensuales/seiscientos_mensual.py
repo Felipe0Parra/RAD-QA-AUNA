@@ -211,6 +211,9 @@ class PruebaMensual600(PruebaBasico):
             # Limpiar tabs dinámicas
             if hasattr(self, 'dynamic_tabs'):
                 for tab in self.dynamic_tabs.values():
+                    # C.1: en las pantallas de imágenes el valor es el dict de widgets de la pestaña (`tab['tab']`);
+                    # en las demás, el QWidget mismo
+                    tab = tab['tab'] if isinstance(tab, dict) else tab
                     if tab:
                         tab.deleteLater()
                 self.dynamic_tabs.clear()

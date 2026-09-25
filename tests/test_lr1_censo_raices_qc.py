@@ -305,10 +305,10 @@ CENSO_RAICES = {
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3033"),
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1752, "LinealidadBraquiterapia"):
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3062"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 270, "controles"):  # A.2 (21-09): 256->269; B.3 (21-09): 269->270
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 273, "controles"):  # A.2 (21-09): 256->269; B.3 (21-09): 269->270; C.1 (25-09): 270->273
         (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "
                 "Python -- un control anulado del mes prestaría sus físicos"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 558, "controles"):  # A.2 (21-09): 544->557; B.3 (21-09): 557->558
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 561, "controles"):  # A.2 (21-09): 544->557; B.3 (21-09): 557->558; C.1 (25-09): 558->561
         (IDENTIDAD, "_fecha_real_del_control (F3): WHERE id = ?, fila ya elegida"),
     ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 167, "controles"):  # A.2 (23-09): 164->165; G.2 (24-09): 165->166; G.3 (24-09): 166->167
         (IDENTIDAD, "_existe_ref: WHERE id = ? AND equipo = ? -- el id ya "

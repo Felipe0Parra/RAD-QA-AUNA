@@ -341,14 +341,14 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 203, '%'),
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 203, 'cm'),
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 217, 'cm'),
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1270, 'mm'),  # A.2 (21-09): 1256->1269; B.3 (21-09): 1269->1270
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1528, 'mm'),  # A.2 (21-09): 1514->1527; B.3 (21-09): 1527->1528
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1532, 'mm'),  # A.2 (21-09): 1518->1531; B.3 (21-09): 1531->1532
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1705, '°'),  # A.2 (21-09): 1691->1704; B.3 (21-09): 1704->1705
-    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2497, 'cm'),  # A.2 (21-09): 2305->2364; B.3 (21-09): 2364->2425; B.4 (21-09): 2425->2497
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1705, 'mm'),  # D.1 (23-09): 1595->1602; A.1 (23-09): 1602->1645; A.2 (23-09): 1645->1651; A.3 (23-09): 1651->1653; G.1 (24-09): 1653->1688; G.2 (24-09): 1688->1682; G.3 (24-09): 1682->1705
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1848, 'cm'),  # D.1 (23-09): 1738->1745; A.1 (23-09): 1745->1788; A.2 (23-09): 1788->1794; A.3 (23-09): 1794->1796; G.1 (24-09): 1796->1831; G.2 (24-09): 1831->1825; G.3 (24-09): 1825->1848
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1975, 'HU'),  # D.1 (23-09): 1865->1872; A.1 (23-09): 1872->1915; A.2 (23-09): 1915->1921; A.3 (23-09): 1921->1923; G.1 (24-09): 1923->1958; G.2 (24-09): 1958->1952; G.3 (24-09): 1952->1975
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1273, 'mm'),  # A.2 (21-09): 1256->1269; B.3 (21-09): 1269->1270; C.1 (25-09): 1270->1273
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1531, 'mm'),  # A.2 (21-09): 1514->1527; B.3 (21-09): 1527->1528; C.1 (25-09): 1528->1531
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1535, 'mm'),  # A.2 (21-09): 1518->1531; B.3 (21-09): 1531->1532; C.1 (25-09): 1532->1535
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1708, '°'),  # A.2 (21-09): 1691->1704; B.3 (21-09): 1704->1705; C.1 (25-09): 1705->1708
+    ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2500, 'cm'),  # A.2 (21-09): 2305->2364; B.3 (21-09): 2364->2425; B.4 (21-09): 2425->2497; C.1 (25-09): 2497->2500
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1654, 'mm'),  # D.1 (23-09): 1595->1602; A.1 (23-09): 1602->1645; A.2 (23-09): 1645->1651; A.3 (23-09): 1651->1653; G.1 (24-09): 1653->1688; G.2 (24-09): 1688->1682; G.3 (24-09): 1682->1705; C.1 (25-09): 1705->1654
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1797, 'cm'),  # D.1 (23-09): 1738->1745; A.1 (23-09): 1745->1788; A.2 (23-09): 1788->1794; A.3 (23-09): 1794->1796; G.1 (24-09): 1796->1831; G.2 (24-09): 1831->1825; G.3 (24-09): 1825->1848; C.1 (25-09): 1848->1797
+    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1924, 'HU'),  # D.1 (23-09): 1865->1872; A.1 (23-09): 1872->1915; A.2 (23-09): 1915->1921; A.3 (23-09): 1921->1923; G.1 (24-09): 1923->1958; G.2 (24-09): 1958->1952; G.3 (24-09): 1952->1975; C.1 (25-09): 1975->1924
     ('ui/paginasGuia/SQLtoEXCEL.py', 317, 'cGy/UM'),
     ('ui/paginasGuia/SQLtoEXCEL.py', 318, '%'),
     ('ui/paginasGuia/SQLtoEXCEL.py', 319, '%'),

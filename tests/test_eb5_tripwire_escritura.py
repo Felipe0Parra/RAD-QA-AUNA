@@ -126,7 +126,7 @@ SITIOS_LITERALES_PERMITIDOS = {
         "abierto EXPLÍCITAMENTE como 'nada del contrato de guardado -- es "
         "del formulario de braquiterapia': fuera de alcance de EB1-EB7 por "
         "decisión ya registrada, no un descuido de esta tarea.",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 2297):  # B.3 (21-09): 2221->2282; B.4 (21-09): 2282->2297
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 2300):  # B.3 (21-09): 2221->2282; B.4 (21-09): 2282->2297; C.1 (25-09): 2297->2300
         "_persistir_val_teo_dosis (A.2, PLAN_REFERENCIAS_EDITABLES_21-09) -- "
         "val_teo_dosis no tiene widget (R5), así que no puede llegar por "
         "subirlineasmensuales/_ix; se llena SOLO cuando queda NULL "
@@ -136,7 +136,7 @@ SITIOS_LITERALES_PERMITIDOS = {
         "edición directa de UNA celda que el INSERT no cubre (mismo "
         "criterio que subir_control_cunas, dos entradas más abajo), no "
         "mutación del histórico.",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 2354):
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 2357):  # C.1 (25-09): 2354->2357
         "_persistir_origen_referencia (B.4, PLAN_REFERENCIAS_EDITABLES_21-09) "
         "-- escribe `origen_referencia` ('tabla'/'manual'/'respaldo') en la "
         "fila vigente que el guardado de dosimetría acaba de anular+insertar: "
@@ -148,7 +148,7 @@ SITIOS_LITERALES_PERMITIDOS = {
         "activo = 1') de esa (ref, energia); la generación superada conserva "
         "el origen que tenía. Edición dirigida de UNA celda dentro del mismo "
         "clic 'Subir', no mutación del histórico.",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3815):  # A.2 (21-09): 3623->3682; B.3 (21-09): 3682->3743; B.4 (21-09): 3743->3815
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3818):  # A.2 (21-09): 3623->3682; B.3 (21-09): 3682->3743; B.4 (21-09): 3743->3815; C.1 (25-09): 3815->3818
         "subir_control_cunas -- UPDATE de 'observaciones' restringido a "
         "'activo = 1', pero DENTRO de la misma transacción y DESPUÉS de "
         "anular el bloque anterior (activo=0) e insertar las filas nuevas: "
@@ -323,7 +323,7 @@ SITIOS_OPACOS_PERMITIDOS = {
         "subirlineasmensuales_ix, rama UPDATE fuera del bloque de QC -- "
         "mismo criterio que load.py:727: nombre_tabla nunca es una tabla "
         "de TABLAS_ANULABLES en esta rama (ya verificado por ES1).",
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 4257):  # R.3 (11-09): 3911->3922; A.2 (21-09): 4065->4124; B.3 (21-09): 4124->4185; B.4 (21-09): 4185->4257
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 4260):  # R.3 (11-09): 3911->3922; A.2 (21-09): 4065->4124; B.3 (21-09): 4124->4185; B.4 (21-09): 4185->4257; C.1 (25-09): 4257->4260
         "SELECT (DO1, pruebatalas -- lectura genérica, ya filtra con "
         "filtro_activo) -- no aplica a EB5, no escribe.",
     ("ui/paginasGuia/SQLtoEXCEL.py", 529):

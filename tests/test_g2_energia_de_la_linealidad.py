@@ -127,14 +127,9 @@ def test_construir_la_pantalla_no_cambia_de_pestana_ni_intenta_el_ajuste(app, bd
 # ---------------------------------------------------------------------------
 
 def _poner_hu(obj, hu):
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-    from matplotlib.figure import Figure
     from PyQt5.QtWidgets import QTableWidgetItem
-    from PyQt5.QtWidgets import QLabel
-    if not hasattr(obj, "canvas_resultados"):
-        obj.canvas_resultados = FigureCanvasQTAgg(Figure())     # lo crea la pantalla al cargar una carpeta
-    if getattr(obj, "resultados_texto", None) is None:
-        obj.resultados_texto = QLabel()                        # ídem: el panel de resultados
+    # El lienzo y el panel de resultados los crea la pantalla al abrir la pestaña de linealidad (C.1): ya no hay
+    # punteros que fabricar aquí.
     for fila, valor in enumerate(hu):
         obj.tabla_linealidad_ct.setItem(fila, 5, QTableWidgetItem(f"{valor:.1f}"))
 

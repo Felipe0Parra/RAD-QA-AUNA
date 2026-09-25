@@ -424,9 +424,7 @@ class PruebaMensualTAC(PruebaMensual600):
         # por categoria -- ver `_registrar_adquisicion`.
         self.adquisicion_por_categoria = {}
         self.tam_px_teorico = None
-        self.resultados_texto = None
         self.criterios_por_categoria = {}      # G.3: criterio y veredicto de cada prueba (se guarda con ella)
-        self.criterio_texto = None
         self.reconstruido = False  # Mantenemos para compatibilidad backwards
         
         # Inicializar gestores de reconstrucción
@@ -1061,13 +1059,10 @@ class PruebaMensualTAC(PruebaMensual600):
             print(f"Error juzgando {categoria}: {e}")
             return None
         self.criterios_por_categoria[categoria] = criterios.a_json_ready(juicios)
-        panel = None
-        pestana = self.tab_widget.currentWidget() if getattr(self, 'tab_widget', None) is not None else None
-        if pestana is not None:
-            panel = pestana.findChild(QLabel, "criterio_texto")
-        panel = panel or getattr(self, 'criterio_texto', None)
-        if panel is not None:
-            panel.setText(criterios.texto_html(juicios))
+        # C.1: el panel es el de la pestaña de ESTA prueba (por su nombre), no el de la pestaña que esté a la vista
+        widgets = self._widgets_de(CategoriasMapping.MAPEO_COMPLETO.get(categoria, {}).get('pestaña'))
+        if widgets is not None:
+            widgets['criterio'].setText(criterios.texto_html(juicios))
         return juicios
 
     def _registrar_adquisicion_linealidad(self):
@@ -1479,9 +1474,10 @@ class PruebaMensualTAC(PruebaMensual600):
         if getattr(self, "energia_linealidad_mev", None) is None:
             return None     # G.2: sin energía de protocolo no hay μ con qué ajustar
 
-        # Asegurar que el canvas esté disponible
+        # Asegurar que la pestaña (y su canvas) esté disponible
+        pestana = "Linealidad del CT"
         try:
-            self.graficar.setCurrentText("Linealidad del CT")
+            self._abrir_pestana(pestana)
         except Exception as e:
             print(f" Error al cambiar tab: {e}")
 
@@ -1545,15 +1541,11 @@ class PruebaMensualTAC(PruebaMensual600):
 
         # Ejecuta el análisis y muestra resultados
         try:
-            linealidad = linealidad_ct(datos=mu_vals, hu_promedio=hu_vals, visualizar=True, canvas=self.canvas_resultados)
+            linealidad = linealidad_ct(datos=mu_vals, hu_promedio=hu_vals, visualizar=True, canvas=self._canvas_de(pestana))
             if isinstance(linealidad, dict):
                 linealidad["energia_mev"] = self.energia_linealidad_mev   # G.2: se guarda con la prueba
             texto = self.tabla_resultados_linealidad(linealidad)
-            self.resultados_texto.setText(texto)
-            self.resultados_texto.setStyleSheet("""QLabel { font-family: 'Segoe UI'; font-size: 15px; 
-                                                            color: #2c3e50; background-color: #f8f9fa;
-                                                            padding: 10px; border: 1px solid #dee2e6;
-                                                            border-radius: 5px; }""")
+            self._escribir_resultado(pestana, texto)
             
             #print(" Análisis de Linealidad del CT completado")
             #print(f"   Resultados: {linealidad}")
@@ -1568,49 +1560,6 @@ class PruebaMensualTAC(PruebaMensual600):
             import traceback
             traceback.print_exc()
             return None
-
-    def reemplazar_resultados_texto_con_tabla(self, tabla_widget):
-        """
-        Reemplaza self.resultados_texto (QLabel) con una tabla (QTableWidget) en el layout activo.
-        """
-        try:
-            if not hasattr(self, 'resultados_texto') or self.resultados_texto is None:
-                print("❌ No hay resultados_texto para reemplazar")
-                return
-            
-            # Obtener el layout padre del QLabel actual
-            parent_layout = self.resultados_texto.parent().layout()
-            if parent_layout is None:
-                print("❌ No se pudo obtener el layout padre")
-                return
-            
-            # Obtener la posición del QLabel en el layout
-            index = -1
-            for i in range(parent_layout.count()):
-                item = parent_layout.itemAt(i)
-                if item and item.widget() == self.resultados_texto:
-                    index = i
-                    break
-            
-            if index == -1:
-                print("❌ No se encontró la posición del QLabel en el layout")
-                return
-            
-            # Remover el QLabel actual
-            self.resultados_texto.setParent(None)
-            
-            # Insertar la tabla en la misma posición
-            parent_layout.insertWidget(index, tabla_widget)
-            
-            # Actualizar la referencia
-            self.resultados_texto = tabla_widget
-            
-            #print("✅ Tabla insertada correctamente en lugar del QLabel")
-            
-        except Exception as e:
-            print(f"❌ Error al reemplazar resultados_texto: {e}")
-            import traceback
-            traceback.print_exc()
 
     # Sucede cuando ya se elegió un corte, acá se llama a las funciones de análisis
     # y se muestran los resultados en consola
@@ -2172,7 +2121,8 @@ class PruebaMensualTAC(PruebaMensual600):
 
                 # -------------------------------    ESPESOR DE CORTE         ------------------------------- #
                 if categoria == 'espesor':
-                    self.graficar.setCurrentText("Espesor de corte")
+                    pestana = "Espesor de corte"
+                    self._abrir_pestana(pestana)
                     #print("\nProcesando corte para la categoría de ESPESOR DE CORTE")
 
                     # E.1 (PLAN_ESPESOR_CORTE_24-09.md): como pylinac, el corte elegido y sus dos
@@ -2187,11 +2137,12 @@ class PruebaMensualTAC(PruebaMensual600):
                     resultados_espesor = espesor_corte(imagen_grafica, imagen_analisis, tam_px, visualizar=True,
                                                        combinar_slices=bool(_vecinos_espesor),
                                                        slices_adyacentes=_vecinos_espesor,
-                                                       canvas=self.canvas_resultados)
+                                                       canvas=self._canvas_de(pestana))
                     if resultados_espesor.get("espesor_promedio_mm") is None:
                         # Guarda de E.1: sin alambre medible en este corte no hay número (ni guardado).
                         self.resultados_espesor = None
-                        self.resultados_texto.setText(
+                        self._escribir_resultado(
+                            pestana,
                             "Espesor de corte: no se detectaron las rampas de alambre en este corte "
                             f"({resultados_espesor.get('num_rampas_detectadas', 0)} de 4 válidas; hacen falta 3). "
                             "Elija el corte del módulo CTP404 que sugiere la detección automática.")
@@ -2205,11 +2156,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     resultados_espesor['diferencia_mm'] = round(abs(espesor_teorico_mm - resultados_espesor.get("espesor_promedio_mm", 0)), 3) if espesor_teorico_mm else None
                     self._mostrar_criterio('espesor', resultados_espesor)      # G.3
                     texto = tabla_resultados_espesor(resultados_espesor)
-                    self.resultados_texto.setText(texto)
-                    self.resultados_texto.setStyleSheet("""QLabel{ font-family: 'Segoe UI'; font-size: 15px; 
-                                                                color: #2c3e50; background-color: #f8f9fa;
-                                                                padding: 10px; border: 1px solid #dee2e6;
-                                                                border-radius: 5px; }""")
+                    self._escribir_resultado(pestana, texto)
                     #print(texto)
                     #print(f"Espesor de corte esperado: {self.espesor_corte_val} mm, Espesor calculado: {resultados_espesor.get('espesor_promedio_mm', None)} mm, Error relativo: {error:.2f}%")
                     # Agregar botones de guardado después del análisis completado
@@ -2217,10 +2164,11 @@ class PruebaMensualTAC(PruebaMensual600):
 
                 # -------------------------------    TAMAÑO DE PIXEL          ------------------------------- #
                 elif categoria == 'tamaño_pixel':
-                    self.graficar.setCurrentText("Tamaño de Pixel")
+                    pestana = "Tamaño de Pixel"
+                    self._abrir_pestana(pestana)
                     #print("\nProcesando corte para la categoría de TAMAÑO DE PIXEL")
 
-                    resultados_tamano_pixel = tamano_pixel(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados)
+                    resultados_tamano_pixel = tamano_pixel(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self._canvas_de(pestana))
                     self.resultados_tamano_pixel = resultados_tamano_pixel  # Almacenar para guardado
                     self._registrar_adquisicion('tamano_pixel')
                     self.tam_px_teorico = tam_px  # Almacenar valor teórico
@@ -2239,11 +2187,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     self._mostrar_criterio('tamano_pixel', resultados_tamano_pixel)      # G.3
 
                     texto = tabla_resultados_tamano_pixel(resultados_tamano_pixel)
-                    self.resultados_texto.setText(texto)
-                    self.resultados_texto.setStyleSheet("""QLabel{ font-family: 'Segoe UI'; font-size: 15px; 
-                                                                color: #2c3e50; background-color: #f8f9fa;
-                                                                padding: 10px; border: 1px solid #dee2e6;
-                                                                border-radius: 5px; }""")
+                    self._escribir_resultado(pestana, texto)
                     #print(texto)
                     #print(f"Tamaño pixel teórico: {round(tam_px, 3)} mm, Error relativo: {error:.2f}%" if error else "Error: No se pudo calcular")
                     # Agregar botones de guardado después del análisis completado
@@ -2251,21 +2195,23 @@ class PruebaMensualTAC(PruebaMensual600):
 
                 # -------------------------------    RESOLUCIÓN ESPACIAL      ---------------------------- #
                 elif categoria == 'resolucion_espacial':
-                    self.graficar.setCurrentText("Resolución Espacial")
+                    pestana = "Resolución Espacial"
+                    self._abrir_pestana(pestana)
                     #print("Procesando corte para la categoría de RESOLUCIÓN DE ESPACIAL")
 
-                    resultados_resolucion = resolucion_espacial(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self.canvas_resultados, orientacion=orientacion_serie, roll_deg=roll_deg_serie)
+                    resultados_resolucion = resolucion_espacial(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self._canvas_de(pestana), orientacion=orientacion_serie, roll_deg=roll_deg_serie)
                     self.resultados_resolucion_espacial = resultados_resolucion  # Almacenar para guardado
                     self._registrar_adquisicion('resolucion_espacial')
                     self._mostrar_criterio('resolucion_espacial', resultados_resolucion)      # G.3
                     texto = tabla_resultados_resolucion_espacial(resultados_resolucion)
-                    self.reemplazar_resultados_texto_con_tabla(texto)
+                    self._escribir_resultado(pestana, texto)
                     # Agregar botones de guardado después del análisis completado
                     self._agregar_botones_guardado_post_analisis(categoria)
 
                 # -------------------------------    RESOLUCIÓN DE CONTRASTE  ---------------------------- #
                 elif categoria == 'resolucion_contraste':
-                    self.graficar.setCurrentText("Resolución de Contraste")
+                    pestana = "Resolución de Contraste"
+                    self._abrir_pestana(pestana)
                     
                     # 1. Crear GeometriaCatphan UNA sola vez (D.0: geometría desde HU)
                     from data.ManejoDatos.catphan_TAC.leer_dicom import GeometriaCatphan
@@ -2289,7 +2235,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         catphan=catphan,          # ← instancia con offsets aplicados
                         visibilidad_manual=dlg.visibilidad_manual,
                         visualizar=True,
-                        canvas=self.canvas_resultados,
+                        canvas=self._canvas_de(pestana),
                         # G.3: qué cuenta como ROI visible (parámetros heredados, sin fuente normativa): un solo
                         # sitio, `criterios.PARAMETROS_HEREDADOS`; el veredicto de esta prueba está pendiente de métrica
                         **criterios.parametros_de_analisis('resolucion_contraste', self.equipo_f),
@@ -2304,12 +2250,13 @@ class PruebaMensualTAC(PruebaMensual600):
                     self._mostrar_criterio('resolucion_contraste', resolucion)      # G.3
                     imprimir_resultados_contraste_bajo(resolucion)
                     tabla_widget = tabla_resultados_resolucion_contraste(resolucion)
-                    self.reemplazar_resultados_texto_con_tabla(tabla_widget)
+                    self._escribir_resultado(pestana, tabla_widget)
                     self._agregar_botones_guardado_post_analisis(categoria)
 
                 # -------------------------------    VALORES DEL NÚMERO CT    ------------------------------- #
                 elif categoria == 'valores_numero_ct':
-                    self.graficar.setCurrentText("Valores CT")
+                    pestana = "Valores CT"
+                    self._abrir_pestana(pestana)
                 
                     # 1. Construir geometría CT UNA sola vez
                     from data.ManejoDatos.catphan_TAC.posicionador_manual import (
@@ -2331,13 +2278,13 @@ class PruebaMensualTAC(PruebaMensual600):
                         tam_px,
                         catphan=catphan_ct,        # ← instancia con offsets aplicados
                         visualizar=True,
-                        canvas=self.canvas_resultados,
+                        canvas=self._canvas_de(pestana),
                     )
                     self._registrar_adquisicion('valores_ct')
                     self._mostrar_criterio('valores_ct', self.resultados_ct)      # G.3
                 
                     tabla_widget = tabla_resultados_ct(self.resultados_ct)
-                    self.reemplazar_resultados_texto_con_tabla(tabla_widget)
+                    self._escribir_resultado(pestana, tabla_widget)
                     self.actualizar_hu_desde_resultados_ct()
                     self._agregar_botones_guardado_post_analisis(categoria)
                 
@@ -2347,8 +2294,6 @@ class PruebaMensualTAC(PruebaMensual600):
                 # -------------------------------    LINEALIDAD DEL NÚMERO CT ------------------------------- #
                 elif categoria == 'linealidad_numero_ct':
                     #print("*** ENTRANDO EN CONDICIÓN DE LINEALIDAD CT ***")
-                    #print(f"Canvas disponible: {hasattr(self, 'canvas_resultados')}")
-                    #print(f"ResultadosTexto disponible: {hasattr(self, 'resultados_texto')}")
                     
                     resultados_linealidad = self.try_actualizar_linealidad_ct()
                     # Agregar botones de guardado después del análisis completado
@@ -2358,11 +2303,12 @@ class PruebaMensualTAC(PruebaMensual600):
                     
                 # -------------------------------    UNIFORMIDAD Y RUIDO      ------------------------------- #
                 elif categoria == 'uniformidad_ruido':
-                    self.graficar.setCurrentText("Uniformidad y Ruido")
+                    pestana = "Uniformidad y Ruido"
+                    self._abrir_pestana(pestana)
                     #print("Procesando corte para la categoría de UNIFORMIDAD Y RUIDO")
                     # G.3: la tolerancia sale de la regla de uniformidad del equipo (`perfiles.py`)
                     uniformidad_resultados = uniformidad(imagen_grafica, imagen_analisis, tam_px, visualizar=True, 
-                                                        canvas=self.canvas_resultados,
+                                                        canvas=self._canvas_de(pestana),
                                                         **criterios.parametros_de_analisis('uniformidad', self.equipo_f))
                     self.resultados_uniformidad = uniformidad_resultados  # Almacenar para guardado
                     self._registrar_adquisicion('uniformidad')
@@ -2370,7 +2316,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     
                     # Reemplazar el QLabel con QTableWidget
                     tabla_widget = tabla_resultados_uniformidad(uniformidad_resultados)
-                    self.reemplazar_resultados_texto_con_tabla(tabla_widget)
+                    self._escribir_resultado(pestana, tabla_widget)
                     #print("Tabla de uniformidad creada y mostrada")
                 
                 # Agregar botones de guardado después del análisis completado
@@ -2388,7 +2334,7 @@ class PruebaMensualTAC(PruebaMensual600):
         if text == 'Seleccionar...' or text == 'Ver resultados de...':
             return
 
-        if text in self.dynamic_tabs:
+        if self._widgets_de(text) is not None:
             self._activar_tab_existente(text)
             return
         
@@ -2435,8 +2381,78 @@ class PruebaMensualTAC(PruebaMensual600):
             print(", error ", e)
     def _activar_tab_existente(self, text):
         """Activa una pestaña que ya existe"""
-        index = self.tab_widget.indexOf(self.dynamic_tabs[text])
-        self.tab_widget.setCurrentIndex(index)
+        widgets = self._widgets_de(text)
+        if widgets is not None:
+            self.tab_widget.setCurrentIndex(self.tab_widget.indexOf(widgets['tab']))
+
+    # C.1 (PLAN_HANDOFF_IMAGENES_22-09.md): la pestaña es la dueña de sus widgets. Antes `_crear_nueva_tab` dejaba el
+    # lienzo, la barra y el texto de la ÚLTIMA pestaña creada en atributos únicos de la pantalla y todo el análisis
+    # escribía ahí: en la pestaña equivocada si el físico había cambiado de pestaña, en un widget destruido si la
+    # había cerrado, y con `.setText` sobre una tabla si el resultado anterior había convertido el texto en tabla.
+    # Ahora el ÚNICO camino a un widget de resultados es la pestaña que lo contiene, por su nombre.
+    def _widgets_de(self, text):
+        """Los widgets de la pestaña `text` ({tab, layout, canvas, toolbar, label, resultados, criterio, titulo}), o
+        None si esa pestaña no existe. Una pestaña cuyo widget ya fue destruido (`deleteLater` de `limpiar_recursos`,
+        por ejemplo) es una pestaña que no existe: se retira del registro, así nadie recibe un widget muerto.
+        `label` es la etiqueta con la que nace la pestaña, la que recibe la reconstrucción desde la BD
+        (`GestorReconstruccion`); NO es el destino de los resultados: ese es `resultados`, la ranura."""
+        widgets = getattr(self, 'dynamic_tabs', {}).get(text)
+        if widgets is None:
+            return None
+        try:
+            widgets['tab'].objectName()             # RuntimeError si el objeto C++ ya no existe
+        except RuntimeError:
+            self.dynamic_tabs.pop(text, None)
+            return None
+        return widgets
+
+    def _abrir_pestana(self, text):
+        """Deja abierta y a la vista la pestaña de resultados `text` y devuelve sus widgets. El combo dice qué
+        resultado se ve; si la pestaña no existe (nunca se abrió, se cerró o su widget murió) se crea por el mismo
+        camino que el combo (`createTab`: reconstruir desde la BD o agregar los controles de guardado); si existe,
+        solo se activa. Antes se dependía de que el cambio del combo creara la pestaña, y con el combo ya en ese
+        texto no emite nada: el resultado se escribía en el último widget que se hubiera creado."""
+        self.graficar.setCurrentText(text)
+        widgets = self._widgets_de(text)
+        if widgets is None:
+            self.createTab(text)
+            widgets = self._widgets_de(text)
+            if widgets is None:
+                raise RuntimeError(f"No se pudo abrir la pestaña de resultados '{text}'")
+        else:
+            self._activar_tab_existente(text)
+        return widgets
+
+    def _canvas_de(self, text):
+        """El lienzo de la pestaña `text` (abriéndola si hace falta): donde dibuja el análisis de esa prueba."""
+        return (self._widgets_de(text) or self._abrir_pestana(text))['canvas']
+
+    ESTILO_RESULTADOS = ("QLabel { font-family: 'Segoe UI'; font-size: 15px; color: #2c3e50; "
+                         "background-color: #f8f9fa; padding: 10px; border: 1px solid #dee2e6; border-radius: 5px; }")
+
+    def _escribir_resultado(self, text, contenido):
+        """Único punto por el que el resultado de una prueba llega a la pantalla. `contenido` es texto o un widget
+        (una tabla): que el destino sea un QLabel o un QTableWidget deja de ser una suposición del llamador, porque
+        la ranura de resultados de cada pestaña es un contenedor y aquí se cambia lo que hay dentro."""
+        widgets = self._widgets_de(text) or self._abrir_pestana(text)
+        ranura = widgets['resultados'].layout()
+        actual = ranura.itemAt(0).widget() if ranura.count() else None
+        if isinstance(contenido, str) and isinstance(actual, QLabel):
+            actual.setText(contenido)              # texto sobre texto: la misma etiqueta, como siempre
+            actual.setStyleSheet(self.ESTILO_RESULTADOS)
+            return actual
+        while ranura.count():
+            viejo = ranura.takeAt(0).widget()
+            if viejo is not None and viejo is not contenido:
+                viejo.setParent(None)
+        if isinstance(contenido, str):
+            etiqueta = QLabel()
+            etiqueta.setWordWrap(True)
+            etiqueta.setText(contenido)
+            etiqueta.setStyleSheet(self.ESTILO_RESULTADOS)
+            contenido = etiqueta
+        ranura.addWidget(contenido)
+        return contenido
 
     def _crear_nueva_tab(self, text):
         """Crea una nueva pestaña con su layout básico"""
@@ -2463,39 +2479,42 @@ class PruebaMensualTAC(PruebaMensual600):
         toolbar_tac = NavigationToolbar(canvas_resultados, self)
         new_tab_layout.addWidget(toolbar_tac)
 
-        # Label para resultados de texto
+        # Ranura de resultados: un contenedor que pertenece al layout de la pestaña y no se reemplaza nunca; lo que
+        # cambia es su contenido (el texto o la tabla de cada resultado), y eso lo hace `_escribir_resultado`.
+        contenedor_resultados = QWidget()
+        contenedor_resultados.setObjectName("contenedor_resultados")
+        ranura = QVBoxLayout(contenedor_resultados)
+        ranura.setContentsMargins(0, 0, 0, 0)
         resultados_texto = QLabel()
         resultados_texto.setWordWrap(True)
-        new_tab_layout.addWidget(resultados_texto, stretch=0)
+        ranura.addWidget(resultados_texto)
+        new_tab_layout.addWidget(contenedor_resultados, stretch=0)
 
         # G.3: criterio y veredicto del equipo, debajo de los resultados. Es un widget propio: sobrevive cuando
-        # `reemplazar_resultados_texto_con_tabla` cambia el label de resultados por una tabla.
+        # `_escribir_resultado` cambia lo que hay en la ranura de resultados (texto o tabla).
         criterio_texto = QLabel()
         criterio_texto.setObjectName("criterio_texto")
         criterio_texto.setWordWrap(True)
         criterio_texto.setTextFormat(Qt.RichText)
         new_tab_layout.addWidget(criterio_texto, stretch=0)
 
-        # Agregar pestaña al widget
-        self.tab_widget.addTab(new_tab, text)
-        self.dynamic_tabs[text] = new_tab
-        self.tab_widget.setCurrentWidget(new_tab)
-
-        # Guardar referencias
-        self.canvas_resultados = canvas_resultados
-        self.toolbar_tac = toolbar_tac
-        self.resultados_texto = resultados_texto
-        self.criterio_texto = criterio_texto
-
-        return {
+        # Los widgets de la pestaña viajan con ella: `dynamic_tabs[text]` los guarda completos y se van con su entrada
+        # cuando la pestaña se cierra (`closeTab`) o se destruye (`limpiar_recursos`). No queda ningún puntero suelto.
+        widgets = {
             'tab': new_tab,
             'layout': new_tab_layout,
             'canvas': canvas_resultados,
             'toolbar': toolbar_tac,
             'label': resultados_texto,
+            'resultados': contenedor_resultados,
             'criterio': criterio_texto,
             'titulo': titulo
         }
+        self.tab_widget.addTab(new_tab, text)
+        self.dynamic_tabs[text] = widgets
+        self.tab_widget.setCurrentWidget(new_tab)
+
+        return widgets
 
     def _agregar_controles_guardado(self, nombre_pestaña, tab_info):
         """Agrega controles de guardado para modo de carga nueva"""
@@ -2512,11 +2531,27 @@ class PruebaMensualTAC(PruebaMensual600):
         Agrega botones de guardado a la pestaña activa después de completar un análisis
         """
         try:    
-            # Obtener la pestaña actual
-            current_tab = self.tab_widget.currentWidget()
-            
-            # Obtener el layout de la pestaña actual
-            tab_layout = current_tab.layout()
+            # Mapear categoria interna a nombre de pestaña
+            categoria_a_pestana = {
+                'espesor': 'Espesor de corte',
+                'tamaño_pixel': 'Tamaño de Pixel', 
+                'resolucion_espacial': 'Resolución Espacial',
+                'resolucion_contraste': 'Resolución de Contraste',
+                'valores_numero_ct': 'Valores CT',
+                'linealidad_numero_ct': 'Linealidad del CT',
+                'uniformidad_ruido': 'Uniformidad y Ruido'
+            }
+            nombre_pestana = categoria_a_pestana.get(categoria)
+            if not nombre_pestana:
+                print(f"❌ No se encontró mapeo para la categoría: {categoria}")
+                return
+
+            # C.1: el layout es el de la pestaña de ESTA prueba, no el de la que esté a la vista
+            widgets = self._widgets_de(nombre_pestana)
+            if widgets is None:
+                print(f"❌ No hay pestaña abierta para '{nombre_pestana}'")
+                return
+            tab_layout = widgets['layout']
             
             # Verificar si ya existe un layout de botones para evitar duplicados
             for i in range(tab_layout.count()):
@@ -2531,22 +2566,6 @@ class PruebaMensualTAC(PruebaMensual600):
             # Crear layout para botones si no existe
             botones_layout = QHBoxLayout()
             
-            # Mapear categoria interna a nombre de pestaña para crear el botón
-            categoria_a_pestana = {
-                'espesor': 'Espesor de corte',
-                'tamaño_pixel': 'Tamaño de Pixel', 
-                'resolucion_espacial': 'Resolución Espacial',
-                'resolucion_contraste': 'Resolución de Contraste',
-                'valores_numero_ct': 'Valores CT',
-                'linealidad_numero_ct': 'Linealidad del CT',
-                'uniformidad_ruido': 'Uniformidad y Ruido'
-            }
-            
-            nombre_pestana = categoria_a_pestana.get(categoria)
-            if not nombre_pestana:
-                print(f"❌ No se encontró mapeo para la categoría: {categoria}")
-                return
-
             # Crear botón de guardado individual
             boton_individual = self._crear_boton_guardado_individual(nombre_pestana)
             if boton_individual:
