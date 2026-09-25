@@ -70,14 +70,21 @@ RAICES = lv.RAICES_QC
 # ---------------------------------------------------------------------------
 CENSO_RAICES = {
     # -- B.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md) -----------------------
-    ("services/referencias_qc.py", 127, "referencias_qc"):  # F.1 (25-09): 70->127
+    # -- F.2 (PLAN_HANDOFF_IMAGENES_22-09.md) -----------------------------
+    ("services/referencias_qc.py", 163, "controles"):
+        (LISTA, "_historico_calidad: `ref IN (SELECT id FROM controles WHERE "
+         "LOWER(equipo) = LOWER(?))` -- los controles VIGENTES de un equipo (varias "
+         "generaciones posibles, una por mes), para leer con qué referencia de "
+         "calidad se guardó cada uno; filtra activo con filtro_activo('controles') "
+         "dentro del f-string, y el de dosimetriaMen en la consulta de fuera"),
+    ("services/referencias_qc.py", 216, "referencias_qc"):  # F.1 (25-09): 70->127; F.2 (25-09): 127->216
         (LISTA, "leer_referencia: WHERE equipo=? AND magnitud=? AND energia=? "
          "-- la CLAVE DE BLOQUE completa (no una fila física), así que filtra "
          "activo con filtro_activo() dentro del propio f-string"),
-    ("services/referencias_qc.py", 140, "referencias_qc"):  # F.1 (25-09): 83->140
+    ("services/referencias_qc.py", 229, "referencias_qc"):  # F.1 (25-09): 83->140; F.2 (25-09): 140->229
         (LISTA, "listar_vigentes: lista TODAS las referencias vigentes para "
          "la pestaña; filtra activo con filtro_activo() en el f-string"),
-    ("services/referencias_qc.py", 155, "referencias_qc"):  # F.1 (25-09): 98->155
+    ("services/referencias_qc.py", 244, "referencias_qc"):  # F.1 (25-09): 98->155; F.2 (25-09): 155->244
         (CENSO, "historial: lee las filas vigentes E históricas de una clave "
          "de bloque A PROPÓSITO -- es el rastro de quién cambió qué y cuándo "
          "(paso 8 de la puerta de salida); filtrar activo lo dejaría vacío"),
@@ -342,8 +349,8 @@ CENSO_RAICES = {
 # quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
 # en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
 # 70 -> 73 sitios físicos.
-FILAS_ESPERADAS = 75
-SITIOS_FISICOS_ESPERADOS = 73
+FILAS_ESPERADAS = 76      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`)
+SITIOS_FISICOS_ESPERADOS = 74      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`)
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

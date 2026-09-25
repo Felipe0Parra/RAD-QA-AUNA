@@ -341,8 +341,9 @@ class TestDenominadorDeCobertura:
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 104, (
-            f"B.3 sumó lectoras nuevas -- 104 funciones "
+        assert len(lectoras) == 105, (
+            f"F.2 sumó `services/referencias_qc.py::_historico_calidad` (lee `controles` y `dosimetriaMen` con su "
+            f"filtro de vigencia: las referencias con que se guardó cada control) -- 105 funciones "
             f"esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "

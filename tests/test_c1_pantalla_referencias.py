@@ -318,8 +318,9 @@ class TestSinSQLYSinSimbolos:
                     and isinstance(n.func.value, ast.Name) and n.func.value.id == "_datos"}
         # F.1 (25-09): además lista los físicos que pueden firmar y resuelve el nombre de la cuenta con sesión: todo por el
         # servicio, la pantalla sigue sin SQL propio.
+        # F.2 (25-09): también le pregunta al servicio si el valor es verosímil antes de pedir la confirmación.
         assert llamadas == {"listar_vigentes", "historial", "fijar_referencia", "fisicos_responsables",
-                            "nombre_de_usuario"}
+                            "nombre_de_usuario", "evaluar_verosimilitud"}
 
     def test_ningun_texto_lleva_simbolos_de_correcto_o_incorrecto(self):
         """DA-18: ni en las cadenas del módulo ni en lo que la pantalla

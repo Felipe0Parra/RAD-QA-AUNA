@@ -30,6 +30,8 @@ actúa, y la auditoría sigue registrando a esa cuenta: cambiar quién firma no
 afloja quién escribe.
 """
 import math
+import statistics
+from dataclasses import dataclass
 from datetime import datetime
 
 from data.ManejoDatos.conection import Conexion
@@ -54,6 +56,14 @@ RESPONSABLE_INVALIDO = "el responsable no es un físico médico activo"
 UNIDAD_POR_MAGNITUD = {"calidad": "1"}
 
 CARGO_FISICO = "Físico Médico"       # `users.role`: el cargo mostrado (no `rol_sistema`, que es el permiso)
+
+# F.2 (PLAN_HANDOFF_IMAGENES_22-09.md): un valor que no se parece a nada de lo conocido para esa energía pide una
+# confirmación explícita. El margen no sale de la nada: en los controles reales la calidad MEDIDA de una misma pareja
+# equipo-energía varía entre 0.43 % (Halcyon 6 MV) y 9.92 % (iX 6 MeV), y la peor medición real se aparta 6.8 % del valor
+# de respaldo (Halcyon 6 MV: 0.62 frente a 0.665); el error que hay que atrapar (0.483, el valor de 6 MeV, fijado bajo
+# 15 MV el 22-09 a las 10:22:44, frente a 0.761) es de 36.5 %. 20 % es el doble de la mayor dispersión medida: no salta
+# con la variación normal (dejaría de leerse) y sí con un valor de otra energía o con un decimal corrido.
+MARGEN_VEROSIMILITUD = 0.20
 
 
 def _nombre_completo(cursor, username):
@@ -102,6 +112,85 @@ def _resolver_firmante(cursor, username_solicitante, responsable):
         return (activos[elegido], None) if elegido in activos else (None, RESPONSABLE_INVALIDO)
     propio = _nombre_completo(cursor, username_solicitante).strip()
     return (activos[propio], None) if propio in activos else (None, RESPONSABLE_OBLIGATORIO)
+
+
+@dataclass(frozen=True)
+class Comparacion:
+    """Contra qué se comparó un valor y cuánto se aparta (desviación relativa a la referencia, siempre >= 0)."""
+    origen: str
+    referencia: float
+    desviacion: float
+
+
+@dataclass(frozen=True)
+class Verosimilitud:
+    """Un valor que no concuerda con NINGUNA de las referencias conocidas para esa pareja. Se avisa, no se bloquea:
+    una referencia nueva legítima puede apartarse, y el físico manda."""
+    equipo: str
+    magnitud: str
+    energia: str
+    valor: float
+    margen: float
+    comparaciones: tuple
+
+    def texto(self):
+        """El aviso para la persona, con las dos cifras a la vista y sin símbolos (DA-18)."""
+        donde = f"{self.magnitud} de {self.equipo}" + (f" ({self.energia})" if self.energia else "")
+        lineas = [f"El valor {self.valor:g} se aparta más de {self.margen * 100:g} % de todo lo que se conoce para "
+                  f"{donde}:"]
+        lineas += [f"  - {c.origen}: {c.referencia:g} (difiere {c.desviacion * 100:.1f} %)" for c in self.comparaciones]
+        lineas.append("Si es el valor de otra energía o de otro equipo, o tiene un decimal corrido, corríjalo antes de "
+                      "fijarlo.")
+        return "\n".join(lineas)
+
+    def resumen(self):
+        """Una línea para el rastro de auditoría."""
+        return "valor fuera de lo verosímil: " + "; ".join(
+            f"{c.origen} {c.referencia:g} ({c.desviacion * 100:.1f} %)" for c in self.comparaciones)
+
+
+ORIGEN_RESPALDO = "valor de respaldo de la aplicación"
+
+
+def _historico_calidad(equipo, energia):
+    """Las referencias de calidad con las que se guardaron los controles vigentes de esa pareja (`val_teo_calidad`, la copia
+    que cada control conserva, A.2). Solo vigentes, sin nulos."""
+    sql = (f"SELECT val_teo_calidad FROM dosimetriaMen WHERE energia = ? AND val_teo_calidad IS NOT NULL"
+           f"{filtro_activo('dosimetriaMen')} AND ref IN (SELECT id FROM controles WHERE LOWER(equipo) = LOWER(?)"
+           f"{filtro_activo('controles')})")
+    with Conexion().conectar() as db:
+        cursor = db.cursor()
+        cursor.execute(sql, (energia, equipo))
+        return [float(v) for (v,) in cursor.fetchall()]
+
+
+def evaluar_verosimilitud(equipo, magnitud, energia, valor, respaldo=None):
+    """`None` si `valor` es verosímil para esa pareja -- concuerda (dentro de `MARGEN_VEROSIMILITUD`) con al menos una
+    referencia conocida --, o si no hay nada con qué compararlo; un `Verosimilitud` si no concuerda con ninguna.
+
+    Las referencias conocidas son (a) `respaldo`, el valor de respaldo de la aplicación para esa energía (lo pasa quien
+    llama: vive en el mensual), y (b) la mediana de las referencias con que se guardaron los controles de esa pareja
+    (solo la calidad las tiene). Concordar con UNA basta: una referencia nueva que coincide con lo que ya usan los
+    controles no es sospechosa aunque el respaldo esté desactualizado, y volver al respaldo tampoco.
+
+    No lanza ni bloquea: un valor que no es un número válido lo rechaza `fijar_referencia`, no esto."""
+    v = _valor_valido(valor)
+    if v is None:
+        return None
+    energia = _normalizar_energia(energia)
+    comparaciones = []
+    if respaldo is not None and respaldo > 0:
+        comparaciones.append(Comparacion(ORIGEN_RESPALDO, float(respaldo), abs(v - respaldo) / respaldo))
+    if magnitud == "calidad":
+        historico = _historico_calidad(equipo, energia)
+        if historico:
+            mediana = statistics.median(historico)
+            comparaciones.append(Comparacion(
+                f"mediana de las referencias de {len(historico)} control(es) guardado(s)", mediana,
+                abs(v - mediana) / mediana))
+    if not comparaciones or any(c.desviacion <= MARGEN_VEROSIMILITUD + 1e-12 for c in comparaciones):
+        return None
+    return Verosimilitud(equipo, magnitud, energia, v, MARGEN_VEROSIMILITUD, tuple(comparaciones))
 
 
 def _normalizar_energia(energia):
@@ -174,7 +263,7 @@ def _valor_valido(valor):
 
 
 def fijar_referencia(equipo, magnitud, energia, valor, fuente, observaciones,
-                      username_solicitante, unidad=None, responsable=None):
+                      username_solicitante, unidad=None, responsable=None, advertencia=None):
     """Anula la referencia vigente para (equipo, magnitud, energia), si la
     hay, e inserta la nueva. Exige `es_fisico_jefe(username_solicitante)` --
     si el rol no resuelve o no es jefe/admin, se deniega y se audita el
@@ -192,6 +281,11 @@ def fijar_referencia(equipo, magnitud, energia, valor, fuente, observaciones,
     lo es), y uno que no es físico activo se rechaza (`RESPONSABLE_INVALIDO`).
     El permiso NO cambia: lo decide `es_fisico_jefe` de la cuenta que actúa,
     y la auditoría registra a esa cuenta, no al responsable.
+
+    F.2: `advertencia` es el texto del aviso de verosimilitud que la persona
+    confirmó (`Verosimilitud.resumen()`); solo se anota en la auditoría. NO
+    bloquea nada: avisar es de la pantalla, y una referencia legítima puede
+    apartarse de todo lo conocido.
 
     Devuelve `(True, None)` si se fijó, o `(False, motivo)` si no."""
     energia = _normalizar_energia(energia)
@@ -227,6 +321,8 @@ def fijar_referencia(equipo, magnitud, energia, valor, fuente, observaciones,
         fila = (equipo, magnitud, energia, valor, unidad, fuente, observaciones,
                  firmante, fecha)
         quien = "" if firmante == nombre_solicitante else f"; responsable: {firmante}"
+        if advertencia:
+            quien += f"; confirmado pese al aviso ({advertencia})"
 
         reemplazar_bloque(
             cursor, TABLA, clave, sql_insert, [fila], nombre_solicitante,

@@ -188,6 +188,15 @@ class Referencias(QWidget):
         magnitud = self.cb_magnitud.currentData() if hasattr(self, "cb_magnitud") else MAGNITUDES[0][0]
         return _datos.UNIDAD_POR_MAGNITUD.get(magnitud, "")
 
+    @staticmethod
+    def _respaldo_de(magnitud, energia):
+        """El valor de respaldo de la aplicación para esa magnitud y energía (hoy solo la calidad lo tiene), o None. Se
+        toma del mensual, que es donde vive y quien lo usa (A.1): una sola definición."""
+        if magnitud != "calidad":
+            return None
+        from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
+        return PruebaMensual600.VALORES_REFERENCIA_CALIDAD_RESPALDO.get(energia)
+
     def _nombre_de_la_sesion(self):
         """El nombre completo de la cuenta con sesión abierta (el que figura en `users.fullname`), o None."""
         return _datos.nombre_de_usuario(self._username_solicitante)
@@ -289,18 +298,26 @@ class Referencias(QWidget):
         unidad = self.in_unidad.text().strip() or None
         responsable = self.cb_responsable.currentData()
 
-        if QMessageBox.question(
-                self, "Fijar referencia",
-                f"¿Fijar {magnitud} de {equipo} ({_texto_energia(energia)}) "
-                f"en {valor_texto or 'un valor vacío'}? Los controles NUEVOS "
-                "usarán este valor; los ya guardados conservan el que tenían "
-                "cuando se firmaron.",
-                QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+        texto = (f"¿Fijar {magnitud} de {equipo} ({_texto_energia(energia)}) "
+                 f"en {valor_texto or 'un valor vacío'}? Los controles NUEVOS "
+                 "usarán este valor; los ya guardados conservan el que tenían "
+                 "cuando se firmaron.")
+        # F.2: un valor que no concuerda con nada de lo conocido para esa energía se avisa con las cifras a la vista y
+        # se pregunta con "No" por omisión. Avisa, no bloquea: si la persona confirma, se fija.
+        aviso = _datos.evaluar_verosimilitud(equipo, magnitud, energia, valor_texto,
+                                             respaldo=self._respaldo_de(magnitud, energia))
+        if aviso is None:
+            if QMessageBox.question(self, "Fijar referencia", texto,
+                                    QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
+                return
+        elif QMessageBox.question(self, "Valor inusual", aviso.texto() + "\n\n" + texto,
+                                  QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
 
         exito, motivo = _datos.fijar_referencia(
             equipo, magnitud, energia, valor_texto, fuente, observaciones,
-            self._username_solicitante, unidad=unidad, responsable=responsable)
+            self._username_solicitante, unidad=unidad, responsable=responsable,
+            advertencia=aviso.resumen() if aviso is not None else None)
         if not exito:
             QMessageBox.warning(
                 self, "No se pudo fijar la referencia",
