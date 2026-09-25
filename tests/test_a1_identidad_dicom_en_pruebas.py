@@ -229,7 +229,10 @@ def test_dicomvolume_expone_la_adquisicion_de_su_serie():
     ruta = _requerir("IX_DIC")          # la mas pequena del corpus (70 cortes)
     vol = DicomVolume(ruta)
     esperado = adquisicion_de_serie(leer_serie(ruta))
-    assert vol.adquisicion == esperado
+    # B.3 (25-09): el volumen añade a la adquisicion de los encabezados lo que MIDE en los pixeles (el corrimiento de la
+    # escala de HU); todo lo demas es exactamente lo que dice `leer_serie`.
+    assert {k: v for k, v in vol.adquisicion.items() if k != "desplazamiento_hu"} == esperado
+    assert "desplazamiento_hu" in vol.adquisicion
     assert float(vol.kv) == esperado["kv"]
     assert int(vol.ma) == esperado["ma"]
     assert vol.serie_uid == esperado["serie_uid"]

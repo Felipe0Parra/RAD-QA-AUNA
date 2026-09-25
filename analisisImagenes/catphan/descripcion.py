@@ -41,6 +41,13 @@ ADQUISICION = (
 )
 
 
+# B.3: lo que la aplicación MIDE en los píxeles (no lo publica el equipo). Van aparte de `ADQUISICION`: cuando falta, no
+# se dice "(no lo publica el equipo)" sino que no se midió, o que el control es anterior a la medición.
+MEDIDOS = (
+    ("desplazamiento_hu", "Corrimiento de escala [HU]"),
+)
+
+
 def texto_valor(valor) -> str:
     """Un valor DICOM para mostrar."""
     if valor is None or valor == "":
@@ -58,6 +65,25 @@ def _filas(definicion, adq: dict, claves: Optional[tuple]) -> list:
 def filas_identidad(adq: dict, claves: Optional[tuple] = None) -> list:
     """[(etiqueta, texto)] del equipo tal como lo dice el DICOM."""
     return _filas(IDENTIDAD, adq or {}, claves)
+
+
+def filas_medidas(adq: dict, ausente: Optional[str] = None) -> list:
+    """[(etiqueta, texto)] de lo que la aplicación midió en la serie (hoy, el corrimiento de la escala de HU).
+
+    Una clave AUSENTE del diccionario (un control anterior a la medición, o una comparación solo con encabezados) da
+    `ausente` (la fila se omite si es `None`); una clave presente con valor `None` es una medición que no se pudo hacer.
+    El valor lleva su signo: `+475`, `-35`."""
+    adq = adq or {}
+    filas = []
+    for clave, etiqueta in MEDIDOS:
+        if clave not in adq:
+            if ausente is not None:
+                filas.append((etiqueta, ausente))
+        elif adq[clave] is None:
+            filas.append((etiqueta, "no se pudo medir"))
+        else:
+            filas.append((etiqueta, f"{float(adq[clave]):+.0f}"))
+    return filas
 
 
 def filas_adquisicion(adq: dict, claves: Optional[tuple] = None) -> list:

@@ -41,7 +41,9 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBox, QPushButton,
                              QScrollArea, QVBoxLayout, QWidget)
 
-from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad  # noqa: F401  (NO_PUBLICADO: se sigue importando desde aquí)
+from analisisImagenes.catphan.descripcion import (  # noqa: F401  (NO_PUBLICADO: se sigue importando desde aquí)
+    NO_PUBLICADO, filas_adquisicion, filas_identidad, filas_medidas)
+from analisisImagenes.catphan.escala import CLAVE_EN_ADQUISICION, nota_escala
 from analisisImagenes.catphan.protocolos import (
     COINCIDE, NO_IDENTIFICADO, OTRO_EQUIPO, ROTULO_FUERA_DE_PROTOCOLO, SIN_EQUIPO, SIN_PROTOCOLO,
     comparar_con_protocolo, texto_encontrado, texto_exigido)
@@ -124,6 +126,10 @@ def _carpeta(vol, adq: dict) -> list:
                           f"La carpeta trae más de una serie: se descartaron {n} cortes de otra serie"
                           + (f" ({detalle_txt})." if detalle_txt else ".")))
 
+    nota = nota_escala(adq.get(CLAVE_EN_ADQUISICION))
+    if nota:
+        filas.append((INFO, nota))                       # B.3: no se corrigen las imágenes: se declara su escala
+
     no_imagen = getattr(vol, "no_imagen", 0) or 0
     if no_imagen:
         filas.append((INFO, f"{no_imagen} archivo(s) que no son imagen CT (por ejemplo, un RTSTRUCT) "
@@ -143,7 +149,9 @@ def construir_modelo_ventana(vol, equipo_seleccionado: Optional[str]) -> ModeloV
     # E.2: las filas de identidad y de adquisición se definen en `descripcion.py` -- el PDF del
     # informe muestra la MISMA metadata con las mismas etiquetas.
     identidad = filas_identidad(adq)
-    adquisicion = filas_adquisicion(adq)
+    # B.3: lo que la aplicación midió en los píxeles (el corrimiento de la escala de HU) va con la adquisición; sin
+    # medición (una comparación solo con encabezados) no se muestra la fila.
+    adquisicion = filas_adquisicion(adq) + filas_medidas(adq)
 
     filas = []
     for f in c.filas:

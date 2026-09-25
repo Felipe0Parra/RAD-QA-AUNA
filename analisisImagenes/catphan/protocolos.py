@@ -32,6 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from analisisImagenes.catphan.escala import CLAVE_EN_ADQUISICION as CAMPO_ESCALA  # B.3
 from analisisImagenes.catphan.serie import identificar_equipo_por_datos
 
 # Los campos que se comparan, en el orden en que se muestran. `campo` es la
@@ -275,11 +276,16 @@ def texto_exigido(f: FilaProtocolo) -> str:
     """Lo que el protocolo exige en esa fila, con su tolerancia si la tiene."""
     if f.esperado is None:
         return "no se exige"
+    if f.campo == CAMPO_ESCALA:              # B.3: un corrimiento lleva su signo
+        return f"{float(f.esperado):+g} ± {_fmt(f.tolerancia)}"
     return _fmt(f.esperado) + (f" ± {_fmt(f.tolerancia)}" if f.tolerancia else "")
 
 
 def texto_encontrado(f: FilaProtocolo) -> str:
-    """Lo que dice el DICOM en esa fila ('no publicado' si falta)."""
+    """Lo que dice el DICOM en esa fila ('no publicado' si falta; el corrimiento de la escala lo mide la aplicación:
+    si no se pudo, lo dice)."""
+    if f.campo == CAMPO_ESCALA:
+        return "no se pudo medir" if f.encontrado is None else f"{float(f.encontrado):+g}"
     return _fmt(f.encontrado)
 
 
@@ -375,6 +381,18 @@ def comparar_con_protocolo(equipo_seleccionado: Optional[str], adquisicion: Opti
         tolerancia = protocolo.tolerancias.get(campo, 0.0)
         filas.append(FilaProtocolo(grupo, campo, etiqueta, esperado, encontrado, tolerancia,
                                    _cumple(esperado, encontrado, tolerancia, numerico)))
+
+    # B.3: el corrimiento de la escala de HU lo MIDE la aplicación (no viene en el encabezado), y solo se compara si la
+    # serie trae la medición: una comparación hecha solo con encabezados no lo tiene, y no por eso "no cumple". Con
+    # el protocolo fijo el corrimiento debe ser estable (iX ≈ +490): si un mes sale muy distinto, es la señal más clara
+    # de que se adquirió con otro preset. Una medición que no se pudo hacer no se le cobra al físico.
+    if CAMPO_ESCALA in adq:
+        medido = adq[CAMPO_ESCALA]
+        esperado = protocolo.corrimiento_hu_esperado
+        tolerancia = protocolo.corrimiento_hu_tolerancia
+        filas.append(FilaProtocolo("adquisicion", CAMPO_ESCALA, "Corrimiento de escala de HU [HU]", esperado,
+                                   medido, tolerancia,
+                                   None if medido is None else _cumple(esperado, medido, tolerancia, True)))
 
     if identificado is None:
         identidad = NO_IDENTIFICADO

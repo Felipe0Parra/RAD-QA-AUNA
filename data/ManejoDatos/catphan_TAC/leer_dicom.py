@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSlider, QWidget,
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import pyqtgraph as pg
 from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modulos
+from analisisImagenes.catphan import escala as escala_mod
 from analisisImagenes.catphan import ventana as ventana_mod
 from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie, ventana_de_serie
 from data.ManejoDatos.catphan_TAC.ventana_metadatos import mostrar_ventana_metadatos
@@ -191,6 +192,9 @@ class DicomVolume:
         self.adquisicion = None
         # B.2 (23-09): la ventana (WindowCenter, WindowWidth) que el equipo propone para esta serie, o None.
         self.ventana_dicom = None
+        # B.3 (23-09): el HU del material dominante del fantoma (≈ 0 en un equipo calibrado, ≈ +490 en el OBI del
+        # iX); `None` si no se pudo medir. Ver `analisisImagenes/catphan/escala.py`.
+        self.desplazamiento_hu = None
         self.series_descartadas = {}
         self.detalle_series_descartadas = {}
         self.no_imagen = 0
@@ -268,6 +272,7 @@ class DicomVolume:
                 self.volumen = None
                 self.volumen_hu = None
 
+            self._medir_escala_de_hu()
             _registrar_etapa("fin _load_dicoms")
 
         except Exception as e:
@@ -275,6 +280,16 @@ class DicomVolume:
             print(f"Error durante la carga de DICOM: {e}")
             self.volumen = None
             self.volumen_hu = None
+
+    def _medir_escala_de_hu(self):
+        """B.3: mide el corrimiento de la escala de HU y lo DECLARA en la adquisición de la serie (que es lo que la
+        ventana de la carga muestra, lo que se compara con el catálogo y lo que se archiva con cada prueba). No corrige
+        nada: solo dice en qué unidades viene el volumen."""
+        self.desplazamiento_hu = (None if self.volumen_hu is None
+                                  else escala_mod.desplazamiento_hu(self.volumen_hu))
+        if self.adquisicion is not None:
+            self.adquisicion[escala_mod.CLAVE_EN_ADQUISICION] = (
+                None if self.desplazamiento_hu is None else round(self.desplazamiento_hu, 1))
 
     def _load_standard_volume(self):
         """Carga estándar para volúmenes pequeños/medianos."""

@@ -51,7 +51,8 @@ from models.PDF.PDFWindow import PdfViewer
 # Importar funciones de reconstrucción desde catphan_db
 from data.ManejoDatos.catphan_TAC.catphan_db import reconstruir_resultados_desde_bd
 from services.anulacion import filtro_activo
-from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad
+from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad, filas_medidas
+from analisisImagenes.catphan.escala import CLAVE_EN_ADQUISICION as CLAVE_ESCALA, nota_escala
 from analisisImagenes.catphan.criterios import Juicio, texto_fuente, texto_valor
 
 class ReporteControlSistemaImagenes:
@@ -634,11 +635,13 @@ class ReporteControlSistemaImagenes:
     _CLAVES_ANTERIORES_A_A1 = ('kv', 'ma', 'espesor_mm')
     LEGADO = 'no registrado (control anterior al 23-09-2026)'
     ENERGIA_NO_REGISTRADA = 'no registrada (control anterior al 24-09-2026)'   # G.2
+    ESCALA_NO_REGISTRADA = 'no registrado (control anterior al 25-09-2026)'    # B.3
 
     def _filas_de_una_adquisicion(self, info, equipo):
         """Una adquisición tal como está GUARDADA en `pruebas` (§12.4: el documento de un control
-        reabierto dice lo mismo que el del día). Devuelve `(pares, ancha)`: los pares (etiqueta, valor)
-        que van lado a lado y la fila de ancho completo con el veredicto (o con lo que no se guardó)."""
+        reabierto dice lo mismo que el del día). Devuelve `(pares, anchas)`: los pares (etiqueta, valor)
+        que van lado a lado y las filas de ancho completo -- el veredicto (o lo que no se guardó) y, si la serie
+        no está en HU calibrados (B.3), la nota que lo declara."""
         crudo = info.get('adquisicion_dicom')
         adq = None
         if crudo:
@@ -650,29 +653,35 @@ class ReporteControlSistemaImagenes:
                 adq = None
         if adq is not None:
             desviacion = info.get('desviacion_protocolo')
-            return (filas_identidad(adq) + filas_adquisicion(adq),
-                    ('Frente al protocolo', desviacion or (
-                        f"Sin desviación registrada respecto del protocolo de {equipo or 'su equipo'}")))
+            anchas = [('Frente al protocolo', desviacion or (
+                f"Sin desviación registrada respecto del protocolo de {equipo or 'su equipo'}"))]
+            nota = nota_escala(adq.get(CLAVE_ESCALA))            # B.3: la escala del OBI se declara, no se corrige
+            if nota:
+                anchas.append(('Escala de HU', nota))
+            return (filas_identidad(adq) + filas_adquisicion(adq) + filas_medidas(adq, self.ESCALA_NO_REGISTRADA),
+                    anchas)
 
         # Sin identidad DICOM: un control anterior a A.1 o una fila ilegible. Lo que SÍ se guardó
         # (kV, mA, espesor) se conserva; lo demás se dice, no se inventa ni se rellena con lo de hoy.
         basicos = {'kv': info.get('kv'), 'ma': info.get('ma'), 'espesor_mm': info.get('espesor_corte')}
         pares = [(etiqueta, 'N/A' if valor == NO_PUBLICADO else valor)
                  for etiqueta, valor in filas_adquisicion(basicos, self._CLAVES_ANTERIORES_A_A1)]
-        return pares, ('Identidad y adquisición DICOM',
-                       'no se pudo leer lo guardado' if crudo else self.LEGADO)
+        return pares, [('Identidad y adquisición DICOM',
+                        'no se pudo leer lo guardado' if crudo else self.LEGADO)]
 
     @staticmethod
-    def _en_cuatro_columnas(pares, ancha):
+    def _en_cuatro_columnas(pares, anchas):
         """Los pares (etiqueta, valor) en dos columnas de pares -- se leen de arriba abajo por la
-        izquierda y luego por la derecha -- y la fila ancha al final. Ver `_spans_de_filas_completas`."""
+        izquierda y luego por la derecha -- y las filas anchas (el veredicto, y la nota de escala de HU si
+        corresponde) al final. Ver `_spans_de_filas_completas`."""
         mitad = (len(pares) + 1) // 2
         izquierda, derecha = pares[:mitad], pares[mitad:]
         filas = []
         for i, (etiqueta, valor) in enumerate(izquierda):
             etiqueta2, valor2 = derecha[i] if i < len(derecha) else ('', '')
             filas.append([etiqueta, valor, etiqueta2, valor2])
-        filas.append([ancha[0], ancha[1], None, None])
+        for etiqueta, texto in anchas:
+            filas.append([etiqueta, texto, None, None])
         return filas
 
     def _crear_tabla_parametros_adquisicion(self, infos_prueba, equipo):
