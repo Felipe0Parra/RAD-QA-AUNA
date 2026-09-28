@@ -108,6 +108,14 @@ class TestMensualCamposMaximosYLecturasSeLimpian:
         assert fila[3].text() == "-"  # promedio vuelve al valor de fábrica
 
     def test_campos_lecturas_medidas_se_limpian_voltaje_no(self, app, bd_temporal):
+        """V.5 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): desde V.5 el
+        voltaje YA NO es de solo lectura -- "Limpiar" lo repone a
+        VOLTAJES_POR_DEFECTO en vez de dejarlo intacto. Este test sigue
+        pasando tal cual porque nunca EDITA el voltaje antes de limpiar
+        (sale en su valor por defecto y vuelve al mismo valor por
+        defecto) -- no se borra ni se cambia su aserción; el
+        comportamiento nuevo (voltaje editado que SÍ cambia) lo cubre
+        `tests/test_v5_voltajes_se_escriben.py::TestLimpiarDevuelveLosVoltajesPorDefecto`."""
         d = PruebaMensualBraq(_UsuarioFalso("Físico de Prueba"))
         fila = d.campos_lecturas[0]
         voltaje_original = fila[0].text()

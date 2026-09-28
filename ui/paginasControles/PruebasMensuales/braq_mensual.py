@@ -619,7 +619,14 @@ class PruebaMensualBraq(PruebaBasico):
         grid.setContentsMargins(0, 0, 0, 0)
 
         titulos = ["Voltaje (V)", "Medida 1 (A)", "Medida 2 (A)", "Medida 3 (A)", "Promedio (A)"]
-        voltajes = ["300", "150", "-300"]
+        # V.5 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): una sola
+        # definición del valor por defecto (services/lecturas_del_maximo.py).
+        voltajes = list(VOLTAJES_POR_DEFECTO)
+        tooltips_voltaje = [
+            "Voltaje alto (+). La polaridad opuesta lo sigue sola.",
+            "Voltaje bajo (+), menor que el alto.",
+            "Polaridad opuesta (−). Sigue sola al voltaje alto.",
+        ]
 
         self.campos_lecturas = []
 
@@ -643,7 +650,8 @@ class PruebaMensualBraq(PruebaBasico):
             voltaje = QLineEdit()
             voltaje.setText(voltajes[fila])   # valor inicial
             voltaje.setAlignment(Qt.AlignCenter)
-            voltaje.setReadOnly(True)
+            voltaje.setReadOnly(False)  # V.5: editable
+            voltaje.setToolTip(tooltips_voltaje[fila])
             voltaje.setFixedWidth(130)
             voltaje.setStyleSheet(
                 "border: 1px solid #4a8892; border-radius: 10px; "
@@ -683,6 +691,19 @@ class PruebaMensualBraq(PruebaBasico):
 
             self.campos_lecturas.append(fila_campos)
 
+        # V.5: el voltaje alto (fila 0) y la polaridad opuesta (fila 2)
+        # comparten una sola magnitud -- se escribe uno y el otro se
+        # espeja MIENTRAS SE ESCRIBE (textEdited, no textChanged: solo lo
+        # emite el teclado, así que la recarga y "Limpiar" -- que usan
+        # setText -- no lo disparan ni entran en bucle). Al salir de la
+        # celda (editingFinished, Enter o perder el foco) cada una queda
+        # con su signo fijo (alto +, opuesta -).
+        alto, opuesta = self.campos_lecturas[0][0], self.campos_lecturas[2][0]
+        alto.textEdited.connect(lambda texto: opuesta.setText(texto_espejo(texto, -1)))
+        opuesta.textEdited.connect(lambda texto: alto.setText(texto_espejo(texto, +1)))
+        alto.editingFinished.connect(lambda: self._fijar_signos_de_polaridad(alto.text()))
+        opuesta.editingFinished.connect(lambda: self._fijar_signos_de_polaridad(opuesta.text()))
+
         # Botón Aceptar
         self.aceptar = QPushButton("Ok")
         self.aceptar.setStyleSheet(
@@ -698,6 +719,50 @@ class PruebaMensualBraq(PruebaBasico):
         contenedor.setLayout(grid)
         self.layout_lecturas.addWidget(contenedor)
         self.tabla_lecturas_widget = contenedor
+
+    def _fijar_signos_de_polaridad(self, texto):
+        """V.5: al salir de la celda del voltaje alto o de la polaridad
+        opuesta (editingFinished -- Enter o perder el foco), cada una
+        queda con su signo fijo: alto positivo, opuesta negativo. Durante
+        la escritura (`textEdited`, arriba) ya se espejaban; esto solo
+        asegura el signo final, sin depender de en cuál de las dos celdas
+        haya terminado de teclear el físico."""
+        alto, opuesta = self.campos_lecturas[0][0], self.campos_lecturas[2][0]
+        alto.setText(texto_espejo(texto, +1))
+        opuesta.setText(texto_espejo(texto, -1))
+
+    def _voltajes_del_formulario(self):
+        """V.5: lee las filas 0 (alto), 1 (bajo) y 2 (polaridad opuesta)
+        de `campos_lecturas` POR POSICIÓN -- la fila no se mueve, es la
+        magnitud la que puede cambiar -- y valida el trío con la misma
+        regla que el resto de la app (`services/lecturas_del_maximo.py`).
+        Devuelve `(alto, bajo, negativo)` en `float`; lanza
+        `VoltajesInvalidos` con un mensaje que nombra la FILA si algo no
+        vale."""
+        etiquetas = ("Fila 1, voltaje alto", "Fila 2, voltaje bajo", "Fila 3, polaridad opuesta")
+        valores = []
+        for etiqueta, fila in zip(etiquetas, self.campos_lecturas[:3]):
+            texto = fila[0].text()
+            try:
+                valores.append(voltaje_de_texto(texto))
+            except VoltajesInvalidos as e:
+                raise VoltajesInvalidos(f"{etiqueta}: {e}") from e
+        alto, bajo, negativo = valores
+        try:
+            validar_roles(alto, bajo, negativo)
+        except VoltajesInvalidos as e:
+            # validar_roles no dice cuál fila -- se decide aquí, por
+            # POSICIÓN (nunca por magnitud: eso repetiría el error de
+            # BRQ-V2, ya cerrado en V.3).
+            mensaje = str(e)
+            if not (alto > 0):
+                etiqueta = etiquetas[0]
+            elif not (0 < bajo < alto):
+                etiqueta = etiquetas[1]
+            else:
+                etiqueta = etiquetas[2]
+            raise VoltajesInvalidos(f"{etiqueta}: {mensaje}") from e
+        return alto, bajo, negativo
 
     def clean_info(self, imagenes=False):
         """Z7 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): campos_maximos
@@ -715,8 +780,11 @@ class PruebaMensualBraq(PruebaBasico):
             fila[1].clear()
             fila[2].clear()
             fila[3].setText("-")
-        for fila in getattr(self, "campos_lecturas", []):
-            # [voltaje(RO), medida1, medida2, medida3, promedio(RO)]
+        # V.5: el voltaje YA NO es de solo lectura (RO) -- "Limpiar" lo
+        # devuelve a su valor por defecto en vez de dejarlo como estaba.
+        for fila, voltaje_predeterminado in zip(getattr(self, "campos_lecturas", []), VOLTAJES_POR_DEFECTO):
+            # [voltaje, medida1, medida2, medida3, promedio(RO)]
+            fila[0].setText(voltaje_predeterminado)
             fila[1].clear()
             fila[2].clear()
             fila[3].clear()
@@ -769,7 +837,11 @@ class PruebaMensualBraq(PruebaBasico):
 
         for fila in self.campos_lecturas:
             try:
-                voltaje = float(fila[0].text())  # voltaje editable
+                # V.5: `voltaje_de_texto` (no `float`) -- acepta el signo
+                # menos tipográfico y rechaza NaN/inf/cero; es un
+                # `VoltajesInvalidos`, que ES un `ValueError`, así que el
+                # `except` de abajo lo recoge igual que hoy.
+                voltaje = voltaje_de_texto(fila[0].text())  # voltaje editable
                 v1 = float(fila[1].text())
                 v2 = float(fila[2].text())
                 v3 = float(fila[3].text())
@@ -789,23 +861,21 @@ class PruebaMensualBraq(PruebaBasico):
 
     """Llama a la función que calcula la actividad de la fuente y la grafica                                                                                                                                             """
     def Calculo_Actividad(self):
+        # V.5 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): primero los
+        # voltajes ESCRITOS (por posición, validados); si no valen, se
+        # avisa y no se calcula nada -- antes el papel se adivinaba por
+        # el SIGNO/magnitud de lo que hubiera en `datos_lecturas`.
+        try:
+            voltaje_alto, voltaje_bajo, voltaje_neg = self._voltajes_del_formulario()
+        except VoltajesInvalidos as e:
+            QMessageBox.warning(self, "Voltajes", str(e))
+            return
+
         # Extrae datos de lecturas (diccionario con voltajes dinámicos)
         datos_lecturas = self.extraer_datos_lecturas()
         if len(datos_lecturas) < 3:
             QMessageBox.warning(self, "Advertencia", "Faltan valores para calcular la actividad.")
             return
-
-        # Identificar voltajes
-        positivos = [v for v in datos_lecturas.keys() if v > 0]
-        negativos = [v for v in datos_lecturas.keys() if v < 0]
-
-        if not positivos or not negativos:
-            QMessageBox.warning(self, "Advertencia", "Se requieren voltajes positivos y negativos para calcular la actividad.")
-            return
-
-        voltaje_alto = max(positivos)   # Ej. 300 o 250
-        voltaje_bajo = min(positivos)   # Ej. 150 o 100
-        voltaje_neg  = max(negativos)   # Ej. -300 o -250
 
         V_alto_prom = datos_lecturas[voltaje_alto]["promedio"]
         print(f"Voltaje alto, nA prom: {V_alto_prom}" )
@@ -839,7 +909,8 @@ class PruebaMensualBraq(PruebaBasico):
             V_alto_prom, V_neg_prom, V_bajo_prom,
             t, p, t0, p0,
             calibracion_camara, calibracion_electrometro,
-            conversion, ref, intensidad, fecha_cer, fecha_cal
+            conversion, ref, intensidad, fecha_cer, fecha_cal,
+            v_alto=voltaje_alto, v_bajo=voltaje_bajo,
         )
         graficar_resultados(self.canvas, posiciones=posiciones, promedio=promedios)
         self.mostrar_resultados_actividad(reporte)
@@ -999,14 +1070,16 @@ class PruebaMensualBraq(PruebaBasico):
             medida2 = [round(m, 3) for m in medida2]
             promedios = [round(p, 3) for p in promedios]
 
+            # V.5 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): los voltajes
+            # ESCRITOS (por posición, validados) deciden el papel -- antes
+            # de tocar la BD. Si no valen, se avisa y no se guarda nada.
+            try:
+                voltaje_alto, voltaje_bajo, voltaje_neg = self._voltajes_del_formulario()
+            except VoltajesInvalidos as e:
+                QMessageBox.warning(self, "Voltajes", str(e))
+                return
+
             datos_lecturas = self.extraer_datos_lecturas()
-
-            positivos = [v for v in datos_lecturas.keys() if v > 0]
-            negativos = [v for v in datos_lecturas.keys() if v < 0]
-
-            voltaje_alto = max(positivos)
-            voltaje_bajo = min(positivos)
-            voltaje_neg  = max(negativos)
 
             V_alto = datos_lecturas[voltaje_alto]["medidas"]
             V_bajo = datos_lecturas[voltaje_bajo]["medidas"]
@@ -1017,7 +1090,9 @@ class PruebaMensualBraq(PruebaBasico):
             V_neg_prom  = datos_lecturas[voltaje_neg]["promedio"]
 
             # Cálculos de factores
-            Ks, Kp, Ktp = factores_correccion(V_alto_prom, V_neg_prom, V_bajo_prom, t, p, t0, p0)
+            Ks, Kp, Ktp = factores_correccion(
+                V_alto_prom, V_neg_prom, V_bajo_prom, t, p, t0, p0,
+                v_alto=voltaje_alto, v_bajo=voltaje_bajo)
 
             Ks = round(Ks, 3)
             Kp = round(Kp, 3)
