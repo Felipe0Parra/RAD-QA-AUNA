@@ -237,13 +237,13 @@ EXCEPCIONES_LITERALES = {
     # `filtro_mc` calificada con el alias 'mc.'. Dos hallazgos en la misma
     # línea (el analizador reporta 'sin filtro' y 'LIMIT sin ORDER BY' por
     # separado aunque sea un solo sitio revisado).
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3436): "MaximosCamaras (filtro_mc, alias 'mc.') Y TipoCalibracion (filtro_tc, alias 'tc.', añadido en LR3) -- graficar_maximos_camara; las dos calificadas en variables intermedias",
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3441): "MaximosCamaras (filtro_mc, alias 'mc.') Y TipoCalibracion (filtro_tc, alias 'tc.', añadido en LR3) -- graficar_maximos_camara; las dos calificadas en variables intermedias",  # V.4 (28-09): 3436->3441
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1747): "MaximosCamaras (filtro_mc) Y TipoCalibracion (filtro_tc, LR3) -- gemelo mensual del anterior",
     # LR3 (DA-48): sitios de RAÍZ que ganaron su filtro calificado por alias
     # -- mismo patrón de variable intermedia, ahora visibles para ES1 porque
     # LR4 metió las raíces en el alcance.
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 875): "TipoCalibracion -- filtro_tc calificado con el alias 'tc.' (_ejecutar_carga_calibracion: última fuente instalada antes de una fecha)",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3465): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (graficar_linealidad_fuente)",
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3470): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (graficar_linealidad_fuente)",  # V.4 (28-09): 3465->3470
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1776): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (gemelo mensual de graficar_linealidad_fuente)",
 }
 
@@ -335,16 +335,16 @@ SITIOS_CLAVE_INCOMPLETA_PERMITIDOS = {
     # (a diferencia de R5, con evidencia id=30/33), y fuera del alcance que
     # el plan nombró para C1 (los 3 -- ahora 4 -- sitios de TipoCalibracion
     # mismo). Registrado como hallazgo pendiente en CLAUDE.md.
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2116):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2121):  # V.4 (28-09): 2116->2121
         "SistemaMedicion -- lectura por fecha en _ejecutar_carga_calibracion, "
         "debería ser por ref. Ver nota de la familia arriba.",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2151):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2156):  # V.4 (28-09): 2151->2156
         "CondicionesMedicion -- mismo defecto, misma función.",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2154):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2159):  # V.4 (28-09): 2154->2159
         "ResultadosActividad -- mismo defecto, misma función.",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2165):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2170):  # V.4 (28-09): 2165->2170
         "MaximosCamaras -- mismo defecto, misma función.",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2191):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2196):  # V.4 (28-09): 2191->2196
         "LecturasMaximos -- mismo defecto, misma función.",
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1425):
         "SistemaMedicion -- gemelo mensual del defecto de arriba.",

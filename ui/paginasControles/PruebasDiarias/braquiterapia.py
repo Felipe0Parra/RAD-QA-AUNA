@@ -2041,7 +2041,12 @@ class CalRedundanteFuente(PruebaMensualBraq):
         self.es_calibracion_redundante = True
         super().__init__(user_id)
         #self.date_box.date
-        self.button_click()
+        # V.4 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): se retira -- la
+        # clase base (`super().__init__`) ya ejecuta `self.button_click()`
+        # (`braq_mensual.py`, con `es_calibracion_redundante` ya fijado
+        # arriba, así que la primera llamada YA lo ve). Repetirla cableaba
+        # cada botón dos veces: "Guardar" guardaba, anulaba y volvía a
+        # guardar (EB2b), con dos filas de auditoría y dos avisos.
 
 
     def cargar_datos_ultima_calibracion(self) -> bool:

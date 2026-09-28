@@ -274,27 +274,27 @@ CENSO_RAICES = {
         (LISTA, "serie temporal de actividad por rango de fechas"),
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1853, "braqui"):
         (LISTA, "serie temporal de ciclos de braqui por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2076, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2081, "TipoCalibracion"):  # V.4 (28-09): 2076->2081
         (LISTA, "última fecha registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2095, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2100, "TipoCalibracion"):  # V.4 (28-09): 2095->2100
         (LISTA, "datos de la calibración de braquiterapia de esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2176, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2181, "TipoCalibracion"):  # V.4 (28-09): 2176->2181
         (LISTA, "última fecha con tipo 'Cambio de fuente' (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2558, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2563, "LinealidadBraquiterapia"):  # V.4 (28-09): 2558->2563
         (LISTA, "linealidad de la fuente de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2905, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2910, "LinealidadBraquiterapia"):  # V.4 (28-09): 2905->2910
         (LISTA, "linealidad por fecha para el PDF -- ya filtraba (el sitio "
                 "que fijó el patrón: filtro + ORDER BY id DESC)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3436, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3441, "TipoCalibracion"):  # V.4 (28-09): 3436->3441
         (LISTA, "JOIN a la calibración de una fecha para graficar máximos -- "
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3465, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3470, "LinealidadBraquiterapia"):  # V.4 (28-09): 3465->3470
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3755, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3760, "TipoCalibracion"):  # V.4 (28-09): 3755->3760
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4231, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4236, "braqui"):  # V.4 (28-09): 4231->4236
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4270, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4275, "braqui"):  # V.4 (28-09): 4270->4275
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
     ("ui/paginasControles/PruebasDiarias/seiscientos.py", 187, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),
@@ -309,9 +309,9 @@ CENSO_RAICES = {
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1344, "TipoCalibracion"):
         (LISTA, "calibración por fecha, admitiendo los dos formatos (DP-32)"),
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1747, "TipoCalibracion"):
-        (LISTA, "gemelo mensual exacto de braquiterapia.py:3033"),
+        (LISTA, "gemelo mensual exacto de braquiterapia.py:3038"),  # V.4 (28-09): 3033->3038
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1776, "LinealidadBraquiterapia"):
-        (LISTA, "gemelo mensual exacto de braquiterapia.py:3062"),
+        (LISTA, "gemelo mensual exacto de braquiterapia.py:3067"),  # V.4 (28-09): 3062->3067
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 273, "controles"):  # A.2 (21-09): 256->269; B.3 (21-09): 269->270; C.1 (25-09): 270->273
         (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "
                 "Python -- un control anulado del mes prestaría sus físicos"),
