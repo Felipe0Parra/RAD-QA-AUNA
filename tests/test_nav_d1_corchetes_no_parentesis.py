@@ -196,57 +196,57 @@ BASELINE_D1_PENDIENTE = {
     ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 887, 'mm'),  # E.3 (24-09): 747->763; E.2 (24-09): 763->841; G.2 (24-09): 841->842; G.3 (24-09): 842->878; B.3 (25-09): 878->887
     ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 907, 'cm'),  # E.3 (24-09): 767->783; E.2 (24-09): 783->861; G.2 (24-09): 861->862; G.3 (24-09): 862->898; B.3 (25-09): 898->907
     ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 991, '%'),  # E.3 (24-09): 851->867; E.2 (24-09): 867->945; G.2 (24-09): 945->946; G.3 (24-09): 946->982; B.3 (25-09): 982->991
-    ('models/PDF/Mensuales/reportes_mensuales.py', 801, 'cm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1075, 'mm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1096, '%'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1096, 'cm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1115, 'cm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1144, 'mm'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 802, 'cm'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1076, 'mm'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1097, '%'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1097, 'cm'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1116, 'cm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1145, 'mm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1146, 'mm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1149, '%'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1147, 'mm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1150, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1151, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1152, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1153, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1154, '%'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1175, '%'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1155, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1176, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1177, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1178, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1179, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1180, '%'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1247, 'mm'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1181, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1248, 'mm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1251, '%'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1249, 'mm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1252, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1253, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1254, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1255, '%'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1256, '%'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1329, '°C'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1330, 'mmHg'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1331, '%'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1354, '°C'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1355, 'mmHg'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1356, '%'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1357, 'mm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1366, 'mm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1366, 'nA'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1386, 'A'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1386, 'V'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1499, 'mm'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1500, 'nA'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1547, 'nC'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1555, 'nC'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1556, 's'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1557, 'nA'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1565, 'nC'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1565, 's'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1585, '%'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1587, 's'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1633, 's'),
-    ('models/PDF/Mensuales/reportes_mensuales.py', 1634, 's'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1257, '%'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1330, '°C'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1331, 'mmHg'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1332, '%'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1355, '°C'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1356, 'mmHg'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1357, '%'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1358, 'mm'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1367, 'mm'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1367, 'nA'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1387, 'A'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1387, 'V'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1504, 'mm'),
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1505, 'nA'),  # V.3 (28-09): 1500->1505
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1552, 'nC'),  # V.3 (28-09): 1547->1552
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1560, 'nC'),  # V.3 (28-09): 1555->1560
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1561, 's'),  # V.3 (28-09): 1556->1561
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1562, 'nA'),  # V.3 (28-09): 1557->1562
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1570, 'nC'),  # V.3 (28-09): 1565->1570
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1570, 's'),  # V.3 (28-09): 1565->1570
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1590, '%'),  # V.3 (28-09): 1585->1590
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1592, 's'),  # V.3 (28-09): 1587->1592
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1638, 's'),  # V.3 (28-09): 1633->1638
+    ('models/PDF/Mensuales/reportes_mensuales.py', 1639, 's'),  # V.3 (28-09): 1634->1639
     ('models/PDF/pdf.py', 1591, 'mm'),  # E.1 (24-09): 1533->1546; E.2 (24-09): 1546->1581; G.3 (24-09): 1581->1591
     ('models/PDF/pdf.py', 1592, 'mm'),  # E.1 (24-09): 1534->1547; E.2 (24-09): 1547->1582; G.3 (24-09): 1582->1592
     ('models/PDF/pdf.py', 1657, 'mm'),  # E.1 (24-09): 1599->1612; E.2 (24-09): 1612->1647; G.3 (24-09): 1647->1657
@@ -304,36 +304,36 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 292, 'nC'),
     ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 299, 'nC'),
     ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 321, 'nC'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 1515, 'mm'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2383, 'nC'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2384, 's'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2385, 'nA'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2387, '%'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2927, 'nA'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2927, 'nC'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2927, 's'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2928, 'nC'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2942, 'nC'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2942, 's'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2946, '%'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2946, 's'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3062, 'nC'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3062, 's'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3377, 'nC'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 236, '°C'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 237, 'mmHg'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 238, '%'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 239, '°C'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 240, 'mmHg'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 241, '%'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 544, 'mm'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 544, 'nA'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 618, 'A'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 618, 'V'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1201, 'mm'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1201, 'nA'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1232, 'A'),
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1232, 'V'),
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 1516, 'mm'),  # V.3 (28-09): 1515->1516
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2385, 'nC'),  # V.3 (28-09): 2383->2385
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2386, 's'),  # V.3 (28-09): 2384->2386
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2387, 'nA'),  # V.3 (28-09): 2385->2387
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2389, '%'),  # V.3 (28-09): 2387->2389
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2929, 'nA'),  # V.3 (28-09): 2927->2929
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2929, 'nC'),  # V.3 (28-09): 2927->2929
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2929, 's'),  # V.3 (28-09): 2927->2929
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2930, 'nC'),  # V.3 (28-09): 2928->2930
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2944, 'nC'),  # V.3 (28-09): 2942->2944
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2944, 's'),  # V.3 (28-09): 2942->2944
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2948, '%'),  # V.3 (28-09): 2946->2948
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2948, 's'),  # V.3 (28-09): 2946->2948
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3064, 'nC'),  # V.3 (28-09): 3062->3064
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3064, 's'),  # V.3 (28-09): 3062->3064
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3379, 'nC'),  # V.3 (28-09): 3377->3379
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 239, '°C'),  # V.3 (28-09): 236->239
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 240, 'mmHg'),  # V.3 (28-09): 237->240
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 241, '%'),  # V.3 (28-09): 238->241
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 242, '°C'),  # V.3 (28-09): 239->242
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 243, 'mmHg'),  # V.3 (28-09): 240->243
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 244, '%'),  # V.3 (28-09): 241->244
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 547, 'mm'),  # V.3 (28-09): 544->547
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 547, 'nA'),  # V.3 (28-09): 544->547
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 621, 'A'),  # V.3 (28-09): 618->621
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 621, 'V'),  # V.3 (28-09): 618->621
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1204, 'mm'),  # V.3 (28-09): 1201->1204
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1204, 'nA'),  # V.3 (28-09): 1201->1204
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1243, 'A'),  # V.3 (28-09): 1232->1243
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1243, 'V'),  # V.3 (28-09): 1232->1243
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 164, '°'),
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 184, 'mm'),
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 191, '%'),

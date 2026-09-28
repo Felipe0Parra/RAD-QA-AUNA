@@ -19,6 +19,7 @@ except Exception:
 from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
 from models.PDF.PDFWindow import PdfViewer
 from services.anulacion import filtro_activo
+from services.lecturas_del_maximo import VoltajesInvalidos, lecturas_por_voltaje
 
 class ReporteMensual:
     """Clase para generar reportes PDF de controles mensuales"""
@@ -1385,16 +1386,20 @@ def _crear_tabla_lecturas_maximos(lecturas_data):
     # Encabezado
     tabla.append(['Voltaje (V)', 'Medida 1 (A)', 'Medida 2 (A)', 'Medida 3 (A)', 'Promedio (A)'])
 
-    # Ordenar por voltaje descendente
-    lecturas_ordenadas = sorted(lecturas_data, key=lambda x: float(x.get('voltaje', 0)), reverse=True)
+    # V.3 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): cada voltaje con sus
+    # propias medidas (contrato en services/lecturas_del_maximo.py), en
+    # orden alto/bajo/negativo -- el mismo orden descendente de siempre con
+    # los voltajes históricos (300, 150, -300). Si el bloque no vale, se
+    # conserva el código de hoy (ordenar por voltaje y volcar tal cual
+    # llegó): ningún dato desaparece de un PDF.
+    filas = [(l.get('voltaje', ''), l.get('V_300', ''), l.get('V_150', ''),
+              l.get('Vn_300', ''), l.get('promediosV', '')) for l in lecturas_data]
+    try:
+        filas = [(v, *m, p) for v, m, p in lecturas_por_voltaje(filas)]
+    except VoltajesInvalidos:
+        filas = sorted(filas, key=lambda f: float(f[0] or 0), reverse=True)
 
-    for lectura in lecturas_ordenadas:
-        voltaje = lectura.get('voltaje', '')
-        v_300 = lectura.get('V_300', '')
-        v_150 = lectura.get('V_150', '')
-        vn_300 = lectura.get('Vn_300', '')
-        promedio = lectura.get('promediosV', '')
-
+    for voltaje, v_300, v_150, vn_300, promedio in filas:
         tabla.append([voltaje, v_300, v_150, vn_300, promedio])
 
     return pd.DataFrame(tabla, columns=['Lecturas de máximos', '', '', '', ''])

@@ -116,7 +116,7 @@ SITIOS_LITERALES_PERMITIDOS = {
         "create_control (anual) -- gemelo exacto de load.py:309: reabre el "
         "control existente del año y reasigna los físicos por su id "
         "físico. Mismo mecanismo DA-08, misma tabla, otra raíz de UI.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 108):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 111):
         "actualizar_desplazamiento (DP-39, hallazgo del 24-08 al resolver "
         "DP-38/DA-50): escribe CondicionesMedicion.desplazamiento_ini en "
         "sitio sobre el `ref` vigente, filtrado a activo. Es la ruta real "
@@ -176,7 +176,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
         "(QtSql, DA-08) -- gemelo Qt del mecanismo genérico de "
         "guardarEdicion (load.py:4201, más abajo en OPACOS). Tabla y "
         "columna dinámicas (elegidas en la UI), WHERE siempre 'id = ?'.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 58):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 61):
         "normalizar_fechas_db -- migración de FORMATO de fecha "
         "(DD-MM-YYYY -> YYYY-MM-DD) sobre las 6 tablas de braquiterapia. "
         "Tiene que alcanzar TAMBIÉN las filas anuladas (una anulada con la "

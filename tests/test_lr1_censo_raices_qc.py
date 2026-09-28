@@ -198,19 +198,19 @@ CENSO_RAICES = {
         (IDENTIDAD, "_obtener_info_sesion del PDF de imágenes: WHERE c.id = ?"),
     ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 432, "controles"):  # E.3 (24-09): 413->417; E.2 (24-09): 417->428; G.3 (24-09): 428->431; B.3 (25-09): 431->432
         (IDENTIDAD, "_obtener_datos_tabla_principal del PDF: WHERE id = ?"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 165, "controles"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 166, "controles"):
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 179, "LinealidadBraquiterapia"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 180, "LinealidadBraquiterapia"):
         (LISTA, "referencia de linealidad de braquiterapia por fecha"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 187, "TipoCalibracion"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 188, "TipoCalibracion"):
         (LISTA, "referencia de braquiterapia por (fecha, tipo de control)"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 199, "TipoCalibracion"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 200, "TipoCalibracion"):
         (LISTA, "referencia de braquiterapia por fecha, sin mirar el tipo"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 244, "controles"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 245, "controles"):
         (IDENTIDAD, "datos del control ya referenciado, WHERE id = ?"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 261, "TipoCalibracion"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 262, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya referenciada, WHERE id = ?"),
-    ("models/PDF/Mensuales/reportes_mensuales.py", 284, "LinealidadBraquiterapia"):
+    ("models/PDF/Mensuales/reportes_mensuales.py", 285, "LinealidadBraquiterapia"):
         (IDENTIDAD, "datos de la linealidad ya referenciada, WHERE id = ?"),
 
     # -- scripts ---------------------------------------------------------
@@ -266,51 +266,51 @@ CENSO_RAICES = {
         (LISTA, "reporte diario del Clinac iX por fecha"),
     ("ui/paginasControles/PruebasDiarias/IX.py", 448, "aceleradorlineal_ix"):
         (LISTA, "serie temporal del Clinac iX por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 400, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 401, "braqui"):
         (LISTA, "reporte diario de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 874, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 875, "TipoCalibracion"):
         (LISTA, "última fuente instalada antes de una fecha dada"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1813, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1814, "braqui"):
         (LISTA, "serie temporal de actividad por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1852, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1853, "braqui"):
         (LISTA, "serie temporal de ciclos de braqui por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2075, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2076, "TipoCalibracion"):
         (LISTA, "última fecha registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2094, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2095, "TipoCalibracion"):
         (LISTA, "datos de la calibración de braquiterapia de esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2175, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2176, "TipoCalibracion"):
         (LISTA, "última fecha con tipo 'Cambio de fuente' (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2556, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2558, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2903, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2905, "LinealidadBraquiterapia"):
         (LISTA, "linealidad por fecha para el PDF -- ya filtraba (el sitio "
                 "que fijó el patrón: filtro + ORDER BY id DESC)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3434, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3436, "TipoCalibracion"):
         (LISTA, "JOIN a la calibración de una fecha para graficar máximos -- "
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3463, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3465, "LinealidadBraquiterapia"):
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3753, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3755, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4229, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4231, "braqui"):
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4268, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4270, "braqui"):
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
     ("ui/paginasControles/PruebasDiarias/seiscientos.py", 187, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),
 
     # -- ui/PruebasMensuales ---------------------------------------------
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 146, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 149, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1106, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1109, "TipoCalibracion"):
         (LISTA, "última calibración registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1120, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1123, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya localizada, WHERE id = ?"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1333, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1344, "TipoCalibracion"):
         (LISTA, "calibración por fecha, admitiendo los dos formatos (DP-32)"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1723, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1747, "TipoCalibracion"):
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3033"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1752, "LinealidadBraquiterapia"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1776, "LinealidadBraquiterapia"):
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3062"),
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 273, "controles"):  # A.2 (21-09): 256->269; B.3 (21-09): 269->270; C.1 (25-09): 270->273
         (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "

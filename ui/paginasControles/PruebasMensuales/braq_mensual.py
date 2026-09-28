@@ -21,6 +21,9 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_ACTUALIZAR
 from services.anulacion import filtro_activo
+from services.lecturas_del_maximo import (
+    VOLTAJES_POR_DEFECTO, VoltajesInvalidos, voltaje_de_texto,
+    validar_roles, lecturas_por_voltaje, texto_espejo)
 import traceback
 
 class PruebaMensualBraq(PruebaBasico):
@@ -1222,6 +1225,14 @@ class PruebaMensualBraq(PruebaBasico):
         resultados = cursor.fetchall()
         conn.close()
 
+        # V.3 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): cada voltaje con
+        # sus propias medidas (contrato en services/lecturas_del_maximo.py)
+        # -- un bloque malformado se muestra como antes, sin reconstruir.
+        try:
+            resultados = [(v, *m, p) for v, m, p in lecturas_por_voltaje(resultados)]
+        except VoltajesInvalidos:
+            pass
+
         dialog = QDialog(self)
         dialog.setWindowTitle("Lecturas con diferente voltaje")
         dialog.setMinimumSize(550, 200)
@@ -1676,7 +1687,20 @@ class PruebaMensualBraq(PruebaBasico):
                 query.value(4)
             ))
 
-        return registros
+        # V.3 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): las columnas
+        # V_300/V_150/Vn_300 guardan el PAPEL alto/bajo/negativo -- no
+        # "medida 1/2/3" de la fila que la BD entregó (el contrato completo
+        # vive en services/lecturas_del_maximo.py). Antes se devolvían tal
+        # cual, leídas por fila: en el ref 24 (Calibración Redundante del
+        # 29-12-2025) esto mostraba un promedio que no correspondía a las
+        # medidas de su propia fila.
+        if not registros:
+            return registros
+        try:
+            return [(v, m[0], m[1], m[2], p) for v, m, p in lecturas_por_voltaje(registros)]
+        except VoltajesInvalidos as e:
+            print(f"Bloque de lecturas del máximo inválido para recargar: {e}")
+            return []
 
     def mapear_tabla_maximos(self, fecha=None):
         if fecha is None:
@@ -1686,12 +1710,12 @@ class PruebaMensualBraq(PruebaBasico):
 
         registros = self.cargar_maximos_desde_db(fecha_str)
 
-        for fila, datos in enumerate(registros):
-            if fila >= len(self.campos_maximos):
-                break
-
-            voltaje, v300, v150, vn300, prom = datos
-
+        # V.3: filas en orden alto, bajo, negativo (i=0,1,2) -- el
+        # `if fila >= len(self.campos_maximos)` de antes comparaba contra
+        # la tabla de POSICIONES ("MEDIDAS MÁXIMO DE LA CÁMARA"), no la de
+        # voltajes; con lecturas_por_voltaje llegan como mucho 3 filas,
+        # tantas como self.campos_lecturas.
+        for fila, (voltaje, v300, v150, vn300, prom) in enumerate(registros):
             self.campos_lecturas[fila][0].setText(str(voltaje))
             self.campos_lecturas[fila][1].setText(str(v300))
             self.campos_lecturas[fila][2].setText(str(v150))

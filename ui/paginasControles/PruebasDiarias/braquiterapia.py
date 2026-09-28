@@ -39,6 +39,7 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR, ACCION_ELIMINAR
 from services.anulacion import filtro_activo
+from services.lecturas_del_maximo import VoltajesInvalidos, lecturas_por_voltaje
 from ui.util_fechas import ancho_minimo_fecha
 from data.ManejoDatos.load import (mostrar_db_linealidad, mostrar_db_mensualBraqui, verificar_eliminar, verificar_editar,
                                                 guardarEdicion, cancelarEdicion, abrir_pelicula)
@@ -2198,20 +2199,21 @@ class CalRedundanteFuente(PruebaMensualBraq):
                 print(f"No se encontraron lecturas para la fecha '{fecha_cambio_fuente}'.")
                 return
 
-            # Ajustar tabla de lecturas visual si es necesario
-            num_lecturas = len(filas_lecturas)
-
-            # Si no hay suficientes campos visuales, los generas
-            if len(self.campos_lecturas) < num_lecturas:
-                self.generar_tabla_lecturas(num_lecturas)
-
-            # Llenar los datos dinámicamente
-            for i, fila in enumerate(filas_lecturas):
-                voltaje, v1, v2, v3 = fila
-                self.campos_lecturas[i][0].setText(str(voltaje))  # ← ahora correcto
-                self.campos_lecturas[i][1].setText(str(v1))
-                self.campos_lecturas[i][2].setText(str(v2))
-                self.campos_lecturas[i][3].setText(str(v3))
+            # V.3 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): cada voltaje
+            # con sus propias medidas (contrato en services/lecturas_del_
+            # maximo.py) -- se retira `self.generar_tabla_lecturas(num_
+            # lecturas)`, un TypeError latente (el método no acepta
+            # argumentos; hoy nadie llama a esta función, y se alinea para
+            # que reconectarla no traiga la transpuesta de vuelta). Esta
+            # consulta nunca pidió promediosV, así que sigue sin llenarlo.
+            try:
+                for i, (voltaje, medidas, _promedio) in enumerate(lecturas_por_voltaje(filas_lecturas)):
+                    self.campos_lecturas[i][0].setText(str(voltaje))  # ← ahora correcto
+                    self.campos_lecturas[i][1].setText(str(medidas[0]))
+                    self.campos_lecturas[i][2].setText(str(medidas[1]))
+                    self.campos_lecturas[i][3].setText(str(medidas[2]))
+            except VoltajesInvalidos as e:
+                print(f"Bloque de lecturas del máximo inválido: {e}")
 
         except Exception as e:
             traceback.print_exc()
