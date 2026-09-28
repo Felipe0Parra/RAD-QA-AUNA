@@ -82,11 +82,11 @@ BASELINE_D1_PENDIENTE = {
     #   la V es "vertical", no voltios (SS0.13 del plan). Object Qt de conversion
     #   automatica la volveria una unidad falsa con aspecto de correcta.
 
-    ('analisisImagenes/ActividadFuente.py', 48, 'nA'),
-    ('analisisImagenes/ActividadFuente.py', 51, 'mm'),
-    ('analisisImagenes/ActividadFuente.py', 52, 'nA'),
-    ('analisisImagenes/ActividadFuente.py', 140, 's'),
-    ('analisisImagenes/ActividadFuente.py', 141, 's'),
+    ('analisisImagenes/ActividadFuente.py', 61, 'nA'),  # V.1 (28-09): 48->61, TRS-398 en factores_correccion
+    ('analisisImagenes/ActividadFuente.py', 64, 'mm'),  # V.1 (28-09): 51->64
+    ('analisisImagenes/ActividadFuente.py', 65, 'nA'),  # V.1 (28-09): 52->65
+    ('analisisImagenes/ActividadFuente.py', 153, 's'),  # V.1 (28-09): 140->153
+    ('analisisImagenes/ActividadFuente.py', 154, 's'),  # V.1 (28-09): 141->154
     ('analisisImagenes/Analisis_Catphan_TAC.py', 1057, 'HU'),  # D.0 (23-09): 1008->1017; D.1 (23-09): 1017->1063; B.1 (23-09): 1063->1085; G.3 (24-09): 1085->1093; E.1 (24-09): 1093->1057
     ('analisisImagenes/Analisis_PlacaCuadrada.py', 257, 'mm'),
     ('analisisImagenes/Analisis_PlacaCuadrada.py', 267, 'mm'),

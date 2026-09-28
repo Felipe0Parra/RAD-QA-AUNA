@@ -10,10 +10,23 @@ from zoneinfo import ZoneInfo #Para manejo de zonas horarias
 # literal: o se omite el parámetro, o se pasa esta constante por nombre.
 VIDA_MEDIA_IR192_DIAS = 73.827
 
-def factores_correccion(V_300prom,Vn_300prom, V_150prom, t, p, t0,p0):
+def factores_correccion(V_300prom,Vn_300prom, V_150prom, t, p, t0,p0, v_alto=300.0, v_bajo=150.0):
     #print("     ● Ingresa al cálculo de los factores de corrección")
-    Ks = (4/3) - V_300prom / (3*V_150prom)  # Factor de corrección para la cámara de pozo
-    Kpol = (1 + (np.abs(V_300prom/ Vn_300prom)))/2  # Factor de corrección para el polarímetro
+    # V.1 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, tercera ronda -- TRS-398,
+    # decisión del físico del 28-09): V_300prom/V_150prom/Vn_300prom son los
+    # promedios al voltaje alto/bajo/negativo -- los NOMBRES son históricos
+    # (services/lecturas_del_maximo.py documenta el contrato completo), el
+    # valor real de v_alto/v_bajo es el que se haya escrito. Antes, el
+    # cociente 300/150 estaba fijo en la fórmula (4/3, 3): con cualquier
+    # otro voltaje el Ks salía mal sin avisar. Ks por el método de las dos
+    # tensiones de TRS-398 (Ec. 14/15, tabla del formato IDC-F-RT-143):
+    #     Ks = [(V1/V2)^2 - 1] / [(V1/V2)^2 - M1/M2]
+    # Kpol por TRS-398 (Ec. 12): Kpol = (|M+| + |M-|) / (2|M+|), con M+ la
+    # lectura en la polaridad de trabajo (+V alto) y M- la de polaridad
+    # opuesta a la MISMA magnitud de voltaje.
+    n2 = (v_alto / v_bajo) ** 2
+    Ks = (n2 - 1) / (n2 - V_300prom / V_150prom)  # Factor de corrección para la cámara de pozo (TRS-398)
+    Kpol = (np.abs(V_300prom) + np.abs(Vn_300prom)) / (2 * np.abs(V_300prom))  # Factor de corrección para el polarímetro (TRS-398)
     Ktp = ((t + 273.15)/(t0 + 273.15)) * (p0/p)  # Factor de corrección para temperatura, presión y humedad
 
     return Ks,Kpol,Ktp
@@ -109,11 +122,11 @@ def calcular_decaimiento(fecha_inicio_str, fecha_fin_str, actividad_inicial, vid
     ##print(f"Tiempo en horas (fecha_fin - fecha_inicio): {horas}")
     return actividad_final
 
-def CalcularActividad(V_300prom,Vn_300prom, V_150prom, t, p, t0,p0, calibracion_camara,calibracion_electrometro, conversion,ref,intensidad, fecha_inicio_str, fecha_fin_str):
+def CalcularActividad(V_300prom,Vn_300prom, V_150prom, t, p, t0,p0, calibracion_camara,calibracion_electrometro, conversion,ref,intensidad, fecha_inicio_str, fecha_fin_str, v_alto=300.0, v_bajo=150.0):
     #print("\n-----------------------------------------------------------------------")
     #print("          Actividad de la fuente (Mensual de braquiterapia)\n")
 
-    Ks, Kpol, Ktp = factores_correccion(V_300prom,Vn_300prom, V_150prom, t, p, t0,p0)
+    Ks, Kpol, Ktp = factores_correccion(V_300prom,Vn_300prom, V_150prom, t, p, t0,p0, v_alto=v_alto, v_bajo=v_bajo)
 
     A = actividad_fuente(Ks, Kpol, Ktp, calibracion_camara,calibracion_electrometro, conversion, V_300prom)
     
