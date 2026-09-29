@@ -130,21 +130,21 @@ CENSO_RAICES = {
                 "de un ast.Call)"),
     ("data/ManejoDatos/load.py", 1199, "LinealidadBraquiterapia"):
         (LISTA, "catálogo completo de linealidades de braquiterapia"),
-    ("data/ManejoDatos/load.py", 1300, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 1313, "TipoCalibracion"):
         (LISTA, "catálogo completo de calibraciones (el sitio que ya "
                 "filtraba bien y que hizo decidible DP-31)"),
-    ("data/ManejoDatos/load.py", 1642, "controles"):
+    ("data/ManejoDatos/load.py", 1655, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama con equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1645, "controles"):
+    ("data/ManejoDatos/load.py", 1658, "controles"):
         (LISTA, "mostrar_controles_mensuales, rama sin equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1918, "controles"):
+    ("data/ManejoDatos/load.py", 1931, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 1952, "controles"):
+    ("data/ManejoDatos/load.py", 1965, "controles"):
         (LISTA, "mostrar_controles_imgIX_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2107, "controles"):
+    ("data/ManejoDatos/load.py", 2120, "controles"):
         (LISTA, "mostrar_controles_imgIX: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A9, PLAN_FUGA_CONEXIONES_01-09.md §9): vivía
-    # aquí como ("data/ManejoDatos/load.py", 2130, "controles"), LISTA,
+    # aquí como ("data/ManejoDatos/load.py", 2143, "controles"), LISTA,
     # "mostrar_controles_imgIX: SELECT MAX de parámetros" -- A9 envolvió
     # el cuerpo de mostrar_controles_imgIX en un `with Conexion().
     # conectar() as conn:` y censar_raices() (línea ~358: "if textos is
@@ -153,35 +153,35 @@ CENSO_RAICES = {
     # que A7). El sitio SIGUE ahí y sigue filtrando -- solo el analizador
     # de este archivo perdió visibilidad; ver test_eb5/test_le4 para la
     # entrada equivalente, movida a su lista de OPACOS en vez de borrada.
-    ("data/ManejoDatos/load.py", 2312, "controles"):
+    ("data/ManejoDatos/load.py", 2325, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2346, "controles"):
+    ("data/ManejoDatos/load.py", 2359, "controles"):
         (LISTA, "mostrar_controles_imgHC_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2503, "controles"):
+    ("data/ManejoDatos/load.py", 2516, "controles"):
         (LISTA, "mostrar_controles_imgHC: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A10, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
-    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2526,
+    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2539,
     # "controles"), LISTA, "mostrar_controles_imgHC: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 2703, "controles"):
+    ("data/ManejoDatos/load.py", 2716, "controles"):
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A11, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
-    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2726,
+    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2739,
     # "controles"), LISTA, "mostrar_controles_tac: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 4553, "controles"):
+    ("data/ManejoDatos/load.py", 4566, "controles"):
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4567, "controles"):
+    ("data/ManejoDatos/load.py", 4580, "controles"):
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4630, "controles"):
+    ("data/ManejoDatos/load.py", 4643, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4640, "controles"):
+    ("data/ManejoDatos/load.py", 4653, "controles"):
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4853, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4866, "TipoCalibracion"):
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
 
     # -- Halcyon ---------------------------------------------------------

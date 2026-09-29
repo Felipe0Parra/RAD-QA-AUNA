@@ -1214,8 +1214,13 @@ def mostrar_db_linealidad(self):
         repro, exac, t_transito = fila[12], fila[13], fila[14]
 
         # Preparar lista de valores a mostrar
+        # W.1 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, segunda ronda,
+        # versión mínima §R.3): `headers_lin` declara ("Usuario", "user")
+        # antes que ("Fecha", "fecha") -- este orden tiene que ser
+        # (usuario, fecha), no (fecha, usuario), o la columna "Usuario"
+        # muestra la fecha y "Fecha" muestra el usuario.
         datos_visibles = [
-            id_pk, fecha, usuario, modelo, serie_cp, calibracion,
+            id_pk, usuario, fecha, modelo, serie_cp, calibracion,
             modelo_elec, serie_ele, electrometro,
             "btn_carga",        # marcador para botón de carga
             q_est, t_integrado, i_est,
@@ -1281,15 +1286,23 @@ def mostrar_db_mensualBraqui(self):
         0: None,   1: None,  2: None,  3: None, 4: None, 5: None, 6: None, 7: None, 8: None,
         9:  None, 10: None, 11: None, 12: None, 13: None, 14: None, 15: None, 16: None, 17: None,
         18: None, 19: None, 20: None,
-        21: None,   # desplazamiento_ini, nace del analisis de la imagen
-        22: None,   # Botón Máximos
-        23: None,   # Botón Lecturas
-        24: None,   # Ks     ─────────>  Nacen de un calculo
-        25: None,   # Kpol   ───────────────────┘          ↑
-        26: None,   # Ktp    ───────────────────┘          |
-        27: ("ResultadosActividad", "actividad_monitor"),# |
-        28: None,   # Actividad calculada──────────────────┘
-        29: None,   # Actividad de decaimiento ────────────┘
+        21: None,   # Desp. Inicial, nace del análisis de la imagen
+        22: None,   # Observaciones
+        23: None,   # Botón Máximos
+        24: None,   # Botón Lecturas
+        25: None,   # Ks     ─────────>  Nacen de un calculo
+        26: None,   # Kp     ───────────────────┘          ↑
+        27: None,   # Ktp    ───────────────────┘          |
+        # W.1 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, segunda ronda,
+        # versión mínima §R.3): esta clave decía 27 -- el índice de "Ktp"
+        # en `headers` -- así que la única celda editable de la tabla
+        # quedaba bajo "Ktp" y escribía `actividad_monitor`; "Act.
+        # Monitor" (índice 28) no se podía editar. `datos_visibles` (más
+        # abajo) SÍ está alineado con `headers`; el desface era solo en
+        # esta clave.
+        28: ("ResultadosActividad", "actividad_monitor"),# |
+        29: None,   # Actividad calculada──────────────────┘
+        30: None,   # Actividad de decaimiento ────────────┘
 
     }
 
