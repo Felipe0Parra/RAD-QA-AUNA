@@ -266,35 +266,35 @@ CENSO_RAICES = {
         (LISTA, "reporte diario del Clinac iX por fecha"),
     ("ui/paginasControles/PruebasDiarias/IX.py", 448, "aceleradorlineal_ix"):
         (LISTA, "serie temporal del Clinac iX por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 401, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 404, "braqui"):
         (LISTA, "reporte diario de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 875, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 878, "TipoCalibracion"):
         (LISTA, "última fuente instalada antes de una fecha dada"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1814, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1817, "braqui"):
         (LISTA, "serie temporal de actividad por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1853, "braqui"):
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 1856, "braqui"):
         (LISTA, "serie temporal de ciclos de braqui por rango de fechas"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2081, "TipoCalibracion"):  # V.4 (28-09): 2076->2081
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2084, "TipoCalibracion"):  # V.4 (28-09): 2076->2081
         (LISTA, "última fecha registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2100, "TipoCalibracion"):  # V.4 (28-09): 2095->2100
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2103, "TipoCalibracion"):  # V.4 (28-09): 2095->2100
         (LISTA, "datos de la calibración de braquiterapia de esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2181, "TipoCalibracion"):  # V.4 (28-09): 2176->2181
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2184, "TipoCalibracion"):  # V.4 (28-09): 2176->2181
         (LISTA, "última fecha con tipo 'Cambio de fuente' (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2563, "LinealidadBraquiterapia"):  # V.4 (28-09): 2558->2563
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2566, "LinealidadBraquiterapia"):  # V.4 (28-09): 2558->2563
         (LISTA, "linealidad de la fuente de braquiterapia por fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2926, "LinealidadBraquiterapia"):  # V.4 (28-09): 2905->2910
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2929, "LinealidadBraquiterapia"):  # V.4 (28-09): 2905->2910
         (LISTA, "linealidad por fecha para el PDF -- ya filtraba (el sitio "
                 "que fijó el patrón: filtro + ORDER BY id DESC)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3457, "TipoCalibracion"):  # V.4 (28-09): 3436->3441
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3495, "TipoCalibracion"):  # V.4 (28-09): 3436->3441
         (LISTA, "JOIN a la calibración de una fecha para graficar máximos -- "
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3486, "LinealidadBraquiterapia"):  # V.4 (28-09): 3465->3470
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3524, "LinealidadBraquiterapia"):  # V.4 (28-09): 3465->3470
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3776, "TipoCalibracion"):  # V.4 (28-09): 3755->3760
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3814, "TipoCalibracion"):  # V.4 (28-09): 3755->3760
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4252, "braqui"):  # V.4 (28-09): 4231->4236
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4290, "braqui"):  # V.4 (28-09): 4231->4236
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4291, "braqui"):  # V.4 (28-09): 4270->4275
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4329, "braqui"):  # V.4 (28-09): 4270->4275
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
     ("ui/paginasControles/PruebasDiarias/seiscientos.py", 187, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),

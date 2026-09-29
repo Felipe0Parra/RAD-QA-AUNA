@@ -290,6 +290,12 @@ def _pantalla_linealidad_para_guardar(app, serie_cp_combo, serie_ele_combo):
     obj.t_integrado = QLineEdit("1.0")
     obj.i_est = QLineEdit("1.0")
     obj.repro = QLineEdit("0.5")
+    # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): `guardar_linealidad`
+    # ahora ESCRIBE la exactitud/tránsito recalculados en la pantalla
+    # (objetivo (b) del plan: "la pantalla muestra esos mismos valores al
+    # guardar") -- antes solo los leía de `self.r2`/`self.b`.
+    obj.exactitud = QLineEdit()
+    obj.tiempo_transito = QLineEdit()
     obj.r2 = 0.999
     obj.b = 1.5
     obj.repro_med1 = QLineEdit("1.0")
@@ -299,8 +305,15 @@ def _pantalla_linealidad_para_guardar(app, serie_cp_combo, serie_ele_combo):
     obj.repro_med5 = QLineEdit("1.0")
     obj.repro_prom = QLineEdit("1.0")
 
-    fila = [QLineEdit("0"), QLineEdit("2.0"), QLineEdit("2.1"), QLineEdit(""), QLineEdit("")]
-    obj.medidas_lienalidad = [fila]
+    # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): `ajuste_linealidad`
+    # exige al menos 2 pares completos para ajustar una recta (antes de
+    # L.2, `guardar_linealidad` ni siquiera los necesitaba -- leía
+    # `self.r2`/`self.b`, fijados arriba, sin tocar estas filas). Dos
+    # filas, tiempos de parada distintos (posiciones 0 y 1 de
+    # `TIEMPOS_PARADA`), para que el ajuste tenga con qué trabajar.
+    fila0 = [QLineEdit("0"), QLineEdit("2.0"), QLineEdit("2.1"), QLineEdit(""), QLineEdit("")]
+    fila1 = [QLineEdit("1"), QLineEdit("4.0"), QLineEdit("4.2"), QLineEdit(""), QLineEdit("")]
+    obj.medidas_lienalidad = [fila0, fila1]
 
     class _TablaFalsa:
         def viewport(self):

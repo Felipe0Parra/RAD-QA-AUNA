@@ -40,6 +40,9 @@ from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR, ACCION_ELIMINAR
 from services.anulacion import filtro_activo
 from services.lecturas_del_maximo import VoltajesInvalidos, lecturas_por_voltaje
+from services.linealidad_fuente import (
+    TIEMPOS_PARADA, ajuste_linealidad, DatosInsuficientes,
+    reproducibilidad as calcular_reproducibilidad)
 from ui.util_fechas import ancho_minimo_fecha
 from data.ManejoDatos.load import (mostrar_db_linealidad, mostrar_db_mensualBraqui, verificar_eliminar, verificar_editar,
                                                 guardarEdicion, cancelarEdicion, abrir_pelicula)
@@ -3086,7 +3089,10 @@ class Linealidad(PruebaBasico):
         grid, contenedor = self.generar_tablas(titulos=titulos)
 
         self.medidas_lienalidad = []
-        tiempo_parada = [0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8, 25.6, 51.2]
+        # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): una sola
+        # definición (services/linealidad_fuente.py), antes repetida aquí
+        # y en extraer_datos_medidas.
+        tiempo_parada = list(TIEMPOS_PARADA)
 
         for fila, tp in enumerate(tiempo_parada):
             fila_campos = []
@@ -3148,11 +3154,18 @@ class Linealidad(PruebaBasico):
         self.layout_medicion_linealidad.addWidget(contenedor)
 
     def extraer_datos_medidas(self):
-        tiempo_parada = [0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8, 25.6, 51.2]
-        q1 = []
-        q2 = []
-        qprom = []
-        tiempo_efectivo = []
+        # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): las 4 listas
+        # nacen con las 10 POSICIONES ya reservadas (None donde la fila
+        # está incompleta), en vez de solo agregar lo que sí parseó --
+        # antes, una fila vacía en medio (p. ej. 0.8 s) desplazaba TODO lo
+        # que venía después un puesto hacia arriba: la carga que se
+        # guardaba bajo "0.8 s" era en realidad la de "1.6 s", y así en
+        # cascada hasta que "51.2 s" quedaba sin dato.
+        tiempo_parada = list(TIEMPOS_PARADA)
+        q1 = [None] * len(tiempo_parada)
+        q2 = [None] * len(tiempo_parada)
+        qprom = [None] * len(tiempo_parada)
+        tiempo_efectivo = [None] * len(tiempo_parada)
 
         try:
             i_est = float(self.i_est.text())
@@ -3173,10 +3186,10 @@ class Linealidad(PruebaBasico):
             fila[3].setText(f"{prom:.2f}")
             fila[4].setText(f"{tef:.4f}")
 
-            q1.append(v1)
-            q2.append(v2)
-            qprom.append(round(prom, 3))
-            tiempo_efectivo.append(round(tef, 3))
+            q1[i] = v1
+            q2[i] = v2
+            qprom[i] = round(prom, 3)
+            tiempo_efectivo[i] = round(tef, 3)
 
         self.resultados_linealidad = {
             "tp": tiempo_parada,
@@ -3193,14 +3206,19 @@ class Linealidad(PruebaBasico):
         try:
             tiempo_parada, q1, q2, promedios, tiempo_efectivo = self.extraer_datos_medidas()
 
-            x = np.array(tiempo_parada)
-            y = np.array(tiempo_efectivo)
-            m, b = np.polyfit(x, y, 1)
-
-            y_pred = m * x + b
-            ss_res = np.sum((y - y_pred) ** 2)
-            ss_tot = np.sum((y - np.mean(y)) ** 2)
-            self.r2 = 1 - (ss_res / ss_tot)
+            # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): función pura
+            # compartida con `guardar_linealidad` -- misma aritmética
+            # (`np.polyfit(x, y, 1)`), solo sobre los pares completos.
+            # `self.r2` guarda ahora la PENDIENTE (decisión del físico:
+            # "exactitud" = pendiente, no R²) -- se conserva el nombre del
+            # atributo para no tocar nada que lo lea (p. ej. pruebas que
+            # fabrican una pantalla mínima con `obj.r2`/`obj.b`).
+            try:
+                m, b = ajuste_linealidad(tiempo_parada, tiempo_efectivo)
+            except DatosInsuficientes:
+                QMessageBox.warning(self, "Advertencia", "No se ingresaron datos válidos.")
+                return
+            self.r2 = m
             self.b = b
 
             graficar_linealidad(self.canvas, tiempo_efectivo, tiempo_parada)
@@ -3236,11 +3254,11 @@ class Linealidad(PruebaBasico):
                     float(self.repro_med4.text()),
                     float(self.repro_med5.text()),
                 ]
-                reproducibilidad = 100 - float(np.std(repro_vals, ddof=1))
+                reproducibilidad_valor = calcular_reproducibilidad(repro_vals)
             except ValueError:
-                reproducibilidad = 0.0
+                reproducibilidad_valor = 0.0
 
-            self.repro.setText(f"{reproducibilidad:.4f}")
+            self.repro.setText(f"{reproducibilidad_valor:.4f}")
             self.tiempo_transito.setText(f"{self.b:.2f}")
 
             self.col2.addWidget(self.label_r2)
@@ -3289,10 +3307,6 @@ class Linealidad(PruebaBasico):
             t_integrado = float(self.t_integrado.text())
             i_est = float(self.i_est.text())
 
-            reproducibilidad = round(float(self.repro.text()), 4)
-            exactitud = round(self.r2, 5)
-            tiempo_transito = round(self.b, 2)
-
             repro_med = [
                 float(self.repro_med1.text()), float(self.repro_med2.text()), float(self.repro_med3.text()),
                 float(self.repro_med4.text()), float(self.repro_med5.text()), float(self.repro_prom.text())
@@ -3304,7 +3318,31 @@ class Linealidad(PruebaBasico):
                 QMessageBox.warning(self, "Advertencia", "No se pudieron extraer datos de medición.")
                 return
 
-            # Rellenar hasta 10 con None si hay menos
+            # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): exactitud,
+            # tránsito y reproducibilidad se calculan AQUÍ, sobre lo que
+            # se va a guardar (tp/te/repro_med recién leídos arriba) -- no
+            # se leen de `self.r2`/`self.b`, que son el último "Ok" que se
+            # pulsó y pueden describir medidas distintas si algo se
+            # corrigió después sin volver a pulsarlo (§1.9).
+            try:
+                pendiente, intercepto = ajuste_linealidad(tp, te)
+            except DatosInsuficientes:
+                QMessageBox.warning(self, "Advertencia", "No se ingresaron datos válidos.")
+                return
+            exactitud = round(pendiente, 5)
+            tiempo_transito = round(intercepto, 2)
+            reproducibilidad = round(calcular_reproducibilidad(repro_med[:5]), 4)
+
+            # La pantalla queda mostrando exactamente lo que se guarda.
+            self.r2 = pendiente
+            self.b = intercepto
+            self.exactitud.setText(f"{pendiente:.2f}")
+            self.tiempo_transito.setText(f"{intercepto:.2f}")
+            self.repro.setText(f"{reproducibilidad:.4f}")
+
+            # Rellenar hasta 10 con None si hay menos -- con
+            # `extraer_datos_medidas` ya devolviendo 10 posiciones (L.2),
+            # esto no rellena nada; se conserva como red de seguridad.
             def rellenar(lista, largo=10):
                 return lista + [None] * (largo - len(lista))
 

@@ -199,11 +199,11 @@ SITIOS_EQUIPO_ID_PERMITIDOS = {
         "EXENTO",
         "on_serie_elec_cambio -- mismo patron que :481, combo_serie_elec "
         "EN VIVO."),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2817): (  # V.4 (28-09): 2812->2817
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2820): (  # V.4 (28-09): 2812->2817
         "EXENTO",
         "on_serie_pozo_cambio -- mismo patron que braq_mensual.py:481, "
         "combo_serie EN VIVO (gemelo de esa pantalla en el diario)."),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3059): (  # V.4 (28-09): 3038->3043
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3062): (  # V.4 (28-09): 3038->3043
         "EXENTO",
         "on_serie_elec_cambio -- mismo patron, combo_serie_elec EN VIVO."),
     ("services/equipos_service.py", 293): (

@@ -127,6 +127,10 @@ def _linealidad_pelada():
     ):
         setattr(obj, nombre, QLineEdit(valor))
 
+    # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): `guardar_linealidad`
+    # ahora escribe la exactitud/tránsito recalculados en la pantalla.
+    obj.exactitud = QLineEdit()
+    obj.tiempo_transito = QLineEdit()
     obj.r2 = 0.999
     obj.b = 1.5
     obj.extraer_datos_medidas = lambda: (

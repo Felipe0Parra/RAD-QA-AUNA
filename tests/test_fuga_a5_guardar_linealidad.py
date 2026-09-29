@@ -81,6 +81,10 @@ def _linealidad_pelada():
     ):
         setattr(obj, nombre, QLineEdit(valor))
 
+    # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): `guardar_linealidad`
+    # ahora escribe la exactitud/tránsito recalculados en la pantalla.
+    obj.exactitud = QLineEdit()
+    obj.tiempo_transito = QLineEdit()
     obj.r2 = 0.999
     obj.b = 1.5
     obj.extraer_datos_medidas = lambda: (
@@ -103,11 +107,18 @@ class TestA5GuardarLinealidadCierraSiempre:
         _ConexionUnaVezEspia.llamadas.clear()
 
         obj = _linealidad_pelada()
-        # tp[0] llega como una lista -- tipo que sqlite3 no puede
+        # q1[0] llega como una lista -- tipo que sqlite3 no puede
         # bindear -- así que el INSERT revienta dentro del with. El
         # `except:` desnudo de la función lo traga (return sin más).
+        # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): `tp`/`te` tienen
+        # que llegar VÁLIDOS -- ahora `guardar_linealidad` los usa para
+        # `ajuste_linealidad` ANTES de tocar la BD (para que exactitud y
+        # tránsito salgan de lo que se va a guardar); corromper `tp` haría
+        # que la función reventara ahí, antes de llegar al `with` que este
+        # test quiere ejercitar. `q1` no lo toca `ajuste_linealidad`, así
+        # que sigue siendo el campo correcto para simular el fallo tardío.
         obj.extraer_datos_medidas = lambda: (
-            [["no bindable"], 2], [1.0, 2.0], [1.0, 2.0], [1.0, 2.0], [1.0, 2.0])
+            [1, 2], [["no bindable"], 2.0], [1.0, 2.0], [1.0, 2.0], [1.0, 2.0])
 
         resultado = obj.guardar_linealidad()
 

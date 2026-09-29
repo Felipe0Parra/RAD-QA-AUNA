@@ -304,22 +304,22 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 292, 'nC'),
     ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 299, 'nC'),
     ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 321, 'nC'),
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 1516, 'mm'),  # V.3 (28-09): 1515->1516
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2390, 'nC'),  # V.3 (28-09): 2383->2385; V.4 (28-09): 2385->2390
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2391, 's'),  # V.3 (28-09): 2384->2386; V.4 (28-09): 2386->2391
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2392, 'nA'),  # V.3 (28-09): 2385->2387; V.4 (28-09): 2387->2392
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2394, '%'),  # V.3 (28-09): 2387->2389; V.4 (28-09): 2389->2394
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2950, 'nA'),  # V.3 (28-09): 2927->2929; V.4 (28-09): 2929->2934
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2950, 'nC'),  # V.3 (28-09): 2927->2929; V.4 (28-09): 2929->2934
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2950, 's'),  # V.3 (28-09): 2927->2929; V.4 (28-09): 2929->2934
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2951, 'nC'),  # V.3 (28-09): 2928->2930; V.4 (28-09): 2930->2935
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2965, 'nC'),  # V.3 (28-09): 2942->2944; V.4 (28-09): 2944->2949
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2965, 's'),  # V.3 (28-09): 2942->2944; V.4 (28-09): 2944->2949
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2969, '%'),  # V.3 (28-09): 2946->2948; V.4 (28-09): 2948->2953
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2969, 's'),  # V.3 (28-09): 2946->2948; V.4 (28-09): 2948->2953
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3085, 'nC'),  # V.3 (28-09): 3062->3064; V.4 (28-09): 3064->3069
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3085, 's'),  # V.3 (28-09): 3062->3064; V.4 (28-09): 3064->3069
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3400, 'nC'),  # V.3 (28-09): 3377->3379; V.4 (28-09): 3379->3384
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 1519, 'mm'),  # V.3 (28-09): 1515->1516
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2393, 'nC'),  # V.3 (28-09): 2383->2385; V.4 (28-09): 2385->2390
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2394, 's'),  # V.3 (28-09): 2384->2386; V.4 (28-09): 2386->2391
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2395, 'nA'),  # V.3 (28-09): 2385->2387; V.4 (28-09): 2387->2392
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2397, '%'),  # V.3 (28-09): 2387->2389; V.4 (28-09): 2389->2394
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2953, 'nA'),  # V.3 (28-09): 2927->2929; V.4 (28-09): 2929->2934
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2953, 'nC'),  # V.3 (28-09): 2927->2929; V.4 (28-09): 2929->2934
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2953, 's'),  # V.3 (28-09): 2927->2929; V.4 (28-09): 2929->2934
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2954, 'nC'),  # V.3 (28-09): 2928->2930; V.4 (28-09): 2930->2935
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2968, 'nC'),  # V.3 (28-09): 2942->2944; V.4 (28-09): 2944->2949
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2968, 's'),  # V.3 (28-09): 2942->2944; V.4 (28-09): 2944->2949
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2972, '%'),  # V.3 (28-09): 2946->2948; V.4 (28-09): 2948->2953
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2972, 's'),  # V.3 (28-09): 2946->2948; V.4 (28-09): 2948->2953
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3088, 'nC'),  # V.3 (28-09): 3062->3064; V.4 (28-09): 3064->3069
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3088, 's'),  # V.3 (28-09): 3062->3064; V.4 (28-09): 3064->3069
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3438, 'nC'),  # V.3 (28-09): 3377->3379; V.4 (28-09): 3379->3384
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 239, '°C'),  # V.3 (28-09): 236->239
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 240, 'mmHg'),  # V.3 (28-09): 237->240
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 241, '%'),  # V.3 (28-09): 238->241
