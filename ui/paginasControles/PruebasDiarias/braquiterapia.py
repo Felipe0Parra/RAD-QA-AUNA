@@ -2846,7 +2846,15 @@ class Linealidad(PruebaBasico):
         #self.fuera_servicio.clicked.connect(self.reasignar_botonySERVICIO)
         #self.btn_add.clicked.connect(lambda _, maquina='braqui', otro = "Diario" : self.ordenar_botones(maquina, self.fueradeservicio, otro))
         #self.btn_add.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
-        self.btn_add.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
+        # L.1 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, segunda ronda):
+        # se retira -- `Linealidad.button_click` era copia de la pantalla
+        # diaria (`PruebaDiariaBraq`, arriba), y esta conexión le ponía a
+        # "Guardar" los TÍTULOS DEL DIARIO sobre la tabla lateral de
+        # linealidad (`asignar_encabezados(self, 'braqui')`, la misma
+        # función que arma la tabla de 27 columnas del control diario).
+        # `guardar_linealidad` ya refresca la tabla con `mostrar_db_linealidad`
+        # (sus propios títulos), así que esta conexión sobra.
+        #self.btn_add.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
 
         #self.btn_add.clicked.connect(lambda _: self.clean_info(imagenes=False))
         #self.btn_add.clicked.connect(lambda _:self.clean_info)
@@ -2876,15 +2884,23 @@ class Linealidad(PruebaBasico):
 
         self.search_bar.textChanged.connect(self._iniciar_busqueda_debounced)
 
-        self.edit_table.clicked.connect(self.verificar_editar)
+        # L.1: "Editar"/"Aceptar"/"Cancelar" pasaban por el camino de la
+        # pantalla DIARIA (`self.verificar_editar`/`self.cargarDatosEditados`/
+        # `self.cancelarEdicion`, todos heredados de `PruebaDiariaBraq`),
+        # que apunta a `braqui` -- una edición de linealidad escribía (o
+        # intentaba escribir) sobre un registro DIARIO con el mismo `id`.
+        # Ahora usa el mismo camino que el mensual de braqui
+        # (`verificar_editar`/`guardarEdicion`/`cancelarEdicion` de
+        # `load.py`, ya importadas arriba): cada celda edita su PROPIO
+        # registro de `LinealidadBraquiterapia`, por los metadatos que
+        # `mostrar_db_linealidad` ya deja en cada celda (W.1).
+        self.edit_table.clicked.connect(
+            lambda: verificar_editar(self, self.table, "LinealidadBraquiterapia", "id", None))
 
-        self.accept_edit.clicked.connect(lambda: self.cargarDatosEditados(self.item, self.old_value, "braqui"))
-        self.accept_edit.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
-        self.accept_edit.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
+        self.accept_edit.clicked.connect(
+            lambda: guardarEdicion(self, self.table, "LinealidadBraquiterapia", None))
 
-        self.cancel_edit.clicked.connect(lambda: self.cancelarEdicion(self.item, self.old_value))
-        self.cancel_edit.clicked.connect(lambda: load_table(self, self.boolean_colums, self.actividad_ciclos, 'braqui'))
-        self.cancel_edit.clicked.connect(lambda:asignar_encabezados(self, 'braqui'))
+        self.cancel_edit.clicked.connect(lambda: cancelarEdicion(self))
         self.btn_submit.clicked.connect(
         lambda: self._generar_reporte_linealidad()
         )
