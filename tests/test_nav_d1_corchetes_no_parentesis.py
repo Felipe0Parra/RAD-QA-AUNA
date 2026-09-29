@@ -326,14 +326,14 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 242, '°C'),  # V.3 (28-09): 239->242
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 243, 'mmHg'),  # V.3 (28-09): 240->243
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 244, '%'),  # V.3 (28-09): 241->244
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 547, 'mm'),  # V.3 (28-09): 544->547
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 547, 'nA'),  # V.3 (28-09): 544->547
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 621, 'A'),  # V.3 (28-09): 618->621
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 621, 'V'),  # V.3 (28-09): 618->621
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1279, 'mm'),  # V.3 (28-09): 1201->1204; V.5 (28-09): 1204->1279
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1279, 'nA'),  # V.3 (28-09): 1201->1204; V.5 (28-09): 1204->1279
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1318, 'A'),  # V.3 (28-09): 1232->1243; V.5 (28-09): 1243->1318
-    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1318, 'V'),  # V.3 (28-09): 1232->1243; V.5 (28-09): 1243->1318
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 551, 'mm'),  # V.3 (28-09): 544->547; P.1 (28-09): 547->551
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 551, 'nA'),  # V.3 (28-09): 544->547
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 625, 'A'),  # V.3 (28-09): 618->621; P.1 (28-09): 621->625
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 625, 'V'),  # V.3 (28-09): 618->621
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1289, 'mm'),  # V.3 (28-09): 1201->1204; V.5 (28-09): 1204->1279; P.1 (28-09): 1279->1289
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1289, 'nA'),  # V.3 (28-09): 1201->1204; V.5 (28-09): 1204->1279
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1328, 'A'),  # V.3 (28-09): 1232->1243; V.5 (28-09): 1243->1318; P.1 (28-09): 1318->1328
+    ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 1328, 'V'),  # V.3 (28-09): 1232->1243; V.5 (28-09): 1243->1318
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 164, '°'),
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 184, 'mm'),
     ('ui/paginasControles/PruebasMensuales/halcyon_mensual.py', 191, '%'),

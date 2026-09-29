@@ -139,7 +139,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     # `filtro_activo(...)`; un `Name` se marca `{DYN}`. Mismo caso, misma
     # solución que `load.py:2750-2751` (`filtro_t`/`filtro_p`): el sitio SÍ
     # filtra, el detector de texto no puede verlo, se documenta a mano.
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1958): "LF4/DA-47 (addsomething::consulta) -- filtra CONDICIONALMENTE por selectividad del WHERE: `filtro = filtro_activo(nombre_tabla) if uid != \"id\" else \"\"`. Con uid='ref' (SistemaMedicion/CondicionesMedicion, clave de BLOQUE) el filtro se aplica; con uid='id' (TipoCalibracion, fila física) se omite a propósito -- filtrar ahí vaciaría el formulario de una calibración anulada abierta a propósito. Invisible para el detector por ir en variable intermedia (igual que load.py:2750-2751). Cubierto por tests/test_lf4_braqui_lectura_identidad.py en las dos direcciones",  # V.5 (28-09): 1883->1958
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1969): "LF4/DA-47 (addsomething::consulta) -- filtra CONDICIONALMENTE por selectividad del WHERE: `filtro = filtro_activo(nombre_tabla) if uid != \"id\" else \"\"`. Con uid='ref' (SistemaMedicion/CondicionesMedicion, clave de BLOQUE) el filtro se aplica; con uid='id' (TipoCalibracion, fila física) se omite a propósito -- filtrar ahí vaciaría el formulario de una calibración anulada abierta a propósito. Invisible para el detector por ir en variable intermedia (igual que load.py:2750-2751). Cubierto por tests/test_lf4_braqui_lectura_identidad.py en las dos direcciones",  # V.5 (28-09): 1883->1958; P.1 (28-09): 1958->1969
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 270): "DO1 (subirlineasmensuales_ix -- SELECT del bloque vigente para componer el nuevo; ya filtra activo a mano, tabla dinámica)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 309): "DO1 (subirlineasmensuales_ix, rama fuera del bloque de QC)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 360): "DO1 (_cargar_dosimetria_bd_ix -- ya filtra activo a mano, tabla dinámica)",
@@ -238,13 +238,13 @@ EXCEPCIONES_LITERALES = {
     # línea (el analizador reporta 'sin filtro' y 'LIMIT sin ORDER BY' por
     # separado aunque sea un solo sitio revisado).
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3512): "MaximosCamaras (filtro_mc, alias 'mc.') Y TipoCalibracion (filtro_tc, alias 'tc.', añadido en LR3) -- graficar_maximos_camara; las dos calificadas en variables intermedias",  # V.4 (28-09): 3436->3441; L.3 (28-09): 3495->3512
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1822): "MaximosCamaras (filtro_mc) Y TipoCalibracion (filtro_tc, LR3) -- gemelo mensual del anterior",  # V.5 (28-09): 1747->1822
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1833): "MaximosCamaras (filtro_mc) Y TipoCalibracion (filtro_tc, LR3) -- gemelo mensual del anterior",  # V.5 (28-09): 1747->1822; P.1 (28-09): 1822->1833
     # LR3 (DA-48): sitios de RAÍZ que ganaron su filtro calificado por alias
     # -- mismo patrón de variable intermedia, ahora visibles para ES1 porque
     # LR4 metió las raíces en el alcance.
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 878): "TipoCalibracion -- filtro_tc calificado con el alias 'tc.' (_ejecutar_carga_calibracion: última fuente instalada antes de una fecha)",
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3541): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (graficar_linealidad_fuente)",  # V.4 (28-09): 3465->3470; L.3 (28-09): 3524->3541
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1851): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (gemelo mensual de graficar_linealidad_fuente)",  # V.5 (28-09): 1776->1851
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1862): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (gemelo mensual de graficar_linealidad_fuente)",  # V.5 (28-09): 1776->1851; P.1 (28-09): 1851->1862
 }
 
 # LR4 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LR4, [[DA-48]]): sitios de tabla
@@ -346,15 +346,15 @@ SITIOS_CLAVE_INCOMPLETA_PERMITIDOS = {
         "MaximosCamaras -- mismo defecto, misma función.",
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2199):  # V.4 (28-09): 2191->2196
         "LecturasMaximos -- mismo defecto, misma función.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1500):  # V.5 (28-09): 1425->1500
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1511):  # V.5 (28-09): 1425->1500; P.1 (28-09): 1500->1511
         "SistemaMedicion -- gemelo mensual del defecto de arriba.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1612):  # V.5 (28-09): 1537->1612
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1623):  # V.5 (28-09): 1537->1612; P.1 (28-09): 1612->1623
         "CondicionesMedicion -- gemelo mensual.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1652):  # V.5 (28-09): 1577->1652
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1663):  # V.5 (28-09): 1577->1652; P.1 (28-09): 1652->1663
         "ResultadosActividad -- gemelo mensual.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1682):  # V.5 (28-09): 1607->1682
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1693):  # V.5 (28-09): 1607->1682; P.1 (28-09): 1682->1693
         "MaximosCamaras -- gemelo mensual.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1737):  # V.5 (28-09): 1662->1737
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1748):  # V.5 (28-09): 1662->1737; P.1 (28-09): 1737->1748
         "LecturasMaximos -- gemelo mensual.",
 }
 

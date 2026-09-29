@@ -81,7 +81,11 @@ class TestBraqMensualActualizarRefBd:
         obj.date_box = QDateEdit()
         obj.ref_bd = None
         obj.pri_cal = _boton_checkable(tipo == "Control Mensual")
-        obj.cambio_cal = _boton_checkable(tipo == "Cambio de fuente")
+        # P.1 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, segunda ronda): el
+        # widget real del botón "Cambio de Fuente" es `red_cal` (columna
+        # `nombres` de `widgets.xlsx`) -- `cambio_cal` no lo crea nada en
+        # producción, solo lo fabricaba este fixture.
+        obj.red_cal = _boton_checkable(tipo == "Cambio de fuente")
         obj.es_calibracion_redundante = (tipo == "Calibración Redundante")
         return obj
 

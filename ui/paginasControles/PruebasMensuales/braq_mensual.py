@@ -257,7 +257,11 @@ class PruebaMensualBraq(PruebaBasico):
         self.layout_cambio = QHBoxLayout()
 
         archivo = 'widgets.xlsx'
-        if hasattr(self, 'es_cambio_fuente') and self.es_calibracion_redundante:
+        # P.1 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, segunda ronda):
+        # `es_cambio_fuente` no lo crea nada en producción -- el `and`
+        # con él hacía que esta condición fuera SIEMPRE falsa, así que la
+        # redundante nunca llegaba a usar su propio encabezado.
+        if getattr(self, 'es_calibracion_redundante', False):
             _ = self.setupBox(archivo, 'encabezado_ActividadBraqui')
         else:
             _ = self.setupBox(archivo, 'encabezado_mensualBraqui')
@@ -976,11 +980,17 @@ class PruebaMensualBraq(PruebaBasico):
         criterio que el guardado, en vez de resolver por fecha a secas y
         desempatar con `ORDER BY id DESC` (lo que hacía ganar siempre la
         calibración más reciente del día, sin importar cuál seleccionó el
-        físico)."""
+        físico).
+
+        P.1 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, segunda ronda): se
+        retira la pregunta por `cambio_cal` -- ese atributo no lo crea
+        nada en producción (el widget real del botón "Cambio de Fuente"
+        es `red_cal`, columna `nombres` de `widgets.xlsx`); solo existía
+        en un test que lo fabricaba a mano. Retirar la pregunta no cambia
+        ningún resultado: nunca era cierto, y el botón "Cambio de Fuente"
+        ya llegaba a su tipo por el caso por defecto de abajo."""
         if hasattr(self, 'pri_cal') and self.pri_cal.isChecked():
             return "Control Mensual"
-        if hasattr(self, 'cambio_cal') and self.cambio_cal.isChecked():
-            return "Cambio de fuente"
         if hasattr(self, 'es_calibracion_redundante') and self.es_calibracion_redundante:
             return "Calibración Redundante"
         return "Cambio de fuente"
@@ -1343,22 +1353,23 @@ class PruebaMensualBraq(PruebaBasico):
 
 
 
-        if hasattr(self, 'es_cambio_fuente') and self.es_calibracion_redundante:
-            self.btn_submit.clicked.connect(
-                lambda _, :
-                    guardarPDF_mensual(self, fecha=self.date_box.date().toString('yyyy-MM-dd'),
-                            maquina='Braquiterapia', id_maquina=codigo_de_formato(self), tipo_reporte='Calibración Redundante', )
-                        )
-        else:
-            self.btn_submit.clicked.connect(
-                lambda: guardarPDF_mensual(
-                    self,
-                    fecha=self.date_box.date().toString('yyyy-MM-dd'),
-                    maquina='Braquiterapia',
-                    id_maquina=codigo_de_formato(self),
-                    tipo_reporte='Cambio de fuente' if (hasattr(self, 'cambio_cal') and self.cambio_cal.isChecked()) else 'Control Mensual'
-                )
+        # P.1 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, segunda ronda): el
+        # PDF pide el tipo con el que se guardó -- una sola regla
+        # (`_tipo_calibracion_seleccionado`, la misma que ya usan
+        # `guardar_DB`/`actualizar_ref_bd`), evaluada al hacer clic. Antes
+        # había una TERCERA regla aquí (`es_cambio_fuente`, que nada crea,
+        # y `cambio_cal`, que tampoco -- el atributo real es `red_cal`),
+        # así que el PDF siempre salía "Control Mensual" y en los días con
+        # dos calibraciones imprimía la otra.
+        self.btn_submit.clicked.connect(
+            lambda: guardarPDF_mensual(
+                self,
+                fecha=self.date_box.date().toString('yyyy-MM-dd'),
+                maquina='Braquiterapia',
+                id_maquina=codigo_de_formato(self),
+                tipo_reporte=self._tipo_calibracion_seleccionado()
             )
+        )
 
         # Conexión ÚNICA para el menú de gráficas
         self.menu_graficar.currentTextChanged.connect(self.plotter_mensual_desde_menu)
