@@ -5,17 +5,23 @@ aquí) que envuelve TODA la función hace `return` sin cerrar nada si algo
 revienta ANTES de ese `close()` explícito -- p. ej. el propio
 `cursor.execute(INSERT...)`.
 
-El `with` se acota SOLO a la parte que necesita `conn` (de `cursor =
-conn.cursor()` a `conn.commit()`); el resto de la función (auditoría,
-diálogo, refresco de tabla) no usa `conn` y queda fuera, sin tocar su
-indentación -- P3 permite acotar el `with` a lo que de verdad hace falta,
-no reordena ni mueve nada.
+L.3 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, tercera ronda) reemplazó el
+`with Conexion().conectar() as conn:` por el mismo patrón de conexión que
+`guardar_resultado_CambioFuente` (EB2b): `conn = Conexion().conectar()` +
+`try/except Exception: conn.rollback(); raise/finally: conn.close()`. Ya
+no hay ningún `with` que envolver, así que la garantía de este archivo ya
+no se verifica contando invocaciones de `_ConexionUnaVez.__exit__` (ese
+código ya no corre en este camino) sino verificando el efecto real que
+`__exit__` perseguía: que una transacción de escritura abandonada no deje
+bloqueado a un escritor nuevo (DP-67) y que el INSERT fallido no deje
+ninguna fila a medias.
 
 P2: `extraer_datos_medidas` (ya inyectable en el fixture existente,
 `_linealidad_pelada`) devuelve un valor NO bindeable en una de las 10
 filas de linealidad -- el fallo real ocurre en `cursor.execute`, dentro
-del `with`."""
+del `try` de `reemplazar_bloque`."""
 import os
+import sqlite3
 
 import pytest
 
@@ -27,7 +33,7 @@ from PyQt5.QtWidgets import (
 )
 
 import data.ManejoDatos.conection as conection_mod
-from data.ManejoDatos.conection import Conexion, _ConexionUnaVez
+from data.ManejoDatos.conection import Conexion
 import ui.paginasControles.PruebasDiarias.braquiterapia as braq_mod
 from ui.paginasControles.PruebasDiarias.braquiterapia import Linealidad
 
@@ -93,28 +99,18 @@ def _linealidad_pelada():
     return obj
 
 
-class _ConexionUnaVezEspia(_ConexionUnaVez):
-    llamadas = []
-
-    def __exit__(self, exc_type, exc, tb):
-        _ConexionUnaVezEspia.llamadas.append("exit")
-        return super().__exit__(exc_type, exc, tb)
-
-
 class TestA5GuardarLinealidadCierraSiempre:
-    def test_insert_revienta_y_aun_asi_se_invoca_exit(self, app, bd_temporal, monkeypatch):
-        monkeypatch.setattr(conection_mod, "_ConexionUnaVez", _ConexionUnaVezEspia)
-        _ConexionUnaVezEspia.llamadas.clear()
-
+    def test_insert_revienta_y_no_deja_transaccion_abierta(self, app, bd_temporal):
         obj = _linealidad_pelada()
         # q1[0] llega como una lista -- tipo que sqlite3 no puede
-        # bindear -- así que el INSERT revienta dentro del with. El
-        # `except:` desnudo de la función lo traga (return sin más).
+        # bindear -- así que el INSERT revienta dentro del `try` de
+        # `reemplazar_bloque`. El `except:` desnudo de la función lo
+        # traga (return sin más).
         # L.2 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): `tp`/`te` tienen
         # que llegar VÁLIDOS -- ahora `guardar_linealidad` los usa para
         # `ajuste_linealidad` ANTES de tocar la BD (para que exactitud y
         # tránsito salgan de lo que se va a guardar); corromper `tp` haría
-        # que la función reventara ahí, antes de llegar al `with` que este
+        # que la función reventara ahí, antes de llegar al INSERT que este
         # test quiere ejercitar. `q1` no lo toca `ajuste_linealidad`, así
         # que sigue siendo el campo correcto para simular el fallo tardío.
         obj.extraer_datos_medidas = lambda: (
@@ -123,9 +119,25 @@ class TestA5GuardarLinealidadCierraSiempre:
         resultado = obj.guardar_linealidad()
 
         assert resultado is None
-        assert _ConexionUnaVezEspia.llamadas == ["exit"], (
-            "el with debe invocar __exit__ exactamente una vez, incluso "
-            f"cuando el INSERT revienta -- se registró: {_ConexionUnaVezEspia.llamadas}")
+
+        # DP-67: una transacción de escritura ABANDONADA congela a
+        # cualquier escritor nuevo hasta agotar el busy_timeout real
+        # (30 s). Con un timeout corto aquí, un `database is locked`
+        # demostraría la fuga; que un escritor nuevo pueda tomar el
+        # candado EXCLUSIVO de inmediato prueba que el `finally:
+        # conn.close()` (L.3) cerró de verdad, sin depender de contar
+        # invocaciones de `_ConexionUnaVez.__exit__` -- ese camino ya no
+        # usa ningún `with`.
+        con_escritor_nuevo = sqlite3.connect(bd_temporal, timeout=0.5)
+        con_escritor_nuevo.execute("BEGIN IMMEDIATE")
+        con_escritor_nuevo.commit()
+        con_escritor_nuevo.close()
+
+        con_verificacion = Conexion().conectar()
+        n = con_verificacion.execute(
+            "SELECT COUNT(*) FROM LinealidadBraquiterapia").fetchone()[0]
+        con_verificacion.close()
+        assert n == 0, "el INSERT fallido no debió dejar ninguna fila a medias"
 
     def test_camino_normal_sigue_guardando_igual(self, app, bd_temporal):
         obj = _linealidad_pelada()

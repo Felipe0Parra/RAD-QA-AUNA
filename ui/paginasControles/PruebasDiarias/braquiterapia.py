@@ -38,7 +38,7 @@ from analisisImagenes.ActividadFuente import graficar_linealidad, graficar_resul
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR, ACCION_ELIMINAR
-from services.anulacion import filtro_activo
+from services.anulacion import filtro_activo, reemplazar_bloque
 from services.lecturas_del_maximo import VoltajesInvalidos, lecturas_por_voltaje
 from services.linealidad_fuente import (
     TIEMPOS_PARADA, ajuste_linealidad, DatosInsuficientes,
@@ -3385,18 +3385,35 @@ class Linealidad(PruebaBasico):
 
             placeholders = ','.join(['?'] * len(datos))
 
-            with Conexion().conectar() as conn:
-                cursor = conn.cursor()
-                cursor.execute(f'''
-                    INSERT INTO LinealidadBraquiterapia ({columnas})
-                    VALUES ({placeholders})
-                ''', datos)
-
+            # L.3 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md, tercera ronda):
+            # guardar una fecha que ya tiene registro vigente lo REEMPLAZA,
+            # como el mensual -- ya no un INSERT liso (DP-40/EB6 quedaba
+            # deliberadamente sin este mecanismo por falta de datos; el
+            # físico decidió que se hiciera "como el mensual"). El bloque
+            # anterior se ANULA (nunca se borra) y la auditoría la escribe
+            # `reemplazar_bloque` en la MISMA transacción -- se retira la
+            # llamada aparte de `_registrar_auditoria`. Mismo patrón de
+            # conexión que `guardar_resultado_CambioFuente` (EB2b).
+            conn = Conexion().conectar()
+            cursor = conn.cursor()
+            try:
+                cursor.execute("BEGIN")
+                reemplazar_bloque(
+                    cursor, "LinealidadBraquiterapia",
+                    [("DATE(fecha)", fecha)],
+                    f"INSERT INTO LinealidadBraquiterapia ({columnas}) "
+                    f"VALUES ({placeholders})",
+                    [tuple(datos)],
+                    user, detalle="linealidad (braquiterapia)",
+                    accion=ACCION_GUARDAR)
                 ref = cursor.lastrowid
                 conn.commit()
-            # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): sin auditar
-            # hasta ahora.
-            _registrar_auditoria(user, ACCION_GUARDAR, "LinealidadBraquiterapia", ref=ref)
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
             QMessageBox.information(self, "Guardado", "Datos de linealidad almacenados correctamente.")
             mostrar_db_linealidad(self)
             self.tabla_resultados.viewport().update()

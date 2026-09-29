@@ -319,7 +319,7 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2972, 's'),  # V.3 (28-09): 2946->2948; V.4 (28-09): 2948->2953
     ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3088, 'nC'),  # V.3 (28-09): 3062->3064; V.4 (28-09): 3064->3069
     ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3088, 's'),  # V.3 (28-09): 3062->3064; V.4 (28-09): 3064->3069
-    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3438, 'nC'),  # V.3 (28-09): 3377->3379; V.4 (28-09): 3379->3384
+    ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 3455, 'nC'),  # V.3 (28-09): 3377->3379; V.4 (28-09): 3379->3384; L.3 (28-09): 3438->3455
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 239, '°C'),  # V.3 (28-09): 236->239
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 240, 'mmHg'),  # V.3 (28-09): 237->240
     ('ui/paginasControles/PruebasMensuales/braq_mensual.py', 241, '%'),  # V.3 (28-09): 238->241

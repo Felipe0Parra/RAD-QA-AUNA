@@ -237,13 +237,13 @@ EXCEPCIONES_LITERALES = {
     # `filtro_mc` calificada con el alias 'mc.'. Dos hallazgos en la misma
     # línea (el analizador reporta 'sin filtro' y 'LIMIT sin ORDER BY' por
     # separado aunque sea un solo sitio revisado).
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3495): "MaximosCamaras (filtro_mc, alias 'mc.') Y TipoCalibracion (filtro_tc, alias 'tc.', añadido en LR3) -- graficar_maximos_camara; las dos calificadas en variables intermedias",  # V.4 (28-09): 3436->3441
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3512): "MaximosCamaras (filtro_mc, alias 'mc.') Y TipoCalibracion (filtro_tc, alias 'tc.', añadido en LR3) -- graficar_maximos_camara; las dos calificadas en variables intermedias",  # V.4 (28-09): 3436->3441; L.3 (28-09): 3495->3512
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1822): "MaximosCamaras (filtro_mc) Y TipoCalibracion (filtro_tc, LR3) -- gemelo mensual del anterior",  # V.5 (28-09): 1747->1822
     # LR3 (DA-48): sitios de RAÍZ que ganaron su filtro calificado por alias
     # -- mismo patrón de variable intermedia, ahora visibles para ES1 porque
     # LR4 metió las raíces en el alcance.
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 878): "TipoCalibracion -- filtro_tc calificado con el alias 'tc.' (_ejecutar_carga_calibracion: última fuente instalada antes de una fecha)",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3524): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (graficar_linealidad_fuente)",  # V.4 (28-09): 3465->3470
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3541): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (graficar_linealidad_fuente)",  # V.4 (28-09): 3465->3470; L.3 (28-09): 3524->3541
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1851): "LinealidadBraquiterapia -- filtro_lf calificado con el alias 'lf.' (gemelo mensual de graficar_linealidad_fuente)",  # V.5 (28-09): 1776->1851
 }
 

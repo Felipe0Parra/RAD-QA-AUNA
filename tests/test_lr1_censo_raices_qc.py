@@ -285,16 +285,16 @@ CENSO_RAICES = {
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 2929, "LinealidadBraquiterapia"):  # V.4 (28-09): 2905->2910
         (LISTA, "linealidad por fecha para el PDF -- ya filtraba (el sitio "
                 "que fijó el patrón: filtro + ORDER BY id DESC)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3495, "TipoCalibracion"):  # V.4 (28-09): 3436->3441
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3512, "TipoCalibracion"):  # V.4 (28-09): 3436->3441; L.3 (28-09): 3495->3512
         (LISTA, "JOIN a la calibración de una fecha para graficar máximos -- "
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3524, "LinealidadBraquiterapia"):  # V.4 (28-09): 3465->3470
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3541, "LinealidadBraquiterapia"):  # V.4 (28-09): 3465->3470; L.3 (28-09): 3524->3541
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3814, "TipoCalibracion"):  # V.4 (28-09): 3755->3760
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3831, "TipoCalibracion"):  # V.4 (28-09): 3755->3760; L.3 (28-09): 3814->3831
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4290, "braqui"):  # V.4 (28-09): 4231->4236
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4307, "braqui"):  # V.4 (28-09): 4231->4236; L.3 (28-09): 4290->4307
         (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4329, "braqui"):  # V.4 (28-09): 4270->4275
+    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4346, "braqui"):  # V.4 (28-09): 4270->4275; L.3 (28-09): 4329->4346
         (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
     ("ui/paginasControles/PruebasDiarias/seiscientos.py", 187, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),
