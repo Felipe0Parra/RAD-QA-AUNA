@@ -277,8 +277,6 @@ SITIOS_LECTURA_REVISADOS = {
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("data/ManejoDatos/load.py", "abrir_pelicula"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("data/ManejoDatos/load.py", "consulta_mesualBraq"):
-        "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("data/ManejoDatos/load.py", "mostrar_analisis_franjas"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("data/ManejoDatos/load.py", "mostrar_analisis_img"):

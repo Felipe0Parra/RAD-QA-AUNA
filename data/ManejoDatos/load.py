@@ -4280,7 +4280,6 @@ def guardarEdicion(dlg, tabla_widget, nombre_tabla, id_ref):
     from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 
     db = None
-    datos_iniciales, datos_finales = None, None  # 🔹 Evita UnboundLocalError si no es TipoCalibracion
 
     try:
         #                   Obtener valores editados
@@ -4323,9 +4322,16 @@ def guardarEdicion(dlg, tabla_widget, nombre_tabla, id_ref):
         else:
             table_name, col_name = nombre_tabla, col_data
 
-        # Si es TipoCalibracion, guardar datos iniciales para comparar luego
+        # RC.2 (PLAN_RECALCULO_CALIBRACION_BRAQUI_30-09.md): TODA corrección
+        # de TipoCalibracion va por un solo camino -- corregir_calibracion --,
+        # que recalcula como al volver a guardar y escribe todo o nada.
         if table_name == "TipoCalibracion":
-            datos_iniciales = consulta_mesualBraq(dlg, row_id)
+            corregir_calibracion(dlg, row_id, col_name, old_value, new_value)
+            dlg.accept_edit.hide()
+            dlg.cancel_edit.hide()
+            dlg.btn_delete.show()
+            dlg.edit_table.show()
+            return
 
         #           Determinar cláusula WHERE según la tabla
         # ---------------------------------------------------------------
@@ -4393,83 +4399,6 @@ def guardarEdicion(dlg, tabla_widget, nombre_tabla, id_ref):
 
         QMessageBox.information(dlg, "Éxito", "Registro actualizado correctamente.")
         print("UPDATE ejecutado correctamente")
-
-        #       Recalculo específico para TipoCalibracion
-        # ---------------------------------------------------------------
-        if table_name == "TipoCalibracion":
-            datos_finales = consulta_mesualBraq(dlg, row_id)
-            if datos_iniciales is not None and datos_finales != datos_iniciales:
-                try:
-                    from analisisImagenes.ActividadFuente import factores_correccion, actividad_fuente, calcular_decaimiento
-
-                    # Extraer voltajes válidos
-                    voltajes = [float(v) for v in datos_finales["lecturas"].keys()if datos_finales["lecturas"][v] is not None]
-
-                    if not voltajes:
-                        raise Exception("No se encontraron lecturas válidas")
-
-                    # Detectar voltaje máximo en valor absoluto
-                    X = max(voltajes, key=abs)
-
-                    # Obtener lecturas en +V y -V
-                    Vprom = datos_finales["lecturas"].get(str(X))
-                    Vnprom = datos_finales["lecturas"].get(str(-X))
-
-                    # Buscar un valor intermedio
-                    V = None
-                    for v in voltajes:
-                        if abs(v) != abs(X):
-                            V = datos_finales["lecturas"].get(str(v))
-                            break
-
-                    # Calcular factores de corrección
-                    Ks, Kpol, Ktp = factores_correccion(Vprom, Vnprom, V, datos_finales["t"], datos_finales["p"],
-                        datos_finales["t0"], datos_finales["p0"])
-
-                    # Calcular actividad
-                    A = actividad_fuente(
-                        Ks, Kpol, Ktp, datos_finales["calibracion_camara"], datos_finales["calibracion_electrometro"],
-                        datos_finales["conversion"], Vprom)
-
-                    # Calcular decaimiento
-                    dec_valor = calcular_decaimiento(datos_finales["fecha_cer"], datos_finales["fecha_cal"],
-                        datos_finales["intensidad"])
-
-                    # Debug
-                    print("\n-----------------------------------------------------------------------")
-                    print("          Actividad de la fuente (Mensual de braquiterapia)\n")
-                    print(f" Ks={round(Ks, 3)}, Kp={round(Kpol, 3)}, Ktp={round(Ktp, 3)}")
-                    print(f" A={round(A, 3)}, dec_valor={round(dec_valor, 3)}")
-                    print("-----------------------------------------------------------------------")
-
-                    if A is None or dec_valor is None:
-                        raise Exception("Los cálculos devolvieron None, no se actualiza la BD")
-
-                    # Actualizar ResultadosActividad
-                    query_update = QSqlQuery(db)
-                    sql = f"""
-                        UPDATE ResultadosActividad
-                        SET Ks = ?, Kp = ?, Ktp = ?,
-                            actividad_calculada = ?, actividad_decaimiento = ?
-                        WHERE ref = ?{filtro_activo('ResultadosActividad')}
-                    """
-                    query_update.prepare(sql)
-                    query_update.addBindValue(round(Ks, 3))
-                    query_update.addBindValue(round(Kpol, 3))
-                    query_update.addBindValue(round(Ktp, 3))
-                    query_update.addBindValue(round(A, 3))
-                    query_update.addBindValue(round(dec_valor, 3))
-                    query_update.addBindValue(row_id)
-
-                    if not query_update.exec_():
-                        print(" ! Error en query ResultadosActividad:", query_update.lastError().text())
-                    else:
-                        mostrar_db_mensualBraqui(dlg)
-                        print("→ Recalculo y actualización de ResultadosActividad exitoso")
-
-                except Exception as e:
-                    traceback.print_exc()
-                    print(f"⚠ Error al recalcular actividad: {e}")
 
     except Exception as e:
         traceback.print_exc()
@@ -4815,68 +4744,209 @@ def eliminarRegistro(dlg, tabla_widget, nombre_tabla, id_ref=None):
         print("Fin de eliminarRegistro\n")
 
 def consulta_mesualBraq(self, id):
-    #Hacer una consulta inicial:
+    """RC.2 (PLAN_RECALCULO_CALIBRACION_BRAQUI_30-09.md): reescrita para
+    servir a `corregir_calibracion` -- lee `LecturasMaximos` POR PAPEL
+    (`services.lecturas_del_maximo.lecturas_por_voltaje`, V.3) y añade lo
+    archivado en `ResultadosActividad`, para poder mostrar el antes/después
+    de una corrección. Mismo nombre y firma; su único llamante pasa a ser
+    `corregir_calibracion`. `with Conexion().conectar() as conn:` cierra en
+    todos los caminos (T7/DP-67), nunca `conn.close()` dentro del `with`
+    (DP-76)."""
+    from services.correccion_calibracion import CorreccionImposible, RESULTADOS_ARCHIVADOS
+    from services.lecturas_del_maximo import lecturas_por_voltaje
+
     datos_iniciales = {}
-    conn = Conexion.conectar(self)
-    cursor = conn.cursor()
+    with Conexion().conectar() as conn:
+        cursor = conn.cursor()
 
-    # --- CondicionesMedicion ---
-    cursor.execute(f"""
-        SELECT t, p
-        FROM CondicionesMedicion
-        WHERE ref = ?{filtro_activo('CondicionesMedicion')}
-    """, (id,))
-    row = cursor.fetchone()
-    if row:
+        # --- CondicionesMedicion ---
+        cursor.execute(f"""
+            SELECT t, p
+            FROM CondicionesMedicion
+            WHERE ref = ?{filtro_activo('CondicionesMedicion')}
+        """, (id,))
+        row = cursor.fetchone()
+        if not row:
+            raise CorreccionImposible(
+                "no se encontraron las condiciones de medición de esta calibración.")
         datos_iniciales["t"], datos_iniciales["p"] = row
-    else:
-        raise Exception(f"No se encontraron condiciones de medición con ref={id}")
 
-    # --- SistemasMedicion ---
-    cursor.execute(f"""
-        SELECT t0, p0, calibracion, electrometro
-        FROM SistemaMedicion
-        WHERE ref = ?{filtro_activo('SistemaMedicion')}
-    """, (id,))
-    row = cursor.fetchone()
-    if row:
-        datos_iniciales["t0"], datos_iniciales["p0"], datos_iniciales["calibracion_camara"], datos_iniciales["calibracion_electrometro"] = row
+        # --- SistemaMedicion ---
+        cursor.execute(f"""
+            SELECT t0, p0, calibracion, electrometro
+            FROM SistemaMedicion
+            WHERE ref = ?{filtro_activo('SistemaMedicion')}
+        """, (id,))
+        row = cursor.fetchone()
+        if not row:
+            raise CorreccionImposible(
+                "no se encontró el sistema de medición de esta calibración.")
+        (datos_iniciales["t0"], datos_iniciales["p0"],
+         datos_iniciales["calibracion_camara"], datos_iniciales["calibracion_electrometro"]) = row
 
-    else:
-        raise Exception(f"No se encontraron condiciones de medición con ref={id}")
+        # --- LecturasMaximos, por PAPEL (alto, bajo, negativo) ---
+        cursor.execute(f"""
+            SELECT voltaje, V_300, V_150, Vn_300, promediosV
+            FROM LecturasMaximos
+            WHERE ref = ?{filtro_activo('LecturasMaximos')}
+        """, (id,))
+        filas = cursor.fetchall()
+        # lecturas_por_voltaje lanza VoltajesInvalidos (un ValueError) si el
+        # bloque no tiene exactamente 3 filas o los papeles no valen -- se
+        # deja propagar, corregir_calibracion la trata igual que
+        # CorreccionImposible.
+        datos_iniciales["lecturas"] = lecturas_por_voltaje(filas)
 
-    # --- LecturasMaximos (traer todas las lecturas de ese ref) ---
-    cursor.execute(f"""
-        SELECT voltaje, promediosV
-        FROM LecturasMaximos
-        WHERE ref = ?{filtro_activo('LecturasMaximos')}
-    """, (id,))
-    rows = cursor.fetchall()
-    if not rows:
-        raise Exception(f"No se encontraron lecturas en LecturasMaximos con ref={id}")
-
-    # Convertimos a diccionario {voltaje: promediosV}
-    lecturas = {
-        str(voltaje): float(prom) if prom is not None else None
-        for voltaje, prom in rows
-        }
-    datos_iniciales["lecturas"] = lecturas
-
-    # --- Otros datos necesarios (ejemplo: calibraciones, fechas, etc.) ---
-    cursor.execute("""
-        SELECT  conversion, fecha_cer, fecha, intensidad
-        FROM TipoCalibracion
-        WHERE id = ?
-    """, (id,))
-    row = cursor.fetchone()
-    if row:
+        # --- TipoCalibracion ---
+        cursor.execute("""
+            SELECT conversion, fecha_cer, fecha, intensidad
+            FROM TipoCalibracion
+            WHERE id = ?
+        """, (id,))
+        row = cursor.fetchone()
+        if not row:
+            raise CorreccionImposible("no se encontraron los datos de esta calibración.")
         (datos_iniciales["conversion"],
-        datos_iniciales["fecha_cer"],
-        datos_iniciales["fecha_cal"],
-        datos_iniciales["intensidad"]) = row
-    else:
-        raise Exception(f"No se encontraron datos de calibración con id={id}")
-    conn.close()
+         datos_iniciales["fecha_cer"],
+         datos_iniciales["fecha_cal"],
+         datos_iniciales["intensidad"]) = row
 
-    print(f"\n  ● Datos de consulta_mesualBraq: {datos_iniciales}, en la ref = {id}")
+        # --- ResultadosActividad, lo YA ARCHIVADO (para el antes/después) ---
+        cursor.execute(f"""
+            SELECT Ks, Kp, Ktp, actividad_calculada, actividad_decaimiento
+            FROM ResultadosActividad
+            WHERE ref = ?{filtro_activo('ResultadosActividad')}
+        """, (id,))
+        row = cursor.fetchone()
+        if not row:
+            raise CorreccionImposible(
+                "no se encontraron los resultados de actividad archivados de esta calibración.")
+        datos_iniciales["archivado"] = dict(zip(RESULTADOS_ARCHIVADOS, row))
+
     return datos_iniciales
+
+
+def corregir_calibracion(dlg, ref, columna, valor_anterior, valor_nuevo):
+    """RC.2 (PLAN_RECALCULO_CALIBRACION_BRAQUI_30-09.md): único camino de
+    corrección de una celda de `TipoCalibracion`. Decide sin escribir nada,
+    confirma solo si hay cifras recalculadas que cambian (No por omisión),
+    y escribe la celda, los resultados (si los hay) y su fila de auditoría
+    en UNA transacción -- todo o nada. Decisión del físico (DP-138):
+    "Todo, como al volver a guardar"."""
+    from services.correccion_calibracion import (
+        COLUMNAS_QUE_RECALCULAN, COLUMNAS_SIN_EFECTO_EN_EL_CALCULO,
+        COLUMNAS_QUE_NO_SE_CORRIGEN_EN_SITIO, NOMBRES_LEGIBLES_COLUMNA,
+        NOMBRES_LEGIBLES_RESULTADOS, CorreccionImposible, datos_con_correccion,
+        hay_que_recalcular, resultados_desde_lo_guardado, lineas_antes_despues)
+    from services.lecturas_del_maximo import VoltajesInvalidos, voltaje_de_texto
+
+    def _cancelar():
+        dlg.editing_item.setText(str(valor_anterior))
+
+    # 1. Decidir sin escribir nada.
+    if columna in COLUMNAS_QUE_NO_SE_CORRIGEN_EN_SITIO:
+        QMessageBox.warning(dlg, "Corrección no aplicada",
+                             COLUMNAS_QUE_NO_SE_CORRIGEN_EN_SITIO[columna])
+        _cancelar()
+        return
+    if columna not in COLUMNAS_QUE_RECALCULAN and columna not in COLUMNAS_SIN_EFECTO_EN_EL_CALCULO:
+        QMessageBox.warning(dlg, "Corrección no aplicada",
+                             f"la columna '{columna}' no está clasificada; no se corrige.")
+        _cancelar()
+        return
+
+    nuevos = None
+    lineas = []
+    v_alto = v_bajo = None
+    if columna in COLUMNAS_QUE_RECALCULAN:
+        try:
+            datos = consulta_mesualBraq(dlg, ref)
+            corregidos = datos_con_correccion(datos, columna, valor_nuevo)
+            if hay_que_recalcular(datos, corregidos):
+                nuevos = resultados_desde_lo_guardado(corregidos)
+                lineas = lineas_antes_despues(datos["archivado"], nuevos)
+                v_alto = voltaje_de_texto(corregidos["lecturas"][0][0])
+                v_bajo = voltaje_de_texto(corregidos["lecturas"][1][0])
+        except (CorreccionImposible, VoltajesInvalidos) as e:
+            QMessageBox.warning(dlg, "Corrección no aplicada", str(e))
+            _cancelar()
+            return
+
+    # 2. Confirmar, solo si hay cifras recalculadas que cambian.
+    if nuevos is not None and lineas:
+        partes = []
+        for clave, antes, despues in lineas:
+            nombre = NOMBRES_LEGIBLES_RESULTADOS.get(clave, clave)
+            unidad = " Ci" if "ctividad" in clave else ""
+            if antes == despues:
+                partes.append(f"{nombre}: {antes}{unidad} sin cambio")
+            else:
+                partes.append(f"{nombre}: {antes}{unidad} pasa a {despues}{unidad}")
+        texto = (
+            f"Corregir {NOMBRES_LEGIBLES_COLUMNA.get(columna, columna)} de "
+            f"{valor_anterior} a {valor_nuevo} recalcula los resultados de la "
+            f"actividad de este control como si se volviera a guardar "
+            f"(voltajes guardados {v_alto:g} / {v_bajo:g} / {-v_alto:g} V, "
+            f"TRS-398):\n\n" + " · ".join(partes) +
+            "\n\nLos valores anteriores quedan en el registro de auditoría. "
+            "¿Aplicar la corrección?")
+        respuesta = QMessageBox.question(
+            dlg, "Corregir la calibración", texto,
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if respuesta != QMessageBox.Yes:
+            _cancelar()
+            return
+
+    # 3. Escribir, todo o nada.
+    try:
+        with Conexion().conectar() as conn:
+            conn.execute("BEGIN")
+            cur = conn.execute(
+                f'UPDATE "TipoCalibracion" SET "{columna}" = ? WHERE "id" = ?',
+                (valor_nuevo, ref))
+            if cur.rowcount != 1:
+                raise CorreccionImposible("no se encontró la calibración para corregirla.")
+
+            detalle = f"{columna}: {valor_anterior!r} → {valor_nuevo!r}"
+            if nuevos is not None:
+                cur2 = conn.execute(
+                    f"""UPDATE ResultadosActividad
+                        SET Ks = ?, Kp = ?, Ktp = ?,
+                            actividad_calculada = ?, actividad_decaimiento = ?
+                        WHERE ref = ?{filtro_activo('ResultadosActividad')}""",
+                    (nuevos["Ks"], nuevos["Kp"], nuevos["Ktp"],
+                     nuevos["actividad_calculada"], nuevos["actividad_decaimiento"], ref))
+                if cur2.rowcount != 1:
+                    raise CorreccionImposible(
+                        "no se pudieron actualizar los resultados de la actividad.")
+                detalle += "; recalculado como al volver a guardar (antes → después): " + \
+                    "; ".join(f"{nombre} {antes} → {despues}" for nombre, antes, despues in lineas)
+
+            antes_audit = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+            _registrar_auditoria(_usuario_actual(dlg), ACCION_EDITAR, "TipoCalibracion",
+                                  ref=str(ref), detalle=detalle, con=conn)
+            despues_audit = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+            if despues_audit - antes_audit != 1:
+                raise CorreccionImposible(
+                    "no se pudo dejar el rastro de auditoría; no se aplicó la corrección.")
+
+            conn.commit()
+    except Exception as e:
+        traceback.print_exc()
+        _cancelar()
+        QMessageBox.critical(dlg, "Error", f"Error al actualizar: {e}")
+        return
+
+    # 4. Después del commit. La corrección YA está aplicada (commit hecho
+    # arriba): un fallo al refrescar la vista no puede convertirse en un
+    # "Error al actualizar" -- mismo criterio que HEAD (el recálculo viejo
+    # atrapaba este mismo refresco dentro de su propio try/except).
+    mensaje = "Registro actualizado correctamente."
+    if nuevos is not None:
+        mensaje += " Se recalcularon los resultados de la actividad."
+    QMessageBox.information(dlg, "Éxito", mensaje)
+    if nuevos is not None:
+        try:
+            mostrar_db_mensualBraqui(dlg)
+        except Exception:
+            traceback.print_exc()

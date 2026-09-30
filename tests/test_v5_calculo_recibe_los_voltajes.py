@@ -9,18 +9,16 @@ El censo es por AST, sobre el código fuente vigente, no una lista de
 línea: toda llamada a estas dos funciones, en cualquier archivo de
 producción salvo el que las define, tiene que traer los dos keywords.
 
-Único sitio EXENTO, con su razón: `data/ManejoDatos/load.py::guardarEdicion`
-(la rama de recálculo al editar `TipoCalibracion` -- el defecto que `V.2`
-iba a cerrar). `V.2` queda EXCLUIDA de esta ronda por decisión del físico
-(§R.3/§R.4 del plan: "inalcanzable desde la pantalla, ninguna celda de
-`TipoCalibracion` es editable" -- BRQ-V2 bajó a riesgo BAJO). `V.5` solo
-toca `braq_mensual.py`; este sitio se queda con los valores por defecto
-(300/150) hasta que se decida ejecutar `V.2`, documentado aquí a
-propósito para que no se cuele como un olvido.
-
 RC.1 (PLAN_RECALCULO_CALIBRACION_BRAQUI_30-09.md): `resultados_para_archivar`
 entra al censo -- es la única función que `guardar_DB` usa ahora para
 archivar, y exige `v_alto`/`v_bajo` por nombre y sin valor por defecto.
+
+RC.2 (mismo plan): la EXENTA de `guardarEdicion` se retira -- esa llamada
+(sin `v_alto`/`v_bajo`) ya no existe: la corrección de `TipoCalibracion`
+pasa por `corregir_calibracion`, que recalcula con
+`resultados_desde_lo_guardado` (`services/correccion_calibracion.py`),
+la cual sí llama a `resultados_para_archivar` por nombre. `EXENTAS` queda
+vacía.
 """
 import ast
 from pathlib import Path
@@ -35,14 +33,7 @@ EXCLUDE_DIRS = {
 ARCHIVO_DEFINICION = "analisisImagenes/ActividadFuente.py"
 FUNCIONES_CENSADAS = {"factores_correccion", "CalcularActividad", "resultados_para_archivar"}
 
-EXENTAS = {
-    ("data/ManejoDatos/load.py", "guardarEdicion"):
-        "recálculo al editar TipoCalibracion -- el defecto que V.2 iba a "
-        "cerrar; V.2 excluida de esta ronda (§R.3/§R.4 del plan, "
-        "'inalcanzable desde la pantalla'), y V.5 solo toca "
-        "braq_mensual.py. Sigue con los valores por defecto (300/150) "
-        "hasta que se decida ejecutar V.2.",
-}
+EXENTAS = {}
 
 
 def _archivos_produccion(raiz: Path):
@@ -125,7 +116,10 @@ def test_la_exenta_sigue_existiendo_con_ese_nombre():
 
 def test_censo_encuentra_al_menos_las_3_llamadas_reales():
     """Compuerta de que el censo no está midiendo el vacío: hoy hay 3
-    llamadas de producción (braq_mensual.py x2, load.py x1)."""
+    llamadas de producción (braq_mensual.py x2: CalcularActividad y
+    resultados_para_archivar en guardar_DB; services/correccion_
+    calibracion.py x1: resultados_para_archivar en
+    resultados_desde_lo_guardado)."""
     total = 0
     for rel, path in _archivos_produccion(ROOT):
         arbol = ast.parse(path.read_text(encoding="utf-8"))

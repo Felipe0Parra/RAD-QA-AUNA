@@ -169,20 +169,24 @@ CENSO_RAICES = {
     # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2739,
     # "controles"), LISTA, "mostrar_controles_tac: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 4566, "controles"):
+    ("data/ManejoDatos/load.py", 4495, "controles"):  # RC.2 (30-09): 4566->4495
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4580, "controles"):
+    ("data/ManejoDatos/load.py", 4509, "controles"):  # RC.2 (30-09): 4580->4509
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4643, "controles"):
+    ("data/ManejoDatos/load.py", 4572, "controles"):  # RC.2 (30-09): 4643->4572
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4653, "controles"):
+    ("data/ManejoDatos/load.py", 4582, "controles"):  # RC.2 (30-09): 4653->4582
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4866, "TipoCalibracion"):
+    ("data/ManejoDatos/load.py", 4801, "TipoCalibracion"):  # RC.2 (30-09): 4866->4801
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
+    ("data/ManejoDatos/load.py", 4904, "TipoCalibracion"):  # RC.2 (30-09), nuevo: 4903->4904
+        (IDENTIDAD, "corregir_calibracion -- UPDATE de UNA celda ya identificada "
+                    "por su id físico, WHERE id = ? (mismo criterio que la "
+                    "entrada anterior y que el UPDATE genérico de guardarEdicion)"),
 
     # -- Halcyon ---------------------------------------------------------
     ("data/ManejoDatos/obtenerDatosHalcyon.py", 206, "halcyon"):
@@ -349,8 +353,10 @@ CENSO_RAICES = {
 # quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
 # en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
 # 70 -> 73 sitios físicos.
-FILAS_ESPERADAS = 76      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`)
-SITIOS_FISICOS_ESPERADOS = 74      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`)
+FILAS_ESPERADAS = 77      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`)
+                          # RC.2 (30-09): +1, `corregir_calibracion` (IDENTIDAD sobre TipoCalibracion)
+SITIOS_FISICOS_ESPERADOS = 75      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`)
+                                    # RC.2 (30-09): +1 (corregir_calibracion, IDENTIDAD)
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

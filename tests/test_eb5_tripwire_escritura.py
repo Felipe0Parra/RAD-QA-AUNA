@@ -96,6 +96,19 @@ SITIOS_LITERALES_PERMITIDOS = {
         "por su propio id físico. Edición directa de UNA celda (DA-08), no "
         "un reemplazo de bloque -- las hijas de QC de ese control llegan "
         "después, por su propio camino de guardado.",
+    ("data/ManejoDatos/load.py", 4904):  # RC.2 (30-09), nuevo: 4903->4904
+        "corregir_calibracion -- UPDATE de UNA celda de TipoCalibracion ya "
+        "identificada por su id físico (tabla LITERAL en el f-string; solo "
+        "la columna es dinámica). Corrección con rastro (DA-05/07/08), el "
+        "mismo mecanismo PERMANENTE que guardarEdicion, no el patrón G1/G2 "
+        "que EB1 elimina: no reemplaza ningún bloque.",
+    ("data/ManejoDatos/load.py", 4912):  # RC.2 (30-09), nuevo: 4911->4912
+        "corregir_calibracion -- UPDATE de ResultadosActividad, el recálculo "
+        "derivado de la corrección anterior, en la MISMA transacción y con "
+        "su auditoría (DA-52). Solo corre si el dato corregido cambia algo "
+        "que dependa de él (hay_que_recalcular); reescribe la fila vigente "
+        "identificada por su clave de bloque (ref, filtro_activo), nunca un "
+        "DELETE.",
     # RETIRADA el 25-08 por IM1 (Fase 6): aquí vivía `crear_algo`
     # (`load.py:395`), el `UPDATE preguntas SET imagen = ?` en sitio -- IMG-2,
     # el defecto que destruyó 9 imágenes en el rebuild del 19-08. EB5 lo dejó
@@ -271,22 +284,14 @@ SITIOS_OPACOS_PERMITIDOS = {
         "INSERT (users, admin de arranque) -- no aplica a EB5.",
     ("data/ManejoDatos/load.py", 370):
         "INSERT (controles, alta de un control nuevo) -- no aplica a EB5.",
-    ("data/ManejoDatos/load.py", 4376):
+    ("data/ManejoDatos/load.py", 4382):  # RC.2 (30-09): 4376->4382
         "guardarEdicion (A3, DA-05/DA-07/DA-08) -- mecanismo GENÉRICO de "
         "edición directa de una celda: tabla y columna dinámicas (elegidas "
         "en la UI), WHERE por id físico O por (ref, energia) según la "
         "tabla. Mecanismo de corrección PERMANENTE, decidido, auditado -- "
         "no el patrón G1/G2 que este plan elimina (que mutaba TODO el "
         "bloque en cada guardado, no un campo puntual con rastro).",
-    ("data/ManejoDatos/load.py", 4456):
-        "guardarEdicion -- recálculo en cascada de ResultadosActividad "
-        "(Ks/Kp/Ktp/actividad_calculada/actividad_decaimiento) al editar un "
-        "campo de TipoCalibracion. Filtra 'activo' (filtro_activo), opaco "
-        "para el resolver por reasignación de `sql` en varias ramas de la "
-        "misma función. Parte del mismo mecanismo A3/DA-05 que la entrada "
-        "anterior: una corrección dispara su recálculo derivado, ambos con "
-        "el mismo rastro de auditoría.",
-    ("data/ManejoDatos/load.py", 4792):
+    ("data/ManejoDatos/load.py", 4721):  # RC.2 (30-09): 4792->4721
         "eliminarRegistro, rama else -- DELETE físico, alcanzable SOLO "
         "para tablas fuera del cierre transitivo de QC (catálogos "
         "genéricos). La rama if (anular_fila) cubre las 59 tablas de "

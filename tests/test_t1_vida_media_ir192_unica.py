@@ -107,15 +107,30 @@ class TestCensoRealDeLosCuatroArchivos:
             f"VIDA_MEDIA_IR192_DIAS por nombre")
 
 
+# Piso de llamadas POR ARCHIVO (no vacuidad del censo). Si uno baja: parseo
+# roto, llamada que salió del censo, o consolidación deliberada -- entonces
+# se baja aquí, con su motivo. Al escribir T1 era 1+1+1+1; RC.1 (30-09)
+# movió la de braq_mensual.py::guardar_DB a resultados_para_archivar y RC.2
+# (30-09) retiró la de load.py::guardarEdicion. Piso 0 = se sigue censando
+# para atrapar una llamada futura con literal.
+PISO_DE_LLAMADAS = {
+    "analisisImagenes/ActividadFuente.py": 2,  # CalcularActividad, resultados_para_archivar
+    "ui/paginasControles/PruebasDiarias/braquiterapia.py": 1,  # actividad_braq_automatica (diario)
+    "ui/paginasControles/PruebasMensuales/braq_mensual.py": 0,  # desde RC.1
+    "data/ManejoDatos/load.py": 0,  # desde RC.2
+}
+
+
 def test_el_censo_encuentra_llamadas_de_verdad():
-    # Guarda contra que un refactor rompa el parseo por AST y el censo
-    # quede vacío en silencio (falso verde) en los 4 archivos juntos.
-    total = sum(
-        contar_llamadas_totales((RAIZ / ruta).read_text(encoding="utf-8"))
-        for ruta in ARCHIVOS_CENSADOS)
-    assert total >= 4, (
-        f"solo se encontraron {total} llamadas a calcular_decaimiento en "
-        f"los 4 archivos censados -- ¿falló el parseo por AST?")
+    assert set(PISO_DE_LLAMADAS) == set(ARCHIVOS_CENSADOS)
+    halladas = {ruta: contar_llamadas_totales((RAIZ / ruta).read_text(encoding="utf-8"))
+                for ruta in ARCHIVOS_CENSADOS}
+    faltan = {ruta: (halladas[ruta], piso)
+              for ruta, piso in PISO_DE_LLAMADAS.items() if halladas[ruta] < piso}
+    assert not faltan, (
+        f"llamadas a calcular_decaimiento bajo el piso {{archivo: (halladas, piso)}}: "
+        f"{faltan} -- ¿parseo roto, llamada fuera del censo, o consolidación "
+        f"(bajar el piso aquí con su motivo)?")
 
 
 def test_vida_media_ir192_es_73_827_dias():

@@ -120,7 +120,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("data/ManejoDatos/load.py", 989): "diarias (EB4) -- ya filtra activo a mano, tabla dinámica",
     ("data/ManejoDatos/load.py", 186): "diarias (D3) -- ya filtra activo a mano, tabla dinámica",
     ("data/ManejoDatos/load.py", 1146): "código muerto (mostrar_db_CambioFuente, sin llamadores)",
-    ("data/ManejoDatos/load.py", 4761): "identidad (fila antes de anular/borrar)",
+    ("data/ManejoDatos/load.py", 4690): "identidad (fila antes de anular/borrar)",  # RC.2 (30-09): 4761->4690
     ("scripts/retirar_tabla_del_esquema.py", 70): "EB7 (DA-50) -- COUNT(*) sobre `tabla`, restringida a la lista blanca CERRADA `TABLAS_RETIRABLES` (equipos_anual, posicionamiento_reposicionamiento). Ninguna de las dos está en TABLAS_ANULABLES ni tiene `activo` -- se retiran del esquema en vez de versionar, filtrar aquí no tendría sentido",
     # NOTA (LF, gap hallado por el subagente que resolvió LF3): hasta aquí
     # decía "TipoCalibracion es raíz DP-31; SistemaMedicion/CondicionesMedicion
@@ -457,15 +457,14 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/conection.py", 784): "DDL/migración (EB2d, DA-57, tabla temporal de la migración que retira el UNIQUE de angulo_starshot)",  # R.1: 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782; G.2 (24-09): 782->783; G.3 (24-09): 783->784
     ("data/ManejoDatos/conection.py", 2508): "INSERT (users, no está en TABLAS_ANULABLES)",  # R1: 2091->2160; R.1: 2224->2309; T.0: 2309->2363; B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461; G.2 (24-09): 2461->2482; G.3 (24-09): 2482->2508
     ("data/ManejoDatos/load.py", 370): "INSERT (controles -- un INSERT nunca necesita filtro)",
-    ("data/ManejoDatos/load.py", 4376): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",
+    ("data/ManejoDatos/load.py", 4382): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",  # RC.2 (30-09): 4376->4382
     # LF (gap hallado por el subagente que resolvió LF3): decía "no está en
     # TABLAS_ANULABLES" -- cierto antes de LF2, falso después (PENDIENTE-LF).
     # Corregido: la sentencia ahora SÍ llama a `filtro_activo('ResultadosActividad')`
     # -- sigue "opaca" para AN1 no por el filtro sino porque `sql` se
     # reasigna en varias ramas de `guardarEdicion` (misma función que la
     # entrada anterior), irresoluble a propósito por diseño de AN1.
-    ("data/ManejoDatos/load.py", 4456): "UPDATE ResultadosActividad -- ya filtra con filtro_activo('ResultadosActividad'); opaca a AN1 por reasignación de `sql` en varias ramas de guardarEdicion, no por falta de filtro",
-    ("data/ManejoDatos/load.py", 4792): "DELETE por id_where -- rama else de eliminarRegistro, alcanzable SOLO para tablas fuera del cierre transitivo de QC (catálogos genéricos: equipos, tipos_prueba...). EB3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB3, 24-08): la rama `if` (anular_fila) ya cubre las 59 tablas de TABLAS_ANULABLES desde MI1 -- IV2 garantiza que ninguna descendiente de QC queda fuera de esa lista o de EXCEPCIONES_INVENTARIO, y TestTripwireDeAlcance (test_e7_soft_delete_bloque_qc.py) verifica que ningún llamador real nombra una tabla de QC que no esté en la lista blanca. Ver test_eb3_eliminarregistro_delete_inalcanzable.py",
+    ("data/ManejoDatos/load.py", 4721): "DELETE por id_where -- rama else de eliminarRegistro, alcanzable SOLO para tablas fuera del cierre transitivo de QC (catálogos genéricos: equipos, tipos_prueba...). EB3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB3, 24-08): la rama `if` (anular_fila) ya cubre las 59 tablas de TABLAS_ANULABLES desde MI1 -- IV2 garantiza que ninguna descendiente de QC queda fuera de esa lista o de EXCEPCIONES_INVENTARIO, y TestTripwireDeAlcance (test_e7_soft_delete_bloque_qc.py) verifica que ningún llamador real nombra una tabla de QC que no esté en la lista blanca. Ver test_eb3_eliminarregistro_delete_inalcanzable.py",  # RC.2 (30-09): 4792->4721
     ("data/ManejoDatos/obtenerDatosHalcyon.py", 397): "INSERT (halcyon -- un INSERT nunca necesita filtro)",
     ("services/dosis_service.py", 281): "DDL (CREATE TABLE calculadora_dosimetrica, no está en TABLAS_ANULABLES -- tiene su propia columna `vigente`, mecanismo de versionado independiente de este contrato)",
     ("services/dosis_service.py", 391): "INSERT (calculadora_dosimetrica, no está en TABLAS_ANULABLES)",
