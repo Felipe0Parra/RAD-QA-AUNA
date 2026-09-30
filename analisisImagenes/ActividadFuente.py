@@ -156,3 +156,30 @@ def graficar_linealidad(canvas=None, tp=None, tf=None):
 
     fig.tight_layout()
     canvas.draw()
+
+
+def promedio_de_medidas(m1, m2, m3):
+    """RC.1 (PLAN_RECALCULO_CALIBRACION_BRAQUI_30-09.md): media de las tres
+    medidas de un voltaje de LECTURAS DEL MÁXIMO -- la misma cuenta en el
+    formulario ("Ok"/"Guardar") y en la corrección de "Ver tabla". El orden
+    de las sumas es el de siempre: no cambiarlo (cambia el último bit)."""
+    return (m1 + m2 + m3) / 3
+
+
+def resultados_para_archivar(prom_alto, prom_bajo, prom_negativo, t, p, t0, p0,
+                             calibracion_camara, calibracion_electrometro, conversion,
+                             fecha_cer, fecha_cal, intensidad, *, v_alto, v_bajo):
+    """RC.1: las cinco cifras que se archivan en ResultadosActividad, con la
+    aritmética exacta de `guardar_DB` en HEAD 7553a49: Ks, Kp y Ktp se
+    redondean a 3 ANTES de calcular la actividad. `v_alto`/`v_bajo` son
+    obligatorios y por nombre (lección de V.2: un 300/150 por defecto calculó
+    mal sin avisar)."""
+    Ks, Kp, Ktp = factores_correccion(prom_alto, prom_negativo, prom_bajo,
+                                      t, p, t0, p0, v_alto=v_alto, v_bajo=v_bajo)
+    Ks, Kp, Ktp = round(Ks, 3), round(Kp, 3), round(Ktp, 3)
+    actividad_calculada = round(actividad_fuente(
+        Ks, Kp, Ktp, calibracion_camara, calibracion_electrometro, conversion, prom_alto), 3)
+    actividad_decaimiento = round(calcular_decaimiento(fecha_cer, fecha_cal, intensidad), 3)
+    return {"Ks": Ks, "Kp": Kp, "Ktp": Ktp,
+            "actividad_calculada": actividad_calculada,
+            "actividad_decaimiento": actividad_decaimiento}

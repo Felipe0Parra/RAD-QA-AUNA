@@ -849,7 +849,7 @@ class PruebaMensualBraq(PruebaBasico):
                 v1 = float(fila[1].text())
                 v2 = float(fila[2].text())
                 v3 = float(fila[3].text())
-                promedio = (v1 + v2 + v3) / 3
+                promedio = promedio_de_medidas(v1, v2, v3)
             except ValueError:
                 continue  # salta si alguna celda está vacía
 
@@ -1099,18 +1099,17 @@ class PruebaMensualBraq(PruebaBasico):
             V_bajo_prom = datos_lecturas[voltaje_bajo]["promedio"]
             V_neg_prom  = datos_lecturas[voltaje_neg]["promedio"]
 
-            # Cálculos de factores
-            Ks, Kp, Ktp = factores_correccion(
-                V_alto_prom, V_neg_prom, V_bajo_prom, t, p, t0, p0,
-                v_alto=voltaje_alto, v_bajo=voltaje_bajo)
-
-            Ks = round(Ks, 3)
-            Kp = round(Kp, 3)
-            Ktp = round(Ktp, 3)
-
+            # RC.1 (PLAN_RECALCULO_CALIBRACION_BRAQUI_30-09.md): lo que se
+            # archiva sale de UNA función, la misma que usa la corrección de
+            # "Ver tabla" (RC.2).
             actividad_monitor = float(self.ref.text())
-            actividad_calculada = round(actividad_fuente(Ks, Kp, Ktp, calibracion, electrometro, conversion, V_alto_prom), 3)
-            actividad_decaimiento = round(calcular_decaimiento(fecha_cer, fecha_cal, intensidad), 3)
+            lo_archivado = resultados_para_archivar(
+                V_alto_prom, V_bajo_prom, V_neg_prom, t, p, t0, p0,
+                calibracion, electrometro, conversion, fecha_cer, fecha_cal, intensidad,
+                v_alto=voltaje_alto, v_bajo=voltaje_bajo)
+            Ks, Kp, Ktp = lo_archivado["Ks"], lo_archivado["Kp"], lo_archivado["Ktp"]
+            actividad_calculada = lo_archivado["actividad_calculada"]
+            actividad_decaimiento = lo_archivado["actividad_decaimiento"]
             usuario = self.user_id._nombre
 
             if tipo == 'Cambio de fuente':

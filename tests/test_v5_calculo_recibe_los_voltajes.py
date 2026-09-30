@@ -17,6 +17,10 @@ iba a cerrar). `V.2` queda EXCLUIDA de esta ronda por decisión del físico
 toca `braq_mensual.py`; este sitio se queda con los valores por defecto
 (300/150) hasta que se decida ejecutar `V.2`, documentado aquí a
 propósito para que no se cuele como un olvido.
+
+RC.1 (PLAN_RECALCULO_CALIBRACION_BRAQUI_30-09.md): `resultados_para_archivar`
+entra al censo -- es la única función que `guardar_DB` usa ahora para
+archivar, y exige `v_alto`/`v_bajo` por nombre y sin valor por defecto.
 """
 import ast
 from pathlib import Path
@@ -29,7 +33,7 @@ EXCLUDE_DIRS = {
 }
 
 ARCHIVO_DEFINICION = "analisisImagenes/ActividadFuente.py"
-FUNCIONES_CENSADAS = {"factores_correccion", "CalcularActividad"}
+FUNCIONES_CENSADAS = {"factores_correccion", "CalcularActividad", "resultados_para_archivar"}
 
 EXENTAS = {
     ("data/ManejoDatos/load.py", "guardarEdicion"):

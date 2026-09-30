@@ -302,15 +302,15 @@ CENSO_RAICES = {
     # -- ui/PruebasMensuales ---------------------------------------------
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 149, "TipoCalibracion"):
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1194, "TipoCalibracion"):  # V.5 (28-09): 1109->1184; P.1 (28-09): 1184->1194
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1193, "TipoCalibracion"):  # V.5 (28-09): 1109->1184; P.1 (28-09): 1184->1194; RC.1 (30-09): 1194->1193
         (LISTA, "última calibración registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1208, "TipoCalibracion"):  # V.5 (28-09): 1123->1198; P.1 (28-09): 1198->1208
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1207, "TipoCalibracion"):  # V.5 (28-09): 1123->1198; P.1 (28-09): 1198->1208; RC.1 (30-09): 1208->1207
         (IDENTIDAD, "datos de la calibración ya localizada, WHERE id = ?"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1430, "TipoCalibracion"):  # V.5 (28-09): 1344->1419; P.1 (28-09): 1419->1430
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1429, "TipoCalibracion"):  # V.5 (28-09): 1344->1419; P.1 (28-09): 1419->1430; RC.1 (30-09): 1430->1429
         (LISTA, "calibración por fecha, admitiendo los dos formatos (DP-32)"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1833, "TipoCalibracion"):  # V.5 (28-09): 1747->1822; P.1 (28-09): 1822->1833
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1832, "TipoCalibracion"):  # V.5 (28-09): 1747->1822; P.1 (28-09): 1822->1833; RC.1 (30-09): 1833->1832
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3038"),  # V.4 (28-09): 3033->3038
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1862, "LinealidadBraquiterapia"):  # V.5 (28-09): 1776->1851; P.1 (28-09): 1851->1862
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1861, "LinealidadBraquiterapia"):  # V.5 (28-09): 1776->1851; P.1 (28-09): 1851->1862; RC.1 (30-09): 1862->1861
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3067"),  # V.4 (28-09): 3062->3067
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 273, "controles"):  # A.2 (21-09): 256->269; B.3 (21-09): 269->270; C.1 (25-09): 270->273
         (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "
