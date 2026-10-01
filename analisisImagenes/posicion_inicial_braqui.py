@@ -1,0 +1,542 @@
+"""PI.1 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md): el motor de la "Posición inicial" de braquiterapia.
+
+Es el análisis del notebook `Codigo_AnalisisImagen/Analisis_placa_inicial_braqui_corregido.ipynb` -- el
+método del físico: dos clics sobre la línea de referencia, rotar para dejarla vertical, región del
+máximo (meseta) por fila, centro de la meseta contra la línea -- con las correcciones medidas en §2.2
+del plan (los cuatro defectos del método sin corregir y la mejora subpíxel):
+
+  V1. ángulo canónico con atan2 (una línea horizontal ya no divide por cero);
+  V2. una mancha cortada por el borde de la película se declara "no medible" (antes solo se detectaba
+      si el corte caía dentro del marco);
+  V3. solo cuentan las filas cuyos dos bordes de meseta se ven (la línea tapaba un borde y corría el
+      centro hasta 6 px);
+  V4. el sentido físico sale de la banda de tránsito (antes / después de la marca), no de cómo quedó
+      la imagen;
+  +   bordes de la meseta con interpolación subpíxel (peor caso geométrico 0.34 -> 0.09 px);
+  +   ventana alrededor de la línea marcada: sirve igual para el recorte que para la página completa
+      del escáner, que trae la hoja blanca alrededor;
+  +   la escala: la resolución se lee de lo que el archivo DECLARA (`resolucion_imagen.py`: Pillow rellena
+      72 dpi en un JPEG con EXIF sin resolución y 1 dpi en un TIFF) y solo se convierte a milímetros a las
+      resoluciones en que el método está validado (`escala_mm`): una captura de pantalla declara 96 dpi de
+      verdad, y con una escala falsa el veredicto Cumple / No cumple saldría sobre una medida inventada.
+
+Sin Qt y sin base de datos (lo comprueba un test por AST): lo usan la página, el recálculo de un
+registro guardado, la pestaña sintética y los tests, todos con la misma función `analizar`. Cualquier
+cambio de la lógica de este archivo obliga a subir `VERSION_ALGORITMO`: lo guardado se compara contra
+lo recalculado al abrirlo (DD3).
+"""
+import io
+import re
+from datetime import date
+
+import numpy as np
+import cv2
+from scipy.ndimage import median_filter
+
+from analisisImagenes.resolucion_imagen import resolucion_declarada
+
+VERSION_ALGORITMO = "PI-1"
+
+PARAMETROS = {
+    "grosor_marco": 25,            # px que se ignoran junto a cada borde del escaneo
+    "delta": 2.5,                  # niveles de gris bajo el tope que siguen contando como meseta
+    "ancho_linea": 7,              # semiancho (px) de la franja de la linea de marcador
+    "hueco_max": 10,               # huecos de hasta 10 px dentro de la meseta se puentean
+    "filtro": 5,                   # filtro de mediana 5 x 5
+    "fraccion_central": 0.8,       # cuerdas que miden al menos el 80 % del ancho maximo
+    "fraccion_minima": 0.3,        # si faltan cuerdas limpias, se aceptan hasta el 30 %
+    "minimo_filas": 10,
+    "delta_cruces": 6,             # comprobacion independiente: bordes a tope - 6
+    "caida_borde": 40,             # caida mayor en 3 px = borde de pelicula o del escaneo, no dosis
+    "fraccion_filas_cortadas": 0.2,
+    "ventana_mm": 20.0,            # medio ancho de la ventana alrededor de la linea
+    "margen_filas_mm": 3.0,        # margen por encima y por debajo de los clics
+    "refinar_linea": True,
+    "contraste_transito": 5.0,     # niveles minimos de la banda de transito para decidir el lado
+    "transito_desde_mm": 12.0,     # la banda se mide lejos de la mancha: ahi la cola propia ya no cuenta
+    "transito_hasta_mm": 50.0,
+    "umbral_pelicula": 60.0,       # invertido: por debajo es fondo del escaner, marco o fuera de la imagen
+    "tolerancia_mm": 1.0,
+    "resoluciones_validadas_dpi": [600.0],   # solo a estas resoluciones el método da milímetros y veredicto
+    "tolerancia_dpi_relativa": 0.01,         # 599 / 599.999 (lo que escribe el Epson) cuentan como 600
+}
+
+DPI_SI_FALTA = 600.0               # solo para dimensionar la ventana; nunca para convertir a mm
+
+
+def escala_mm(dpi, P):
+    """Milímetros por píxel, o None si NO hay escala que dar. Es el ÚNICO lugar donde una resolución se vuelve
+    escala (nadie más calcula 25.4 / dpi): solo se convierte a milímetros a las resoluciones en que el método
+    está validado (`resoluciones_validadas_dpi`, a `tolerancia_dpi_relativa`). Una resolución ausente, o declarada
+    pero no validada (una captura de pantalla de 96 dpi, un escaneo a 300), da píxeles y un aviso: nunca milímetros
+    ni veredicto sobre una escala que el método no conoce."""
+    if not dpi:
+        return None
+    tolerancia = P["tolerancia_dpi_relativa"]
+    if any(abs(dpi - v) <= tolerancia * v for v in P["resoluciones_validadas_dpi"]):
+        return 25.4 / dpi
+    return None
+
+
+# ----------------------------------------------------------------------------- lectura
+
+_FECHA_EXIF = re.compile(r"^\s*(\d{4})[:\-/](\d{2})[:\-/](\d{2})")
+
+
+def _fecha_de_texto(valor):
+    """'2026:09:30 16:12:29' (formato EXIF) -> date(2026, 9, 30); None si no se puede leer."""
+    if isinstance(valor, bytes):
+        valor = valor.decode("ascii", "ignore")
+    if not isinstance(valor, str):
+        return None
+    coincidencia = _FECHA_EXIF.match(valor)
+    if coincidencia is None:
+        return None
+    try:
+        return date(int(coincidencia.group(1)), int(coincidencia.group(2)), int(coincidencia.group(3)))
+    except ValueError:
+        return None
+
+
+def _fecha_del_escaneo(imagen_pil):
+    """Fecha en que el escáner escribió la imagen (EXIF), o None si no la trae. Prefiere la fecha de
+    captura (DateTimeOriginal, luego DateTimeDigitized) a `DateTime`, que un editor puede reescribir;
+    el Epson WF-6590 solo escribe `DateTime`."""
+    exif = imagen_pil.getexif()
+    try:
+        interno = exif.get_ifd(0x8769)
+    except Exception:
+        interno = {}
+    for origen, etiqueta in ((interno, 36867), (interno, 36868), (exif, 306)):
+        fecha = _fecha_de_texto(origen.get(etiqueta))
+        if fecha is not None:
+            return fecha
+    return None
+
+
+def leer_imagen(datos):
+    """Bytes del archivo tal como se subió -> (gris, color, dpi, fecha_escaneo): gris y color de 8 bits,
+    resolución en puntos por pulgada que el archivo DECLARA (o None si no la trae: no la que Pillow rellena,
+    ver `resolucion_imagen`) y fecha del escaneo como `datetime.date` (o None). Se decodifica desde bytes (no
+    desde ruta): cv2.imread no abre rutas con tildes en Windows, y la imagen se guarda en la BD como bytes."""
+    arreglo = np.frombuffer(datos, np.uint8)
+    gris = cv2.imdecode(arreglo, cv2.IMREAD_GRAYSCALE)
+    color = cv2.imdecode(arreglo, cv2.IMREAD_COLOR)
+    if gris is None or color is None:
+        raise ValueError("No se reconoce el formato de la imagen.")
+    dpi = None
+    fecha_escaneo = None
+    try:
+        from PIL import Image
+        imagen = Image.open(io.BytesIO(datos))
+    except Exception:
+        imagen = None
+    if imagen is not None:
+        try:
+            dpi = resolucion_declarada(imagen)
+        except Exception:
+            dpi = None
+        try:
+            fecha_escaneo = _fecha_del_escaneo(imagen)
+        except Exception:
+            fecha_escaneo = None
+    return gris, color, dpi, fecha_escaneo
+
+
+# ----------------------------------------------------------------------------- geometria
+
+def angulo_canonico(p0, p1):
+    """Grados a rotar (convencion de cv2.getRotationMatrix2D) para dejar vertical la linea p0-p1.
+    Igual a la formula del notebook donde esa funciona; definido tambien con la linea horizontal.
+    Resultado en (-90, 90]: no depende del orden de los clics."""
+    dx, dy = float(p1[0] - p0[0]), float(p1[1] - p0[1])
+    angulo = -np.degrees(np.arctan2(dx, dy))
+    while angulo > 90.0:
+        angulo -= 180.0
+    while angulo <= -90.0:
+        angulo += 180.0
+    return angulo
+
+
+def ventana_rotada(gris, color, puntos, angulo, P, tam_mm, medio_ancho_mm=None, canales=("gris", "R", "G", "B")):
+    """Recorta y rota SOLO la ventana alrededor de la linea: filas entre los clics +- margen,
+    columnas +- ventana_mm. Devuelve las imagenes invertidas (mas dosis = mas alto) en float32,
+    los clics en coordenadas de la ventana y la matriz ventana <- original."""
+    alto_img, ancho_img = gris.shape
+    c = ((puntos[0][0] + puntos[1][0]) / 2.0, (puntos[0][1] + puntos[1][1]) / 2.0)
+    R = cv2.getRotationMatrix2D(c, angulo, 1.0)
+    clics_r = cv2.transform(np.array(puntos, np.float64).reshape(-1, 1, 2), R).reshape(-1, 2)
+    escala = (tam_mm if tam_mm else 25.4 / DPI_SI_FALTA)
+    medio_ancho = int(round((medio_ancho_mm or P["ventana_mm"]) / escala))
+    margen = int(round(P["margen_filas_mm"] / escala))
+    x_l = float(np.mean(clics_r[:, 0]))
+    x0 = int(np.floor(x_l)) - medio_ancho
+    y0 = int(np.floor(clics_r[:, 1].min())) - margen
+    ancho_v = 2 * medio_ancho + 1
+    alto_v = int(np.ceil(clics_r[:, 1].max())) + margen - y0 + 1
+    M = R.copy()
+    M[0, 2] -= x0
+    M[1, 2] -= y0
+    # recorte del original que cubre la ventana (esquinas llevadas atras) -- para no rotar la pagina entera
+    inversa = cv2.invertAffineTransform(M)
+    esquinas = np.array([[0, 0], [ancho_v, 0], [0, alto_v], [ancho_v, alto_v]], np.float64).reshape(-1, 1, 2)
+    orig = cv2.transform(esquinas, inversa).reshape(-1, 2)
+    bx0 = max(0, int(np.floor(orig[:, 0].min())) - 3)
+    by0 = max(0, int(np.floor(orig[:, 1].min())) - 3)
+    bx1 = min(ancho_img, int(np.ceil(orig[:, 0].max())) + 4)
+    by1 = min(alto_img, int(np.ceil(orig[:, 1].max())) + 4)
+    if bx1 <= bx0 or by1 <= by0:
+        raise ValueError("Los puntos quedan fuera de la imagen.")
+    M_recorte = M.copy()
+    M_recorte[:, 2] += M[:, :2] @ np.array([bx0, by0], np.float64)
+    g = P["grosor_marco"]
+    yy, xx = np.mgrid[by0:by1, bx0:bx1]
+    marco = (xx < g) | (xx >= ancho_img - g) | (yy < g) | (yy >= alto_img - g)
+
+    def preparar(canal):
+        inv = (255.0 - canal[by0:by1, bx0:bx1].astype(np.float32))
+        inv[marco] = 0.0          # el marco del fisico: el borde del escaneo no cuenta
+        return cv2.warpAffine(inv, M_recorte, (ancho_v, alto_v), flags=cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
+
+    fuentes = {"gris": lambda: gris, "B": lambda: color[:, :, 0], "G": lambda: color[:, :, 1], "R": lambda: color[:, :, 2]}
+    imagenes = {nombre: preparar(fuentes[nombre]()) for nombre in canales}
+    clics_v = clics_r - np.array([x0, y0], np.float64)
+    return imagenes, clics_v, M
+
+
+# ----------------------------------------------------------------------------- la linea
+
+def centro_de_linea_en_fila(fila, x_aprox, semiancho=15, contraste_minimo=15):
+    x0 = int(round(x_aprox)) - semiancho
+    if x0 < 0 or x0 + 2 * semiancho + 1 > len(fila):
+        return None
+    ventana = fila[x0:x0 + 2 * semiancho + 1].astype(float)
+    base = np.linspace(np.median(ventana[:4]), np.median(ventana[-4:]), len(ventana))
+    contraste = ventana - base
+    k = int(np.argmax(contraste))
+    if contraste[k] < contraste_minimo:
+        return None
+    media = contraste[k] / 2
+    izq = k
+    while izq > 0 and contraste[izq - 1] >= media:
+        izq -= 1
+    der = k
+    while der < len(contraste) - 1 and contraste[der + 1] >= media:
+        der += 1
+    if izq == 0 or der == len(contraste) - 1:
+        return None
+    x_izq = (izq - 1) + (media - contraste[izq - 1]) / (contraste[izq] - contraste[izq - 1])
+    x_der = der + (contraste[der] - media) / (contraste[der] - contraste[der + 1])
+    return x0 + (x_izq + x_der) / 2
+
+
+def refinar_linea(imagen, clics):
+    (xa, ya), (xb, yb) = sorted(np.asarray(clics, float).tolist(), key=lambda p: p[1])
+    filas, centros = [], []
+    for y in range(max(0, int(np.ceil(ya))), min(imagen.shape[0] - 1, int(np.floor(yb))) + 1):
+        x_aprox = xa + (xb - xa) * (y - ya) / (yb - ya) if yb != ya else xa
+        c = centro_de_linea_en_fila(imagen[y], x_aprox)
+        if c is not None:
+            filas.append(y)
+            centros.append(c)
+    if len(filas) < 3:
+        return None
+    filas, centros = np.array(filas), np.array(centros)
+    usadas = np.ones(len(filas), bool)
+    for _ in range(5):
+        pendiente, corte = np.polyfit(filas[usadas], centros[usadas], 1)
+        residuo = centros - (pendiente * filas + corte)
+        mad = np.median(np.abs(residuo[usadas] - np.median(residuo[usadas])))
+        nuevas = np.abs(residuo) <= max(3 * 1.4826 * mad, 0.5)
+        if np.array_equal(nuevas, usadas):
+            break
+        usadas = nuevas
+    pendiente, corte = np.polyfit(filas[usadas], centros[usadas], 1)
+    dispersion = float(np.std(centros[usadas] - (pendiente * filas[usadas] + corte)))
+    return {"pendiente": float(pendiente), "corte": float(corte), "filas": filas, "centros": centros,
+            "usadas": usadas, "dispersion": dispersion}
+
+
+def referencia_de_la_linea(imagen, clics, P, separacion_maxima=5, filas_minimas=10):
+    alto = imagen.shape[0]
+    clics = np.asarray(clics, float)
+    x_clics = np.full(alto, float(np.mean(clics[:, 0])))
+    if not P["refinar_linea"]:
+        return x_clics, None, 1.0, "linea ubicada con los clics"
+    linea = refinar_linea(imagen, clics)
+    if linea is None or np.sum(linea["usadas"]) < filas_minimas:
+        return x_clics, linea, 1.0, "no se pudo refinar la linea: se usan los clics"
+    x_ref = linea["pendiente"] * np.arange(alto) + linea["corte"]
+    tramo = slice(max(0, int(clics[:, 1].min())), min(alto, int(clics[:, 1].max()) + 1))
+    if np.max(np.abs(x_ref[tramo] - x_clics[tramo])) > separacion_maxima:
+        return x_clics, linea, 1.0, "la linea refinada se aleja mas de 5 px de los clics: se usan los clics"
+    u = linea["dispersion"] / np.sqrt(max(np.sum(linea["usadas"]) / 8, 1))
+    return x_ref, linea, float(u), "linea refinada por su perfil"
+
+
+# ----------------------------------------------------------------------------- la meseta
+
+def corridas(mascara, hueco_max):
+    indices = np.where(mascara)[0]
+    if len(indices) == 0:
+        return np.array([], int), np.array([], int)
+    cortes = np.where(np.diff(indices) > hueco_max + 1)[0]
+    return np.r_[indices[0], indices[cortes + 1]], np.r_[indices[cortes], indices[-1]]
+
+
+def mesetas_por_fila(imagen, x_ref, P):
+    """Meseta de cada fila con todo lo necesario para decidir si la fila sirve."""
+    suave = median_filter(imagen, size=P["filtro"]) if P["filtro"] else imagen
+    alto, ancho = suave.shape
+    al = P["ancho_linea"]
+    fuera_linea = np.ones((alto, ancho), bool)
+    for y in range(alto):
+        x = int(round(x_ref[y]))
+        fuera_linea[y, max(0, x - al):x + al + 1] = False
+    tope = float(np.max(suave[fuera_linea]))
+    umbral = tope - P["delta"]
+    n = alto
+    inicio = np.full(n, -1); fin = np.full(n, -1)
+    x_izq = np.full(n, np.nan); x_der = np.full(n, np.nan)
+    toca = np.zeros(n, bool); cortada = np.zeros(n, bool); oculto = np.zeros(n, bool)
+    for y in range(alto):
+        f = suave[y]
+        mascara = f >= umbral
+        x = int(round(x_ref[y]))
+        a, b = max(0, x - al), min(ancho, x + al + 1)
+        llena = bool(np.any(mascara[max(0, a - 3):a]) and np.any(mascara[b:b + 3]))
+        mascara[a:b] = llena
+        inis, fins = corridas(mascara, P["hueco_max"])
+        if len(inis) == 0:
+            continue
+        k = int(np.argmax(fins - inis))
+        i, j = int(inis[k]), int(fins[k])
+        inicio[y], fin[y] = i, j
+        toca[y] = i == 0 or j == ancho - 1
+        oculto[y] = (not llena) and ((a - 3 <= j + 1 <= a) or (b <= i <= b + 2))
+
+        def vecinos(desde, paso):
+            k2, vals = desde, []
+            while 0 <= k2 < ancho and len(vals) < 3:
+                if not (a <= k2 < b):
+                    vals.append(f[k2])
+                k2 += paso
+            return vals
+        izq, der = vecinos(i - 1, -1), vecinos(j + 1, +1)
+        cortada[y] = bool((izq and min(izq) < tope - P["caida_borde"]) or (der and min(der) < tope - P["caida_borde"]))
+        # bordes subpixel al umbral (si el vecino es la franja de la linea, el borde queda en el pixel)
+        if i > 0 and not (a <= i - 1 < b) and f[i] != f[i - 1]:
+            x_izq[y] = (i - 1) + (umbral - f[i - 1]) / (f[i] - f[i - 1])
+        else:
+            x_izq[y] = i - 0.5
+        if j < ancho - 1 and not (a <= j + 1 < b) and f[j] != f[j + 1]:
+            x_der[y] = j + (f[j] - umbral) / (f[j] - f[j + 1])
+        else:
+            x_der[y] = j + 0.5
+    return {"suave": suave, "tope": tope, "umbral": umbral, "inicio": inicio, "fin": fin,
+            "x_izq": x_izq, "x_der": x_der, "toca": toca, "cortada": cortada, "oculto": oculto}
+
+
+def filas_utiles(m, P):
+    """Cuerdas centrales (bloque continuo alrededor de la mas ancha) con los dos bordes visibles;
+    si quedan pocas, cuerdas mas cortas (sus bordes se alejan de la linea)."""
+    inicio, fin, oculto = m["inicio"], m["fin"], m["oculto"]
+    ancho = np.where(inicio >= 0, fin - inicio + 1, 0)
+    if np.max(ancho) == 0:
+        return np.array([], int), ancho
+    candidatas = np.where(ancho >= P["fraccion_central"] * np.max(ancho))[0]
+    inis, fins = corridas(np.isin(np.arange(len(ancho)), candidatas), 3)
+    mas_ancha = int(np.argmax(ancho))
+    k = int(np.where((inis <= mas_ancha) & (fins >= mas_ancha))[0][0])
+    bloque = np.arange(inis[k], fins[k] + 1)
+    filas = bloque[(ancho[bloque] > 0) & ~oculto[bloque]]
+    if len(filas) < P["minimo_filas"]:
+        filas = np.where((inicio >= 0) & ~oculto & (ancho >= P["fraccion_minima"] * np.max(ancho)))[0]
+    return filas, ancho
+
+
+def medir_perfil(imagen, x_ref, P):
+    m = mesetas_por_fila(imagen, x_ref, P)
+    filas, ancho = filas_utiles(m, P)
+    r = {"m": m, "filas": filas, "ancho": ancho, "tope": m["tope"]}
+    alto = imagen.shape[0]
+    if len(filas) < P["minimo_filas"]:
+        r["estado"] = "no medible: la linea tapa el borde de la meseta"
+        return r
+    if np.any(m["toca"][filas]) or filas.min() == 0 or filas.max() == alto - 1:
+        r["estado"] = "no medible: la mancha se sale de la zona marcada"
+        return r
+    if np.mean(m["cortada"][filas]) > P["fraccion_filas_cortadas"]:
+        r["estado"] = "no medible: la mancha esta cortada por el borde de la pelicula"
+        return r
+    centros = (m["x_izq"][filas] + m["x_der"][filas]) / 2.0
+    desfases = x_ref[filas] - centros
+    # comprobacion independiente: bordes a tope - delta_cruces
+    nivel = m["tope"] - P["delta_cruces"]
+    otros = []
+    for y in filas:
+        f = m["suave"][y]
+        i, j = m["inicio"][y], m["fin"][y]
+        while i > 0 and f[i - 1] >= nivel:
+            i -= 1
+        while j < len(f) - 1 and f[j + 1] >= nivel:
+            j += 1
+        if i == 0 or j == len(f) - 1:
+            continue
+        xi = (i - 1) + (nivel - f[i - 1]) / (f[i] - f[i - 1])
+        xd = j + (f[j] - nivel) / (f[j] - f[j + 1])
+        otros.append(x_ref[y] - (xi + xd) / 2.0)
+    n_eff = max(len(filas) / 8.0, 1.0)
+    r.update({"estado": "ok", "centros": centros, "desfases": desfases,
+              "desfase_px": float(np.median(desfases)), "dispersion_px": float(np.std(desfases)),
+              "u_filas_px": float(1.2533 * np.std(desfases) / np.sqrt(n_eff)),
+              "desfase_cruces_px": float(np.median(otros)) if otros else float("nan")})
+    return r
+
+
+# ----------------------------------------------------------------------------- transito y signo
+
+def lado_del_transito(imagen_larga, desplazamiento_x, clics_y, r, P, tam_mm):
+    """La banda de transito corre a lo largo del cateter hasta el borde de la pelicula, del lado por
+    donde entra la fuente. Se mide LEJOS de la mancha (entre transito_desde_mm y transito_hasta_mm),
+    donde la cola de la propia mancha ya no cuenta: las filas del cateter (las cuerdas centrales)
+    contra las filas de pelicula ENTRE LOS CLICS que quedan por encima y por debajo de la mancha
+    (a mas de un radio), cada grupo por separado. Hay banda de un lado si sobresale al menos
+    `contraste_transito` niveles sobre los DOS grupos; el lado se decide solo si del otro lado no hay
+    banda (o no hay pelicula para mirar). Solo pixeles de pelicula (fuera: marco, fondo del escaner).
+    Devuelve ('derecha' | 'izquierda' | None, detalle por lado)."""
+    if r.get("estado") != "ok":
+        return None, {}
+    escala = tam_mm if tam_mm else 25.4 / DPI_SI_FALTA
+    filas = r["filas"]
+    centro = float(np.median(r["centros"])) + desplazamiento_x
+    radio = float(np.median(r["m"]["fin"][filas] - r["m"]["inicio"][filas])) / 2.0
+    alto, ancho = imagen_larga.shape
+    desde = max(int(round(P["transito_desde_mm"] / escala)), int(round(4 * radio)))
+    hasta = int(round(P["transito_hasta_mm"] / escala))
+    y_a, y_b = int(np.ceil(min(clics_y))), int(np.floor(max(clics_y)))
+    arriba = np.arange(max(0, y_a), max(0, int(filas.min() - radio)))
+    abajo = np.arange(min(alto, int(filas.max() + radio) + 1), min(alto, y_b + 1))
+    pelicula = imagen_larga > P["umbral_pelicula"]
+    detalle = {}
+    for lado, cols in (("izquierda", np.arange(max(0, int(centro) - hasta), max(0, int(centro) - desde))),
+                       ("derecha", np.arange(min(ancho, int(centro) + desde), min(ancho, int(centro) + hasta)))):
+        def mediana(filas_grupo):
+            if len(filas_grupo) < 10 or len(cols) < 50:
+                return None
+            sub, msk = imagen_larga[np.ix_(filas_grupo, cols)], pelicula[np.ix_(filas_grupo, cols)]
+            return float(np.median(sub[msk])) if msk.sum() >= 500 else None
+        banda, sup, inf = mediana(filas), mediana(arriba), mediana(abajo)
+        if banda is None or (sup is None and inf is None):
+            detalle[lado] = None
+            continue
+        contrastes = [banda - v for v in (sup, inf) if v is not None]
+        detalle[lado] = {"banda": banda, "arriba": sup, "abajo": inf, "contraste": float(min(contrastes))}
+    umbral = P["contraste_transito"]
+
+    def hay_banda(lado):
+        d = detalle.get(lado)
+        return d is not None and d["contraste"] >= umbral
+
+    def sin_banda(lado):
+        d = detalle.get(lado)
+        return d is None or d["contraste"] < umbral / 2
+    if hay_banda("derecha") and sin_banda("izquierda"):
+        return "derecha", detalle
+    if hay_banda("izquierda") and sin_banda("derecha"):
+        return "izquierda", detalle
+    return None, detalle
+
+
+# ----------------------------------------------------------------------------- todo junto
+
+def analizar(gris, color, dpi, puntos, parametros=None):
+    """El analisis completo. `puntos` en pixeles de la imagen tal como se subio."""
+    P = dict(PARAMETROS, **(parametros or {}))
+    tam_mm = escala_mm(dpi, P)
+    angulo = angulo_canonico(puntos[0], puntos[1])
+    imagenes, clics_v, M = ventana_rotada(gris, color, puntos, angulo, P, tam_mm)
+    x_ref, linea, u_linea, mensaje = referencia_de_la_linea(imagenes["gris"], clics_v, P)
+    perfiles = {nombre: medir_perfil(imagenes[nombre], x_ref, P) for nombre in ("gris", "R", "G", "B")}
+    larga, _, _ = ventana_rotada(gris, color, puntos, angulo, P, tam_mm,
+                                 medio_ancho_mm=P["transito_hasta_mm"] + 2.0, canales=("gris",))
+    desplazamiento = (larga["gris"].shape[1] - imagenes["gris"].shape[1]) // 2
+    lado, contrastes = lado_del_transito(larga["gris"], desplazamiento, clics_v[:, 1], perfiles["gris"], P, tam_mm)
+    return {"version": VERSION_ALGORITMO, "parametros": P, "dpi": dpi, "tamano_pixel_mm": tam_mm,
+            "angulo": angulo, "matriz_ventana": M, "imagenes": imagenes, "clics_ventana": clics_v,
+            "x_ref": x_ref, "linea": linea, "u_linea_px": u_linea, "mensaje_linea": mensaje,
+            "perfiles": perfiles, "lado_transito": lado, "contrastes_transito": contrastes}
+
+
+def resumen(resultado, perfil="gris"):
+    """Lo que se MUESTRA (y lo que imprimen los PDF): se construye, no se guarda (DA del 09-09)."""
+    r = resultado["perfiles"][perfil]
+    tam = resultado["tamano_pixel_mm"]
+    P = resultado["parametros"]
+    if r["estado"] != "ok":
+        return {"estado": r["estado"], "veredicto": "No medible"}
+    salida = {"estado": "ok", "desfase_px": r["desfase_px"], "filas": int(len(r["filas"]))}
+    if tam is None:
+        dpi = resultado["dpi"]
+        if dpi:
+            validadas = ", ".join(f"{v:g}" for v in P["resoluciones_validadas_dpi"])
+            aviso = (f"la imagen declara {dpi:g} dpi; el metodo esta validado a {validadas} dpi: "
+                     "sin milimetros ni veredicto")
+        else:
+            aviso = "la imagen no trae resolucion: no se puede convertir a milimetros"
+        salida.update({"desfase_mm": None, "veredicto": "No medible", "aviso": aviso})
+        return salida
+    d_mm = r["desfase_px"] * tam
+    u_filas = r["u_filas_px"] * tam
+    u_linea = resultado["u_linea_px"] * tam
+    u_metodo = (abs(r["desfase_px"] - r["desfase_cruces_px"]) * tam / np.sqrt(3)
+                if np.isfinite(r["desfase_cruces_px"]) else u_filas)
+    U = 2 * float(np.sqrt(u_filas**2 + u_linea**2 + u_metodo**2))
+    lado = resultado["lado_transito"]
+    if lado == "derecha":
+        fisico = d_mm
+    elif lado == "izquierda":
+        fisico = -d_mm
+    else:
+        fisico = None
+    if fisico is None:
+        sentido = ("a la izquierda" if d_mm > 0 else "a la derecha") + " de la linea en la imagen (no se distingue la banda de transito)"
+    else:
+        sentido = "antes de la marca" if fisico < 0 else "despues de la marca"
+    salida.update({"desfase_mm": d_mm, "desfase_fisico_mm": fisico, "sentido": sentido, "U_mm": U,
+                   "dispersion_mm": r["dispersion_px"] * tam,
+                   "veredicto": "Cumple" if abs(d_mm) <= P["tolerancia_mm"] else "No cumple"})
+    return salida
+
+
+# ----------------------------------------------------------------------------- placa sintetica
+
+def placa_sintetica(desfase_mm, ancho_x_mm, ancho_y_mm, saturacion, dpi=600.0, ruido=1.2, semilla=0,
+                    alto=467, ancho=1328):
+    """Tu placa sintetica original, con deslizadores: gaussiana eliptica (anchos = sigma en mm) que se
+    recorta en `saturacion` (fraccion del pico), linea de marcador tan oscura como la meseta, ruido y JPEG.
+    Devuelve (gris, color, dpi, puntos) listo para `analizar`."""
+    rng = np.random.default_rng(semilla)
+    tam = 25.4 / dpi
+    x_l, y_c = 190.0, 216.0
+    xs = x_l - desfase_mm / tam
+    X, Y = np.meshgrid(np.arange(ancho), np.arange(alto))
+    f = np.exp(-((X - xs) ** 2 / (2 * (ancho_x_mm / tam) ** 2) + (Y - y_c) ** 2 / (2 * (ancho_y_mm / tam) ** 2)))
+    s = 120 + 135 * np.minimum(f, saturacion) / saturacion + rng.normal(0, ruido, f.shape)
+    s[20:450, 186:195] = 255
+    escaneo = (255 - np.clip(s, 0, 255)).astype(np.uint8)
+    _, comprimida = cv2.imencode(".jpg", escaneo, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    gris = cv2.imdecode(comprimida, cv2.IMREAD_GRAYSCALE)
+    return gris, cv2.cvtColor(gris, cv2.COLOR_GRAY2BGR), dpi, [(192, 56), (189, 377)]
+
+
+def barrido_sintetico(ancho_x_mm, ancho_y_mm, saturacion, desfases_mm=(-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5)):
+    """Real contra medido para la grafica de la pestana sintetica."""
+    puntos = []
+    for d in desfases_mm:
+        g, c, dpi, pts = placa_sintetica(d, ancho_x_mm, ancho_y_mm, saturacion)
+        r = analizar(g, c, dpi, pts)
+        s = resumen(r)
+        puntos.append((float(d), s.get("desfase_mm") if s["estado"] == "ok" else None))
+    return puntos
