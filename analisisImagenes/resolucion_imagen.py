@@ -18,9 +18,11 @@ Si el archivo declara dos cifras que no coinciden (a 1 %) -- dos resoluciones di
 hay escala: None. Se prefiere la cifra racional de EXIF/TIFF a la entera del JFIF (el Epson escribe 599.999 y el
 JFIF la trunca a 599: es la misma declaración).
 
-Lo que esto NO resuelve: que una resolución declarada sea la real (una captura de pantalla declara 96 dpi de
-verdad; un recorte reducido puede conservar "600" en la cabecera). De eso se ocupa `escala_mm` del motor
-(`posicion_inicial_braqui.py`): solo se convierte a milímetros a las resoluciones en que el método está validado.
+Lo que esto NO resuelve (ni pretende): que la resolución declarada sea la real. Paint reescribe la declarada a 96
+dpi al recortar sin remuestrear (EPSON009: 96.012), y un recorte reducido puede conservar "600" en la cabecera. Desde
+PI.1b el motor NO usa este dato como escala: la escala es la del procedimiento de escaneo (600 dpi, que el físico
+garantiza) y esta lectura solo sirve para CLASIFICAR la cabecera (`clase_resolucion` del motor: coincide, sin dato,
+editor u otra) y para informar en pantalla.
 
 Sin Qt y sin base de datos. Diseño y verificación: Opus, 01-10 (42 casos: 21 sintéticos y 21 archivos reales)."""
 import math

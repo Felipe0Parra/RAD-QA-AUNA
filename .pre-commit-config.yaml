@@ -21,7 +21,15 @@ repos:
     # Los dos que quedan NO tocan ningun archivo: solo fallan si hay un
     # problema de verdad (YAML invalido, archivo enorme en el indice).
     -   id: check-yaml
+    # PI.1b (01-10-2026): las fixtures de tests/datos/ son placas reales de QA (EPSON009: TIFF de
+    # Paint con 96.012 dpi; EPSON031: pagina cruda del Epson). Su md5 esta fijado en los tests, asi
+    # que no se pueden recomprimir. Ahi el limite es 1 MB; en el resto del repo sigue en 500 KB.
     -   id: check-added-large-files
+        exclude: ^tests/datos/
+    -   id: check-added-large-files
+        name: check-added-large-files (tests/datos, hasta 1 MB)
+        files: ^tests/datos/
+        args: ['--maxkb=1024']
 
 -   repo: local
     hooks:

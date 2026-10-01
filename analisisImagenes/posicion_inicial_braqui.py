@@ -15,10 +15,13 @@ del plan (los cuatro defectos del método sin corregir y la mejora subpíxel):
   +   bordes de la meseta con interpolación subpíxel (peor caso geométrico 0.34 -> 0.09 px);
   +   ventana alrededor de la línea marcada: sirve igual para el recorte que para la página completa
       del escáner, que trae la hoja blanca alrededor;
-  +   la escala: la resolución se lee de lo que el archivo DECLARA (`resolucion_imagen.py`: Pillow rellena
-      72 dpi en un JPEG con EXIF sin resolución y 1 dpi en un TIFF) y solo se convierte a milímetros a las
-      resoluciones en que el método está validado (`escala_mm`): una captura de pantalla declara 96 dpi de
-      verdad, y con una escala falsa el veredicto Cumple / No cumple saldría sobre una medida inventada.
+  +   la escala (PI.1b): el procedimiento es de 600 dpi, garantizado desde el escaneo (el físico recorta con gThumb
+      o con Paint, que reescribe la resolución declarada a 96 dpi sin remuestrear), y esa es la escala de
+      `escala_mm`. La resolución que el archivo DECLARA (`resolucion_imagen.py`; Pillow rellena 72 dpi en un JPEG
+      con EXIF sin resolución y 1 dpi en un TIFF) solo se CLASIFICA (`clase_resolucion`): coincide con 600, falta,
+      la escribió un editor (72 o 96: se usa 600 y se avisa en pantalla) u otra (300, 200...: un escaneo a otra
+      resolución, sin milímetros ni veredicto). Como red blanda, el ancho de la meseta saturada (6.2-6.5 mm en
+      las placas reales) se compara con lo esperado a 600 dpi.
 
 Sin Qt y sin base de datos (lo comprueba un test por AST): lo usan la página, el recálculo de un
 registro guardado, la pestaña sintética y los tests, todos con la misma función `analizar`. Cualquier
@@ -57,25 +60,40 @@ PARAMETROS = {
     "transito_hasta_mm": 50.0,
     "umbral_pelicula": 60.0,       # invertido: por debajo es fondo del escaner, marco o fuera de la imagen
     "tolerancia_mm": 1.0,
-    "resoluciones_validadas_dpi": [600.0],   # solo a estas resoluciones el método da milímetros y veredicto
-    "tolerancia_dpi_relativa": 0.01,         # 599 / 599.999 (lo que escribe el Epson) cuentan como 600
+    "resolucion_escaneo_dpi": 600.0,         # la resolución del procedimiento de escaneo: la escala de los milímetros
+    "resoluciones_de_editor_dpi": [72.0, 96.0],   # lo que un editor (Paint, Windows) escribe al guardar un recorte
+    "tolerancia_dpi_relativa": 0.01,         # 599 / 599.999 (lo que escribe el Epson) cuentan como 600; 96.012 como 96
+    "ancho_meseta_mm": [4.5, 9.0],           # ancho esperado de la meseta saturada a 600 dpi (medido: 6.2-6.5 mm)
 }
 
-DPI_SI_FALTA = 600.0               # solo para dimensionar la ventana; nunca para convertir a mm
+DPI_SI_FALTA = 600.0               # solo para dimensionar la ventana cuando no hay escala (resolución "otra")
+
+
+def clase_resolucion(dpi, P):
+    """Qué es la resolución que el archivo declara frente a la del procedimiento (`resolucion_escaneo_dpi`):
+    "coincide" (600, 599.999, 599), "sin_dato" (no declara), "editor" (72 o 96: lo que un editor escribe al guardar un
+    recorte, no una resolución de escaneo) u "otra" (300, 200, 1200...: ningún editor escribe eso; es un escaneo a
+    otra resolución)."""
+    if not dpi:
+        return "sin_dato"
+    tolerancia = P["tolerancia_dpi_relativa"]
+    escaneo = P["resolucion_escaneo_dpi"]
+    if abs(dpi - escaneo) <= tolerancia * escaneo:
+        return "coincide"
+    if any(abs(dpi - v) <= tolerancia * v for v in P["resoluciones_de_editor_dpi"]):
+        return "editor"
+    return "otra"
 
 
 def escala_mm(dpi, P):
     """Milímetros por píxel, o None si NO hay escala que dar. Es el ÚNICO lugar donde una resolución se vuelve
-    escala (nadie más calcula 25.4 / dpi): solo se convierte a milímetros a las resoluciones en que el método
-    está validado (`resoluciones_validadas_dpi`, a `tolerancia_dpi_relativa`). Una resolución ausente, o declarada
-    pero no validada (una captura de pantalla de 96 dpi, un escaneo a 300), da píxeles y un aviso: nunca milímetros
-    ni veredicto sobre una escala que el método no conoce."""
-    if not dpi:
+    escala (nadie más calcula 25.4 / dpi), y la escala es SIEMPRE la del procedimiento de escaneo
+    (`resolucion_escaneo_dpi`, 600 dpi), nunca la que declara el archivo: Paint reescribe la resolución declarada
+    (96) al recortar, sin remuestrear. Solo con una resolución "otra" (declarada y que ningún editor escribe) no hay
+    escala: es un escaneo a otra resolución y los milímetros saldrían falsos."""
+    if clase_resolucion(dpi, P) == "otra":
         return None
-    tolerancia = P["tolerancia_dpi_relativa"]
-    if any(abs(dpi - v) <= tolerancia * v for v in P["resoluciones_validadas_dpi"]):
-        return 25.4 / dpi
-    return None
+    return 25.4 / P["resolucion_escaneo_dpi"]
 
 
 # ----------------------------------------------------------------------------- lectura
@@ -114,14 +132,31 @@ def _fecha_del_escaneo(imagen_pil):
     return None
 
 
+def _hay_transparencia(imagen_pil):
+    """True si algún píxel no es opaco (canal alfa < 255). Una selección transparente deja en el RGB un color que
+    el análisis no sabe interpretar."""
+    try:
+        if imagen_pil.mode in ("RGBA", "LA", "PA"):
+            return imagen_pil.getchannel("A").getextrema()[0] < 255
+        if "transparency" in imagen_pil.info:
+            return imagen_pil.convert("RGBA").getchannel("A").getextrema()[0] < 255
+    except Exception:
+        return False
+    return False
+
+
 def leer_imagen(datos):
     """Bytes del archivo tal como se subió -> (gris, color, dpi, fecha_escaneo): gris y color de 8 bits,
     resolución en puntos por pulgada que el archivo DECLARA (o None si no la trae: no la que Pillow rellena,
-    ver `resolucion_imagen`) y fecha del escaneo como `datetime.date` (o None). Se decodifica desde bytes (no
-    desde ruta): cv2.imread no abre rutas con tildes en Windows, y la imagen se guarda en la BD como bytes."""
+    ver `resolucion_imagen`; es solo informativa, la escala la fija `escala_mm`) y fecha del escaneo como
+    `datetime.date` (o None). Se decodifica desde bytes (no desde ruta): cv2.imread no abre rutas con tildes en
+    Windows, y la imagen se guarda en la BD como bytes. El formato se reconoce por el contenido, no por la
+    extensión (un `.jpeg` puede ser un TIFF). Se ignora la orientación EXIF: OpenCV la aplica por defecto, y así
+    lo recalculado al abrir un registro no depende de ese valor por defecto (DD3). Una imagen con zonas
+    transparentes se rechaza (`ValueError`)."""
     arreglo = np.frombuffer(datos, np.uint8)
-    gris = cv2.imdecode(arreglo, cv2.IMREAD_GRAYSCALE)
-    color = cv2.imdecode(arreglo, cv2.IMREAD_COLOR)
+    gris = cv2.imdecode(arreglo, cv2.IMREAD_GRAYSCALE | cv2.IMREAD_IGNORE_ORIENTATION)
+    color = cv2.imdecode(arreglo, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
     if gris is None or color is None:
         raise ValueError("No se reconoce el formato de la imagen.")
     dpi = None
@@ -132,6 +167,9 @@ def leer_imagen(datos):
     except Exception:
         imagen = None
     if imagen is not None:
+        if _hay_transparencia(imagen):
+            raise ValueError("La imagen tiene zonas transparentes: guardela sin transparencia "
+                             "(el analisis no sabe que color hay debajo).")
         try:
             dpi = resolucion_declarada(imagen)
         except Exception:
@@ -463,10 +501,82 @@ def analizar(gris, color, dpi, puntos, parametros=None):
                                  medio_ancho_mm=P["transito_hasta_mm"] + 2.0, canales=("gris",))
     desplazamiento = (larga["gris"].shape[1] - imagenes["gris"].shape[1]) // 2
     lado, contrastes = lado_del_transito(larga["gris"], desplazamiento, clics_v[:, 1], perfiles["gris"], P, tam_mm)
-    return {"version": VERSION_ALGORITMO, "parametros": P, "dpi": dpi, "tamano_pixel_mm": tam_mm,
-            "angulo": angulo, "matriz_ventana": M, "imagenes": imagenes, "clics_ventana": clics_v,
+    return {"version": VERSION_ALGORITMO, "parametros": P, "dpi": dpi, "clase_resolucion": clase_resolucion(dpi, P),
+            "tamano_pixel_mm": tam_mm, "angulo": angulo, "matriz_ventana": M, "imagenes": imagenes, "clics_ventana": clics_v,
             "x_ref": x_ref, "linea": linea, "u_linea_px": u_linea, "mensaje_linea": mensaje,
             "perfiles": perfiles, "lado_transito": lado, "contrastes_transito": contrastes}
+
+
+def incertidumbre_px(resultado, perfil="gris"):
+    """Incertidumbre expandida (k = 2) del desfase de un perfil, en PÍXELES: dispersión de las filas, ajuste de la
+    línea y diferencia entre los dos métodos de borde (rectangular, ÷√3). Es la ÚNICA definición de la suma:
+    `resumen` la pasa a milímetros con la escala y PI.3 la guarda en píxeles (DD4). None si el perfil no se mide."""
+    r = resultado["perfiles"][perfil]
+    if r["estado"] != "ok":
+        return None
+    u_filas = r["u_filas_px"]
+    u_linea = resultado["u_linea_px"]
+    u_metodo = (abs(r["desfase_px"] - r["desfase_cruces_px"]) / np.sqrt(3)
+                if np.isfinite(r["desfase_cruces_px"]) else u_filas)
+    return 2 * float(np.sqrt(u_filas**2 + u_linea**2 + u_metodo**2))
+
+
+CAPAS_GUARDADAS = (("gris", "gris"), ("R", "r"), ("G", "g"), ("B", "b"))   # (perfil del motor, sufijo de la columna)
+
+
+def valores_medidos(resultado):
+    """LO QUE SE GUARDA (PI.3): la ÚNICA definición de los valores medidos de un análisis, con las claves iguales a
+    las columnas de `braqui_posicion_inicial`. Por perfil (gris y capas r, g, b): `estado_*`, `desfase_*_px` y
+    `desfase_*_mm` (px es None si el perfil no se mide; mm = px * `tamano_pixel_mm`, SIN redondear, y None si falta px
+    o la escala). Del gris además `incertidumbre_gris_px` (k = 2), `dispersion_gris_px`, `filas_gris` y
+    `ancho_meseta_gris_px`; y `tamano_pixel_mm` y `lado_transito`. Todo en tipos de Python (listo para SQLite y
+    JSON). Sentido, veredicto y avisos NO se guardan: se construyen al mostrarlos (`resumen`)."""
+    tam = resultado["tamano_pixel_mm"]
+    valores = {"tamano_pixel_mm": tam, "lado_transito": resultado["lado_transito"]}
+    for nombre, sufijo in CAPAS_GUARDADAS:
+        p = resultado["perfiles"][nombre]
+        px = float(p["desfase_px"]) if p["estado"] == "ok" else None
+        valores[f"estado_{sufijo}"] = p["estado"]
+        valores[f"desfase_{sufijo}_px"] = px
+        valores[f"desfase_{sufijo}_mm"] = px * tam if (px is not None and tam is not None) else None
+    g = resultado["perfiles"]["gris"]
+    ok = g["estado"] == "ok"
+    valores.update({
+        "incertidumbre_gris_px": incertidumbre_px(resultado, "gris"),
+        "dispersion_gris_px": float(g["dispersion_px"]) if ok else None,
+        "filas_gris": int(len(g["filas"])) if ok else None,
+        "ancho_meseta_gris_px": int(np.max(g["ancho"])) if ok else None,
+    })
+    return valores
+
+
+def avisos_de_escala(resultado):
+    """(nota_resolucion, aviso_escala), cada uno texto o None, sobre la escala con que se mide:
+    - nota_resolucion: lo que la imagen DECLARA frente al procedimiento. Un editor (72 o 96) o la falta de dato
+      se anotan (solo en pantalla: se usa la resolución del escaneo); coincidir con el procedimiento no se anota.
+    - aviso_escala: red blanda por CONTENIDO. Si la meseta saturada del gris mide, con la escala del procedimiento, fuera
+      de lo esperado (`ancho_meseta_mm`), el escaneo pudo ser a otra resolución con la cabecera reescrita por un
+      editor. El veredicto se sigue dando; depende de la dosis, así que los límites son provisionales."""
+    P = resultado["parametros"]
+    escaneo = P["resolucion_escaneo_dpi"]
+    clase = resultado["clase_resolucion"]
+    dpi = resultado["dpi"]
+    nota = None
+    if clase == "editor":
+        nota = (f"la imagen declara {dpi:g} dpi (lo escribe el editor al guardar); "
+                f"se usa la resolucion del escaneo: {escaneo:g} dpi")
+    elif clase == "sin_dato":
+        nota = f"la imagen no declara resolucion; se usa la resolucion del escaneo: {escaneo:g} dpi"
+    aviso = None
+    tam = resultado["tamano_pixel_mm"]
+    gris = resultado["perfiles"]["gris"]
+    if tam is not None and gris["estado"] == "ok":
+        ancho_mm = float(np.max(gris["ancho"])) * tam
+        lo, hi = P["ancho_meseta_mm"]
+        if not lo <= ancho_mm <= hi:
+            aviso = (f"la meseta mide {ancho_mm:.1f} mm de ancho, fuera de lo esperado a {escaneo:g} dpi "
+                     f"({lo:g}-{hi:g} mm): compruebe que la pelicula se escaneo a {escaneo:g} dpi")
+    return nota, aviso
 
 
 def resumen(resultado, perfil="gris"):
@@ -478,21 +588,14 @@ def resumen(resultado, perfil="gris"):
         return {"estado": r["estado"], "veredicto": "No medible"}
     salida = {"estado": "ok", "desfase_px": r["desfase_px"], "filas": int(len(r["filas"]))}
     if tam is None:
-        dpi = resultado["dpi"]
-        if dpi:
-            validadas = ", ".join(f"{v:g}" for v in P["resoluciones_validadas_dpi"])
-            aviso = (f"la imagen declara {dpi:g} dpi; el metodo esta validado a {validadas} dpi: "
-                     "sin milimetros ni veredicto")
-        else:
-            aviso = "la imagen no trae resolucion: no se puede convertir a milimetros"
-        salida.update({"desfase_mm": None, "veredicto": "No medible", "aviso": aviso})
+        escaneo = P["resolucion_escaneo_dpi"]
+        salida.update({"desfase_mm": None, "veredicto": "No medible", "aviso": (
+            f"la imagen declara {resultado['dpi']:g} dpi y el procedimiento es de {escaneo:g} dpi: parece escaneada a "
+            f"otra resolucion; escanee la pelicula a {escaneo:g} dpi. Sin milimetros ni veredicto")})
         return salida
     d_mm = r["desfase_px"] * tam
-    u_filas = r["u_filas_px"] * tam
-    u_linea = resultado["u_linea_px"] * tam
-    u_metodo = (abs(r["desfase_px"] - r["desfase_cruces_px"]) * tam / np.sqrt(3)
-                if np.isfinite(r["desfase_cruces_px"]) else u_filas)
-    U = 2 * float(np.sqrt(u_filas**2 + u_linea**2 + u_metodo**2))
+    u_px = incertidumbre_px(resultado, perfil)
+    U = u_px * tam
     lado = resultado["lado_transito"]
     if lado == "derecha":
         fisico = d_mm
@@ -504,9 +607,11 @@ def resumen(resultado, perfil="gris"):
         sentido = ("a la izquierda" if d_mm > 0 else "a la derecha") + " de la linea en la imagen (no se distingue la banda de transito)"
     else:
         sentido = "antes de la marca" if fisico < 0 else "despues de la marca"
-    salida.update({"desfase_mm": d_mm, "desfase_fisico_mm": fisico, "sentido": sentido, "U_mm": U,
+    nota, aviso_escala = avisos_de_escala(resultado)
+    salida.update({"desfase_mm": d_mm, "desfase_fisico_mm": fisico, "sentido": sentido, "U_mm": U, "U_px": u_px,
                    "dispersion_mm": r["dispersion_px"] * tam,
-                   "veredicto": "Cumple" if abs(d_mm) <= P["tolerancia_mm"] else "No cumple"})
+                   "veredicto": "Cumple" if abs(d_mm) <= P["tolerancia_mm"] else "No cumple",
+                   "nota_resolucion": nota, "aviso_escala": aviso_escala})
     return salida
 
 
