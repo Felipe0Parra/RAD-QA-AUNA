@@ -562,27 +562,23 @@ def nota_de_resolucion(resultado):
     return None
 
 
-def resumen(resultado, perfil="gris"):
-    """Lo que se MUESTRA (y lo que imprimen los PDF): se construye, no se guarda (DA del 09-09)."""
-    r = resultado["perfiles"][perfil]
-    tam = resultado["tamano_pixel_mm"]
-    P = resultado["parametros"]
-    if r["estado"] != "ok":
-        return {"estado": r["estado"], "veredicto": "No medible"}
-    salida = {"estado": "ok", "desfase_px": r["desfase_px"], "filas": int(len(r["filas"]))}
-    if tam is None:
+def interpretar(estado, desfase_px, incertidumbre_px, tamano_pixel_mm, lado_transito, dpi, P):
+    """De lo que se GUARDA (el estado del perfil, su desfase y su incertidumbre en pixeles, la escala, el lado del
+    transito, la resolucion declarada y los parametros) a lo que se MUESTRA: milimetros, sentido fisico, veredicto y aviso.
+    Es la UNICA definicion de esas cuatro cosas (PI.3): la usan `resumen` (la pantalla) y el texto breve del servicio (la
+    tabla de registros y los PDF), asi que no pueden decir cosas distintas con los mismos numeros. Solo lee escalares: no
+    hace falta el analisis completo para volver a interpretarlo."""
+    if estado != "ok":
+        return {"veredicto": "No medible"}
+    if tamano_pixel_mm is None:
         escaneo = P["resolucion_escaneo_dpi"]
-        salida.update({"desfase_mm": None, "veredicto": "No medible", "aviso": (
-            f"la imagen declara {resultado['dpi']:g} dpi y el procedimiento es de {escaneo:g} dpi: parece escaneada a "
-            f"otra resolucion; escanee la pelicula a {escaneo:g} dpi. Sin milimetros ni veredicto")})
-        return salida
-    d_mm = r["desfase_px"] * tam
-    u_px = incertidumbre_px(resultado, perfil)
-    U = u_px * tam
-    lado = resultado["lado_transito"]
-    if lado == "derecha":
+        return {"desfase_mm": None, "veredicto": "No medible", "aviso": (
+            f"la imagen declara {dpi:g} dpi y el procedimiento es de {escaneo:g} dpi: parece escaneada a "
+            f"otra resolucion; escanee la pelicula a {escaneo:g} dpi. Sin milimetros ni veredicto")}
+    d_mm = desfase_px * tamano_pixel_mm
+    if lado_transito == "derecha":
         fisico = d_mm
-    elif lado == "izquierda":
+    elif lado_transito == "izquierda":
         fisico = -d_mm
     else:
         fisico = None
@@ -590,10 +586,25 @@ def resumen(resultado, perfil="gris"):
         sentido = ("a la izquierda" if d_mm > 0 else "a la derecha") + " de la linea en la imagen (no se distingue la banda de transito)"
     else:
         sentido = "antes de la marca" if fisico < 0 else "despues de la marca"
-    salida.update({"desfase_mm": d_mm, "desfase_fisico_mm": fisico, "sentido": sentido, "U_mm": U, "U_px": u_px,
-                   "dispersion_mm": r["dispersion_px"] * tam,
-                   "veredicto": "Cumple" if abs(d_mm) <= P["tolerancia_mm"] else "No cumple",
-                   "nota_resolucion": nota_de_resolucion(resultado)})
+    return {"desfase_mm": d_mm, "desfase_fisico_mm": fisico, "sentido": sentido, "U_mm": incertidumbre_px * tamano_pixel_mm,
+            "U_px": incertidumbre_px, "veredicto": "Cumple" if abs(d_mm) <= P["tolerancia_mm"] else "No cumple"}
+
+
+def resumen(resultado, perfil="gris"):
+    """Lo que se MUESTRA (y lo que imprimen los PDF): se construye, no se guarda (DA del 09-09). Los milimetros, el sentido
+    y el veredicto salen de `interpretar`, la unica definicion; aqui solo se completa con lo que necesita la pantalla."""
+    r = resultado["perfiles"][perfil]
+    tam = resultado["tamano_pixel_mm"]
+    P = resultado["parametros"]
+    if r["estado"] != "ok":
+        return {"estado": r["estado"], **interpretar(r["estado"], None, None, tam, resultado["lado_transito"],
+                                                     resultado["dpi"], P)}
+    salida = {"estado": "ok", "desfase_px": r["desfase_px"], "filas": int(len(r["filas"]))}
+    salida.update(interpretar("ok", r["desfase_px"], incertidumbre_px(resultado, perfil), tam, resultado["lado_transito"],
+                              resultado["dpi"], P))
+    if tam is not None:
+        salida["dispersion_mm"] = r["dispersion_px"] * tam
+        salida["nota_resolucion"] = nota_de_resolucion(resultado)
     return salida
 
 

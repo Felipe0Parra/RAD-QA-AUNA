@@ -69,6 +69,29 @@ RAICES = lv.RAICES_QC
 # revisar la clasificación sin volver a leer los 75 sitios.
 # ---------------------------------------------------------------------------
 CENSO_RAICES = {
+    # -- PI.3 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 02-10) --------------
+    ("services/posicion_inicial_braqui.py", 148, "TipoCalibracion"):
+        (LISTA, "_filas_de_cambio_de_fuente: WHERE tipo = ? AND DATE(fecha) IS NOT NULL -- los cambios de fuente de "
+         "TODAS las fechas (la clave de bloque es (DATE(fecha), tipo) y aquí se pide el catálogo completo de un tipo); "
+         "filtra activo con filtro_activo() dentro del f-string. Es la ÚNICA lectura de TipoCalibracion del servicio: "
+         "la regla de vigencia, el selector, el indicador de `listar` y la validación de `guardar` la comparten"),
+    ("services/posicion_inicial_braqui.py", 158, "braqui_posicion_inicial"):
+        (LISTA, "_vigente_por_fecha: WHERE fecha = ? -- la CLAVE DE BLOQUE completa (la fecha del cambio de fuente), no "
+         "una fila física; filtra activo con filtro_activo() dentro del f-string. La comparten `existe_vigente`, la "
+         "regla (`posicion_inicial_para`) y `guardar` (dentro de su transacción)"),
+    ("services/posicion_inicial_braqui.py", 238, "braqui_posicion_inicial"):
+        (LISTA, "listar: todas las pruebas vigentes para la tabla de la página; filtra activo con filtro_activo() en el "
+         "f-string (las anuladas viven en el visor, no en esta lista)"),
+    ("services/posicion_inicial_braqui.py", 253, "braqui_posicion_inicial"):
+        (IDENTIDAD, "leer: WHERE id = ? -- abrir un registro YA ELEGIDO, incluso anulado (DA-47): filtrar lo haría "
+         "desaparecer justo cuando se quiere ver; trae la imagen y `activo`"),
+    ("services/posicion_inicial_braqui.py", 354, "braqui_posicion_inicial"):
+        (IDENTIDAD, "anular, SELECT activo: WHERE id = ? -- lee `activo` COMO DATO para decidir si ya estaba anulada "
+         "(True/False sin auditar); no puede filtrarlo, o una prueba anulada se confundiría con una que no existe"),
+    ("services/posicion_inicial_braqui.py", 358, "braqui_posicion_inicial"):
+        (IDENTIDAD, "anular, UPDATE ... SET activo = 0 WHERE id = ? -- la fila física ya identificada; a propósito NO "
+         "pasa por sql_anular_bloque (su AND de vigencia sobre un WHERE id es el defecto de 'filtro sobre lectura de "
+         "identidad' que RT1 vigila)"),
     # -- B.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md) -----------------------
     # -- F.2 (PLAN_HANDOFF_IMAGENES_22-09.md) -----------------------------
     ("services/referencias_qc.py", 163, "controles"):
@@ -353,10 +376,12 @@ CENSO_RAICES = {
 # quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
 # en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
 # 70 -> 73 sitios físicos.
-FILAS_ESPERADAS = 77      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`)
+FILAS_ESPERADAS = 83      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`)
                           # RC.2 (30-09): +1, `corregir_calibracion` (IDENTIDAD sobre TipoCalibracion)
-SITIOS_FISICOS_ESPERADOS = 75      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`)
+                          # PI.3 (02-10): +6, `services/posicion_inicial_braqui.py` (3 LISTA y 3 IDENTIDAD)
+SITIOS_FISICOS_ESPERADOS = 81      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`)
                                     # RC.2 (30-09): +1 (corregir_calibracion, IDENTIDAD)
+                                    # PI.3 (02-10): +6 (los seis del servicio, ninguno se resuelve a dos textos)
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

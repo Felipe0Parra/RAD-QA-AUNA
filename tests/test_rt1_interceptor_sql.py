@@ -337,13 +337,18 @@ class TestDenominadorDeCobertura:
         #             el control ya tiene copia guardada antes de precargar
         #             la referencia. Una lectura nueva y real; filtra
         #             vigencia con `filtro_activo` y cubre la clave completa.
+        #   105 -> 110 PI.3 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 02-10):
+        #             `services/posicion_inicial_braqui.py` -- cinco funciones lectoras nuevas sobre dos raíces del
+        #             bloque de QC (`_filas_de_cambio_de_fuente` sobre `TipoCalibracion`; `_vigente_por_fecha`, `listar`,
+        #             `leer` y el SELECT de `anular` sobre `braqui_posicion_inicial`). (El 104 -> 105 de F.2, 25-09,
+        #             solo consta en el mensaje de abajo.)
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 105, (
-            f"F.2 sumó `services/referencias_qc.py::_historico_calidad` (lee `controles` y `dosimetriaMen` con su "
-            f"filtro de vigencia: las referencias con que se guardó cada control) -- 105 funciones "
+        assert len(lectoras) == 110, (
+            f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
+            f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad) -- 110 funciones "
             f"esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
