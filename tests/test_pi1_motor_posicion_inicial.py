@@ -24,8 +24,8 @@ resolución y con 1 en un TIFF sin la etiqueta, así que el motor lee solo lo qu
 recorta con gThumb o con Paint, que reescribe la resolución declarada (EPSON009: un TIFF de 96.012 dpi): la escala es
 SIEMPRE la del procedimiento (`escala_mm`, 600 dpi) y la declarada solo se CLASIFICA (`clase_resolucion`): coincide /
 sin dato / editor (72, 96) -> milímetros con una nota en pantalla; otra (300, 200...) -> sin milímetros ni veredicto.
-Red blanda por contenido: el ancho de la meseta saturada (6.2-6.5 mm en las tres placas reales) fuera de 4.5-9 mm
-da un aviso de escala. `valores_medidos` es la única definición de lo que se guarda (px y mm de gris y capas).
+La comprobación por el ancho de la meseta saturada (6.2-6.5 mm en las tres placas reales) quedó como deuda (DP-143).
+`valores_medidos` es la única definición de lo que se guarda (px y mm de gris y capas).
 
 Las placas reales (PI.1b): braqui_00 (escaneada a 600 dpi y retocada en gThumb), EPSON009 (la TÍPICA: un TIFF RGBA de
 Paint, con extensión .jpeg y 96.012 dpi declarados) y EPSON031 (el escaneo crudo, 5100 x 6600, de la que sale braqui_00).
@@ -36,7 +36,7 @@ dicen la verdad física con las tolerancias del plan y no dependen de esos núme
 
 Rojo real (protocolo de PI.1, punto 6), con el motor sustituido por
 `PLAN_POSICION_INICIAL_BRAQUI_01-10_anexo/adaptador_notebook_sin_corregir.py` (el notebook sin corregir) y ESTE mismo
-archivo, medido el 01-10: caen 40 de 141 (en PI.1 eran 31 de 86) y ninguna por `NameError`/`KeyError` del adaptador:
+archivo, medido el 01-10: caen 40 de 135 (en PI.1 eran 31 de 86; 40 de 141 en PI.1b) y ninguna por `NameError`/`KeyError` del adaptador:
   V1  ZeroDivisionError ........ 2   G4 y el ángulo horizontal
   V2  "ok" donde el motor dice
       "no medible" ............. 14  G6, por la izquierda y por la derecha (incluida la línea sobre el borde); la capa roja de
@@ -48,7 +48,7 @@ archivo, medido el 01-10: caen 40 de 141 (en PI.1 eran 31 de 86) y ninguna por `
   identidad PI-1 ............... 5   números de control de G1, de la hoja, de EPSON009 y de EPSON031; versión y parámetros
 Además, cada corrección se desactiva POR SEPARADO sobre el motor corregido (V1: ángulo con arctan; V2: caída de
 borde enorme; V3: contar cuerdas con borde tapado; V4: lado de tránsito nunca decidido; subpíxel: bordes enteros) y
-cae exactamente el grupo de tests que la guarda. La lectura y la escala de la resolución se mutaron igual (13
+cae exactamente el grupo de tests que la guarda. La lectura y la escala de la resolución se mutaron igual (12
 mutaciones: `pi1_mutaciones.py resolucion`).
 
 Compuertas de no vacuidad (Trampa 8): cada rejilla declara cuántos casos corrió y cuántos mide de verdad
@@ -98,12 +98,12 @@ JUEGOS_DE_CLICS_EPSON009 = (
     [(230, 200), (232, 420)], [(226, 176), (234, 540)], [(234, 545), (228, 185)],      # el último, en orden inverso
 )
 CONTROL_EPSON009 = {"gris_px": -2.603247, "gris_mm": -0.110204, "U_mm": 0.18003, "R_px": 3.830327,
-                    "G_px": -2.302353, "B_px": -3.343512, "meseta_px": 147}
+                    "G_px": -2.302353, "B_px": -3.343512}
 EPSON031 = DATOS / "EPSON031.JPG"
 MD5_EPSON031 = "5c03e438acb4d840a51303299855b62b"
 CLICS_EPSON031 = [(2511, 3687), (2832, 3686)]        # los clics de G2 sobre la página real
 CONTROL_EPSON031 = {"gris_px": -8.471735, "gris_mm": -0.358637, "U_mm": 0.08194,
-                    "G_px": -8.344133, "B_px": -8.332383, "meseta_px": 153}
+                    "G_px": -8.344133, "B_px": -8.332383}
 
 
 # ----------------------------------------------------------------------------------------- ayudas
@@ -956,7 +956,6 @@ class TestEPSON009:
         assert epson009["resultado"]["tamano_pixel_mm"] == 25.4 / 600.0
         assert s["nota_resolucion"] == ("la imagen declara 96.012 dpi (lo escribe el editor al guardar); "
                                         "se usa la resolucion del escaneo: 600 dpi")
-        assert s["aviso_escala"] is None
 
     def test_el_sentido_fisico_sale_de_la_banda_de_transito(self, epson009):
         r, s = epson009["resultado"], epson009["resumen"]
@@ -972,13 +971,6 @@ class TestEPSON009:
             assert perfiles[capa]["estado"] == "ok", capa
         for capa in ("G", "B"):
             assert abs(perfiles[capa]["desfase_px"] - perfiles["gris"]["desfase_px"]) * MM_POR_PX < 0.05, capa
-
-    def test_la_meseta_mide_lo_que_en_las_otras_placas(self, epson009, placa_real):
-        ancho = int(np.max(epson009["resultado"]["perfiles"]["gris"]["ancho"]))
-        ancho_recorte = int(np.max(placa_real["resultado"]["perfiles"]["gris"]["ancho"]))
-        assert ancho == 147 and ancho_recorte == 151
-        assert 4.5 <= ancho * MM_POR_PX <= 9.0                 # 6.2 mm
-        assert abs(ancho - ancho_recorte) / ancho_recorte < 0.05     # la misma mancha física: la misma resolución
 
     def test_otros_juegos_de_clics_dan_lo_mismo(self, epson009):
         """El físico marca los dos puntos a ojo: cinco juegos distintos (y uno en orden inverso) deben dar el mismo
@@ -1005,7 +997,7 @@ class TestEPSON031PaginaCruda:
         assert epson031["gris"].shape == (6600, 5100) and epson031["color"].shape == (6600, 5100, 3)
         assert epson031["dpi"] == 600.0 and epson031["fecha"] == date(2026, 9, 30)
         assert epson031["resultado"]["clase_resolucion"] == "coincide"
-        assert epson031["resumen"]["nota_resolucion"] is None and epson031["resumen"]["aviso_escala"] is None
+        assert epson031["resumen"]["nota_resolucion"] is None
 
     def test_mide_lo_mismo_que_el_recorte(self, epson031, placa_real):
         s, s_recorte, r = epson031["resumen"], placa_real["resumen"], epson031["resultado"]
@@ -1043,43 +1035,9 @@ class TestEPSON031PaginaCruda:
         assert (a * b).sum() / np.sqrt((a * a).sum() * (b * b).sum()) >= 0.999
 
 
-def _reducida(placa, clics, factor):
-    """La placa como saldría de un escaneo a menor resolución: reducida con INTER_AREA, con los clics llevados al nuevo
-    tamaño."""
-    gris, color = placa["gris"], placa["color"]
-    tam = (max(1, int(round(gris.shape[1] * factor))), max(1, int(round(gris.shape[0] * factor))))
-    return (cv2.resize(gris, tam, interpolation=cv2.INTER_AREA), cv2.resize(color, tam, interpolation=cv2.INTER_AREA),
-            [((x + 0.5) * factor - 0.5, (y + 0.5) * factor - 0.5) for x, y in clics])
-
-
-class TestComprobacionDeLaMeseta:
-    """Red blanda por CONTENIDO (PI.1b): si el escaneo fue a otra resolución y un editor reescribió la cabecera a 96 (lo
-    que hace Paint), la cabecera no avisa; el ancho de la meseta saturada sí cambia (6.2-6.5 mm a 600 dpi en las placas
-    reales; a 300 dpi mediría 3.1 mm). El veredicto se sigue dando. Provisional: dos películas independientes, y el
-    ancho depende de la dosis."""
-
-    def test_a_600_dpi_ninguna_de_las_placas_reales_avisa(self, placa_real, epson009, epson031):
-        for nombre, placa in (("braqui_00", placa_real), ("EPSON009", epson009), ("EPSON031", epson031)):
-            assert placa["resumen"]["aviso_escala"] is None, nombre
-            ancho_mm = np.max(placa["resultado"]["perfiles"]["gris"]["ancho"]) * MM_POR_PX
-            assert 6.0 <= ancho_mm <= 6.6, (nombre, ancho_mm)            # lo medido: 6.39, 6.22 y 6.48
-
-    @pytest.mark.parametrize("factor", (0.5, 1.0 / 3.0), ids=("a_300_dpi", "a_200_dpi"))
-    @pytest.mark.parametrize("nombre", ("braqui_00", "EPSON009"))
-    def test_una_placa_escaneada_a_300_o_200_dpi_con_cabecera_de_paint_avisa(self, nombre, factor, placa_real, epson009):
-        placa, clics = (placa_real, CLICS_PLACA_REAL) if nombre == "braqui_00" else (epson009, CLICS_EPSON009)
-        gris, color, puntos = _reducida(placa, clics, factor)
-        r = motor.analizar(gris, color, 96.012, puntos)                    # la cabecera que deja Paint
-        s = motor.resumen(r)
-        assert r["clase_resolucion"] == "editor" and s["estado"] == "ok"
-        assert "la meseta mide" in s["aviso_escala"]
-        assert "compruebe que la pelicula se escaneo a 600 dpi" in s["aviso_escala"]
-        assert s["veredicto"] in ("Cumple", "No cumple")                   # el veredicto se sigue dando (red blanda)
-
-
 CLAVES_VALORES_MEDIDOS = {
     "tamano_pixel_mm", "lado_transito", "estado_gris", "desfase_gris_px", "desfase_gris_mm", "incertidumbre_gris_px",
-    "dispersion_gris_px", "filas_gris", "ancho_meseta_gris_px",
+    "dispersion_gris_px", "filas_gris",
     "estado_r", "desfase_r_px", "desfase_r_mm", "estado_g", "desfase_g_px", "desfase_g_mm",
     "estado_b", "desfase_b_px", "desfase_b_mm",
 }
@@ -1091,7 +1049,7 @@ class TestValoresMedidos:
 
     def test_las_claves_son_las_de_las_columnas(self, placa_real):
         v = motor.valores_medidos(placa_real["resultado"])
-        assert set(v) == CLAVES_VALORES_MEDIDOS and len(v) == 18
+        assert set(v) == CLAVES_VALORES_MEDIDOS and len(v) == 17
 
     @pytest.mark.parametrize("nombre", ("braqui_00", "EPSON009", "EPSON031"))
     def test_el_mm_es_exactamente_el_px_por_la_escala_y_son_tipos_de_python(self, nombre, placa_real, epson009, epson031):
@@ -1115,7 +1073,7 @@ class TestValoresMedidos:
             sp = motor.resumen(r, perfil)
             assert v[f"desfase_{sufijo}_px"] == sp["desfase_px"] and v[f"desfase_{sufijo}_mm"] == sp["desfase_mm"], perfil
         assert v["incertidumbre_gris_px"] == s["U_px"]
-        assert v["filas_gris"] == s["filas"] and v["ancho_meseta_gris_px"] == 147
+        assert v["filas_gris"] == s["filas"]
         assert v["dispersion_gris_px"] == pytest.approx(s["dispersion_mm"] / v["tamano_pixel_mm"], rel=1e-12)
         assert v["lado_transito"] == "derecha"
 
@@ -1126,7 +1084,7 @@ class TestValoresMedidos:
         v = motor.valores_medidos(r)
         assert v["estado_gris"] == CORTADA
         for clave in ("desfase_gris_px", "desfase_gris_mm", "incertidumbre_gris_px", "dispersion_gris_px",
-                      "filas_gris", "ancho_meseta_gris_px"):
+                      "filas_gris"):
             assert v[clave] is None, clave
 
     def test_sin_escala_no_hay_milimetros_pero_si_pixeles(self, placa_real):
@@ -1243,6 +1201,6 @@ class TestIdentidadDelAlgoritmoPI1:
             "transito_hasta_mm": 50.0, "umbral_pelicula": 60.0, "tolerancia_mm": 1.0,
             # la escala es la del procedimiento de escaneo; la declarada solo se clasifica (PI.1b, 01-10)
             "resolucion_escaneo_dpi": 600.0, "resoluciones_de_editor_dpi": [72.0, 96.0],
-            "tolerancia_dpi_relativa": 0.01, "ancho_meseta_mm": [4.5, 9.0],
+            "tolerancia_dpi_relativa": 0.01,
         }
         assert motor.DPI_SI_FALTA == 600.0

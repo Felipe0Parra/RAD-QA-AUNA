@@ -20,8 +20,8 @@ del plan (los cuatro defectos del método sin corregir y la mejora subpíxel):
       `escala_mm`. La resolución que el archivo DECLARA (`resolucion_imagen.py`; Pillow rellena 72 dpi en un JPEG
       con EXIF sin resolución y 1 dpi en un TIFF) solo se CLASIFICA (`clase_resolucion`): coincide con 600, falta,
       la escribió un editor (72 o 96: se usa 600 y se avisa en pantalla) u otra (300, 200...: un escaneo a otra
-      resolución, sin milímetros ni veredicto). Como red blanda, el ancho de la meseta saturada (6.2-6.5 mm en
-      las placas reales) se compara con lo esperado a 600 dpi.
+      resolución, sin milímetros ni veredicto). La comprobación por el ancho de la meseta saturada (6.2-6.5 mm en
+      las placas reales) queda como deuda (DP-143).
 
 Sin Qt y sin base de datos (lo comprueba un test por AST): lo usan la página, el recálculo de un
 registro guardado, la pestaña sintética y los tests, todos con la misma función `analizar`. Cualquier
@@ -63,7 +63,6 @@ PARAMETROS = {
     "resolucion_escaneo_dpi": 600.0,         # la resolución del procedimiento de escaneo: la escala de los milímetros
     "resoluciones_de_editor_dpi": [72.0, 96.0],   # lo que un editor (Paint, Windows) escribe al guardar un recorte
     "tolerancia_dpi_relativa": 0.01,         # 599 / 599.999 (lo que escribe el Epson) cuentan como 600; 96.012 como 96
-    "ancho_meseta_mm": [4.5, 9.0],           # ancho esperado de la meseta saturada a 600 dpi (medido: 6.2-6.5 mm)
 }
 
 DPI_SI_FALTA = 600.0               # solo para dimensionar la ventana cuando no hay escala (resolución "otra")
@@ -528,9 +527,9 @@ def valores_medidos(resultado):
     """LO QUE SE GUARDA (PI.3): la ÚNICA definición de los valores medidos de un análisis, con las claves iguales a
     las columnas de `braqui_posicion_inicial`. Por perfil (gris y capas r, g, b): `estado_*`, `desfase_*_px` y
     `desfase_*_mm` (px es None si el perfil no se mide; mm = px * `tamano_pixel_mm`, SIN redondear, y None si falta px
-    o la escala). Del gris además `incertidumbre_gris_px` (k = 2), `dispersion_gris_px`, `filas_gris` y
-    `ancho_meseta_gris_px`; y `tamano_pixel_mm` y `lado_transito`. Todo en tipos de Python (listo para SQLite y
-    JSON). Sentido, veredicto y avisos NO se guardan: se construyen al mostrarlos (`resumen`)."""
+    o la escala). Del gris además `incertidumbre_gris_px` (k = 2), `dispersion_gris_px` y `filas_gris`; y
+    `tamano_pixel_mm` y `lado_transito`. Todo en tipos de Python (listo para SQLite y JSON). Sentido, veredicto y
+    avisos NO se guardan: se construyen al mostrarlos (`resumen`)."""
     tam = resultado["tamano_pixel_mm"]
     valores = {"tamano_pixel_mm": tam, "lado_transito": resultado["lado_transito"]}
     for nombre, sufijo in CAPAS_GUARDADAS:
@@ -545,38 +544,22 @@ def valores_medidos(resultado):
         "incertidumbre_gris_px": incertidumbre_px(resultado, "gris"),
         "dispersion_gris_px": float(g["dispersion_px"]) if ok else None,
         "filas_gris": int(len(g["filas"])) if ok else None,
-        "ancho_meseta_gris_px": int(np.max(g["ancho"])) if ok else None,
     })
     return valores
 
 
-def avisos_de_escala(resultado):
-    """(nota_resolucion, aviso_escala), cada uno texto o None, sobre la escala con que se mide:
-    - nota_resolucion: lo que la imagen DECLARA frente al procedimiento. Un editor (72 o 96) o la falta de dato
-      se anotan (solo en pantalla: se usa la resolución del escaneo); coincidir con el procedimiento no se anota.
-    - aviso_escala: red blanda por CONTENIDO. Si la meseta saturada del gris mide, con la escala del procedimiento, fuera
-      de lo esperado (`ancho_meseta_mm`), el escaneo pudo ser a otra resolución con la cabecera reescrita por un
-      editor. El veredicto se sigue dando; depende de la dosis, así que los límites son provisionales."""
-    P = resultado["parametros"]
-    escaneo = P["resolucion_escaneo_dpi"]
+def nota_de_resolucion(resultado):
+    """Nota (texto o None) sobre lo que la imagen DECLARA frente al procedimiento de escaneo. Un editor (72 o 96) o la
+    falta de dato se anotan (solo en pantalla: se usa la resolución del escaneo); coincidir con el procedimiento no se
+    anota. (La comprobación por el ancho de la meseta saturada quedó como deuda, DP-143.)"""
+    escaneo = resultado["parametros"]["resolucion_escaneo_dpi"]
     clase = resultado["clase_resolucion"]
-    dpi = resultado["dpi"]
-    nota = None
     if clase == "editor":
-        nota = (f"la imagen declara {dpi:g} dpi (lo escribe el editor al guardar); "
+        return (f"la imagen declara {resultado['dpi']:g} dpi (lo escribe el editor al guardar); "
                 f"se usa la resolucion del escaneo: {escaneo:g} dpi")
-    elif clase == "sin_dato":
-        nota = f"la imagen no declara resolucion; se usa la resolucion del escaneo: {escaneo:g} dpi"
-    aviso = None
-    tam = resultado["tamano_pixel_mm"]
-    gris = resultado["perfiles"]["gris"]
-    if tam is not None and gris["estado"] == "ok":
-        ancho_mm = float(np.max(gris["ancho"])) * tam
-        lo, hi = P["ancho_meseta_mm"]
-        if not lo <= ancho_mm <= hi:
-            aviso = (f"la meseta mide {ancho_mm:.1f} mm de ancho, fuera de lo esperado a {escaneo:g} dpi "
-                     f"({lo:g}-{hi:g} mm): compruebe que la pelicula se escaneo a {escaneo:g} dpi")
-    return nota, aviso
+    if clase == "sin_dato":
+        return f"la imagen no declara resolucion; se usa la resolucion del escaneo: {escaneo:g} dpi"
+    return None
 
 
 def resumen(resultado, perfil="gris"):
@@ -607,11 +590,10 @@ def resumen(resultado, perfil="gris"):
         sentido = ("a la izquierda" if d_mm > 0 else "a la derecha") + " de la linea en la imagen (no se distingue la banda de transito)"
     else:
         sentido = "antes de la marca" if fisico < 0 else "despues de la marca"
-    nota, aviso_escala = avisos_de_escala(resultado)
     salida.update({"desfase_mm": d_mm, "desfase_fisico_mm": fisico, "sentido": sentido, "U_mm": U, "U_px": u_px,
                    "dispersion_mm": r["dispersion_px"] * tam,
                    "veredicto": "Cumple" if abs(d_mm) <= P["tolerancia_mm"] else "No cumple",
-                   "nota_resolucion": nota, "aviso_escala": aviso_escala})
+                   "nota_resolucion": nota_de_resolucion(resultado)})
     return salida
 
 
