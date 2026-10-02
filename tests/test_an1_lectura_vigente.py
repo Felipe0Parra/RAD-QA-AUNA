@@ -49,7 +49,10 @@ def test_tablas_del_bloque_qc_cubre_el_bloque_entero_raices_incluidas():
             "bloque de QC -- LR4 retiró la exclusión (DA-48)")
     # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09): +1 (referencias_qc,
     # quinta raíz propia -- sin FK, tabla de configuración por equipo).
-    assert len(lv.RAICES_QC) == 8
+    # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 01-10): +1
+    # (braqui_posicion_inicial, sexta raíz propia -- sin FK, el enlace con
+    # el cambio de fuente es por la fecha).
+    assert len(lv.RAICES_QC) == 9
 
     # Las 3 tablas del rebuild del 18-08 -- deliberadamente FUERA del
     # TABLAS_EN_ALCANCE de 18 tablas que tenía LE4, y sin embargo D3
@@ -391,8 +394,9 @@ def test_claves_indice_coincide_con_el_fuente():
     claves = lv.claves_indice()
     # IV3 (52) + MI3 (4 diarias) + EB6 (TipoCalibracion) + R1 (4 lecturas
     # crudas de Linealidad, PLAN_REPARACION_ANUAL_27-08.md §Fase 3) + B.1
-    # (1, referencias_qc, PLAN_REFERENCIAS_EDITABLES_21-09.md)
-    assert len(claves) == 62
+    # (1, referencias_qc, PLAN_REFERENCIAS_EDITABLES_21-09.md) + PI.2 (1,
+    # braqui_posicion_inicial, PLAN_POSICION_INICIAL_BRAQUI_01-10.md)
+    assert len(claves) == 63
     assert claves == {t: frozenset(c) for t, c in CLAVES_REALES.items()}
     # LF5: la premisa que hace seguro tratar "id"/"rowid" como identidad
     # física en cualquier tabla, sin mirar CLAVES_INDICE caso por caso.

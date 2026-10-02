@@ -172,6 +172,11 @@ TABLAS_ANULABLES = frozenset({
     # `reemplazar_bloque`/`filtro_activo` (services/referencias_qc.py, B.2)
     # la traten como el resto del bloque de QC.
     "referencias_qc",
+    # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, DA-82): la prueba de posición inicial de la fuente de
+    # braquiterapia (imagen + medidas) entra al contrato desde que nace. Sin FK: el enlace con el cambio de fuente
+    # es por la FECHA (un FK por `id` se rompería al primer reguardado), así que es raíz propia de QC y no forma
+    # parte del cierre transitivo por FK que vigila IV2 -- misma razón que `referencias_qc`.
+    "braqui_posicion_inicial",
 })
 
 

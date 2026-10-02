@@ -152,6 +152,12 @@ CLAVES_INDICE = {
     # energía (p.ej. una tolerancia global) -- en SQLite dos NULL no
     # colisionan en un UNIQUE, así que NULL dejaría esas filas sin proteger.
     "referencias_qc": ("equipo", "magnitud", "energia"),
+
+    # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, DA-82): la clave de bloque de la prueba de posición inicial es
+    # la FECHA del cambio de fuente al que pertenece -- impide dos pruebas VIGENTES para el mismo cambio de
+    # fuente. Reguardar anula la vigente e inserta la nueva (`id` nuevo, misma fecha): por eso el enlace con el
+    # cambio de fuente es por fecha y no por `id`.
+    "braqui_posicion_inicial": ("fecha",),
 }
 
 _RE_EXPRESION_CLAVE = re.compile(r'^(\w+)\((\w+)\)$')

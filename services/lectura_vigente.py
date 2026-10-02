@@ -79,6 +79,11 @@ RAICES_QC = frozenset({
     # pero fuera del cierre transitivo por FK desde las demás raíces) --
     # que es exactamente lo que es: una raíz propia, no un descendiente.
     "referencias_qc",
+    # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, DA-82): sexta raíz nueva -- la prueba de posición inicial de la
+    # fuente de braquiterapia tampoco cuelga de un control puntual: el enlace con el cambio de fuente es por la
+    # FECHA, así que a propósito no tiene FK. Misma razón que `referencias_qc`: sin clasificarla aquí, IV2 la
+    # marca "sobrante".
+    "braqui_posicion_inicial",
 })
 
 

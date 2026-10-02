@@ -203,6 +203,7 @@ class Conexion():
             self.crearTablasHalcyon()  # Crear tablas para controles Halcyon (Anuales y Mensuales)
             self.crearTablasMLCs()
             self.crearTablaReferenciasQC()  # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
+            self.crearTablaPosicionInicialBraqui()  # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md)
 
             # R1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): DosisService.crear_tabla()
             # (que asegura columnas como "energia"/"vigente" via ALTER TABLE)
@@ -2485,6 +2486,68 @@ class Conexion():
                 observaciones TEXT,
                 fijada_por TEXT,
                 fecha TEXT
+            )
+        """
+        cursor = self.con.cursor()
+        cursor.execute(tabla)
+        self.con.commit()
+
+    def crearTablaPosicionInicialBraqui(self):
+        """PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, DA-82): la prueba de posición inicial de la fuente de
+        braquiterapia -- la imagen subida, los dos clics, los parámetros con que corrió el análisis y lo medido (el
+        desfase del gris y de cada capa de color, en píxeles y en milímetros, con la incertidumbre del gris).
+        Raíz propia del contrato de QC, SIN FK (§5.3 del plan): el enlace con el cambio de fuente es por la FECHA,
+        porque un FK por `id` se rompería al primer reguardado del cambio de fuente (anular+insertar da `id`
+        nuevo). Sin `activo`: la agrega sola `_asegurar_activo_bloque_qc` (la tabla ya está en TABLAS_ANULABLES desde
+        que nace, mismo patrón que `referencias_qc`). `fecha` es la del cambio de fuente y `serie_fuente` una copia
+        de su serie al guardar; `dpi` es lo que el archivo DECLARA (informativa: la escala es la del procedimiento,
+        600 dpi) y `tamano_pixel_mm` la escala con que se midió (NULL si la resolución declarada es otra: sin
+        milímetros). Un CHECK por perfil (gris, r, g, b) rechaza milímetros que no sean EXACTAMENTE los píxeles por
+        la escala; se escribe con los `IS NULL` explícitos porque un CHECK que evalúa a NULL deja pasar la fila."""
+        tabla = """
+            CREATE TABLE IF NOT EXISTS braqui_posicion_inicial (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha TEXT NOT NULL,
+                serie_fuente TEXT,
+                user TEXT,
+                imagen BLOB NOT NULL,
+                imagen_nombre TEXT,
+                imagen_md5 TEXT,
+                dpi REAL,
+                tamano_pixel_mm REAL,
+                puntos TEXT NOT NULL,
+                parametros TEXT NOT NULL,
+                version_algoritmo TEXT NOT NULL,
+                estado_gris TEXT,
+                desfase_gris_px REAL,
+                desfase_gris_mm REAL,
+                incertidumbre_gris_px REAL,
+                dispersion_gris_px REAL,
+                filas_gris INTEGER,
+                estado_r TEXT,
+                desfase_r_px REAL,
+                desfase_r_mm REAL,
+                estado_g TEXT,
+                desfase_g_px REAL,
+                desfase_g_mm REAL,
+                estado_b TEXT,
+                desfase_b_px REAL,
+                desfase_b_mm REAL,
+                lado_transito TEXT,
+                tolerancia_mm REAL,
+                observaciones TEXT,
+                CHECK ((desfase_gris_mm IS NULL) = (desfase_gris_px IS NULL OR tamano_pixel_mm IS NULL)
+                       AND (desfase_gris_mm IS NULL
+                            OR abs(desfase_gris_mm - desfase_gris_px * tamano_pixel_mm) <= 1e-9)),
+                CHECK ((desfase_r_mm IS NULL) = (desfase_r_px IS NULL OR tamano_pixel_mm IS NULL)
+                       AND (desfase_r_mm IS NULL
+                            OR abs(desfase_r_mm - desfase_r_px * tamano_pixel_mm) <= 1e-9)),
+                CHECK ((desfase_g_mm IS NULL) = (desfase_g_px IS NULL OR tamano_pixel_mm IS NULL)
+                       AND (desfase_g_mm IS NULL
+                            OR abs(desfase_g_mm - desfase_g_px * tamano_pixel_mm) <= 1e-9)),
+                CHECK ((desfase_b_mm IS NULL) = (desfase_b_px IS NULL OR tamano_pixel_mm IS NULL)
+                       AND (desfase_b_mm IS NULL
+                            OR abs(desfase_b_mm - desfase_b_px * tamano_pixel_mm) <= 1e-9))
             )
         """
         cursor = self.con.cursor()

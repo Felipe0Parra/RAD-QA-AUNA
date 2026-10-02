@@ -70,14 +70,18 @@ def _insertar_control(ruta_bd, **campos):
 # ---------------------------------------------------------------------------
 
 class TestSecciones:
-    def test_las_8_raices_estan_todas(self, bd_temporal):
+    def test_las_9_raices_estan_todas(self, bd_temporal):
         # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09): +1
         # (referencias_qc, quinta raíz propia -- RAICES_QC).
+        # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 01-10): +1
+        # (braqui_posicion_inicial, sexta raíz propia -- RAICES_QC). Esto prueba
+        # la CAPA DE DATOS del visor (`secciones()`); que la pantalla la muestre
+        # es otra cosa (DP-144: su lista de chips es fija).
         secc = va.secciones()
         assert set(secc) == {
             "controles", "TipoCalibracion", "LinealidadBraquiterapia",
             "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui",
-            "referencias_qc",
+            "referencias_qc", "braqui_posicion_inicial",
         }
 
     def test_cada_seccion_incluye_a_su_propia_raiz(self, bd_temporal):

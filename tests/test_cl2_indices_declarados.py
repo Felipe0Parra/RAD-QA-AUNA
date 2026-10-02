@@ -131,6 +131,10 @@ CLAVES_ESPERADAS_DEL_PLAN = {
     # dosis y tolerancias editables desde la app -- clave por equipo,
     # magnitud y energía (quinta raíz propia, sin FK, RAICES_QC).
     "referencias_qc": ("equipo", "magnitud", "energia"),
+    # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 01-10): la prueba de
+    # posición inicial de braquiterapia -- clave de bloque = la FECHA del
+    # cambio de fuente al que pertenece (sexta raíz propia, sin FK).
+    "braqui_posicion_inicial": ("fecha",),
 }
 
 # Tablas del bloque de QC que YA estaban en TABLAS_ANULABLES antes de IV1
