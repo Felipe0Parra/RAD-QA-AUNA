@@ -49,8 +49,9 @@ from PIL import Image
 from PyQt5 import sip
 from PyQt5.QtCore import QEvent, QPoint, QPointF, Qt
 from PyQt5.QtGui import QWheelEvent
-from PyQt5.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QApplication, QComboBox, QDialog, QFileDialog, QLabel, QLineEdit,
-                             QMessageBox, QPushButton, QTableWidget, QTabBar, QTabWidget, QToolBar, QWidget)
+from PyQt5.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QAbstractSlider, QApplication, QComboBox, QDialog,
+                             QFileDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTabBar, QTabWidget,
+                             QToolBar, QWidget)
 
 import ui.paginasControles.PruebasMensuales.posicion_inicial_braqui as pagina_mod
 import ui.paginasGuia.dialogs as dialogs_mod
@@ -271,10 +272,31 @@ def _recorrer(raiz):
         if sip.ispycreated(hijo):
             if isinstance(hijo, QWidget):
                 yield hijo
-                if not isinstance(hijo, _HOJAS):
+                if isinstance(hijo, QTabWidget):
+                    # Las páginas por su ÍNDICE, no por `children()` del QStackedWidget interno: cada cambio de pestaña hace
+                    # `raise()` de su página y Qt reordena ese hijo (orden de apilamiento).
+                    for i in range(hijo.count()):
+                        pagina = hijo.widget(i)
+                        yield pagina
+                        yield from _recorrer(pagina)
+                elif not isinstance(hijo, _HOJAS):
                     yield from _recorrer(hijo)
         elif hijo.isWidgetType():
             yield from _recorrer(hijo)
+
+
+def _atributos(objeto):
+    """Los atributos de Python de un objeto como la huella los observa: los simples por su valor, los bytes por su md5 y las
+    colecciones por su tamaño (lo demás son widgets y funciones, que la huella ya recorre por otro camino)."""
+    atributos = {}
+    for nombre, valor in vars(objeto).items():
+        if isinstance(valor, (bytes, bytearray)):
+            atributos[nombre] = ("bytes", hashlib.md5(valor).hexdigest())
+        elif _simple(valor):
+            atributos[nombre] = valor
+        elif isinstance(valor, (list, tuple, dict, set)):
+            atributos[nombre] = ("coleccion", len(valor))
+    return atributos
 
 
 def _huella(p, sin_vista_imagen=False):
@@ -282,7 +304,13 @@ def _huella(p, sin_vista_imagen=False):
     limpia: cada widget (clase, habilitado, visible, y su estado según el tipo), cada barra de herramientas y cada lienzo
     que haya (modo, historial, botones marcados, bloqueo, ejes, artistas, límites, manejadores) y los atributos simples de
     la página (valores y nombres). Un widget, un lienzo o una barra nuevos de la página (PI.5 añade una pestaña) entran
-    solos en la huella: no hay que declararlos."""
+    solos en la huella: no hay que declararlos.
+
+    Las páginas de un QTabWidget se recorren por su índice y no por `children()`: cada cambio de pestaña hace `raise()` de su
+    página y Qt reordena ese hijo (orden de apilamiento), así que dos páginas con el mismo estado salían en orden distinto. Hasta
+    PI.4 no se notaba por un accidente de simetría (las pestañas del gris y de las capas tienen la misma estructura); la
+    cuarta, distinta, lo rompió. Ordenar las listas lo arreglaba pero no veía el intercambio de estado entre dos widgets iguales
+    (anchos X e Y cambiados: lo midió la revisión de Opus de PI.5)."""
     todos = list(_recorrer(p))
     widgets = []
     for w in todos:
@@ -295,6 +323,8 @@ def _huella(p, sin_vista_imagen=False):
             e += [w.count(), w.currentIndex(), w.currentText(), tuple(w.itemData(i) for i in range(w.count()))]
         elif isinstance(w, QPushButton):
             e += [w.text(), w.isChecked()]
+        elif isinstance(w, QAbstractSlider):
+            e += [w.value(), w.minimum(), w.maximum(), w.isSliderDown()]
         elif isinstance(w, QTabWidget):
             e += [w.count(), w.currentIndex(), tuple(w.tabText(i) for i in range(w.count()))]
         elif isinstance(w, QTableWidget):
@@ -302,6 +332,10 @@ def _huella(p, sin_vista_imagen=False):
                            for r in range(w.rowCount()))
             e += [w.rowCount(), w.columnCount(), w.currentRow(),
                   tuple(sorted(i.row() for i in w.selectionModel().selectedRows())), celdas]
+        if type(w).__module__ == pagina_mod.__name__:
+            # Un widget que DEFINE la pagina (la pestana sintetica de PI.5) lleva su propio estado de Python: que se calculo,
+            # con que parametros, que barrido recuerda. Si 'Limpiar' lo dejara, la huella lo vería.
+            e.append(tuple(sorted(_atributos(w).items(), key=lambda par: par[0])))
         widgets.append(tuple(e))
 
     barras = [w for w in todos if isinstance(w, NavigationToolbar2)]
@@ -323,16 +357,8 @@ def _huella(p, sin_vista_imagen=False):
         figuras.append((i, tuple(ejes)))
         manejadores.append((i, tuple(sorted((evento, len(cb)) for evento, cb in lienzo.callbacks.callbacks.items()))))
 
-    atributos = {}
-    for nombre, valor in vars(p).items():
-        if isinstance(valor, (bytes, bytearray)):
-            atributos[nombre] = ("bytes", hashlib.md5(valor).hexdigest())
-        elif _simple(valor):
-            atributos[nombre] = valor
-        elif isinstance(valor, (list, tuple, dict, set)):
-            atributos[nombre] = ("coleccion", len(valor))
     return {"widgets": widgets, "barras": infos_barras, "figuras": figuras, "lienzos": manejadores,
-            "atributos": atributos, "nombres": sorted(vars(p))}
+            "atributos": _atributos(p), "nombres": sorted(vars(p))}
 
 
 def _resultado(imagen_bytes=BRAQUI_00, clics=CLICS_G1):
@@ -1847,15 +1873,16 @@ class TestLaPaginaNoHaceLoQueNoDebe:
         menos dejaría un botón mudo)."""
         senales = [(pagina.boton_imagen, "clicked"), (pagina.boton_recalcular, "clicked"), (pagina.boton_limpiar, "clicked"),
                    (pagina.boton_guardar, "clicked"), (pagina.boton_anular, "clicked"),
-                   (pagina.selector_cambio, "activated"), (pagina.tabla_registros, "cellDoubleClicked")]
-        assert len(senales) == 7
+                   (pagina.selector_cambio, "activated"), (pagina.tabla_registros, "cellDoubleClicked"),
+                   (pagina.pestanas, "currentChanged")]
+        assert len(senales) == 8
         for objeto, nombre in senales:
             assert objeto.receivers(getattr(objeto, nombre)) == 1, (type(objeto).__name__, nombre)
         manejadores = [m() for m in pagina.lienzo_imagen.callbacks.callbacks["button_press_event"].values()]
         propios = [m for m in manejadores if getattr(m, "__self__", None) is pagina]
         assert len(propios) == 1 and propios[0].__name__ == "_al_pulsar", \
             "un solo `mpl_connect` propio (los otros son de la figura, el lienzo y la barra de herramientas)"
-        assert pagina.pestanas.count() == 3 and [pagina.pestanas.tabText(i) for i in range(3)] == [
-            "Imagen", "Perfil gris", "Capas RGB"]
+        assert pagina.pestanas.count() == 4 and [pagina.pestanas.tabText(i) for i in range(4)] == [
+            "Imagen", "Perfil gris", "Capas RGB", "Imagen sintética"]
         assert [pagina.tabla_registros.horizontalHeaderItem(i).text() for i in range(4)] == [
             "Cambio de fuente", "Serie de la fuente", "Guardado por", "Resultado"]

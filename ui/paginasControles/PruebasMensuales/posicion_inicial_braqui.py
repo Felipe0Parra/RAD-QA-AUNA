@@ -36,21 +36,31 @@ Decisiones de la revisión de diseño de Opus (03-10-2026, `pi4_informe_opus.md`
     cancelar (D9 se cumple en cualquier orden).
   - Ningún manejador deja escapar una excepción (X9) y ningún diálogo se abre con el cursor de espera puesto (X8).
 
-Lo que deja preparado: `abrir_registro(id) -> bool` y `refrescar()` públicos (PI.6 y el visor), `pestanas` para que PI.5
-añada la suya Y su reinicio dentro de `_restablecer_estado`, las propiedades `estado` y `puntos`; ninguna señal."""
+La cuarta pestaña (PI.5, D6), `PestanaSintetica`, deja ver cómo responde el método a anchos y saturación distintos con
+una placa sintética de desfase conocido: usa el MISMO `motor.analizar` que la imagen real (validar una copia no validaría
+nada) y no toca la BD. Qt solo tiene deslizadores de enteros; el cálculo son varios segundos (la placa, su análisis y el
+barrido de desfases: una docena de análisis), así que NO corre en cada paso sino al soltar el deslizador
+(`sliderReleased`) y, para el teclado, la rueda y el clic en la barra, una sola vez cuando el valor deja de moverse (un
+temporizador de un disparo). El barrido no depende del desfase elegido: se recuerda mientras no cambien los tres
+parámetros de forma.
+
+Lo que deja preparado: `abrir_registro(id) -> bool` y `refrescar()` públicos (PI.6 y el visor), `pestanas` con la imagen
+sintética como cuarta (su reinicio vive dentro de `_restablecer_estado`), las propiedades `estado` y `puntos`; ninguna
+señal."""
 import functools
 import io
 import json
 import os
 import traceback
+from collections import namedtuple
 from datetime import date
 
 import numpy as np
 from PIL import Image
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout,
-                             QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QTabWidget, QTableWidget,
-                             QTableWidgetItem, QVBoxLayout, QWidget)
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QFrame,
+                             QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QSlider, QTabWidget,
+                             QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from analisisImagenes import posicion_inicial_braqui as motor
 from resources.utils.matplotlib_lazy import get_matplotlib_components
@@ -62,6 +72,7 @@ from ui.paginasGuia.dialogs import DialogAdminPermisoEliminar
 LINEA_REFINADA = "linea refinada por su perfil"
 DECIMALES_CLIC = 3                     # X1
 PESTANA_IMAGEN, PESTANA_GRIS, PESTANA_RGB = 0, 1, 2
+PESTANA_SINTETICA = 3                  # PI.5
 
 COLOR_MEDIDO = "#2a78d6"
 COLOR_REFERENCIA = "#eb6834"
@@ -78,6 +89,24 @@ FILTRO_IMAGENES = "Imágenes (*.jpg *.jpeg *.JPG *.JPEG *.png *.PNG *.tif *.tiff
 
 LINEA_SIN_CAMBIO = "Su cambio de fuente ya no existe vigente: elija otro si quiere guardarla de nuevo."
 COLOR_LINEA_DESCARTADA = "#00a6b8"
+COLOR_REJILLA = "#e1e0d9"
+
+# PI.5: la imagen sintética. Qt solo tiene deslizadores de enteros: cada uno lleva su divisor (el valor que recibe el
+# motor es el entero dividido por `escala`) y los decimales con que se muestra. Por omisión, los de la placa sintética
+# del físico: anchos de 2.2 y 1.1 mm, saturada al 50 % del pico y la mancha 0.6 mm a la derecha de la línea.
+_Deslizador = namedtuple("_Deslizador", "clave rotulo minimo maximo omision escala decimales")
+DESLIZADORES = (
+    _Deslizador("ancho_x", "Ancho en X [mm]", 5, 60, 22, 10, 1),
+    _Deslizador("ancho_y", "Ancho en Y [mm]", 5, 60, 11, 10, 1),
+    _Deslizador("saturacion", "Saturación [%]", 30, 100, 50, 100, 0),
+    _Deslizador("desfase", "Desfase real [mm]", -50, 50, -6, 10, 1),
+)
+DESLIZADOR = {d.clave: d for d in DESLIZADORES}
+TEXTO_SINTETICA = "Calculando la placa sintética..."
+NOTA_SINTETICA = ("Desfase en la imagen = línea - mancha: un desfase negativo pone la mancha a la derecha de la línea. Se "
+                  "recalcula al soltar un deslizador (unos segundos).")
+ANCHO_DE_LOS_CONTROLES = 270            # px: la columna de los deslizadores; todo el alto de la pestaña es para los dibujos
+RETRASO_SINTETICA_MS = 400             # teclado, rueda y clic en la barra: un solo cálculo cuando el valor deja de moverse
 
 _EXTENSIONES_DEL_FORMATO = {"JPEG": (".jpg", ".jpeg"), "TIFF": (".tif", ".tiff"), "PNG": (".png",), "BMP": (".bmp",),
                             "WEBP": (".webp",)}
@@ -373,6 +402,77 @@ def dibujar_perfil(ax, resultado, perfil, fila, color=TINTA, leyenda=False):
         ax.legend(loc="lower center", fontsize=7, ncol=3)
 
 
+# ------------------------------------------------------------------------------------- la imagen sintética (puros)
+
+def texto_valor(clave, entero):
+    """El valor de un deslizador como se muestra (la unidad ya está en su rótulo): 2.2, 50, -0.6."""
+    d = DESLIZADOR[clave]
+    return str(entero) if d.decimales == 0 else _numero(entero / d.escala, d.decimales)
+
+
+def parametros_sinteticos(enteros):
+    """De los enteros de los deslizadores (`{clave: entero}`) a lo que recibe el motor: los anchos y el desfase en [mm] y la
+    saturación como fracción del pico. Es la ÚNICA conversión: la usan el cálculo y las pruebas."""
+    return {"ancho_x_mm": enteros["ancho_x"] / DESLIZADOR["ancho_x"].escala,
+            "ancho_y_mm": enteros["ancho_y"] / DESLIZADOR["ancho_y"].escala,
+            "saturacion": enteros["saturacion"] / DESLIZADOR["saturacion"].escala,
+            "desfase_mm": enteros["desfase"] / DESLIZADOR["desfase"].escala}
+
+
+def analizar_sintetica(p):
+    """La placa sintética con esos parámetros, analizada con el MISMO `motor.analizar` que la imagen real."""
+    gris, color, dpi, puntos = motor.placa_sintetica(p["desfase_mm"], p["ancho_x_mm"], p["ancho_y_mm"], p["saturacion"])
+    return motor.analizar(gris, color, dpi, puntos)
+
+
+def texto_sintetica(real_mm, resultado):
+    """`Real -0.60 mm, medido -0.60 mm, error 0.00 mm` (el error es medido menos real), o por qué no se mide. Si el motor
+    no refinó la línea la placa se midió contra los puntos y se dice: sin el aviso, ese número se leería como medida
+    buena."""
+    s = motor.resumen(resultado)
+    real = _numero(real_mm, 2)
+    if s["estado"] != "ok":
+        return f"Real {real} mm, no medible: {_motivo_de_estado(s['estado'])}"
+    medido = s["desfase_mm"]
+    texto = f"Real {real} mm, medido {_numero(medido, 2)} mm, error {_numero(medido - real_mm, 2)} mm"
+    if motivo_para_no_guardar(resultado):
+        texto += " (la línea no se refinó: se midió contra los puntos)"
+    return texto
+
+
+def dibujar_barrido(ax, puntos, actual, tolerancia):
+    """Real contra medido, como la gráfica de calibración del notebook: la franja de tolerancia, la diagonal medido = real,
+    los puntos del barrido, los que no se pudieron medir aparte (cruces sobre el borde inferior) y el punto de la placa
+    que se muestra, resaltado. `puntos` son los pares `(real, medido o None)` de `motor.barrido_sintetico`; `actual` es el
+    par de la placa mostrada."""
+    medidos = [(r, m) for r, m in puntos if m is not None]
+    no_medibles = [r for r, m in puntos if m is None]
+    real, medido = actual
+    valores = [abs(r) for r, _ in puntos] + [abs(m) for _, m in medidos] + [abs(real)]
+    if medido is not None:
+        valores.append(abs(medido))
+    limite = max(6.0, max(valores) + 1.0)
+    suelo = -limite + 0.4
+    ax.axhspan(-tolerancia, tolerancia, color=COLOR_REJILLA, alpha=0.6, label=f"tolerancia ±{_tolerancia(tolerancia)} mm")
+    ax.plot([-limite, limite], [-limite, limite], color=TINTA_SUAVE, lw=1, label="medido = real")
+    ax.plot([r for r, _ in medidos], [m for _, m in medidos], "o", ms=6, color=COLOR_MEDIDO,
+            label=f"barrido de {len(puntos)} desfases")
+    if no_medibles:
+        ax.plot(no_medibles, [suelo] * len(no_medibles), "x", ms=7, mew=1.5, color=TINTA, label="no medible")
+    if medido is None:
+        ax.plot([real], [suelo], "X", ms=11, color=COLOR_REFERENCIA, mec=TINTA, label="placa mostrada, no medible")
+    else:
+        ax.plot([real], [medido], "D", ms=9, color=COLOR_REFERENCIA, mec=TINTA, label="placa mostrada")
+    ax.set_xlim(-limite, limite)
+    ax.set_ylim(-limite, limite)
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(color=COLOR_REJILLA)
+    ax.set_xlabel("desfase real [mm]")
+    ax.set_ylabel("desfase medido [mm]")
+    ax.set_title("Medido contra real", fontsize=9)
+    ax.legend(fontsize=7, loc="upper left")
+
+
 # ------------------------------------------------------------------------------------------- ningún manejador escapa
 
 def _protegido(titulo, por_defecto=None):
@@ -393,6 +493,42 @@ def _protegido(titulo, por_defecto=None):
     return decorador
 
 
+# ---------------------------------------------------------------------------------- piezas de pantalla compartidas
+
+def _nuevo_lienzo(mpl):
+    """(contenedor, figura, lienzo, barra): la figura NO se registra en pyplot (nunca `plt.*`), así que se libera al soltar
+    la referencia. Lo usan las pestañas de la página y la imagen sintética."""
+    contenedor = QWidget()
+    capa = QVBoxLayout(contenedor)
+    capa.setContentsMargins(0, 0, 0, 0)
+    figura = mpl["Figure"](layout="constrained")
+    lienzo = mpl["FigureCanvas"](figura)
+    barra = mpl["NavigationToolbar"](lienzo, contenedor)
+    capa.addWidget(barra)
+    capa.addWidget(lienzo, 1)
+    return contenedor, figura, lienzo, barra
+
+
+def _recuadro():
+    """El aspecto del recuadro de resultado de `mostrar_resultados_AnalisisImagen` (texto con borde y relleno), sin reutilizar
+    esa función: ella borra a sus hermanos con `deleteLater` (V6 y DA-71)."""
+    recuadro = QLabel()
+    recuadro.setTextFormat(Qt.PlainText)
+    recuadro.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+    recuadro.setWordWrap(True)
+    recuadro.setTextInteractionFlags(Qt.TextSelectableByMouse)
+    recuadro.setStyleSheet("padding: 5px; border: 1px solid #ccc;")
+    return recuadro
+
+
+def _apagar_barra(barra):
+    """Lupa y desplazar apagadas (X4): `zoom()` y `pan()` alternan, así que solo se llaman si están activas."""
+    if barra.mode == "zoom rect":
+        barra.zoom()
+    elif barra.mode == "pan/zoom":
+        barra.pan()
+
+
 # ------------------------------------------------------------------------------------------------------------ página
 
 class _SelectorSinRueda(QComboBox):
@@ -407,6 +543,183 @@ class _SelectorSinRueda(QComboBox):
             evento.ignore()
 
 
+class _DeslizadorSinRueda(QSlider):
+    """Como el combo: la rueda del ratón solo mueve el deslizador si tiene el foco (sin él, un paso de rueda al pasar por la
+    pestaña cambiaba un parámetro y lanzaba un cálculo de varios segundos; lo midió la revisión de Opus de PI.5)."""
+
+    def wheelEvent(self, evento):
+        if self.hasFocus():
+            super().wheelEvent(evento)
+        else:
+            evento.ignore()
+
+
+class PestanaSintetica(QWidget):
+    """PI.5 (D6): la imagen sintética. Cuatro deslizadores (anchos en X e Y de la mancha, saturación y desfase real), la
+    placa sintética de ese desfase con su línea y sus centros, su perfil y la gráfica real contra medido del barrido de
+    desfases. Sin acceso a la BD. El cálculo es de varios segundos: corre al soltar un deslizador y la primera vez que se
+    abre la pestaña, dentro de la espera de la página (UX1); nunca en cada paso de un arrastre. `con_espera(texto,
+    funcion)` es la espera de la página (indicador, cursor y `try/finally`): una pestaña suelta usa una que solo llama
+    a la función."""
+
+    def __init__(self, con_espera=None, parent=None):
+        super().__init__(parent)
+        self._con_espera = con_espera or (lambda texto, funcion: funcion())
+        self._construir()
+        self.reiniciar()
+
+    def _construir(self):
+        mpl = get_matplotlib_components()
+        capa = QHBoxLayout(self)
+        # Los controles a la izquierda y los dibujos a la derecha: encima de los dibujos, cuatro deslizadores y la nota se
+        # comían 155 px y a 1280 x 760 la figura quedaba en 180 px de alto (medido en la captura): tres ejes aplastados.
+        controles = QVBoxLayout()
+        self.rotulos, self.deslizadores, self.valores = {}, {}, {}
+        for d in DESLIZADORES:
+            rotulo, valor = QLabel(d.rotulo), QLabel()
+            valor.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            valor.setMinimumWidth(40)
+            fila = QHBoxLayout()
+            fila.addWidget(rotulo, 1)
+            fila.addWidget(valor)
+            deslizador = _DeslizadorSinRueda(Qt.Horizontal)
+            deslizador.setRange(d.minimo, d.maximo)
+            deslizador.setValue(d.omision)
+            controles.addLayout(fila)
+            controles.addWidget(deslizador)
+            self.rotulos[d.clave] = rotulo
+            self.deslizadores[d.clave] = deslizador
+            self.valores[d.clave] = valor
+            # Cada señal por su pasarela. NUNCA `valueChanged` directo al cálculo: un arrastre emite uno por paso y cada
+            # cálculo son varios segundos (la prueba de PI.5 mide cuántos análisis dispara un gesto).
+            deslizador.valueChanged.connect(lambda entero, clave=d.clave: self._al_cambiar_valor(clave, entero))
+            deslizador.sliderPressed.connect(lambda *_: self._al_pulsar_deslizador())
+            deslizador.sliderReleased.connect(lambda *_: self._actualizar())
+        self.nota = QLabel(NOTA_SINTETICA)
+        self.nota.setWordWrap(True)
+        controles.addWidget(self.nota)
+        controles.addStretch(1)
+        panel = QWidget()
+        panel.setLayout(controles)
+        panel.setFixedWidth(ANCHO_DE_LOS_CONTROLES)
+        capa.addWidget(panel)
+        dibujos = QVBoxLayout()
+        contenedor, self.figura, self.lienzo, self.barra = _nuevo_lienzo(mpl)
+        dibujos.addWidget(contenedor, 1)
+        self.recuadro = _recuadro()
+        dibujos.addWidget(self.recuadro)
+        capa.addLayout(dibujos, 1)
+        self._temporizador = QTimer(self)
+        self._temporizador.setSingleShot(True)
+        self._temporizador.setInterval(RETRASO_SINTETICA_MS)
+        self._temporizador.timeout.connect(lambda *_: self._al_vencer_temporizador())
+        self._barrido = None             # (forma, puntos): el último barrido; solo depende de los tres parámetros de forma
+
+    # ------------------------------------------------------------------------------------------------------ estado
+
+    @property
+    def calculada(self):
+        return self._calculada
+
+    def parametros(self):
+        """Lo que recibe el motor con los deslizadores como están ahora."""
+        return parametros_sinteticos({clave: d.value() for clave, d in self.deslizadores.items()})
+
+    def _descartar(self):
+        """IM3: antes de calcular, el resultado anterior desaparece (si el cálculo falla no queda uno viejo en pantalla)."""
+        self._calculada = False
+        self._ultimos = None
+        self.recuadro.clear()
+        self.figura.clear()
+        self.barra.update()              # X5: sin esto, Home volvería a la vista de la figura anterior
+        self.lienzo.draw_idle()
+
+    def reiniciar(self):
+        """El estado de arranque, y el ÚNICO sitio que lo define: `__init__` lo llama y 'Limpiar' de la página lo llama
+        otra vez (la prueba compara con una huella del árbol de widgets). Los valores por omisión se ponen con las señales
+        bloqueadas: reiniciar no es un gesto del físico y no debe disparar un cálculo."""
+        self._temporizador.stop()
+        for d in DESLIZADORES:
+            deslizador = self.deslizadores[d.clave]
+            deslizador.blockSignals(True)
+            deslizador.setValue(d.omision)
+            deslizador.blockSignals(False)
+            self.valores[d.clave].setText(texto_valor(d.clave, d.omision))
+        self._barrido = None
+        self._descartar()
+        _apagar_barra(self.barra)
+
+    # ------------------------------------------------------------------------------------------------ los manejadores
+
+    @_protegido("Imagen sintética")
+    def _al_cambiar_valor(self, clave, entero):
+        """El valor visible sigue al deslizador en cada paso (es barato); el cálculo no: arrastrando, lo dispara el
+        soltar; con el teclado, la rueda o un clic en la barra no hay soltar, así que se arma un temporizador de un
+        disparo."""
+        self.valores[clave].setText(texto_valor(clave, entero))
+        if not self.deslizadores[clave].isSliderDown():
+            self._temporizador.start()
+
+    @_protegido("Imagen sintética")
+    def _al_pulsar_deslizador(self):
+        """Pulsar un asa detiene el temporizador que un cambio anterior del teclado dejó armado: vencería con el ratón
+        apretado y el gesto acabaría en dos cálculos (medido por la revisión de Opus de PI.5)."""
+        self._temporizador.stop()
+
+    @_protegido("Imagen sintética")
+    def _al_vencer_temporizador(self):
+        """Con un botón del ratón apretado (el asa, o un clic mantenido en la barra, que Qt repite cada medio segundo) el gesto
+        no terminó: se vuelve a armar y se calcula al soltar o al dejar de moverse."""
+        if QApplication.mouseButtons() or any(d.isSliderDown() for d in self.deslizadores.values()):
+            self._temporizador.start()
+            return
+        self._actualizar()
+
+    @_protegido("Imagen sintética")
+    def al_mostrarse(self):
+        """La primera vez que se abre la pestaña (la página no calcula al construirse: son unos segundos)."""
+        if not self._calculada:
+            self._actualizar()
+
+    @_protegido("Imagen sintética")
+    def _actualizar(self):
+        self._temporizador.stop()
+        p = self.parametros()
+        if self._calculada and p == self._ultimos:
+            return                       # soltar sin mover no cambia nada: ni se recalcula ni se pierde el zoom
+        self._descartar()
+        try:
+            self._con_espera(TEXTO_SINTETICA, lambda: self._calcular(p))
+        except Exception:
+            self._descartar()            # un fallo a medio dibujar no deja medio dibujo en pantalla
+            raise
+
+    def _calcular(self, p):
+        resultado = analizar_sintetica(p)
+        forma = (p["ancho_x_mm"], p["ancho_y_mm"], p["saturacion"])
+        if self._barrido is None or self._barrido[0] != forma:
+            self._barrido = (forma, motor.barrido_sintetico(*forma))
+        self._mostrar(p, resultado, self._barrido[1])
+        self._ultimos = p
+        self._calculada = True
+
+    def _mostrar(self, p, resultado, barrido):
+        """Dibuja sobre la figura ya vacía: `_actualizar` llama antes a `_descartar` (que la vacía y deja a la barra sin
+        historial), y es lo que garantiza que un fallo no deja nada viejo."""
+        fila = fila_representativa(resultado, "gris")
+        rejilla = self.figura.add_gridspec(2, 2, width_ratios=(3, 2))
+        ventana = self.figura.add_subplot(rejilla[0, 0])
+        dibujar_ventana(ventana, resultado, "gris", fila)
+        ventana.set_ylabel("fila [px]")             # el rótulo largo de la pestaña del gris no cabe en este eje bajo
+        dibujar_perfil(self.figura.add_subplot(rejilla[1, 0]), resultado, "gris", fila, leyenda=True)
+        s = motor.resumen(resultado)
+        medido = s["desfase_mm"] if s["estado"] == "ok" else None
+        dibujar_barrido(self.figura.add_subplot(rejilla[:, 1]), barrido, (p["desfase_mm"], medido),
+                        resultado["parametros"]["tolerancia_mm"])
+        self.recuadro.setText(texto_sintetica(p["desfase_mm"], resultado))
+        self.lienzo.draw_idle()
+
+
 class PosicionInicialBraqui(QWidget):
     def __init__(self, user_id, parent=None):
         """`user_id` es el OBJETO de usuario de la sesión (no un texto): el nombre para el servicio sale de
@@ -418,32 +731,6 @@ class PosicionInicialBraqui(QWidget):
         self.refrescar()
 
     # ----------------------------------------------------------------------------------------------------- construir
-
-    @staticmethod
-    def _nuevo_lienzo(mpl):
-        """(contenedor, figura, lienzo, barra): la figura NO se registra en pyplot (nunca `plt.*`), así que se libera al
-        soltar la referencia."""
-        contenedor = QWidget()
-        capa = QVBoxLayout(contenedor)
-        capa.setContentsMargins(0, 0, 0, 0)
-        figura = mpl["Figure"](layout="constrained")
-        lienzo = mpl["FigureCanvas"](figura)
-        barra = mpl["NavigationToolbar"](lienzo, contenedor)
-        capa.addWidget(barra)
-        capa.addWidget(lienzo, 1)
-        return contenedor, figura, lienzo, barra
-
-    @staticmethod
-    def _recuadro():
-        """El aspecto del recuadro de resultado de `mostrar_resultados_AnalisisImagen` (texto con borde y relleno), sin
-        reutilizar esa función: ella borra a sus hermanos con `deleteLater` (V6 y DA-71)."""
-        recuadro = QLabel()
-        recuadro.setTextFormat(Qt.PlainText)
-        recuadro.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        recuadro.setWordWrap(True)
-        recuadro.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        recuadro.setStyleSheet("padding: 5px; border: 1px solid #ccc;")
-        return recuadro
 
     def _construir(self):
         """Todos los widgets, una sola vez: ninguno se crea ni se destruye después (un widget que alguien vacía deja
@@ -498,25 +785,28 @@ class PosicionInicialBraqui(QWidget):
         fila_botones.addWidget(self.etiqueta_registro, 1)
         principal.addLayout(fila_botones)
 
-        # Pestañas: la imagen para marcar, el perfil del gris y las tres capas. PI.5 añade la suya al final.
+        # Pestañas: la imagen para marcar, el perfil del gris, las tres capas y, al final, la imagen sintética (PI.5), que
+        # es de la pestaña misma: no depende de la imagen que se haya subido.
         self.pestanas = QTabWidget()
-        tab_imagen, self._fig_imagen, self.lienzo_imagen, self.barra_imagen = self._nuevo_lienzo(mpl)
+        tab_imagen, self._fig_imagen, self.lienzo_imagen, self.barra_imagen = _nuevo_lienzo(mpl)
         self.eje_imagen = self._fig_imagen.add_subplot(111)
-        contenedor_gris, self._fig_gris, self.lienzo_gris, self.barra_gris = self._nuevo_lienzo(mpl)
+        contenedor_gris, self._fig_gris, self.lienzo_gris, self.barra_gris = _nuevo_lienzo(mpl)
         tab_gris = QWidget()
         capa_gris = QVBoxLayout(tab_gris)
         capa_gris.addWidget(contenedor_gris, 1)
-        self.recuadro_gris = self._recuadro()
+        self.recuadro_gris = _recuadro()
         capa_gris.addWidget(self.recuadro_gris)
-        contenedor_rgb, self._fig_rgb, self.lienzo_rgb, self.barra_rgb = self._nuevo_lienzo(mpl)
+        contenedor_rgb, self._fig_rgb, self.lienzo_rgb, self.barra_rgb = _nuevo_lienzo(mpl)
         tab_rgb = QWidget()
         capa_rgb = QVBoxLayout(tab_rgb)
         capa_rgb.addWidget(contenedor_rgb, 1)
-        self.recuadro_rgb = self._recuadro()
+        self.recuadro_rgb = _recuadro()
         capa_rgb.addWidget(self.recuadro_rgb)
         self.pestanas.addTab(tab_imagen, "Imagen")
         self.pestanas.addTab(tab_gris, "Perfil gris")
         self.pestanas.addTab(tab_rgb, "Capas RGB")
+        self.sintetica = PestanaSintetica(self._con_espera)
+        self.pestanas.addTab(self.sintetica, "Imagen sintética")
         principal.addWidget(self.pestanas, 3)
 
         # Registros guardados.
@@ -547,6 +837,7 @@ class PosicionInicialBraqui(QWidget):
         # UN solo manejador de clics, aquí y no al instalar cada imagen: ya hay otros tres de la barra y N imágenes
         # seguidas acumularían N marcas por clic.
         self.lienzo_imagen.mpl_connect("button_press_event", self._al_pulsar)
+        self.pestanas.currentChanged.connect(lambda indice: self._al_cambiar_pestana(indice))
 
     # ------------------------------------------------------------------------------------------------------ estado
 
@@ -584,10 +875,7 @@ class PosicionInicialBraqui(QWidget):
     def _apagar_herramientas(self):
         """Lupa y desplazar apagadas (X4): `zoom()` y `pan()` alternan, así que solo se llaman si están activas."""
         for barra in (self.barra_imagen, self.barra_gris, self.barra_rgb):
-            if barra.mode == "zoom rect":
-                barra.zoom()
-            elif barra.mode == "pan/zoom":
-                barra.pan()
+            _apagar_barra(barra)
 
     def _rotular_eje_imagen(self):
         self.eje_imagen.set_xlabel("columna de la imagen [px]")
@@ -620,6 +908,7 @@ class PosicionInicialBraqui(QWidget):
         self.selector_cambio.setCurrentIndex(0 if self.selector_cambio.count() else -1)
         self.tabla_registros.clearSelection()
         self.tabla_registros.setCurrentCell(-1, -1)
+        self.sintetica.reiniciar()
         self.pestanas.setCurrentIndex(PESTANA_IMAGEN)
         self.lienzo_imagen.draw_idle()
 
@@ -834,6 +1123,13 @@ class PosicionInicialBraqui(QWidget):
         self.lienzo_rgb.draw_idle()
 
     # ------------------------------------------------------------------------------------------------ los botones
+
+    @_protegido("Cambiar de pestaña")
+    def _al_cambiar_pestana(self, indice):
+        """La imagen sintética no calcula al construirse la página (son unos segundos): la primera vez que se abre su
+        pestaña."""
+        if indice == PESTANA_SINTETICA:
+            self.sintetica.al_mostrarse()
 
     @_protegido("Recalcular")
     def _al_recalcular(self):
