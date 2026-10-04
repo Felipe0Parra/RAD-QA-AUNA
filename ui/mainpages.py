@@ -29,6 +29,10 @@ from services.respaldo import respaldar_bd
 # fecha (braq_mensual.py:124) y no tiene boton "Iniciar", asi que no hay
 # ningun control que "cerrar". Excluirla saca del alcance, ademas, el
 # acoplamiento de `posicionamiento` (SS0.5a) -- el mas delicado de los dos.
+# PI.6: el menu de "Cal. Fuente" ya no ofrece la pagina vieja de posicion
+# inicial y la pagina nueva ("posicion_inicial", boton propio) no es
+# cerrable; la vieja sigue construyendose dentro del mensual hasta PI.9,
+# pero ya nadie la muestra.
 CLAVES_CERRABLES = ("mensual", "anual", "imagen_mensual", "imagen_anual")
 
 # A.3 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): paginas que se construyen
@@ -137,15 +141,18 @@ class Menuu(QWidget):
             menu = QMenu(self)
             actividad_action = menu.addAction("Calibración Redundante")
             linealidad_action = menu.addAction("Linealidad de la Fuente")
-            posicionamiento_action = menu.addAction("Posicionamiento Inicial")
             self.cf_btn.setMenu(menu)
 
             # Conexión de acciones del menú
             actividad_action.triggered.connect(lambda: self.seleccionar_cambio_fuente("Calibración Redundante"))
             linealidad_action.triggered.connect(lambda: self.seleccionar_cambio_fuente("Linealidad de la Fuente"))
-            posicionamiento_action.triggered.connect(lambda: self.seleccionar_cambio_fuente("Posicionamiento Inicial"))
 
             top_buttons_layout.addWidget(self.cf_btn)
+            # PI.6: una sola entrada para la prueba de posicion inicial, justo
+            # debajo de "Cal. Fuente" y encima de "Cerrar control" (A.2 exige
+            # "Cerrar control" inmediatamente encima de "Inicio").
+            self.pi_btn = QPushButton("Posición inicial")
+            top_buttons_layout.addWidget(self.pi_btn)
 
         top_buttons_layout.addWidget(self.cerrar_ctrl_btn)
         top_buttons_layout.addWidget(self.back_button)
@@ -169,6 +176,8 @@ class Menuu(QWidget):
         if self.maquina in ("Halcyon", "iX"):
             self.pa_img_btn.clicked.connect(lambda: self._mostrar_pagina("imagen_anual"))
             self.pm_img_btn.clicked.connect(lambda: self._mostrar_pagina("imagen_mensual"))
+        if self.maquina == "Braquiterapia":
+            self.pi_btn.clicked.connect(lambda: self._mostrar_pagina("posicion_inicial"))
         # Layout principal
         master_layout.addWidget(self.menu_widget, 5)
         master_layout.addWidget(self.pages_widget, 95)
@@ -193,8 +202,6 @@ class Menuu(QWidget):
             self._mostrar_pagina("cal_fuente")
         elif opcion == "Linealidad de la Fuente":
             self._mostrar_pagina("linealidad")
-        elif opcion == "Posicionamiento Inicial":
-            self._mostrar_pagina("posicionamiento")
 
     def block(self):
         #self.pd_btn.setEnabled(False)
@@ -465,11 +472,13 @@ class Menuu(QWidget):
             if Linealidad:
                 return Linealidad(self.user_id)
 
-        if clave == "posicionamiento":
-            mensual = self._obtener_pagina("mensual")
-            if mensual is not None and hasattr(mensual, "posicionamiento"):
-                return mensual.posicionamiento
-            return None
+        if clave == "posicion_inicial":
+            PosicionInicialBraqui = self._importar_clase(
+                "ui.paginasControles.PruebasMensuales.posicion_inicial_braqui",
+                "PosicionInicialBraqui"
+            )
+            if PosicionInicialBraqui:
+                return PosicionInicialBraqui(self.user_id)
         return None
 
 class MainWindow(QMainWindow):
