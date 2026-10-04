@@ -430,3 +430,13 @@ def texto_breve(registro, con_cambio_de_fuente=True):
     if con_cambio_de_fuente and registro.get("fecha"):
         cuerpo += f". Cambio de fuente del {registro['fecha']}"
     return cuerpo
+
+
+def texto_para_pdf(fecha, serie=SIN_FILTRO_DE_SERIE):
+    """PI.7/PI.8: lo que un PDF imprime como posición inicial en `fecha`: el texto breve de la prueba que vale ese día (la regla
+    es `posicion_inicial_para`, con `serie` en el mensual, DD8) o None si no hay ninguna. Es la ÚNICA definición de qué dice un
+    PDF: el diario y el mensual la llaman, ninguno arma su propio texto ni su propia búsqueda. Si falla (BD, regla) la excepción
+    sube: un PDF firmado no debe salir sin el dato ni con un valor que no es el de la fuente en uso. Quien llama decide qué
+    imprime cuando devuelve None (el mensual, el valor que ya traía; el diario, nada)."""
+    registro = posicion_inicial_para(fecha, serie)
+    return texto_breve(registro) if registro else None

@@ -1355,7 +1355,7 @@ def _crear_tabla_condiciones_medicion(datos_completos):
         tabla.append(['Temperatura de medida (°C)', t])
         tabla.append(['Presión de medida (mmHg)', p])
         tabla.append(['Humedad de medida (%)', h])
-        tabla.append(['Desplazamiento inicial (mm)', desplazamiento_ini])
+        tabla.append(['Desplazamiento inicial (mm)', _desplazamiento_inicial_para_pdf(datos_completos, desplazamiento_ini)])
 
     return pd.DataFrame(tabla, columns=['Condiciones de medición', ''])
 
@@ -1657,3 +1657,16 @@ def _crear_grafico_linealidad(datos_completos):
     buf.close()
 
     return pd.DataFrame([[img_base64]], columns=['Gráfico de linealidad'])
+
+
+def _desplazamiento_inicial_para_pdf(datos_completos, valor_guardado):
+    """PI.7 (DA-82 D2): el valor de la fila "Desplazamiento inicial" del mensual de braquiterapia es la posición inicial de la fuente
+    en uso -- el texto breve de la prueba que vale en la fecha y para la serie de ESTA calibración (`datos_completos`, nunca el
+    `fecha` con que se pidió el reporte: `_obtener_referencia_braquiterapia` puede caer a otra calibración del día) -- y dura lo que
+    dura la fuente. Si no hay prueba vigente (o la serie no es la suya, DD8) queda EXACTAMENTE el valor que ya traía la calibración
+    (el mismo objeto: un REAL, un texto o 'No Aplica'). Si la hay, manda ella aunque diga "No medible": volver al valor viejo
+    imprimiría una cifra del método retirado sin decir de dónde sale. Va al final del archivo, con su import local, para no
+    desplazar las citas por línea de los censores (Trampa 5)."""
+    from services.posicion_inicial_braqui import texto_para_pdf
+    texto = texto_para_pdf(datos_completos.get('fecha'), serie=datos_completos.get('serie'))
+    return valor_guardado if texto is None else texto
