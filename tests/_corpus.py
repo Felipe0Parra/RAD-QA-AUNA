@@ -52,8 +52,11 @@ CATPHAN = {
     "TOMOGRAFO": "QA tomografo Catphan",
     "HALCYON_SEP": "QA Halcyon Catphan",
     "HALCYON_JUN": os.path.join("DICOM", "CatphanHalcyonJunio2026"),
-    "HALCYON_236": os.path.join("DICOM", "CATPHANKV"),
-    "IX_DIC": os.path.join("DICOM", "Catphandiciembre"),
+    # PR.0 (05-10-2026, DP-151): estas dos carpetas se renombraron (`CATPHANKV` -> `CATPHANKV-Halcyon`,
+    # `Catphandiciembre` -> `Catphandiciembre-iX`) y 133 pruebas se saltaron en silencio. Si vuelve a pasar,
+    # `tests/test_pr0_corpus_completo.py` falla nombrando la serie que falta.
+    "HALCYON_236": os.path.join("DICOM", "CATPHANKV-Halcyon"),
+    "IX_DIC": os.path.join("DICOM", "Catphandiciembre-iX"),
     "MIXTA": "Catphan",
 }
 
