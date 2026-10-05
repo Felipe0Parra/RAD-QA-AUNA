@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import QApplication, QMessageBox, QPushButton
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
 from ui.paginasControles.PruebasDiarias.braquiterapia import (
-    PruebaDiariaBraq, PosicionamientoInicial, Linealidad)
+    PruebaDiariaBraq, Linealidad)
 from ui.paginasControles.PruebasMensuales.braq_mensual import PruebaMensualBraq
 
 FECHA_FUENTE = "2026-01-01 00:00:00"
@@ -339,18 +339,13 @@ class TestAlcanceResetearImagenUiOtrasPantallas:
     y (según el propio código) `PruebaMensualBraq` -- [medido durante la
     ejecución]: `PruebaMensualBraq` NUNCA pasa `imagenes=True` en su
     cableado real (:1201 llama `clean_info(imagenes=False)`), así que solo
-    `PosicionamientoInicial` la alcanza de verdad hoy."""
+    `PosicionamientoInicial` la alcanza de verdad hoy.
 
-    def test_posicionamiento_inicial_sigue_igual_de_roto_no_lo_rompio_ni_lo_arreglo_h1(
-            self, app, bd_temporal):
-        """Hallazgo del propio barrido de alcance (§4.2 del plan): este
-        botón YA estaba roto antes de H1 (`resetear_imagen_ui` no existe en
-        `PosicionamientoInicial`) -- H1 no debe cambiar ESE síntoma, ni para
-        bien ni para mal, porque no es de este plan."""
-        d = PosicionamientoInicial(_UsuarioFalso())
+    [PI.9] La clase `PosicionamientoInicial` se retiró (DP-139): queda solo la prueba de `PruebaMensualBraq`."""
 
-        with pytest.raises(AttributeError):
-            d.clean_info(imagenes=True)
+    # PI.9: retirada con PosicionamientoInicial (reemplazo completo, DP-139):
+    # `test_posicionamiento_inicial_sigue_igual_de_roto_no_lo_rompio_ni_lo_arreglo_h1` (el boton "Limpiar" de la clase vieja,
+    # roto de origen: `resetear_imagen_ui` no existia ahi) ya no tiene objeto.
 
     def test_mensual_braqui_limpiar_datos_sigue_funcionando(self, app, bd_temporal):
         d = PruebaMensualBraq(_UsuarioFalso())

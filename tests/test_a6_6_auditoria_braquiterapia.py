@@ -3,9 +3,9 @@ en `audit_log` -- archivos que no tenían NI UNA sola llamada de auditoría.
 
 - `guardar_resultado_CambioFuente` (data/ManejoDatos/load.py): 11 escrituras
   (TipoCalibracion + 5 tablas hijas) para una sola acción -- 1 fila.
-- `PruebaMensualBraq.actualizar_desplazamiento_en_db` (braq_mensual.py).
+- ~~`PruebaMensualBraq.actualizar_desplazamiento_en_db` (braq_mensual.py).~~ (retirada en PI.9, DP-139)
 - `Linealidad.guardar_linealidad` y los dos `eliminar_fila_resultado`
-  (`PruebaDiariaBraq`/`PosicionamientoInicial`, ui/paginasControles/
+  (`PruebaDiariaBraq` y, hasta PI.9, `PosicionamientoInicial`, ui/paginasControles/
   PruebasDiarias/braquiterapia.py) -- estos dos últimos conectan a
   `resultados.db` (DP-08, tabla fantasma, fuera de alcance de esta tarea):
   se audita igual el punto de escritura, aunque hoy la tabla no exista.
@@ -30,7 +30,7 @@ import ui.paginasControles.PruebasMensuales.braq_mensual as braq_mensual_mod
 from ui.paginasControles.PruebasMensuales.braq_mensual import PruebaMensualBraq
 import ui.paginasControles.PruebasDiarias.braquiterapia as braq_mod
 from ui.paginasControles.PruebasDiarias.braquiterapia import (
-    Linealidad, PruebaDiariaBraq, PosicionamientoInicial,
+    Linealidad, PruebaDiariaBraq,
 )
 
 
@@ -91,19 +91,8 @@ class TestGuardarResultadoCambioFuenteAuditaUnaVez:
              "cambio de fuente (braquiterapia)")]
 
 
-class TestActualizarDesplazamientoAudita:
-    def test_audita_con_ref_bd(self, app, bd_temporal):
-        obj = PruebaMensualBraq.__new__(PruebaMensualBraq)
-        QWidget.__init__(obj)
-        obj.user_id = _UsuarioFalso("Físico de Prueba")
-        obj.ref = 1
-        obj.ref_bd = 5
-
-        obj.actualizar_desplazamiento_en_db("1.2")
-
-        filas = _audit_log(bd_temporal)
-        assert filas == [
-            ("Físico de Prueba", "actualizar", "CondicionesMedicion", "5", "")]
+# PI.9: retirada con PosicionamientoInicial (reemplazo completo, DP-139):
+# la clase `TestActualizarDesplazamientoAudita` probaba `PruebaMensualBraq.actualizar_desplazamiento_en_db`, que se retiró con ella.
 
 
 def _linealidad_pelada():
@@ -186,16 +175,5 @@ class TestEliminarFilaResultadoAudita:
         assert filas == [
             ("Físico de Prueba", "eliminar", "resultados", "7", "")]
 
-    def test_posicionamiento_inicial_audita_el_borrado(self, app, bd_temporal, monkeypatch, tmp_path):
-        self._con_tabla_resultados(monkeypatch, tmp_path)
-        obj = PosicionamientoInicial.__new__(PosicionamientoInicial)
-        QWidget.__init__(obj)
-        obj.user_id = _UsuarioFalso("Físico de Prueba")
-        obj.resultados_table = _tabla_con_fila(7)
-        obj.cargar_y_mostrar_resultados = lambda: None
-
-        obj.eliminar_fila_resultado()
-
-        filas = _audit_log(bd_temporal)
-        assert filas == [
-            ("Físico de Prueba", "eliminar", "resultados", "7", "")]
+    # PI.9: retirada con PosicionamientoInicial (reemplazo completo, DP-139):
+    # `test_posicionamiento_inicial_audita_el_borrado` (su `eliminar_fila_resultado`) ya no tiene objeto.

@@ -1071,12 +1071,12 @@ class PruebaBasico(QWidget):
         `figure`), una de las dos pilas de limpieza de imagen que
         discrepaban [medido, §0 del plan].
 
-        `PosicionamientoInicial` (otra clase, con su PROPIA maquinaria de
-        análisis -- `resultado_label_ini`, `_crear_parametros` propio) NO
-        tiene `resetear_imagen_ui`; conserva el reseteo mínimo de siempre,
-        sin cambio de comportamiento -- fuera del alcance de este plan
-        (que es sobre el diario de braqui, no sobre posicionamiento
-        inicial)."""
+        Las demás clases que lo heredan y NO tienen `resetear_imagen_ui`
+        (la pantalla vieja de posición inicial, retirada en PI.9, era una:
+        con su PROPIA maquinaria de análisis) conservan el reseteo mínimo
+        de siempre, sin cambio de comportamiento -- fuera del alcance de
+        este plan (que es sobre el diario de braqui, no sobre otra
+        pantalla)."""
         if hasattr(self, 'resetear_imagen_ui'):
             self.resetear_imagen_ui()
             return

@@ -43,15 +43,6 @@ class PruebaMensualBraq(PruebaBasico):
         mostrar_db_mensualBraqui(self)
         self.normalizar_fechas_db()
 
-
-        from ui.paginasControles.PruebasDiarias.braquiterapia import PosicionamientoInicial
-        # Crear instancia de PosicionamientoInicial
-        self.posicionamiento = PosicionamientoInicial(self.user_id)
-        self.posicionamiento.desplazamientoReady.connect(self.actualizar_desplazamiento)
-
-        #print(f"\n📌 Posicionamiento conectado desde: {id(self.posicionamiento)}")
-
-    """ Conectar la señal de actualización de desplazamiento                                                                                                                                                       """
     def normalizar_fechas_db(self):
         conn = Conexion().conectar()
         cursor = conn.cursor()
@@ -76,55 +67,6 @@ class PruebaMensualBraq(PruebaBasico):
             traceback.print_exc()
             print("Error normalizando fechas:", e)
 
-        finally:
-            conn.close()
-    def actualizar_desplazamiento(self, valor):
-        print(f"Desplazamiento recibido: {valor}")
-        try:
-            if isinstance(valor, list) and len(valor) > 0:
-                self.desplazamiento_ini = float(valor[0])
-            elif isinstance(valor, (float, int)):
-                self.desplazamiento_ini = float(valor)
-            else:
-                raise ValueError("Formato de desplazamiento inválido")
-
-            print("llamando a guardar_DB")
-            self.actualizar_desplazamiento_en_db(self.desplazamiento_ini)
-
-        except (ValueError, TypeError) as e:
-            traceback.print_exc()
-            print(f"Valor de desplazamiento inválido: {e}")
-
-    """ Actualiza el desplazamiento en la base de datos                                                                                                                                                                 """
-    def actualizar_desplazamiento_en_db(self, desplazamiento):
-        print(f"ref existe: {hasattr(self, 'ref')}")
-        print(f"ref_bd existe: {hasattr(self, 'ref_bd')}")
-        print(f"ref_bd valor: {getattr(self, 'ref_bd', 'NO EXISTE')}")
-        print(f"⏎ Actualizando desplazamiento_ini en BD: {desplazamiento}")
-        if not hasattr(self, "ref") or self.ref_bd is None:
-            print(" No hay ID de sesión definido.")
-            return
-
-        conn = Conexion().conectar()
-        cursor = conn.cursor()
-        try:
-            cursor.execute(f"""
-                UPDATE CondicionesMedicion
-                SET desplazamiento_ini = ?
-                WHERE ref = ?{filtro_activo('CondicionesMedicion')}
-            """, (str(desplazamiento), self.ref_bd))
-            conn.commit()
-            print("Desplazamiento actualizado en base de datos.")
-            # A6.6 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): sin auditar
-            # hasta ahora.
-            _registrar_auditoria(_usuario_actual(self), ACCION_ACTUALIZAR,
-                                 "CondicionesMedicion", ref=self.ref_bd)
-            QMessageBox.information(self, "Éxito", "El desplazamiento fue guardado correctamente en la base de datos.")
-
-
-        except Exception as e:
-            traceback.print_exc()
-            print("Error al actualizar desplazamiento:", e)
         finally:
             conn.close()
 

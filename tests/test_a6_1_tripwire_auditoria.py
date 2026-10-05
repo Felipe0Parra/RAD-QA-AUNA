@@ -355,6 +355,8 @@ ALLOWLIST = {
     # --- A6.6 (braquiterapia) cerrada 2026-08-04: actualizar_desplazamiento_
     # en_db, guardar_linealidad y los dos eliminar_fila_resultado auditan
     # directamente -- no quedan entradas aquí para esos tres.
+    # [PI.9: actualizar_desplazamiento_en_db y el eliminar_fila_resultado de la
+    # clase vieja de posición inicial se retiraron con ella (DP-139).]
     # guardar_resultado_CambioFuente auditaba directamente hasta EB2b
     # (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB2b, 24-08): al convertir el
     # guardado a anular+insertar (reemplazar_bloque, EB1), la única fila de

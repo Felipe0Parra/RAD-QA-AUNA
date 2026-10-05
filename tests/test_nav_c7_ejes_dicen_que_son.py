@@ -43,10 +43,11 @@ class TestNingunEjeDiceDosisSobreOtraMagnitud:
 
     def test_las_cuatro_parejas_de_braqui_dicen_actividad_o_ciclos(self):
         texto = BRAQUI.read_text(encoding="utf-8")
-        assert texto.count("ax.set_ylabel('Actividad')") == 2, (
-            "las 2 copias (diario + su duplicado) deben decir 'Actividad'")
-        assert texto.count("ax.set_ylabel('Ciclos')") == 2, (
-            "las 2 copias (diario + su duplicado) deben decir 'Ciclos'")
+        # PI.9 (05-10): el duplicado exacto vivia en la clase vieja de posicion inicial (retirada, DP-139): de las 2 copias queda 1 de cada una
+        assert texto.count("ax.set_ylabel('Actividad')") == 1, (
+            "la gráfica del diario debe decir 'Actividad' (su duplicado se retiró en PI.9)")
+        assert texto.count("ax.set_ylabel('Ciclos')") == 1, (
+            "la gráfica del diario debe decir 'Ciclos' (su duplicado se retiró en PI.9)")
 
     def test_ix_dice_consistencia_de_dosis_sin_corchetes(self):
         texto = IX.read_text(encoding="utf-8")

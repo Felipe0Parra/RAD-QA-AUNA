@@ -14,6 +14,7 @@ lecturas se quedaron atrás:
   - `braquiterapia.py::PosicionamientoInicial.actualizar_ref_bd` -- tipo
     constante "Cambio de fuente" (el posicionamiento inicial ocurre al
     instalar la fuente, nunca en una calibración redundante).
+    [PI.9: la clase se retiró (DP-139); su prueba también.]
 """
 import os
 import sqlite3
@@ -130,16 +131,5 @@ class TestCalRedundanteFuenteCargaLaPlantillaCorrecta:
             "(Calibración Redundante), aunque comparten fecha")
 
 
-class TestPosicionamientoInicialActualizarRefBd:
-
-    def test_selecciona_cambio_de_fuente_no_la_redundante(self, app, bd_temporal, monkeypatch):
-        obj = braquiterapia_mod.PosicionamientoInicial.__new__(
-            braquiterapia_mod.PosicionamientoInicial)
-        QWidget.__init__(obj)
-        obj.date_box = QDateEdit()
-        obj.ref_bd = None
-
-        obj.date_box.setDate(_fecha_qdate())
-        obj.actualizar_ref_bd()
-
-        assert obj.ref_bd == 30
+# PI.9: retirada con PosicionamientoInicial (reemplazo completo, DP-139):
+# la clase `TestPosicionamientoInicialActualizarRefBd` probaba `PosicionamientoInicial.actualizar_ref_bd`.

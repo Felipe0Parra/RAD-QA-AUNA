@@ -188,14 +188,14 @@ def _funcion_que_contiene(arbol, linea):
 #               fila (no de un puntero ajeno).
 
 SITIOS_EQUIPO_ID_PERMITIDOS = {
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 494): (  # P.1 (28-09): 490->494
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 436): (  # P.1 (28-09): 490->494; PI.9 (05-10): 494->436
         "EXENTO",
         "on_serie_pozo_cambio -- equipo_id viene de "
         "combo_serie.currentData(), la calibracion que el fisico ACABA de "
         "elegir en el combo (poblado momentos antes por "
         "calibraciones_activas()); no restaura ningun dato guardado en el "
         "pasado."),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 535): (  # P.1 (28-09): 531->535
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 477): (  # P.1 (28-09): 531->535; PI.9 (05-10): 535->477
         "EXENTO",
         "on_serie_elec_cambio -- mismo patron que :481, combo_serie_elec "
         "EN VIVO."),

@@ -129,16 +129,8 @@ SITIOS_LITERALES_PERMITIDOS = {
         "create_control (anual) -- gemelo exacto de load.py:309: reabre el "
         "control existente del año y reasigna los físicos por su id "
         "físico. Mismo mecanismo DA-08, misma tabla, otra raíz de UI.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 111):
-        "actualizar_desplazamiento (DP-39, hallazgo del 24-08 al resolver "
-        "DP-38/DA-50): escribe CondicionesMedicion.desplazamiento_ini en "
-        "sitio sobre el `ref` vigente, filtrado a activo. Es la ruta real "
-        "que justificó retirar posicionamiento_reposicionamiento (DA-50) -- "
-        "funciona hoy -- pero SI se reguarda dos veces el mismo bloque, el "
-        "desplazamiento anterior se pierde sin anular. DP-39 ya lo deja "
-        "abierto EXPLÍCITAMENTE como 'nada del contrato de guardado -- es "
-        "del formulario de braquiterapia': fuera de alcance de EB1-EB7 por "
-        "decisión ya registrada, no un descuido de esta tarea.",
+    # PI.9: retirada con PosicionamientoInicial (reemplazo completo, DP-139): el UPDATE de `CondicionesMedicion.desplazamiento_ini` de
+    # `PruebaMensualBraq.actualizar_desplazamiento` (DP-39) desaparece con el metodo: ya no hay sitio que revisar.
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 2300):  # B.3 (21-09): 2221->2282; B.4 (21-09): 2282->2297; C.1 (25-09): 2297->2300
         "_persistir_val_teo_dosis (A.2, PLAN_REFERENCIAS_EDITABLES_21-09) -- "
         "val_teo_dosis no tiene widget (R5), así que no puede llegar por "
@@ -189,7 +181,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
         "(QtSql, DA-08) -- gemelo Qt del mecanismo genérico de "
         "guardarEdicion (load.py:4201, más abajo en OPACOS). Tabla y "
         "columna dinámicas (elegidas en la UI), WHERE siempre 'id = ?'.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 61):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 52):  # PI.9 (05-10): 61->52
         "normalizar_fechas_db -- migración de FORMATO de fecha "
         "(DD-MM-YYYY -> YYYY-MM-DD) sobre las 6 tablas de braquiterapia. "
         "Tiene que alcanzar TAMBIÉN las filas anuladas (una anulada con la "

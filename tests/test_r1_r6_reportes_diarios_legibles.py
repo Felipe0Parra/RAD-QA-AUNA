@@ -253,11 +253,14 @@ class TestR3UmbralNuncaVacio:
     def test_braqui_ya_no_llama_con_umbrales_none(self):
         """Rojo-antes-que-verde de clase: braqui pasaba `umbrales=None` y
         se quedaba sin columna -- ahora pasa "si" como sus 3 hermanas, en
-        LAS DOS clases duplicadas de `PruebaDiariaBraq`."""
+        LAS DOS clases duplicadas de `PruebaDiariaBraq`.
+
+        [PI.9: la copia de la clase vieja de posición inicial se retiró
+        (DP-139): queda una sola llamada, la de `PruebaDiariaBraq`.]"""
         fuente = open("ui/paginasControles/PruebasDiarias/braquiterapia.py",
                        encoding="utf-8").read()
         assert "umbrales=None" not in fuente
-        assert fuente.count('umbrales="si"') >= 2
+        assert fuente.count('umbrales="si"') >= 1     # PI.9: era >= 2 (la clase retirada traía la segunda copia)
 
     def test_booleano_sin_umbral_numerico_muestra_no_aplica(
             self, app, bd_temporal, monkeypatch):

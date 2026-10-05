@@ -3,7 +3,7 @@ braquiterapia limpia TODO -- tres huecos confirmados empíricamente (no las
 hipótesis del plan original: se hizo primero un inventario real de qué
 sobrevive a "limpiar", antes de tocar código, tal como pedía el plan).
 
-- `PruebaDiariaBraq`/`PosicionamientoInicial` (diarias): `self.observaciones`
+- `PruebaDiariaBraq`/`PosicionamientoInicial` (diarias; la segunda, retirada en PI.9): `self.observaciones`
   queda fuera de `self.df_lines` a propósito -- `storeDailyTests`
   (`PruebasDiarias.py`) lo excluye para no confundirlo con un botón
   Funciona/No funciona -- y por eso también quedaba fuera de "Limpiar datos".
@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import QApplication, QMessageBox
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
 from ui.paginasControles.PruebasDiarias.braquiterapia import (
-    PruebaDiariaBraq, PosicionamientoInicial, Linealidad)
+    PruebaDiariaBraq, Linealidad)
 from ui.paginasControles.PruebasMensuales.braq_mensual import PruebaMensualBraq
 
 
@@ -82,13 +82,8 @@ class TestDiariaObservacionesSeLimpia:
 
         assert d.observaciones.text() == ""
 
-    def test_posicionamiento_inicial_limpia_observaciones(self, app, bd_temporal):
-        d = PosicionamientoInicial(_UsuarioFalso("Físico de Prueba"))
-        d.observaciones.setText("nota que debía desaparecer")
-
-        d.clean_info()
-
-        assert d.observaciones.text() == ""
+    # PI.9: retirada con PosicionamientoInicial (reemplazo completo, DP-139):
+    # `test_posicionamiento_inicial_limpia_observaciones` ya no tiene objeto.
 
 
 class TestMensualCamposMaximosYLecturasSeLimpian:

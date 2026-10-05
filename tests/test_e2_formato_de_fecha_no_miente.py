@@ -374,12 +374,11 @@ def _invariante_seccion_cubre_formato(widget, nombre):
 
 @pytest.mark.parametrize("nombre_clase", [
     "PruebaDiariaBraq", "PruebaDiaria600", "PruebaDiariaIX", "PruebaDiariaHc",
-    "PosicionamientoInicial", "Linealidad",
+    "Linealidad",           # PI.9: retirada con PosicionamientoInicial (reemplazo completo, DP-139)
 ])
 def test_pantallas_reales_cumplen_la_invariante(app, bd_temporal, nombre_clase):
     modulos = {
         "PruebaDiariaBraq": "ui.paginasControles.PruebasDiarias.braquiterapia",
-        "PosicionamientoInicial": "ui.paginasControles.PruebasDiarias.braquiterapia",
         "Linealidad": "ui.paginasControles.PruebasDiarias.braquiterapia",
         "PruebaDiaria600": "ui.paginasControles.PruebasDiarias.seiscientos",
         "PruebaDiariaIX": "ui.paginasControles.PruebasDiarias.IX",

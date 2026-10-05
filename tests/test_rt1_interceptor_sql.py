@@ -342,14 +342,17 @@ class TestDenominadorDeCobertura:
         #             bloque de QC (`_filas_de_cambio_de_fuente` sobre `TipoCalibracion`; `_vigente_por_fecha`, `listar`,
         #             `leer` y el SELECT de `anular` sobre `braqui_posicion_inicial`). (El 104 -> 105 de F.2, 25-09,
         #             solo consta en el mensaje de abajo.)
+        #   110 -> 108 PI.9 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 05-10): se retira la clase `PosicionamientoInicial` (DP-139) y con
+        #             ella sus dos funciones lectoras, `actualizar_ref_bd` y `consulta_db` (braquiterapia.py). Como en LR7, BAJA
+        #             porque la superficie desapareció, no porque se perdiera cobertura.
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 110, (
+        assert len(lectoras) == 108, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
-            f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad) -- 110 funciones "
-            f"esperadas; ahora salen "
+            f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad) y PI.9 retiró dos de la clase vieja de posición "
+            f"inicial -- 108 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"

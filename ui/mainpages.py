@@ -31,8 +31,8 @@ from services.respaldo import respaldar_bd
 # acoplamiento de `posicionamiento` (SS0.5a) -- el mas delicado de los dos.
 # PI.6: el menu de "Cal. Fuente" ya no ofrece la pagina vieja de posicion
 # inicial y la pagina nueva ("posicion_inicial", boton propio) no es
-# cerrable; la vieja sigue construyendose dentro del mensual hasta PI.9,
-# pero ya nadie la muestra.
+# cerrable; la vieja se retiro en PI.9 (el mensual ya no la construye
+# dentro de si).
 CLAVES_CERRABLES = ("mensual", "anual", "imagen_mensual", "imagen_anual")
 
 # A.3 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): paginas que se construyen

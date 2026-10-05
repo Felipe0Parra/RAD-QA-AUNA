@@ -317,11 +317,9 @@ SITIOS_LECTURA_REVISADOS = {
         "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
     ("models/PDF/pdf.py", "_leer_datos_starshot_db"):
         "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", "actualizar_ref_bd"):
-        "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
+    # PI.9 (05-10): retiradas con PosicionamientoInicial (reemplazo completo, DP-139) las dos entradas de su clase en braquiterapia.py,
+    # `actualizar_ref_bd` y `consulta_db`: la lista encoge 43 -> 41 (la regla de drenaje de DP-77, aplicada por una tarea que ya tenia sus pruebas).
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", "construir_tablas_reporte_linealidad"):
-        "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", "consulta_db"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", "actualizar_ref_bd"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",

@@ -317,27 +317,23 @@ CENSO_RAICES = {
                 "el WHERE es DATE(tc.fecha), no tc.id: es lectura de bloque"),
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3541, "LinealidadBraquiterapia"):  # V.4 (28-09): 3465->3470; L.3 (28-09): 3524->3541
         (LISTA, "linealidad de la fuente por fecha, para la gráfica"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 3831, "TipoCalibracion"):  # V.4 (28-09): 3755->3760; L.3 (28-09): 3814->3831
-        (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4307, "braqui"):  # V.4 (28-09): 4231->4236; L.3 (28-09): 4290->4307
-        (LISTA, "serie temporal de actividad (2ª copia del mismo patrón)"),
-    ("ui/paginasControles/PruebasDiarias/braquiterapia.py", 4346, "braqui"):  # V.4 (28-09): 4270->4275; L.3 (28-09): 4329->4346
-        (LISTA, "serie temporal de ciclos (2ª copia del mismo patrón)"),
+    # PI.9 (05-10): retiradas con PosicionamientoInicial (reemplazo completo, DP-139) las tres entradas de su clase: `actualizar_ref_bd` (lectura de
+    # TipoCalibracion por fecha) y las dos series temporales (actividad y ciclos, "2ª copia del mismo patron"); la clase era la ultima del archivo.
     ("ui/paginasControles/PruebasDiarias/seiscientos.py", 187, "aceleradorlineal_600"):
         (LISTA, "reporte diario del Clinac 600 por fecha"),
 
     # -- ui/PruebasMensuales ---------------------------------------------
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 149, "TipoCalibracion"):
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 91, "TipoCalibracion"):  # PI.9 (05-10): 149->91
         (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1193, "TipoCalibracion"):  # V.5 (28-09): 1109->1184; P.1 (28-09): 1184->1194; RC.1 (30-09): 1194->1193
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1135, "TipoCalibracion"):  # V.5 (28-09): 1109->1184; P.1 (28-09): 1184->1194; RC.1 (30-09): 1194->1193; PI.9 (05-10): 1193->1135
         (LISTA, "última calibración registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1207, "TipoCalibracion"):  # V.5 (28-09): 1123->1198; P.1 (28-09): 1198->1208; RC.1 (30-09): 1208->1207
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1149, "TipoCalibracion"):  # V.5 (28-09): 1123->1198; P.1 (28-09): 1198->1208; RC.1 (30-09): 1208->1207; PI.9 (05-10): 1207->1149
         (IDENTIDAD, "datos de la calibración ya localizada, WHERE id = ?"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1429, "TipoCalibracion"):  # V.5 (28-09): 1344->1419; P.1 (28-09): 1419->1430; RC.1 (30-09): 1430->1429
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1371, "TipoCalibracion"):  # V.5 (28-09): 1344->1419; P.1 (28-09): 1419->1430; RC.1 (30-09): 1430->1429; PI.9 (05-10): 1429->1371
         (LISTA, "calibración por fecha, admitiendo los dos formatos (DP-32)"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1832, "TipoCalibracion"):  # V.5 (28-09): 1747->1822; P.1 (28-09): 1822->1833; RC.1 (30-09): 1833->1832
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1774, "TipoCalibracion"):  # V.5 (28-09): 1747->1822; P.1 (28-09): 1822->1833; RC.1 (30-09): 1833->1832; PI.9 (05-10): 1832->1774
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3038"),  # V.4 (28-09): 3033->3038
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1861, "LinealidadBraquiterapia"):  # V.5 (28-09): 1776->1851; P.1 (28-09): 1851->1862; RC.1 (30-09): 1862->1861
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1803, "LinealidadBraquiterapia"):  # V.5 (28-09): 1776->1851; P.1 (28-09): 1851->1862; RC.1 (30-09): 1862->1861; PI.9 (05-10): 1861->1803
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3067"),  # V.4 (28-09): 3062->3067
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 273, "controles"):  # A.2 (21-09): 256->269; B.3 (21-09): 269->270; C.1 (25-09): 270->273
         (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "
@@ -376,12 +372,14 @@ CENSO_RAICES = {
 # quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
 # en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
 # 70 -> 73 sitios físicos.
-FILAS_ESPERADAS = 83      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`)
+FILAS_ESPERADAS = 80      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`)
                           # RC.2 (30-09): +1, `corregir_calibracion` (IDENTIDAD sobre TipoCalibracion)
                           # PI.3 (02-10): +6, `services/posicion_inicial_braqui.py` (3 LISTA y 3 IDENTIDAD)
-SITIOS_FISICOS_ESPERADOS = 81      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`)
+                          # PI.9 (05-10): -3, los tres sitios de la clase retirada (`actualizar_ref_bd` y las dos series temporales; LISTA)
+SITIOS_FISICOS_ESPERADOS = 78      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`)
                                     # RC.2 (30-09): +1 (corregir_calibracion, IDENTIDAD)
                                     # PI.3 (02-10): +6 (los seis del servicio, ninguno se resuelve a dos textos)
+                                    # PI.9 (05-10): -3 (los mismos tres sitios; ninguno se resolvia a dos textos)
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca
