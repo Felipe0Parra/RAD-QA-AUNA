@@ -115,7 +115,7 @@ def _dibujar_imagen_contenida(c, ruta_imagen, x, y, ancho_recuadro, alto_recuadr
 def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
                 id_maquina = " ", nombre_pdf="lab_report.pdf",
                 logo_path="logo.png", firma = None, role = "", temp = False,
-                es_diario_qc = False):
+                es_diario_qc = False, posicion_inicial = None):
     # `es_diario_qc`: C2 (PLAN_REPORTES_LEGIBLES_08-09.md §1.4) -- este
     # generador tiene un SEGUNDO cliente que el físico no nombró
     # (`reporte_calculadora_dos.py`, §2.3 del plan). Por defecto (False,
@@ -374,6 +374,17 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
 
     y_cursor = y_start - parts[-1]._height  # borde inferior de la tabla, en la ÚLTIMA página
 
+    def _salto_si_no_cabe(y, alto):
+        """PI.8: ¿cabe un bloque de `alto` pt debajo de `y` antes de la franja de la firma? Si no, cierra la página (con su firma en el
+        diario, C.3) y devuelve el borde superior de la siguiente; si cabe, devuelve `y`. LA regla de salto de página de los bloques de
+        después de la tabla principal: R6 y la posición inicial la comparten (dos copias divergirían, corolario 1)."""
+        if y - alto < ALTO_BLOQUE_FIRMA:
+            if es_diario_qc:
+                _dibujar_firma_en_pagina_actual()
+            c.showPage()
+            return height - 50
+        return y
+
     # 🔹 R6: resumen del análisis de la placa de braqui (promedio y
     # desviación estándar, tabla APARTE) + la imagen de la placa real --
     # solo si hay algo que mostrar (300/335 controles de braqui tienen
@@ -424,12 +435,7 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
             alto_bloque_r6 += 10 + ALTO_RECUADRO_IMAGEN_BRAQUI
 
         # ¿Cabe antes de la franja de la firma en la página actual?
-        if y_cursor - alto_bloque_r6 < ALTO_BLOQUE_FIRMA:
-            if es_diario_qc:
-                _dibujar_firma_en_pagina_actual()
-            c.showPage()
-            y_start = height - 50
-            y_cursor = y_start
+        y_cursor = _salto_si_no_cabe(y_cursor, alto_bloque_r6)
 
         y_cursor -= 10
         y_tabla_resumen = y_cursor - alto_resumen
@@ -455,6 +461,35 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
                     y_recuadro + ALTO_RECUADRO_IMAGEN_BRAQUI / 2,
                     "Imagen no disponible (formato no reconocido)")
             y_cursor = y_recuadro
+
+    # PI.8 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, DA-82 D2): la posición inicial de la fuente en uso, en una línea, DEBAJO de R6
+    # (el análisis y su placa son una unidad; esta es otra prueba): tabla aparte de una columna, con la cabecera de la de R6 y el
+    # texto en un `Paragraph` (un string pelado en una Table se desborda de la celda, DP-97). Solo si el llamador la pasa:
+    # `reportes.py::reporte()` lo hace en braquiterapia cuando la fuente en uso de ese día tiene prueba; con `None` (el valor por
+    # omisión, y el de la calculadora de dosis) este generador es EXACTAMENTE el de antes. Mismo salto de página que R6.
+    if posicion_inicial is not None:
+        from reportlab.lib.styles import ParagraphStyle
+        estilo_posicion = ParagraphStyle(
+            'PosicionInicialDiario', parent=styles['Normal'],
+            fontSize=CUERPO_TABLA_PT, leading=CUERPO_TABLA_PT + 2)
+        tabla_posicion = Table([['Posición inicial de la fuente'], [Paragraph(str(posicion_inicial), estilo_posicion)]],
+                               colWidths=[ANCHO_RECUADRO_IMAGEN_BRAQUI])
+        tabla_posicion.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#01b0ca")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), CABECERA_TABLA_PT),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        tabla_posicion.wrapOn(c, width, height)
+        alto_posicion = tabla_posicion._height
+        y_cursor = _salto_si_no_cabe(y_cursor, 10 + alto_posicion)
+        y_cursor -= 10
+        tabla_posicion.drawOn(c, x_start, y_cursor - alto_posicion)
+        y_cursor -= alto_posicion
 
     # Firma de la última página (siempre, en las dos ramas -- comportamiento
     # original sin cambios para la calculadora; C.3 añadió las llamadas de

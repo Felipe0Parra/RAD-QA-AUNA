@@ -432,11 +432,22 @@ def texto_breve(registro, con_cambio_de_fuente=True):
     return cuerpo
 
 
+_CIFRA_Y_UNIDAD = re.compile(r"(?<=\d) (?=(?:mm|px|dpi)\b)")
+
+
+def unir_numero_y_unidad(texto):
+    """Espacio duro (U+00A0) entre una cifra y su unidad (mm, px, dpi). Un `Paragraph` parte el renglón en los espacios normales y
+    dejaba «1.0» al final de uno y «mm).» al principio del siguiente: la unidad separada de su valor en un documento firmado. El espacio
+    duro se lee como un espacio y no es un punto de corte. Solo lo que imprime un PDF lo lleva: `texto_breve` no cambia (la tabla de
+    la página y sus pruebas lo fijan con espacio normal)."""
+    return _CIFRA_Y_UNIDAD.sub("\u00a0", texto)
+
+
 def texto_para_pdf(fecha, serie=SIN_FILTRO_DE_SERIE):
     """PI.7/PI.8: lo que un PDF imprime como posición inicial en `fecha`: el texto breve de la prueba que vale ese día (la regla
-    es `posicion_inicial_para`, con `serie` en el mensual, DD8) o None si no hay ninguna. Es la ÚNICA definición de qué dice un
-    PDF: el diario y el mensual la llaman, ninguno arma su propio texto ni su propia búsqueda. Si falla (BD, regla) la excepción
-    sube: un PDF firmado no debe salir sin el dato ni con un valor que no es el de la fuente en uso. Quien llama decide qué
-    imprime cuando devuelve None (el mensual, el valor que ya traía; el diario, nada)."""
+    es `posicion_inicial_para`, con `serie` en el mensual, DD8), con cada cifra unida a su unidad (`unir_numero_y_unidad`), o None
+    si no hay ninguna. Es la ÚNICA definición de qué dice un PDF: el diario y el mensual la llaman, ninguno arma su propio texto ni su
+    propia búsqueda. Si falla (BD, regla) la excepción sube: un PDF firmado no debe salir sin el dato ni con un valor que no es el de
+    la fuente en uso. Quien llama decide qué imprime cuando devuelve None (el mensual, el valor que ya traía; el diario, nada)."""
     registro = posicion_inicial_para(fecha, serie)
-    return texto_breve(registro) if registro else None
+    return unir_numero_y_unidad(texto_breve(registro)) if registro else None

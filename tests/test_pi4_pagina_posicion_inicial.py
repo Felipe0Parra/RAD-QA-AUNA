@@ -417,8 +417,7 @@ class TestCargarLaImagen:
             "se usa la resolucion del escaneo: 600 dpi")
 
     def test_3b_una_imagen_de_otra_resolucion_dice_el_aviso_antes_de_marcar(self, pagina, dialogos, tmp_path):
-        ruta = tmp_path / "a_300.tif"
-        ruta.write_bytes(_a_300_dpi())
+        ruta = _a_300_con_mtime(tmp_path)
         _cargar(pagina, dialogos, str(ruta))
         assert pagina.etiqueta_resolucion.text().startswith("TIFF · Resolución: la imagen declara 300 dpi y el procedimiento "
                                                             "es de 600 dpi: parece escaneada a otra resolucion")
@@ -869,8 +868,7 @@ class TestGuardar:
             ("no medible: la mancha se sale de la zona marcada", None)]
 
     def test_12b_una_resolucion_otra_se_guarda_en_pixeles_si_el_fisico_lo_confirma(self, pagina, dialogos, tmp_path, bd):
-        ruta = tmp_path / "a_300.tif"
-        ruta.write_bytes(_a_300_dpi())
+        ruta = _a_300_con_mtime(tmp_path)
         p = pagina
         _analizada(p, dialogos, str(ruta), CLICS_PLACA_REAL)
         assert "sin milímetros" in p.recuadro_gris.text()
@@ -885,8 +883,7 @@ class TestGuardar:
 
     def test_12c_dos_motivos_y_la_prueba_ya_guardada_van_en_una_sola_pregunta(self, pagina, dialogos, tmp_path, bd):
         _sembrar_prueba(bd, CAMBIO, SERIE_C)
-        ruta = tmp_path / "a_300.tif"
-        ruta.write_bytes(_a_300_dpi())
+        ruta = _a_300_con_mtime(tmp_path)
         _analizada(pagina, dialogos, str(ruta), CLICS_PLACA_REAL)
         pagina.boton_guardar.click()
         assert len(dialogos.de("question")) == 1
@@ -1445,6 +1442,17 @@ class TestMemoriaDeLaImagenGrande:
 
 # ======================================================================== el cambio de fuente elegido (revisión de Opus)
 
+def _a_300_con_mtime(tmp_path, nombre="a_300.tif"):
+    """El TIFF a 300 dpi (sin EXIF) con una fecha de modificación FIJA, la del escaneo de braqui_00 (2026-09-30): sin EXIF, DD7 usa la fecha
+    del archivo, y con la de HOY la prueba dependía del día en que corría (a 7 días de `CAMBIO` propone el cambio de fuente, a 8 ya no, y
+    sin él no hay pregunta de resolución: la corrida de la suite que cruzó la medianoche del 04 al 05-10 las puso en rojo)."""
+    ruta = tmp_path / nombre
+    ruta.write_bytes(_a_300_dpi())
+    marca = datetime(2026, 9, 30, 12, 0).timestamp()
+    os.utime(ruta, (marca, marca))
+    return ruta
+
+
 def _con_mtime(tmp_path, nombre_origen, ano, mes, dia, destino=None):
     """Copia una placa real a `tmp_path` con la fecha de modificación pedida (la que usa DD7 cuando no hay EXIF)."""
     ruta = tmp_path / (destino or nombre_origen)
@@ -1582,8 +1590,7 @@ class TestElCambioDeFuenteElegido:
         p.show()
         QApplication.processEvents()
         base = p.minimumSizeHint().width()
-        a300 = tmp_path / "a_300.tif"
-        a300.write_bytes(_a_300_dpi())
+        a300 = _a_300_con_mtime(tmp_path)
         medidos = {}
         for nombre, ruta in (("braqui_00", archivo_braqui), ("EPSON009", _con_mtime(tmp_path, "EPSON009.jpeg", 2026, 9, 30)),
                              ("a 300 dpi", str(a300))):

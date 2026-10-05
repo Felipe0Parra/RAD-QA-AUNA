@@ -76,8 +76,21 @@ class TestUnSoloTamanoDeLetra:
 
     def test_ocho_usos_de_fontsize_las_4_parejas(self):
         texto = PDF_PY.read_text(encoding="utf-8")
-        assert texto.count("CABECERA_TABLA_PT)") == 4
+        # PI.8 (03-10): la tabla de la posición inicial del diario añade UNA cabecera (la quinta, con la misma constante); su
+        # cuerpo no es un FONTSIZE de la tabla sino un `Paragraph` cuyo estilo usa `CUERPO_TABLA_PT` (lo fija la prueba de abajo),
+        # así que el cuerpo sigue en 4. El censo de literales sueltos (arriba, por AST) no cambia.
+        assert texto.count("CABECERA_TABLA_PT)") == 5
         assert texto.count("CUERPO_TABLA_PT)") == 4
+
+    def test_todo_estilo_de_parrafo_usa_la_constante_del_cuerpo(self):
+        """El identificador de la tabla del diario (C.4) y el texto de la posición inicial (PI.8) son `Paragraph`s: su letra sale de
+        la MISMA constante que el cuerpo de las tablas, nunca de un número suelto (un literal ahí reabriría los dos tamaños de C.4)."""
+        tree = ast.parse(PDF_PY.read_text(encoding="utf-8"), filename=str(PDF_PY))
+        estilos = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "ParagraphStyle"]
+        assert len(estilos) == 2, f"se esperaban 2 ParagraphStyle en pdf.py (identificador y posición inicial), hay {len(estilos)}"
+        for estilo in estilos:
+            tamanos = [k.value for k in estilo.keywords if k.arg == "fontSize"]
+            assert len(tamanos) == 1 and isinstance(tamanos[0], ast.Name) and tamanos[0].id == "CUERPO_TABLA_PT", ast.unparse(estilo)
 
 
 class TestElIdentificadorSeEnvuelveNoSeDesborda:

@@ -242,12 +242,24 @@ def reporte(self, fecha, maquina = "", id_maquina = "",
             else:
                 df.loc[fila, 'Umbrales'] = 'No aplica'
 
+    # PI.8 (DA-82 D2): el diario de braquiterapia dice la posición inicial de la fuente en uso ese día (la regla vive en el servicio:
+    # `texto_para_pdf`, sin serie porque el diario no la guarda). Un fallo AVISA y no genera el PDF: un diario firmado no debe salir
+    # sin el dato ni con uno que no es el de la fuente. Import local: el ciclo reportes -> pdf -> load -> dialogs -> reporte_calculadora_dos.
+    posicion_inicial = None
+    if loto == 'braqui':
+        from services.posicion_inicial_braqui import texto_para_pdf
+        try:
+            posicion_inicial = texto_para_pdf(fecha)
+        except Exception as error:
+            QMessageBox.critical(self, "Error", f"No se pudo leer la posición inicial de la fuente; el reporte no se generó: {error}")
+            return
+
     #haga el reporte
     ICONO =  resource_path('resources/icons/iconoPDF.png')
 
     buffer = generar_reporte_pdf(df=df, fecha=fecha, user=usuario, tipo_reporte=tipo_reporte, maquina=maquina,
                                 id_maquina=id_maquina, logo_path=ICONO, firma=temp_image_path, role=rol, temp=True,
-                                es_diario_qc=True)
+                                es_diario_qc=True, posicion_inicial=posicion_inicial)
 
     if isinstance(buffer, bytes):
         pdf_bytes = buffer

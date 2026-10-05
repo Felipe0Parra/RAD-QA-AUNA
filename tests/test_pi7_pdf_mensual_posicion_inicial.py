@@ -66,7 +66,9 @@ def con_p1(bd):
     verdad por el servicio (placa sintética): lo que vale para todo el período de S1."""
     ids = _sembrar(bd)
     id_p1 = _guardar(S1)
-    esperado = svc.texto_breve(svc.posicion_inicial_para(S1))
+    # lo que imprime un PDF: el texto breve con la cifra unida a su unidad (PI.8, `unir_numero_y_unidad`; la prueba de la regla está en
+    # test_pi8, con el espacio duro escrito a mano: aquí solo se exige que la fila diga lo que `texto_para_pdf` entrega)
+    esperado = svc.unir_numero_y_unidad(svc.texto_breve(svc.posicion_inicial_para(S1)))
     return bd, ids, id_p1, esperado
 
 
