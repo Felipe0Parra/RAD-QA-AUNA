@@ -2,7 +2,7 @@ import traceback, sqlite3
 from PyQt5 import sip
 from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.load import loadtablacomplex
-from services.anulacion import filtro_activo
+from services.identidad_control import buscar_control_vigente, fisico_1_de_control_existente   # FS.1
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from ui.util_formato import codigo_de_formato
 from PyQt5.QtWidgets import (QWidget, QToolBox, QMessageBox, QTableWidgetItem, QVBoxLayout, QHBoxLayout, QPushButton)
@@ -28,6 +28,9 @@ class PruebaAnual600(PruebaMensual600):
                 fecha_formateada = fecha.split('/') # ['MM', 'YYYY']
 
                 # Validar usuario
+                # FS.1: `user_id` es la SESION (Fisico 1 de un control NUEVO, D2); el Fisico 1 que muestra el formulario
+                # llega en `fisico_recibido` y es el que actualiza un control EXISTENTE (antes la sesion lo pisaba).
+                fisico_recibido = user_id
                 user_id = self.user_id._nombre
                 cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (user_id,))
                 if cursor.fetchone() is None:
@@ -57,14 +60,18 @@ class PruebaAnual600(PruebaMensual600):
                 # filtro se crea uno nuevo al lado -- que es lo que DA-49 elige,
                 # y el índice UNIQUE de U2 es parcial sobre las vigentes, así
                 # que los dos conviven. Ver DP-27.
-                cursor.execute(
-                    "SELECT id FROM controles WHERE fecha LIKE ? AND equipo = ? "
-                    f"AND control = 'Anual'{filtro_activo('controles')} ORDER BY id DESC",
-                    (f"%{fecha_formateada[1]}%", maquina) # Usar solo el año para controles anuales
-                )
-                old_id = cursor.fetchone()
+                # FS.1: la misma funcion que usa el mensual (`services/identidad_control.py`); para el anual la
+                # identidad es (equipo, anio).
+                old_id = buscar_control_vigente(cursor, maquina, "Anual", fecha)
                 if old_id is not None:
                     control_id = old_id[0]
+                    fisico_1 = fisico_1_de_control_existente(fisico_recibido, user_id)
+                    if fisico_1 != user_id:
+                        cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (fisico_1,))
+                        if cursor.fetchone() is None:
+                            # Lo recibido es el texto del combo y no es un usuario (p. ej. el marcador «Fisico 1» de una
+                            # sesion que no es «Fisico Medico»): manda la sesion, como siempre hizo el anual.
+                            fisico_1 = user_id
 
                     # B4 (PLAN_AUDITORIA_DOS_EJES_21-07.md SS7.2): actualizar
                     # el(los) físico(s) aunque el control anual ya exista, igual
@@ -74,7 +81,7 @@ class PruebaAnual600(PruebaMensual600):
                     # guardado en `controles.user_id_f2`.
                     cursor.execute(
                         "UPDATE controles SET user_id = ?, user_id_f2 = ? WHERE id = ?",
-                        (user_id, _nombre_fisico2, control_id)
+                        (fisico_1, _nombre_fisico2, control_id)
                     )
                     conn.commit()
 
@@ -126,7 +133,7 @@ class PruebaAnual600(PruebaMensual600):
                 child = layout.takeAt(0)
                 if child.widget():
                     child.widget().deleteLater()
-        self.ref = self.create_control(maquina= maquina, fecha = fecha, user_id= user_id, user_id_f2=user_id_f2)
+        self.ref = self.create_control(maquina= maquina, fecha = fecha, user_id= nombre_fisico1 or user_id, user_id_f2=user_id_f2)   # FS.1: el Fisico 1 del formulario, como el mensual
         self.fecha_control = fecha
         self.nombre_fisico1 = nombre_fisico1
         self.nombre_fisico2 = nombre_fisico2

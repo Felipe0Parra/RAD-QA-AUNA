@@ -197,13 +197,13 @@ SITIOS_CENSALES_PERMITIDOS = {
     # completa/agregación (`load.py:3038`/`3890`, ver
     # SITIOS_CLAVE_INCOMPLETA_PERMITIDOS en test_le4). RT1 los ve porque los
     # tests ejercitan de verdad `mostrar_controles_img*`/`mostrar_controles_tac`.
-    ("data/ManejoDatos/load.py", 1931):
+    ("data/ManejoDatos/load.py", 1936):  # FS.1 (06-10): 1931->1936
         "mostrar_controles_imgIX_anual -- COUNT(p.id_prueba) GROUP BY c.id: "
         "cuenta TODAS las pruebas de la sesión, no elige una.",
-    ("data/ManejoDatos/load.py", 1965):
+    ("data/ManejoDatos/load.py", 1970):  # FS.1 (06-10): 1965->1970
         "mostrar_controles_imgIX_anual -- MAX/MIN GROUP BY c.id: agregación "
         "sobre todas las pruebas de la sesión.",
-    ("data/ManejoDatos/load.py", 2120):
+    ("data/ManejoDatos/load.py", 2125):  # FS.1 (06-10): 2120->2125
         "mostrar_controles_imgIX -- gemelo mensual del COUNT anterior.",
     # CORRECCIÓN 01-09 (A9/A10/A11, PLAN_FUGA_CONEXIONES_01-09.md §9): las
     # tres entradas de esta familia (2119/2515/2715) se retiraron por error
@@ -222,19 +222,19 @@ SITIOS_CENSALES_PERMITIDOS = {
     # estas líneas). test_rt1_no_hereda_los_sitios_opacos_de_es1 permite
     # este solape puntual porque está documentado como independiente, no
     # heredado -- ver EXCEPCIONES_INDEPENDIENTES en test_rt1_interceptor_sql.py.
-    ("data/ManejoDatos/load.py", 2168):
+    ("data/ManejoDatos/load.py", 2173):  # FS.1 (06-10): 2168->2173
         "mostrar_controles_imgIX -- gemelo mensual del MAX/MIN anterior.",
-    ("data/ManejoDatos/load.py", 2325):
+    ("data/ManejoDatos/load.py", 2330):  # FS.1 (06-10): 2325->2330
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del COUNT.",
-    ("data/ManejoDatos/load.py", 2359):
+    ("data/ManejoDatos/load.py", 2364):  # FS.1 (06-10): 2359->2364
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2516):
+    ("data/ManejoDatos/load.py", 2521):  # FS.1 (06-10): 2516->2521
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del COUNT.",
-    ("data/ManejoDatos/load.py", 2564):
+    ("data/ManejoDatos/load.py", 2569):  # FS.1 (06-10): 2564->2569
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2716):
+    ("data/ManejoDatos/load.py", 2721):  # FS.1 (06-10): 2716->2721
         "mostrar_controles_tac -- gemelo TAC del COUNT.",
-    ("data/ManejoDatos/load.py", 2764):
+    ("data/ManejoDatos/load.py", 2769):  # FS.1 (06-10): 2764->2769
         "mostrar_controles_tac -- gemelo TAC del MAX/MIN.",
     ("scripts/observador_contrato.py", 158):
         "_censo_y_vigente -- COUNT(*) sobre TODA la tabla (censo total, sin "

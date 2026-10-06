@@ -13,7 +13,7 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import (
     ACCION_GUARDAR, ACCION_REEMPLAZO, ACCION_EDITAR, ACCION_ELIMINAR, ACCION_ANULAR)
-from services.fechas_control import mismo_mes as _mismo_mes
+from services.identidad_control import buscar_control_vigente, fisico_1_de_control_nuevo   # FS.1
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
@@ -322,16 +322,12 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
             # -- se ignora sin más y más abajo se crea uno nuevo al lado, legal
             # porque el índice único de U2 es parcial sobre las filas activas.
             # Lo anulado sigue en la BD y se consulta en el visor de LR6.
-            cursor.execute(
-                f"SELECT id, fecha FROM controles WHERE equipo = ? AND control = ?{filtro_activo('controles')}",
-                (maquina, tipo_control)
-            )
-            control_activo_id, fecha_activo = None, None
-            for fila_id, fecha_existente in cursor.fetchall():
-                if not _mismo_mes(fecha_existente, fecha):
-                    continue
-                if control_activo_id is None:
-                    control_activo_id, fecha_activo = fila_id, fecha_existente
+            # FS.1 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): la identidad del control es UNA sola regla para
+            # todas las pantallas (`services/identidad_control.py`): mensual = (equipo, mes, anio); anual = (equipo,
+            # anio). «Imagenes anual» llega aqui con tipo «Anual», asi que iniciada en otro mes que el anual ya no
+            # crea un segundo anual del mismo anio.
+            existente = buscar_control_vigente(cursor, maquina, tipo_control, fecha)
+            control_activo_id, fecha_activo = (existente[0], existente[1]) if existente else (None, None)
 
             if control_activo_id is not None:
                 control_id = control_activo_id
@@ -358,14 +354,23 @@ def create_control(self, maquina, fecha, user_id, user_id_f2=None):
                     referencia_mes = fecha_existente
                 QMessageBox.information(
                     self, "Control existente",
-                    f"Se cargó el control mensual de {maquina} correspondiente "
+                    f"Se cargó el control {tipo_control.lower()} de {maquina} correspondiente "
                     f"a {referencia_mes}, con fecha registrada {fecha_existente}. "
                     f"Puede continuar el llenado de datos."
                 )
                 return control_id
 
             # Insertar nuevo registro
-            lista = [maquina, tipo_control, fecha, user_id, _nombre_fisico2]
+            # FS.1 (D2): el Fisico 1 de un control NUEVO es quien tiene la sesion, no lo que diga el combo; sin objeto
+            # de sesion (llamadores antiguos) se conserva el parametro. Un control existente (rama de arriba) se
+            # actualiza con lo que muestre el formulario, como siempre.
+            fisico_1 = fisico_1_de_control_nuevo(_usuario_actual(self), user_id)
+            if fisico_1 != user_id:
+                cursor.execute("SELECT fullname FROM users WHERE fullname = ?", (fisico_1,))
+                if cursor.fetchone() is None:
+                    QMessageBox.critical(self, "Error", f"El usuario '{fisico_1}' no existe en la base de datos.")
+                    return
+            lista = [maquina, tipo_control, fecha, fisico_1, _nombre_fisico2]
             sql = "INSERT INTO controles (equipo, control, fecha, user_id, user_id_f2) VALUES (?,?,?,?,?)"
             cursor.execute(sql, lista)
             conn.commit()

@@ -227,9 +227,9 @@ class TestListaBlancaCensal:
         # aquí exactamente por la misma razón estructural que tablas_
         # anuales.py:61: ES1 no puede clasificarlos, RT1 sí porque ve el SQL
         # ya resuelto en tiempo de ejecución.
-        ("data/ManejoDatos/load.py", 2168),
-        ("data/ManejoDatos/load.py", 2564),
-        ("data/ManejoDatos/load.py", 2764),
+        ("data/ManejoDatos/load.py", 2173),  # FS.1 (06-10): 2168->2173
+        ("data/ManejoDatos/load.py", 2569),  # FS.1 (06-10): 2564->2569
+        ("data/ManejoDatos/load.py", 2769),  # FS.1 (06-10): 2764->2769
     }
 
     def test_toda_excepcion_de_rt1_esta_tambien_en_es1(self):
@@ -348,11 +348,16 @@ class TestDenominadorDeCobertura:
         # Mismos tests sobre más superficie: la cobertura RELATIVA baja. No
         # es una regresión, es la medida honesta que el plan pidió publicar
         # (§2.7/§6-LF3, §6-LR4).
+        #   108 -> 107 FS.1 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md, 06-10): la busqueda del control vigente de un periodo
+        #             queda en UNA sola funcion, `services/identidad_control.py::buscar_control_vigente` (lectora de `controles`, con
+        #             `filtro_activo`): ENTRA esa, y SALEN las dos `create_control` (la de `load.py` y la de `PruebaAnual600`) que la
+        #             hacian cada una a su manera -- ahora solo escriben (INSERT/UPDATE) y delegan la lectura.
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 108, (
+        assert len(lectoras) == 107, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
-            f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad) y PI.9 retiró dos de la clase vieja de posición "
-            f"inicial -- 108 funciones esperadas; ahora salen "
+            f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
+            f"inicial y FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) "
+            f"-- 107 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"

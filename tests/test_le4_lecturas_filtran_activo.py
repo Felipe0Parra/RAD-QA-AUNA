@@ -115,12 +115,12 @@ SITIOS_DINAMICOS_PERMITIDOS = {
         "EXACTAMENTE el caso que R.1 protege (un id reciclado podría "
         "adoptarlo igual). Filtrar `activo` aquí dejaría sin proteger los "
         "ids que solo una fila anulada todavía apunta.",
-    ("data/ManejoDatos/load.py", 803): "DO1/PR1 (subirlineasmensuales -- SELECT del bloque vigente, esquema completo para componer el nuevo sin perder columnas fuera de columnas_lista, p.ej. preguntas.imagen; ya filtra activo a mano, tabla dinámica)",
-    ("data/ManejoDatos/load.py", 830): "PR1 (subirlineasmensuales, rama else -- ya no aplica a preguntas tras PR1, pero sigue alcanzable para cualquier tabla futura fuera de TABLAS_ANULABLES)",
-    ("data/ManejoDatos/load.py", 989): "diarias (EB4) -- ya filtra activo a mano, tabla dinámica",
+    ("data/ManejoDatos/load.py", 808): "DO1/PR1 (subirlineasmensuales -- SELECT del bloque vigente, esquema completo para componer el nuevo sin perder columnas fuera de columnas_lista, p.ej. preguntas.imagen; ya filtra activo a mano, tabla dinámica)",  # FS.1 (06-10): 803->808
+    ("data/ManejoDatos/load.py", 835): "PR1 (subirlineasmensuales, rama else -- ya no aplica a preguntas tras PR1, pero sigue alcanzable para cualquier tabla futura fuera de TABLAS_ANULABLES)",  # FS.1 (06-10): 830->835
+    ("data/ManejoDatos/load.py", 994): "diarias (EB4) -- ya filtra activo a mano, tabla dinámica",  # FS.1 (06-10): 989->994
     ("data/ManejoDatos/load.py", 186): "diarias (D3) -- ya filtra activo a mano, tabla dinámica",
-    ("data/ManejoDatos/load.py", 1146): "código muerto (mostrar_db_CambioFuente, sin llamadores)",
-    ("data/ManejoDatos/load.py", 4690): "identidad (fila antes de anular/borrar)",  # RC.2 (30-09): 4761->4690
+    ("data/ManejoDatos/load.py", 1151): "código muerto (mostrar_db_CambioFuente, sin llamadores)",  # FS.1 (06-10): 1146->1151
+    ("data/ManejoDatos/load.py", 4695): "identidad (fila antes de anular/borrar)",  # RC.2 (30-09): 4761->4690; FS.1 (06-10): 4690->4695
     ("scripts/retirar_tabla_del_esquema.py", 70): "EB7 (DA-50) -- COUNT(*) sobre `tabla`, restringida a la lista blanca CERRADA `TABLAS_RETIRABLES` (equipos_anual, posicionamiento_reposicionamiento). Ninguna de las dos está en TABLAS_ANULABLES ni tiene `activo` -- se retiran del esquema en vez de versionar, filtrar aquí no tendría sentido",
     # NOTA (LF, gap hallado por el subagente que resolvió LF3): hasta aquí
     # decía "TipoCalibracion es raíz DP-31; SistemaMedicion/CondicionesMedicion
@@ -143,7 +143,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 270): "DO1 (subirlineasmensuales_ix -- SELECT del bloque vigente para componer el nuevo; ya filtra activo a mano, tabla dinámica)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 309): "DO1 (subirlineasmensuales_ix, rama fuera del bloque de QC)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 360): "DO1 (_cargar_dosimetria_bd_ix -- ya filtra activo a mano, tabla dinámica)",
-    ("data/ManejoDatos/load.py", 2942): "tabla dinámica (_mostrar_tabla_generica -- módulo TAC/Catphan: 'config[\"tabla\"]' es una de las 7 hijas de TAC, PENDIENTE-LF hoy; JOIN literal con 'pruebas' (también PENDIENTE-LF). LF: corregido el gap que decía \"ninguna está en TABLAS_ANULABLES\" (cierto antes de LF2) -- ahora filtra las DOS con `filtro_t`/`filtro_p` calificados por alias, invisibles para el detector de texto por ir en variables intermedias)",
+    ("data/ManejoDatos/load.py", 2947): "tabla dinámica (_mostrar_tabla_generica -- módulo TAC/Catphan: 'config[\"tabla\"]' es una de las 7 hijas de TAC, PENDIENTE-LF hoy; JOIN literal con 'pruebas' (también PENDIENTE-LF). LF: corregido el gap que decía \"ninguna está en TABLAS_ANULABLES\" (cierto antes de LF2) -- ahora filtra las DOS con `filtro_t`/`filtro_p` calificados por alias, invisibles para el detector de texto por ir en variables intermedias)",  # FS.1 (06-10): 2942->2947
     # scripts/: excepciones censales explícitas (contrato regla 5) --
     # documentadas en cada archivo, no solo aquí.
     ("scripts/migrar_bd_a_estandar.py", 147): "migración/censo (_contar_qc)",
@@ -177,9 +177,9 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     # VIEJO que ya se localizó antes -- no es una lectura, filtrar el
     # propio UPDATE no tendría sentido (volvería un no-op sobre lo que
     # acaba de anular).
-    ("data/ManejoDatos/load.py", 1076): "guardar_resultado_CambioFuente (EB2b) -- anula las 5 hijas del bloque ANTERIOR de TipoCalibracion sobre su `ref` viejo; escritura de anulación, no lectura",
-    ("data/ManejoDatos/load.py", 631): "eliminarfilas/subirlineas -- anula el bloque vigente antes de insertar el nuevo; YA filtra 'activo' a mano en el WHERE compuesto (línea 552)",
-    ("data/ManejoDatos/load.py", 822): "subirlineasmensuales -- anula el bloque vigente de ese `ref`; ya filtra 'activo' a mano en el propio texto",
+    ("data/ManejoDatos/load.py", 1081): "guardar_resultado_CambioFuente (EB2b) -- anula las 5 hijas del bloque ANTERIOR de TipoCalibracion sobre su `ref` viejo; escritura de anulación, no lectura",  # FS.1 (06-10): 1076->1081
+    ("data/ManejoDatos/load.py", 636): "eliminarfilas/subirlineas -- anula el bloque vigente antes de insertar el nuevo; YA filtra 'activo' a mano en el WHERE compuesto (línea 552)",  # FS.1 (06-10): 631->636
+    ("data/ManejoDatos/load.py", 827): "subirlineasmensuales -- anula el bloque vigente de ese `ref`; ya filtra 'activo' a mano en el propio texto",  # FS.1 (06-10): 822->827
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 289): "subirlineasmensuales_ix -- anula el bloque vigente de (ref, energia); ya filtra 'activo' a mano en el propio texto",
     ("scripts/saneamiento_bloque_qc.py", 116): "SA2 -- anula por `rowid` las filas duplicadas que perdieron el desempate: identidad física, una fila nombrada",
     ("ui/paginasControles/PruebasDiarias/PruebasDiarias.py", 910): "edición directa de UNA celda ya identificada (`WHERE id = ?`) -- identidad, no filtra (DA-47)",
@@ -196,11 +196,11 @@ EXCEPCIONES_LITERALES = {
     ("services/consistencia_dosis.py", 51):
         "dosimetriaMen -- filtro_activo('dosimetriaMen') se califica con "
         "el alias 'd.' del JOIN antes de interpolarse (variable `filtro`)",
-    ("data/ManejoDatos/load.py", 1655):
+    ("data/ManejoDatos/load.py", 1660):  # FS.1 (06-10): 1655->1660
         "preguntas -- RP1: filtro_activo('preguntas') se califica con el "
         "alias 'p.' del LEFT JOIN antes de interpolarse (variable `filtro_p`, "
         "mismo patrón que consistencia_dosis.py)",
-    ("data/ManejoDatos/load.py", 1658):
+    ("data/ManejoDatos/load.py", 1663):  # FS.1 (06-10): 1658->1663
         "preguntas -- RP1, mismo `filtro_p` que la excepción anterior, "
         "usado en la segunda rama (equipo_filtrar no truthy) de "
         "mostrar_controles_mensuales",
@@ -226,13 +226,13 @@ EXCEPCIONES_LITERALES = {
     # num_pruebas=0). Variable `filtro_p_on`, 5 funciones gemelas
     # (mostrar_controles_imgIX[_anual], mostrar_controles_imgHC[_anual],
     # mostrar_controles_tac), 2 sitios cada una (COUNT + SELECT MAX).
-    ("data/ManejoDatos/load.py", 1931): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX_anual, COUNT)",
-    ("data/ManejoDatos/load.py", 1965): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX_anual, SELECT MAX)",
-    ("data/ManejoDatos/load.py", 2120): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX, COUNT)",
-    ("data/ManejoDatos/load.py", 2325): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC_anual, COUNT)",
-    ("data/ManejoDatos/load.py", 2359): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC_anual, SELECT MAX)",
-    ("data/ManejoDatos/load.py", 2516): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC, COUNT)",
-    ("data/ManejoDatos/load.py", 2716): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_tac, COUNT)",
+    ("data/ManejoDatos/load.py", 1936): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX_anual, COUNT)",  # FS.1 (06-10): 1931->1936
+    ("data/ManejoDatos/load.py", 1970): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX_anual, SELECT MAX)",  # FS.1 (06-10): 1965->1970
+    ("data/ManejoDatos/load.py", 2125): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX, COUNT)",  # FS.1 (06-10): 2120->2125
+    ("data/ManejoDatos/load.py", 2330): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC_anual, COUNT)",  # FS.1 (06-10): 2325->2330
+    ("data/ManejoDatos/load.py", 2364): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC_anual, SELECT MAX)",  # FS.1 (06-10): 2359->2364
+    ("data/ManejoDatos/load.py", 2521): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC, COUNT)",  # FS.1 (06-10): 2516->2521
+    ("data/ManejoDatos/load.py", 2721): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_tac, COUNT)",  # FS.1 (06-10): 2716->2721
     # MaximosCamaras JOIN TipoCalibracion (raíz) -- mismo patrón, variable
     # `filtro_mc` calificada con el alias 'mc.'. Dos hallazgos en la misma
     # línea (el analizador reporta 'sin filtro' y 'LIMIT sin ORDER BY' por
@@ -280,19 +280,19 @@ SITIOS_CLAVE_INCOMPLETA_PERMITIDOS = {
     ("data/ManejoDatos/Tablas_Anuales/tablas_anuales.py", 891):
         "HC_dosimetria_anual -- mismo caso: addsomething(..., 0, ...) con "
         "id_energia=0 literal (halcyon_anual.py:211, antes 198 -- C2 desplazó el sitio).",
-    ("data/ManejoDatos/load.py", 3111):
+    ("data/ManejoDatos/load.py", 3116):  # FS.1 (06-10): 3111->3116
         "equipos_medicion (mostrar_equipos) -- fetchall() sin ORDER BY/LIMIT: "
         "trae TODAS las filas activas de ese ref (una LISTA -- el catálogo "
         "completo de equipos del control), no elige una entre varias. No hay "
         "ambigüedad porque no se descarta nada.",
-    ("data/ManejoDatos/load.py", 3313):
+    ("data/ManejoDatos/load.py", 3318):  # FS.1 (06-10): 3313->3318
         "analisis_placa_franjas (mostrar_analisis_img) -- mismo caso: "
         "fetchall() sin ORDER BY/LIMIT, trae las 4 franjas completas.",
-    ("data/ManejoDatos/load.py", 3963):
+    ("data/ManejoDatos/load.py", 3968):  # FS.1 (06-10): 3963->3968
         "analisis_placa_franjas -- MAX(ref): agregación sobre toda la tabla "
         "(el ref más reciente con algo vigente), no selecciona una fila por "
         "su clave -- el concepto de 'clave incompleta' no aplica a un MAX.",
-    ("data/ManejoDatos/load.py", 4159):
+    ("data/ManejoDatos/load.py", 4164):  # FS.1 (06-10): 4159->4164
         "analisis_placa_correcciones -- ORDER BY rowid DESC LIMIT 1 sin "
         "'vertice', pero las 4 columnas leídas (diferencia_arriba/abajo/"
         "izquierda/derecha) son un resumen GLOBAL del análisis, no un dato "
@@ -408,12 +408,12 @@ SITIOS_CENSALES_LITERALES = {
 SITIOS_OPACOS_PERMITIDOS = {
     # A11 (PLAN_FUGA_CONEXIONES_01-09.md §9, 01-09): mismo punto ciego
     # que A9/A10 (Trampa 6) sobre mostrar_controles_tac.
-    ("data/ManejoDatos/load.py", 2736): "UPDATE pruebas SET mes_control (backfill, tac) -- ya filtraba con filtro_activo('pruebas')",
-    ("data/ManejoDatos/load.py", 2764): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_tac, SELECT MAX) -- ya no resoluble",
+    ("data/ManejoDatos/load.py", 2741): "UPDATE pruebas SET mes_control (backfill, tac) -- ya filtraba con filtro_activo('pruebas')",  # FS.1 (06-10): 2736->2741
+    ("data/ManejoDatos/load.py", 2769): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_tac, SELECT MAX) -- ya no resoluble",  # FS.1 (06-10): 2764->2769
     # A10 (PLAN_FUGA_CONEXIONES_01-09.md §9, 01-09): mismo punto ciego
     # que A9 (Trampa 6) sobre mostrar_controles_imgHC.
-    ("data/ManejoDatos/load.py", 2536): "UPDATE pruebas SET mes_control (backfill, imgHC) -- ya filtraba con filtro_activo('pruebas')",
-    ("data/ManejoDatos/load.py", 2564): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC, SELECT MAX) -- ya no resoluble",
+    ("data/ManejoDatos/load.py", 2541): "UPDATE pruebas SET mes_control (backfill, imgHC) -- ya filtraba con filtro_activo('pruebas')",  # FS.1 (06-10): 2536->2541
+    ("data/ManejoDatos/load.py", 2569): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgHC, SELECT MAX) -- ya no resoluble",  # FS.1 (06-10): 2564->2569
     # A9 (PLAN_FUGA_CONEXIONES_01-09.md §9, 01-09): mostrar_controles_imgIX
     # -- dos sitios (el UPDATE de backfill y el SELECT final) que ANTES
     # resolvia (uno via EXCEPCIONES_LITERALES, el otro via variable
@@ -423,8 +423,8 @@ SITIOS_OPACOS_PERMITIDOS = {
     # toca dentro de un ast.With. Ninguno de los dos escribe/lee fuera
     # de lo ya revisado -- el UPDATE ya filtraba con filtro_activo,
     # verificado en el propio texto fuente.
-    ("data/ManejoDatos/load.py", 2140): "UPDATE pruebas SET mes_control (backfill) -- ya filtraba con filtro_activo('pruebas'), verificado en el propio texto",
-    ("data/ManejoDatos/load.py", 2168): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX, SELECT MAX) -- misma consulta que antes, ya no resoluble",
+    ("data/ManejoDatos/load.py", 2145): "UPDATE pruebas SET mes_control (backfill) -- ya filtraba con filtro_activo('pruebas'), verificado en el propio texto",  # FS.1 (06-10): 2140->2145
+    ("data/ManejoDatos/load.py", 2173): "pruebas -- filtro_p_on en el ON del LEFT JOIN (mostrar_controles_imgIX, SELECT MAX) -- misma consulta que antes, ya no resoluble",  # FS.1 (06-10): 2168->2173
     # A7 (PLAN_FUGA_CONEXIONES_01-09.md, 01-09): este sitio vivia en
     # SITIOS_DINAMICOS_PERMITIDOS (resuelto, "rama fuera del bloque de
     # QC") hasta que A7 envolvio TODO el cuerpo de subirlineasmensuales
@@ -436,7 +436,7 @@ SITIOS_OPACOS_PERMITIDOS = {
     # no un cambio de riesgo: el mismo `sql`/`cursor.execute(sql, datos)`
     # de siempre. Se muda aqui en vez de arreglar el analizador (fuera
     # de alcance de ese plan).
-    ("data/ManejoDatos/load.py", 851): "subirlineasmensuales, rama FUERA del bloque de QC (`preguntas` antes de PR1 y las tablas sin columna `activo`): UPDATE parcial por `ref`, contrato original -- sin cambios de fondo, ver comentario arriba",
+    ("data/ManejoDatos/load.py", 856): "subirlineasmensuales, rama FUERA del bloque de QC (`preguntas` antes de PR1 y las tablas sin columna `activo`): UPDATE parcial por `ref`, contrato original -- sin cambios de fondo, ver comentario arriba",  # FS.1 (06-10): 851->856
     # EB0/EB1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB0/EB1, DA-52, 24-08):
     # tres sitios de `services/anulacion.py` cuyo SQL se arma detrás de un
     # `ast.Call` (función auxiliar), invisible para este detector estático
@@ -456,15 +456,15 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/conection.py", 712): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",  # R.1: 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682; G.2 (24-09): 682->683; G.3 (24-09): 683->684; PI.2 (01-10): 684->685; RB.3 (05-10): 685->712
     ("data/ManejoDatos/conection.py", 812): "DDL/migración (EB2d, DA-57, tabla temporal de la migración que retira el UNIQUE de angulo_starshot)",  # R.1: 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782; G.2 (24-09): 782->783; G.3 (24-09): 783->784; PI.2 (01-10): 784->785; RB.3 (05-10): 785->812
     ("data/ManejoDatos/conection.py", 2598): "INSERT (users, no está en TABLAS_ANULABLES)",  # R1: 2091->2160; R.1: 2224->2309; T.0: 2309->2363; B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461; G.2 (24-09): 2461->2482; G.3 (24-09): 2482->2508; PI.2 (01-10): 2508->2571; RB.3 (05-10): 2571->2598
-    ("data/ManejoDatos/load.py", 370): "INSERT (controles -- un INSERT nunca necesita filtro)",
-    ("data/ManejoDatos/load.py", 4382): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",  # RC.2 (30-09): 4376->4382
+    ("data/ManejoDatos/load.py", 375): "INSERT (controles -- un INSERT nunca necesita filtro)",  # FS.1 (06-10): 370->375
+    ("data/ManejoDatos/load.py", 4387): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",  # RC.2 (30-09): 4376->4382; FS.1 (06-10): 4382->4387
     # LF (gap hallado por el subagente que resolvió LF3): decía "no está en
     # TABLAS_ANULABLES" -- cierto antes de LF2, falso después (PENDIENTE-LF).
     # Corregido: la sentencia ahora SÍ llama a `filtro_activo('ResultadosActividad')`
     # -- sigue "opaca" para AN1 no por el filtro sino porque `sql` se
     # reasigna en varias ramas de `guardarEdicion` (misma función que la
     # entrada anterior), irresoluble a propósito por diseño de AN1.
-    ("data/ManejoDatos/load.py", 4721): "DELETE por id_where -- rama else de eliminarRegistro, alcanzable SOLO para tablas fuera del cierre transitivo de QC (catálogos genéricos: equipos, tipos_prueba...). EB3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB3, 24-08): la rama `if` (anular_fila) ya cubre las 59 tablas de TABLAS_ANULABLES desde MI1 -- IV2 garantiza que ninguna descendiente de QC queda fuera de esa lista o de EXCEPCIONES_INVENTARIO, y TestTripwireDeAlcance (test_e7_soft_delete_bloque_qc.py) verifica que ningún llamador real nombra una tabla de QC que no esté en la lista blanca. Ver test_eb3_eliminarregistro_delete_inalcanzable.py",  # RC.2 (30-09): 4792->4721
+    ("data/ManejoDatos/load.py", 4726): "DELETE por id_where -- rama else de eliminarRegistro, alcanzable SOLO para tablas fuera del cierre transitivo de QC (catálogos genéricos: equipos, tipos_prueba...). EB3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB3, 24-08): la rama `if` (anular_fila) ya cubre las 59 tablas de TABLAS_ANULABLES desde MI1 -- IV2 garantiza que ninguna descendiente de QC queda fuera de esa lista o de EXCEPCIONES_INVENTARIO, y TestTripwireDeAlcance (test_e7_soft_delete_bloque_qc.py) verifica que ningún llamador real nombra una tabla de QC que no esté en la lista blanca. Ver test_eb3_eliminarregistro_delete_inalcanzable.py",  # RC.2 (30-09): 4792->4721; FS.1 (06-10): 4721->4726
     ("data/ManejoDatos/obtenerDatosHalcyon.py", 397): "INSERT (halcyon -- un INSERT nunca necesita filtro)",
     ("services/dosis_service.py", 281): "DDL (CREATE TABLE calculadora_dosimetrica, no está en TABLAS_ANULABLES -- tiene su propia columna `vigente`, mecanismo de versionado independiente de este contrato)",
     ("services/dosis_service.py", 391): "INSERT (calculadora_dosimetrica, no está en TABLAS_ANULABLES)",
@@ -472,7 +472,7 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("services/dosis_service.py", 550): "SELECT calculadora_dosimetrica -- mismo motivo",
     ("services/dosis_service.py", 556): "SELECT calculadora_dosimetrica -- mismo motivo",
     ("ui/paginasControles/PruebasAnuales/halcyon_anual.py", 323): "INSERT (HC_imagen_perfil_mlc_anual) -- 303->316 (C2) ->323 (A3, rollback/finally), mismo sitio remapeado por contenido",
-    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 89): "INSERT (controles -- un INSERT nunca necesita filtro)",
+    ("ui/paginasControles/PruebasAnuales/seiscientos_anual.py", 96): "INSERT (controles -- un INSERT nunca necesita filtro)",  # FS.1 (06-10): 89->96
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 295): "INSERT (subirlineasmensuales_ix, dentro del bucle de energías -- reasignación de `sql` en cada vuelta, irresoluble a propósito por AN1; INSERT no necesita filtro de todos modos)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 315): "INSERT (subirlineasmensuales_ix, rama fuera del bloque de QC -- ver comentario en el propio archivo)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 329): "UPDATE por (ref, energia) -- subirlineasmensuales_ix, rama fuera del bloque de QC (nombre_tabla no anulable en esta rama)",

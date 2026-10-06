@@ -140,33 +140,33 @@ BASELINE_D1_PENDIENTE = {
     ('data/ManejoDatos/conection.py', 1936, 'HU'),  # R.1 (11-09): 1649->1734; T.0 (16-09): 1734->1788; B.1 (21-09): 1788->1817; A.1 (23-09): 1817->1857; A.2 (23-09): 1857->1861; G.2 (24-09): 1861->1882; G.3 (24-09): 1882->1908; PI.2 (01-10): 1908->1909; RB.3 (05-10): 1909->1936
     ('data/ManejoDatos/conection.py', 1959, 'HU'),  # R.1 (11-09): 1672->1757; T.0 (16-09): 1757->1811; B.1 (21-09): 1811->1840; A.1 (23-09): 1840->1880; A.2 (23-09): 1880->1884; G.2 (24-09): 1884->1905; G.3 (24-09): 1905->1931; PI.2 (01-10): 1931->1932; RB.3 (05-10): 1932->1959
     ('data/ManejoDatos/conection.py', 1973, '%'),  # R.1 (11-09): 1686->1771; T.0 (16-09): 1771->1825; B.1 (21-09): 1825->1854; A.1 (23-09): 1854->1894; A.2 (23-09): 1894->1898; G.2 (24-09): 1898->1919; G.3 (24-09): 1919->1945; PI.2 (01-10): 1945->1946; RB.3 (05-10): 1946->1973
-    ('data/ManejoDatos/load.py', 3038, 'cm'),
-    ('data/ManejoDatos/load.py', 3075, 'mm'),
-    ('data/ManejoDatos/load.py', 3076, 'mm'),
-    ('data/ManejoDatos/load.py', 3077, 'mm'),
-    ('data/ManejoDatos/load.py', 3078, '%'),
-    ('data/ManejoDatos/load.py', 3096, '%'),
-    ('data/ManejoDatos/load.py', 3167, '°'),
-    ('data/ManejoDatos/load.py', 3354, 'cGy/UM'),
-    ('data/ManejoDatos/load.py', 3356, '%'),
-    ('data/ManejoDatos/load.py', 3357, '%'),
-    ('data/ManejoDatos/load.py', 3358, '%'),
-    ('data/ManejoDatos/load.py', 3359, '%'),
-    ('data/ManejoDatos/load.py', 3373, 'MV'),
-    ('data/ManejoDatos/load.py', 3374, 'cGy/UM'),
-    ('data/ManejoDatos/load.py', 3376, '%'),
-    ('data/ManejoDatos/load.py', 3377, '%'),
-    ('data/ManejoDatos/load.py', 3378, '%'),
-    ('data/ManejoDatos/load.py', 3379, '%'),
-    ('data/ManejoDatos/load.py', 3387, '%'),
-    ('data/ManejoDatos/load.py', 3542, 'cm'),
-    ('data/ManejoDatos/load.py', 3617, '%'),
-    ('data/ManejoDatos/load.py', 3617, 'cm'),
-    ('data/ManejoDatos/load.py', 3685, '%'),
-    ('data/ManejoDatos/load.py', 4107, 'mm'),
-    ('data/ManejoDatos/load.py', 4108, 'mm'),
-    ('data/ManejoDatos/load.py', 4141, 'mm'),
-    ('data/ManejoDatos/load.py', 4171, 'mm'),
+    ('data/ManejoDatos/load.py', 3043, 'cm'),  # FS.1 (06-10): 3038->3043
+    ('data/ManejoDatos/load.py', 3080, 'mm'),  # FS.1 (06-10): 3075->3080
+    ('data/ManejoDatos/load.py', 3081, 'mm'),  # FS.1 (06-10): 3076->3081
+    ('data/ManejoDatos/load.py', 3082, 'mm'),  # FS.1 (06-10): 3077->3082
+    ('data/ManejoDatos/load.py', 3083, '%'),  # FS.1 (06-10): 3078->3083
+    ('data/ManejoDatos/load.py', 3101, '%'),  # FS.1 (06-10): 3096->3101
+    ('data/ManejoDatos/load.py', 3172, '°'),  # FS.1 (06-10): 3167->3172
+    ('data/ManejoDatos/load.py', 3359, 'cGy/UM'),  # FS.1 (06-10): 3354->3359
+    ('data/ManejoDatos/load.py', 3361, '%'),  # FS.1 (06-10): 3356->3361
+    ('data/ManejoDatos/load.py', 3362, '%'),  # FS.1 (06-10): 3357->3362
+    ('data/ManejoDatos/load.py', 3363, '%'),  # FS.1 (06-10): 3358->3363
+    ('data/ManejoDatos/load.py', 3364, '%'),  # FS.1 (06-10): 3359->3364
+    ('data/ManejoDatos/load.py', 3378, 'MV'),  # FS.1 (06-10): 3373->3378
+    ('data/ManejoDatos/load.py', 3379, 'cGy/UM'),  # FS.1 (06-10): 3374->3379
+    ('data/ManejoDatos/load.py', 3381, '%'),  # FS.1 (06-10): 3376->3381
+    ('data/ManejoDatos/load.py', 3382, '%'),  # FS.1 (06-10): 3377->3382
+    ('data/ManejoDatos/load.py', 3383, '%'),  # FS.1 (06-10): 3378->3383
+    ('data/ManejoDatos/load.py', 3384, '%'),  # FS.1 (06-10): 3379->3384
+    ('data/ManejoDatos/load.py', 3392, '%'),  # FS.1 (06-10): 3387->3392
+    ('data/ManejoDatos/load.py', 3547, 'cm'),  # FS.1 (06-10): 3542->3547
+    ('data/ManejoDatos/load.py', 3622, '%'),  # FS.1 (06-10): 3617->3622
+    ('data/ManejoDatos/load.py', 3622, 'cm'),  # FS.1 (06-10): 3617->3622
+    ('data/ManejoDatos/load.py', 3690, '%'),  # FS.1 (06-10): 3685->3690
+    ('data/ManejoDatos/load.py', 4112, 'mm'),  # FS.1 (06-10): 4107->4112
+    ('data/ManejoDatos/load.py', 4113, 'mm'),  # FS.1 (06-10): 4108->4113
+    ('data/ManejoDatos/load.py', 4146, 'mm'),  # FS.1 (06-10): 4141->4146
+    ('data/ManejoDatos/load.py', 4176, 'mm'),  # FS.1 (06-10): 4171->4176
     ('models/PDF/Anual/reportes_anuales.py', 342, '%'),
     ('models/PDF/Anual/reportes_anuales.py', 353, '%'),
     ('models/PDF/Anual/reportes_anuales.py', 375, '%'),
@@ -296,14 +296,14 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasAnuales/ix_anual.py', 276, 'nC'),
     ('ui/paginasControles/PruebasAnuales/ix_anual.py', 293, 'nC'),
     ('ui/paginasControles/PruebasAnuales/ix_anual.py', 305, 'nC'),
-    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 207, '%'),
-    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 217, '%'),
-    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 234, '%'),
-    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 234, 'cm'),
-    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 287, 'nC'),
-    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 292, 'nC'),
-    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 299, 'nC'),
-    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 321, 'nC'),
+    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 214, '%'),  # FS.1 (06-10): 207->214
+    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 224, '%'),  # FS.1 (06-10): 217->224
+    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 241, '%'),  # FS.1 (06-10): 234->241
+    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 241, 'cm'),  # FS.1 (06-10): 234->241
+    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 294, 'nC'),  # FS.1 (06-10): 287->294
+    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 299, 'nC'),  # FS.1 (06-10): 292->299
+    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 306, 'nC'),  # FS.1 (06-10): 299->306
+    ('ui/paginasControles/PruebasAnuales/seiscientos_anual.py', 328, 'nC'),  # FS.1 (06-10): 321->328
     ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 1519, 'mm'),  # V.3 (28-09): 1515->1516
     ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2393, 'nC'),  # V.3 (28-09): 2383->2385; V.4 (28-09): 2385->2390
     ('ui/paginasControles/PruebasDiarias/braquiterapia.py', 2394, 's'),  # V.3 (28-09): 2384->2386; V.4 (28-09): 2386->2391
