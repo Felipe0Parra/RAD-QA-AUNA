@@ -31,13 +31,18 @@ Diseño de este módulo:
   engañoso que había antes.
 
 El orden correcto lo garantiza el llamador (`MainWindow.closeEvent`):
-`checkpoint_wal()` PRIMERO, respaldo después -- así el .db copiado ya contiene
-todos los commits que vivían en el "-wal" (lección R2).
+`checkpoint_wal()` PRIMERO, respaldo después -- así el .db principal ya
+contiene todos los commits que vivían en el "-wal" (lección R2). Desde RB.1 la
+copia ya no depende de ese orden: se hace con la API de respaldo de SQLite, que
+da una foto consistente aunque el checkpoint haya quedado a medias.
 """
 
 import os
 import re
 import shutil
+import sqlite3
+import time
+import uuid
 from datetime import datetime, timedelta
 
 from data.ManejoDatos import conection as _conection
@@ -60,6 +65,31 @@ _PATRON_RESPALDO = re.compile(
 # Una marca a menos de un segundo del fin del calendario no es una hora de este mundo: su "segundo siguiente" (lo que `_nombre_nuevo` calcula cuando
 # el contador llega a 99) se sale del rango (`OverflowError`) y el cierre no podria respaldar nunca mas. Esa marca no cuenta como respaldo.
 _ULTIMA_MARCA_UTIL = datetime.max - timedelta(seconds=1)
+
+# RB.1 (05-10-2026, DP-150): la copia es una FOTO CONSISTENTE de la base, hecha con la API de respaldo de SQLite, y se
+# comprueba antes de contar como respaldo. Copiar el archivo `.db` (como hacía E9) daba una copia DAÑADA si en ese
+# instante otro equipo tenía una operación abierta y el checkpoint quedaba a medias (medido, M6): un checkpoint
+# incompleto deja en el `.db` páginas nuevas y viejas mezcladas, que solo forman una base válida junto a su `-wal`.
+SUFIJO_PARCIAL = ".parcial"     # la copia mientras se hace y se comprueba: no cuenta como respaldo
+SUFIJOS_LATERALES = ("-journal", "-wal", "-shm")     # lo que SQLite puede dejar junto a un archivo (una copia que falla a medias deja un `-journal`)
+SUFIJO_REVISAR = ".revisar"     # copia aparte de una base que NO pasa la comprobación: ni cuenta ni se rota como respaldo
+MAX_COPIAS_A_REVISAR = 3        # cada cierre con la base dañada deja una; sin tope crecerían sin límite (con relojes distintos entre equipos, una más: la recién hecha no se borra)
+# `Connection.backup` reintenta SIN FIN mientras la base de origen está ocupada (SQLITE_BUSY / SQLITE_LOCKED): sin un
+# corte, el cierre de la aplicación se quedaría colgado como en M13. Pasado este tiempo la copia se rinde y el
+# siguiente cierre reintenta.
+ESPERA_MAXIMA_COPIA_S = 30
+_ESPERA_CONEXION_S = 5
+_SQLITE_BUSY, _SQLITE_LOCKED = 5, 6
+ESTADO_OK, ESTADO_DEFECTO, ESTADO_NO_CONCLUYENTE = "ok", "defecto", "no_concluyente"
+# B-02 de la segunda revision: `PRAGMA integrity_check` no solo detecta DAÑO; tambien verifica las restricciones (CHECK, NOT NULL) fila por fila. Una fila que viola una
+# restriccion NO es un daño: la base se abre, se lee, se escribe y se copia bien. Tratarla como `defecto` apagaba TODOS los respaldos (ninguno, sin rotar, una `.revisar`
+# y una fila ATENCION por cierre -- y, con RB.2, una copia completa por cierre sin dar ningun respaldo) y frenaba el respaldo previo a la migracion (F1). Solo se clasifica
+# asi si TODOS los mensajes son de restriccion: cualquier otro mensaje -- o uno que no se reconozca -- sigue siendo `defecto`.
+ESTADO_OK_CON_AVISO = "ok_con_aviso"
+_MENSAJE_DE_RESTRICCION = re.compile(r"(?:CHECK constraint failed in|NULL value in) ")
+# `integrity_check` corta en 100 mensajes por defecto: con mas de 100 filas infractoras, un daño de indice que se emita DESPUES quedaria fuera de la lista y se clasificaria
+# mal (medido por el esceptico). Se pide un tope alto y, si aun asi se llena, no se puede afirmar que sean solo restricciones: `defecto`.
+_TOPE_MENSAJES_INTEGRIDAD = 1000
 
 
 def carpeta_respaldos(ruta_origen=None):
@@ -129,6 +159,151 @@ def _rotar(carpeta, max_copias):
             print(f"[respaldo] no se pudo rotar {nombre}: {ex}")
 
 
+def _quitar(ruta):
+    """Borra `ruta` si existe. Nunca lanza."""
+    try:
+        os.remove(ruta)
+    except FileNotFoundError:
+        pass
+    except OSError as ex:
+        print(f"[respaldo] no se pudo borrar {os.path.basename(ruta)}: {ex}")
+
+
+def _quitar_con_laterales(ruta):
+    """Borra `ruta` y lo que SQLite pudo dejar a su lado (`-journal`, `-wal`, `-shm`): una copia que falla a medias (disco lleno...) deja un
+    `-journal` huerfano que nada mas limpiaria (H6 de la revision). Nunca lanza."""
+    for sufijo in SUFIJOS_LATERALES:
+        _quitar(ruta + sufijo)
+    _quitar(ruta)
+
+
+def _nombre_provisional(destino):
+    """Nombre PROPIO del archivo provisional de ESTA copia: `<respaldo>.<pid>-<aleatorio>.parcial` (H1 de la revision). Antes era
+    `<respaldo>.parcial`, el mismo para todos los procesos: dos `respaldar_bd` que elegian el mismo nombre (dos equipos con el reloj atrasado
+    respecto a la ultima copia, o un cierre que retoma el reclamo de otro que se habia caido pero sigue trabajando; el respaldo previo a una
+    migracion, F1, escribe en otra carpeta, `pre_migracion/`) se pisaban el provisional -- uno borraba el del otro al empezar y al fallar -- y llegaron a dejar un archivo de 0 bytes con nombre
+    de respaldo. Con un nombre propio, nadie toca un provisional ajeno."""
+    return f"{destino}.{os.getpid()}-{uuid.uuid4().hex[:8]}{SUFIJO_PARCIAL}"
+
+
+def _copiar_con_api(ruta_origen, ruta_parcial):
+    """Copia la base `ruta_origen` a `ruta_parcial` con la API de respaldo de SQLite, en UN solo paso (RB.1).
+
+    Es una foto consistente de lo confirmado hasta ese instante aunque otros estén trabajando y aunque el checkpoint
+    del WAL no haya terminado. La copia hereda el modo WAL de la base: se deja en el modo normal para que sea un solo
+    archivo autocontenido, y abrirla (aunque sea en una carpeta de solo lectura o de red) no cree `-wal` ni `-shm`.
+    Cierra SIEMPRE las dos conexiones: en Windows no se renombra un archivo abierto.
+
+    `Connection.backup` reintenta sin fin mientras la base de origen está ocupada; la función de progreso corta ese
+    reintento pasado `ESPERA_MAXIMA_COPIA_S` (lanza `TimeoutError`), así que esta función termina siempre."""
+    inicio = time.monotonic()
+
+    def _no_esperar_sin_fin(estado, restantes, total):
+        if estado in (_SQLITE_BUSY, _SQLITE_LOCKED) and time.monotonic() - inicio > ESPERA_MAXIMA_COPIA_S:
+            raise TimeoutError(f"la base de datos de origen sigue ocupada tras {ESPERA_MAXIMA_COPIA_S} s")
+
+    origen = destino = None
+    try:
+        origen = sqlite3.connect(ruta_origen, timeout=min(ESPERA_MAXIMA_COPIA_S, _ESPERA_CONEXION_S))
+        destino = sqlite3.connect(ruta_parcial)
+        origen.backup(destino, progress=_no_esperar_sin_fin)
+        destino.execute("PRAGMA journal_mode=DELETE")
+    finally:
+        for con in (destino, origen):
+            if con is not None:
+                try:
+                    con.close()
+                except Exception:
+                    pass
+
+
+def _integridad(ruta):
+    """`(estado, detalle)` de `PRAGMA integrity_check` sobre `ruta`, con una conexión NUEVA (lo que hay en disco, no lo
+    que una conexión recuerda): `('ok', None)`, `('defecto', texto)` si la base está dañada o no es una base SQLite,
+    `('ok_con_aviso', texto)` si lo único que reporta son filas que violan una restricción (CHECK, NOT NULL: la estructura está bien y la
+    copia es fiel, B-02), o `('no_concluyente', texto)` si no se pudo comprobar (ocupada por otro, sin acceso...): eso no es un defecto de la
+    base y no debe disparar una alarma.
+
+    H1 de la revision: un archivo que NO esta no se comprueba (`sqlite3.connect` lo CREARIA vacio y `integrity_check` lo daria por
+    bueno: se habria renombrado un archivo de 0 bytes como respaldo valido), y uno de 0 bytes es un defecto: no es una copia."""
+    try:
+        tamano = os.path.getsize(ruta)
+    except FileNotFoundError:
+        return (ESTADO_NO_CONCLUYENTE, "el archivo no existe")
+    except OSError as ex:
+        return (ESTADO_NO_CONCLUYENTE, str(ex))
+    if tamano == 0:
+        return (ESTADO_DEFECTO, "el archivo esta vacio (0 bytes)")
+    con = None
+    try:
+        con = sqlite3.connect(ruta, timeout=min(ESPERA_MAXIMA_COPIA_S, _ESPERA_CONEXION_S))
+        filas = con.execute(f"PRAGMA integrity_check({_TOPE_MENSAJES_INTEGRIDAD})").fetchall()
+    except sqlite3.OperationalError as ex:
+        return (ESTADO_NO_CONCLUYENTE, str(ex))
+    except sqlite3.DatabaseError as ex:
+        return (ESTADO_DEFECTO, str(ex))
+    except Exception as ex:
+        return (ESTADO_NO_CONCLUYENTE, f"{type(ex).__name__}: {ex}")
+    finally:
+        if con is not None:
+            try:
+                con.close()
+            except Exception:
+                pass
+    # B-04 de la segunda revision: si el archivo desaparecio o fue reemplazado entre medir y conectar, `connect` lo CREO vacio y `integrity_check` lo da por bueno
+    # (con un proceso que reacciona al cierre del provisional, medido en 1.9-3.7 % de los cierres). Un archivo que sigue en 0 bytes tras la comprobacion nunca fue una base.
+    try:
+        if os.path.getsize(ruta) == 0:
+            return (ESTADO_DEFECTO, "el archivo esta vacio (0 bytes)")
+    except OSError as ex:
+        return (ESTADO_NO_CONCLUYENTE, str(ex))
+    if len(filas) == 1 and filas[0][0] == "ok":
+        return (ESTADO_OK, None)
+    mensajes = [str(f[0]).replace("\n", " ") for f in filas]
+    detalle = "; ".join(mensajes[:3])
+    if len(filas) < _TOPE_MENSAJES_INTEGRIDAD and all(_MENSAJE_DE_RESTRICCION.match(m) for m in mensajes):
+        return (ESTADO_OK_CON_AVISO, detalle)
+    return (ESTADO_DEFECTO, detalle)
+
+
+def _nombres_a_revisar(carpeta):
+    """Copias aparte (`<nombre de respaldo>.revisar`) presentes en la carpeta, de la más vieja a la más reciente."""
+    try:
+        nombres = [n for n in os.listdir(carpeta)
+                   if n.endswith(SUFIJO_REVISAR) and _marca_y_contador(n[:-len(SUFIJO_REVISAR)]) is not None]
+    except OSError:
+        return []
+    return sorted(nombres)
+
+
+def _conservar_para_revisar(ruta_origen, parcial, destino, copia_hecha):
+    """Cuando la base de origen NO pasa la comprobación hace falta conservar algo para revisarla: es el momento en que más
+    falta hace. Se guarda la copia que ya se hizo (o, si la copia no se pudo hacer, el archivo tal cual) con un nombre
+    que NO es el de un respaldo (`<nombre>.revisar`): no entra en la rotación ni cuenta como respaldo. Conserva a lo
+    sumo `MAX_COPIAS_A_REVISAR`: la primera (la mas cercana al momento del daño, la que mas vale) y las mas recientes (una mas si los
+    relojes de los equipos difieren: la recien hecha no se borra). La primera de un incidente ya resuelto sigue ocupando su plaza hasta que
+    alguien borre las `.revisar` a mano (limite declarado, B-03 de la segunda revision). Devuelve la ruta, o `None` si no se pudo."""
+    revisar = destino + SUFIJO_REVISAR
+    try:
+        if copia_hecha and os.path.isfile(parcial):
+            os.replace(parcial, revisar)
+        else:
+            shutil.copy2(ruta_origen, revisar)
+    except Exception as ex:
+        print(f"[respaldo] no se pudo conservar la copia para revisar: {ex}")
+        return None
+    carpeta = os.path.dirname(revisar)
+    nombres = _nombres_a_revisar(carpeta)
+    # H4 de la revision: se conserva la PRIMERA copia (la mas cercana al momento en que la base se daño) y las `MAX - 1` ultimas; antes se
+    # conservaban solo las mas recientes y la primera se perdia a los 3 cierres siguientes, el mismo dia. La que se acaba de hacer tampoco se
+    # borra: con el reloj de este equipo atrasado respecto al de otros que tambien dejaron copias, su nombre puede quedar en medio.
+    conservar = set(nombres[:1]) | set(nombres[max(len(nombres) - (MAX_COPIAS_A_REVISAR - 1), 0):]) | {os.path.basename(revisar)}
+    for viejo in nombres:
+        if viejo not in conservar:
+            _quitar(os.path.join(carpeta, viejo))
+    return revisar
+
+
 MOTIVO_CIERRE_APP = "respaldo al cerrar la aplicacion"
 
 
@@ -152,7 +327,22 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
     este equipo, como antes. Permite fijarla en las pruebas y en `RB.2`. El
     nombre se decide en un solo paso (`_nombre_nuevo`): el respaldo termina
     siempre, con cualquier contenido de la carpeta.
+
+    RB.1: la copia es una foto consistente hecha con la API de respaldo de
+    SQLite a un nombre provisional (`.parcial`), y solo cuenta como respaldo
+    (se renombra, se rota y se audita) si pasa `PRAGMA integrity_check`.
+    Si no la pasa: con la base de origen sana, la copia se descarta y se
+    devuelve `None` (el siguiente cierre reintenta); con la base de origen
+    dañada (o que SQLite no puede leer) no se rota nada, se conserva una copia
+    aparte (`<hora de este equipo>.revisar`, fuera de la rotación) y se deja una
+    fila de auditoría que lo dice -- si la base permite escribirla: cuando SQLite
+    no puede ni abrirla (cabecera pisada, archivo que no es una base) la
+    auditoría vive en esa misma base y no se puede escribir, y la constancia es
+    la copia aparte y el aviso por consola (H3 de la revisión). Una base ocupada
+    por otro no es un defecto: se devuelve `None` sin alarma. Sigue siendo
+    best-effort y termina siempre.
     """
+    parcial = None
     try:
         if ruta_origen is None:
             ruta_origen = _conection.ruta_base_datos()
@@ -177,16 +367,63 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
         nombre = _nombre_nuevo(_nombres_respaldo(carpeta_destino), ahora)
         destino = os.path.join(carpeta_destino, nombre)
 
-        shutil.copy2(ruta_origen, destino)
-        _rotar(carpeta_destino, max_copias)
+        # RB.1: una foto consistente (API de respaldo de SQLite, en un paso) con un nombre PROVISIONAL, que no cuenta
+        # como respaldo hasta que se comprueba. Antes: `shutil.copy2` del `.db`, que sale dañado si el checkpoint quedó a
+        # medias, y aun así se rotaba y se auditaba como respaldo hecho.
+        parcial = _nombre_provisional(destino)
+        copia_hecha = False
+        try:
+            _copiar_con_api(ruta_origen, parcial)
+            copia_hecha = True
+        except Exception as ex:
+            print(f"[respaldo] la copia no se pudo hacer: {ex}")
+        if copia_hecha:
+            estado, detalle = _integridad(parcial)
+            if estado in (ESTADO_OK, ESTADO_OK_CON_AVISO):
+                os.replace(parcial, destino)
+                parcial = None
+                _rotar(carpeta_destino, max_copias)
 
+                audit_minimo.registrar(
+                    usuario, audit_minimo.ACCION_GUARDAR, tabla="backup",
+                    ref=os.path.basename(destino),
+                    detalle=f"{motivo}: {destino}",
+                    ruta_db=ruta_origen)
+                if estado == ESTADO_OK_CON_AVISO:
+                    # B-02: la base viola una restriccion de su esquema (la estructura esta bien y la copia es fiel): el respaldo se hizo y queda constancia del aviso.
+                    audit_minimo.registrar(
+                        usuario, audit_minimo.ACCION_GUARDAR, tabla="backup",
+                        ref=os.path.basename(destino),
+                        detalle=("AVISO: la base de datos viola una restriccion de su esquema (la estructura esta bien y el respaldo se hizo): "
+                                 f"{str(detalle)[:200]}"),
+                        ruta_db=ruta_origen)
+                print(f"Respaldo de la base de datos creado en: {destino}")
+                return destino
+            print(f"[respaldo] la copia no pasa la comprobacion de integridad ({detalle}): se descarta")
+
+        # No hay un respaldo valido. Si la base de origen esta sana, el problema era de la copia: se descarta y el
+        # siguiente cierre reintenta. Si el origen NO pasa la comprobacion (o SQLite no puede ni leerlo), no se rota
+        # ni se cuenta nada como respaldo: se conserva una copia aparte para revisarla y se deja constancia visible.
+        estado_origen, detalle_origen = _integridad(ruta_origen)
+        if estado_origen != ESTADO_DEFECTO:
+            return None
+        # H4 de la revision: la copia aparte se nombra con la hora de ESTE equipo, no con el nombre que habria tenido el respaldo (que se
+        # repite en cada cierre si hay una copia de otro equipo con el reloj adelantado, y entonces cada cierre pisaria la anterior).
+        a_revisar = os.path.join(carpeta_destino, f"{PREFIJO_RESPALDO}{ahora.strftime(_FORMATO_MARCA)}{SUFIJO_RESPALDO}")
+        revisar = _conservar_para_revisar(ruta_origen, parcial, a_revisar, copia_hecha)
         audit_minimo.registrar(
             usuario, audit_minimo.ACCION_GUARDAR, tabla="backup",
-            ref=os.path.basename(destino),
-            detalle=f"{motivo}: {destino}",
+            ref=os.path.basename(revisar) if revisar else nombre,
+            detalle=("ATENCION, respaldo NO hecho: la base de datos de origen no pasa la comprobacion de integridad "
+                     f"({str(detalle_origen)[:200]}). "
+                     + (f"Copia aparte para revisar, fuera de la rotacion: {revisar}" if revisar
+                        else "No se pudo conservar ninguna copia aparte.")),
             ruta_db=ruta_origen)
-        print(f"Respaldo de la base de datos creado en: {destino}")
-        return destino
+        print(f"[respaldo] ATENCION: la base de datos de origen no pasa la comprobacion de integridad: {detalle_origen}")
+        return None
     except Exception as ex:
         print(f"[respaldo] no se pudo respaldar la base de datos: {ex}")
         return None
+    finally:
+        if parcial is not None:
+            _quitar_con_laterales(parcial)

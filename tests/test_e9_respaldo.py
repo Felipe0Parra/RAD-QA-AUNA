@@ -46,10 +46,13 @@ def _contar_filas(ruta, tabla="datos"):
 
 class TestCopiaValidaYCompleta:
     def test_respaldo_incluye_lo_que_vivia_solo_en_el_wal(self, tmp_path):
-        """La demostración central del orden checkpoint -> respaldo: una fila
-        commiteada SOLO en el -wal (autocheckpoint apagado, técnica R2/M1) no
-        aparece en una copia hecha sin checkpoint, y SÍ aparece tras
-        `checkpoint_wal()` -- el orden que `closeEvent` garantiza."""
+        """Una fila commiteada SOLO en el -wal (autocheckpoint apagado, técnica
+        R2/M1) aparece en la copia con y sin checkpoint. Antes de RB.1 (05-10-2026)
+        la copia era del archivo `.db` y sin checkpoint PERDÍA la fila (por eso
+        `closeEvent` hace el checkpoint primero); desde RB.1 la copia se hace con
+        la API de respaldo de SQLite, que da una foto consistente de lo confirmado
+        aunque el checkpoint no haya corrido -- el orden del cierre ya no es lo que
+        sostiene la integridad de la copia, solo un seguro más."""
         origen = str(tmp_path / "BaseDatosQA.db")
         _crear_bd(origen, filas=2)
 
@@ -61,12 +64,12 @@ class TestCopiaValidaYCompleta:
         try:
             assert os.path.getsize(origen + "-wal") > 0
 
-            # Sin checkpoint: la copia del .db pierde la fila (por esto el
-            # respaldo viejo, que corría antes del checkpoint, era defectuoso).
-            incompleta = respaldar_bd(ruta_origen=origen,
-                                      carpeta_destino=str(tmp_path / "sin_ckpt"))
-            assert incompleta is not None
-            assert _contar_filas(incompleta) == 2
+            # Sin checkpoint: RB.1 -- la copia por la API trae igual la fila que
+            # vive solo en el -wal (con la copia de archivo de E9 traía 2).
+            sin_checkpoint = respaldar_bd(ruta_origen=origen,
+                                          carpeta_destino=str(tmp_path / "sin_ckpt"))
+            assert sin_checkpoint is not None
+            assert _contar_filas(sin_checkpoint) == 3
 
             # Con checkpoint primero (el orden de closeEvent): copia completa.
             checkpoint_wal(con)
