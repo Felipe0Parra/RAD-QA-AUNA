@@ -3,7 +3,7 @@ import sys
 import gc
 import weakref
 from datetime import datetime
-from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSlider, QWidget, QPushButton, QFileDialog, QDialog, QFrame, QApplication)
+from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSlider, QWidget, QPushButton, QFileDialog, QDialog, QFrame, QApplication, QMessageBox)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import pyqtgraph as pg
 from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modulos
@@ -132,6 +132,48 @@ def _tamano_volumen_estimado_bytes(dicoms):
     return total
 
 
+def motivo_de_no_carga(carpeta, error):
+    """SE.5 (PLAN_GUARDADO_SIN_ESPESOR_Y_RESPALDOS_05-10.md, DP-149): por qué una carpeta no cargó, dicho para una persona. Sin Qt: mira la carpeta y el texto del
+    error de `DicomVolume.error_de_carga`. Antes elegir una carpeta que no servía (la de arriba de la que tiene los `.dcm`, una vacía, archivos sin extensión, una
+    serie no uniforme) no hacía NADA en pantalla: `_load_dicoms` atrapaba la excepción con un `print` y el físico no sabía si había elegido mal o si el programa
+    había fallado -- con el campo de espesor de solo lectura, eso terminaba en 'no deja guardar'."""
+    if not carpeta or not os.path.isdir(carpeta):
+        return f"La carpeta elegida no existe o no se puede abrir: {carpeta}"
+    try:
+        entradas = sorted(os.listdir(carpeta))
+    except OSError as ex:
+        return f"No se pudo leer la carpeta elegida ({ex})."
+    archivos = [e for e in entradas if os.path.isfile(os.path.join(carpeta, e))]
+    con_dcm = [e for e in archivos if e.lower().endswith(".dcm")]
+    if not con_dcm:
+        con_dicom_adentro = []
+        for sub in (e for e in entradas if os.path.isdir(os.path.join(carpeta, e))):
+            try:
+                if any(f.lower().endswith(".dcm") for f in os.listdir(os.path.join(carpeta, sub))):
+                    con_dicom_adentro.append(sub)
+            except OSError:
+                continue
+        if con_dicom_adentro:
+            nombres = ", ".join(f"'{n}'" for n in con_dicom_adentro[:3]) + (f" y {len(con_dicom_adentro) - 3} más" if len(con_dicom_adentro) > 3 else "")
+            return (f"La carpeta elegida no tiene archivos DICOM (.dcm) directamente: están una carpeta más adentro, en {nombres}. "
+                    "Elija esa subcarpeta.")
+        sin_extension = [e for e in archivos if "." not in e]
+        if sin_extension:
+            return (f"La carpeta elegida no tiene archivos con extensión .dcm, y la aplicación solo lee archivos .dcm. "
+                    f"Hay {len(sin_extension)} archivo(s) sin extensión, por ejemplo '{sin_extension[0]}'.")
+        if not entradas:
+            return "La carpeta elegida está vacía."
+        return "La carpeta elegida no tiene archivos DICOM (.dcm)."
+    texto = str(error or "")
+    if "CT Image Storage" in texto:
+        return (f"La carpeta tiene {len(con_dcm)} archivo(s) .dcm, pero ninguno es una imagen de CT (CT Image Storage): "
+                "pueden ser estructuras de radioterapia u otros objetos DICOM.")
+    if "no es uniforme" in texto:
+        return ("Los cortes de la serie principal de la carpeta no tienen el mismo tamaño, espaciado o escala "
+                f"(PixelSpacing, Rows, Columns, RescaleSlope, RescaleIntercept), así que no se pueden apilar en un volumen. Detalle: {texto}")
+    return f"No se pudo cargar la carpeta como una serie de CT. Detalle: {texto or 'sin detalle'}"
+
+
 class DicomVolume:
     """
     Clase para cargar, procesar y acceder a volúmenes DICOM de tomografía.
@@ -187,6 +229,7 @@ class DicomVolume:
         # D-06). Antes: `sorted(..., key=SliceLocation)`, ausente en los CBCT
         # de Varian (Halcyon, iX) -> volumen barajado.
         self.serie_uid = None
+        self.error_de_carga = None          # SE.5: el motivo por el que no cargo (texto del error), o None si cargo
         # A.1 (23-09): identidad y adquisicion de ESTA serie, leidas una sola
         # vez por `leer_serie` (el mismo corte de donde salen kv/ma).
         self.adquisicion = None
@@ -278,6 +321,7 @@ class DicomVolume:
         except Exception as e:
             _registrar_etapa("EXCEPCION en _load_dicoms", str(e))
             print(f"Error durante la carga de DICOM: {e}")
+            self.error_de_carga = str(e) or type(e).__name__
             self.volumen = None
             self.volumen_hu = None
 
@@ -1017,8 +1061,12 @@ class VisualizadorDicom(QWidget):
         # Cargar volumen DICOM
         vol_nuevo = DicomVolume(self.ruta_carpeta)
         if vol_nuevo.volumen_hu is None:
-            self.vol = vol_nuevo
+            # SE.5: una carpeta que no carga lo DICE (antes: un `print` y nada en pantalla), y el volumen anterior, si lo había, sigue activo (como al
+            # cancelar la ventana de A.3): el volumen fallido no lo reemplaza.
             print("Error: No se pudo cargar el volumen DICOM.")
+            texto = motivo_de_no_carga(self.ruta_carpeta, vol_nuevo.error_de_carga)
+            self.ruta_carpeta = self.vol.ruta_carpeta if self.vol is not None else None
+            QMessageBox.warning(self, "Carpeta DICOM", texto)
             return
 
         # A.3 (23-09): la ventana de metadatos, ANTES de detectar módulos, de
