@@ -20,7 +20,7 @@ import sys, os, importlib
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from data.ManejoDatos.usuariosManager import UsuarioData
 from services.audit_minimo import usuario_actual as _usuario_actual
-from data.ManejoDatos.conection import Conexion, checkpoint_wal
+from data.ManejoDatos.conection import Conexion, checkpoint_wal, ESPERA_CHECKPOINT_AL_CERRAR_MS
 from services.respaldo import respaldar_al_cerrar
 
 # A.2 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): claves de pagina que
@@ -756,8 +756,12 @@ class MainWindow(QMainWindow):
         # después de cerrar la app, el .db por sí solo ya queda completo (sin
         # depender de llevarse también "-wal"/"-shm"). Best-effort: nunca
         # bloquea el cierre.
+        # RB.3 (PLAN_GUARDADO_SIN_ESPESOR_Y_RESPALDOS_05-10.md): el checkpoint espera como
+        # mucho `ESPERA_CHECKPOINT_AL_CERRAR_MS` a que otro termine lo que tiene abierto;
+        # con la espera general (30 s) retenia el turno de escritura y nadie mas podia
+        # guardar. El respaldo ya no depende de que el checkpoint termine (RB.1).
         if Conexion._instance is not None:
-            checkpoint_wal(Conexion._instance.con)
+            checkpoint_wal(Conexion._instance.con, espera_ms=ESPERA_CHECKPOINT_AL_CERRAR_MS)
         # E9 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §17): respaldo fechado con
         # rotación, DESPUÉS del checkpoint para que la copia salga completa.
         # Best-effort igual que el checkpoint: un fallo avisa por consola y la

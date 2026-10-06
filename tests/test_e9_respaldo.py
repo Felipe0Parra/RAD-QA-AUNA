@@ -213,8 +213,9 @@ class TestCloseEventDeProduccion:
                 con = object()
 
         monkeypatch.setattr(mainpages_mod, "Conexion", _ConexionFalsa)
+        # RB.3: `closeEvent` pasa `espera_ms` (el checkpoint del cierre espera como mucho 500 ms).
         monkeypatch.setattr(mainpages_mod, "checkpoint_wal",
-                            lambda con: llamadas.append("checkpoint"))
+                            lambda con, espera_ms=None: llamadas.append("checkpoint"))
         # RB.2: `closeEvent` pide el respaldo por franja (`respaldar_al_cerrar`), no el respaldo directo.
         monkeypatch.setattr(mainpages_mod, "respaldar_al_cerrar",
                             lambda usuario=None: llamadas.append("respaldo"))

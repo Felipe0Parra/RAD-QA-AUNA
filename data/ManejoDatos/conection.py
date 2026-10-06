@@ -99,7 +99,14 @@ def aplicar_pragmas_conexion(con):
     return con
 
 
-def checkpoint_wal(con):
+# RB.3 (05-10-2026, DP-150): cuanto espera, como mucho, el checkpoint del CIERRE de la app a que otro termine una operacion abierta.
+# Con la espera general de la conexion (30 s) el checkpoint TRUNCATE retiene el turno de escritura mientras espera y nadie mas puede
+# guardar (medido en M6: 30.07 s de espera, un guardado detenido 30.08 s y cuatro guardados con la espera de QtSql -5 s- fallando con
+# `database is locked`). Acotado a 500 ms, la demora maxima para los demas fue de 0.53 s y no fallo nadie (medido en un equipo).
+ESPERA_CHECKPOINT_AL_CERRAR_MS = 500
+
+
+def checkpoint_wal(con, espera_ms=None):
     """R2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): en modo WAL (H2.5), los
     commits recientes pueden vivir SOLO en el archivo "-wal", no en el .db
     principal, hasta que ocurre un checkpoint. Copiar/mover la BD llevándose
@@ -114,13 +121,33 @@ def checkpoint_wal(con):
     queda completa. Best-effort: nunca lanza (mismo principio que
     audit_minimo.registrar()) -- un fallo al checkpointar no debe impedir que
     la app siga cerrando.
+
+    `espera_ms` (RB.3): con un valor, el checkpoint espera como mucho esos
+    milisegundos a que otra conexión termine lo que tiene abierto (si no
+    termina, el checkpoint queda a medias y el WAL se consolida en otro
+    cierre) y la espera de la conexion VUELVE a su valor anterior al terminar,
+    también si el checkpoint lanza. Sin él (el respaldo previo a una
+    migración, F1), exactamente como antes: la espera general de la conexión.
+    Un checkpoint a medias deja el `.db` sin su `-wal` DAÑADO si se copia como
+    archivo: por eso el respaldo se hace con la API de SQLite (RB.1) y esta
+    espera acotada solo es segura DESPUÉS de RB.1.
     """
     if con is None:
         return
+    espera_anterior = None
     try:
+        if espera_ms is not None:
+            espera_anterior = con.execute("PRAGMA busy_timeout").fetchone()[0]
+            con.execute(f"PRAGMA busy_timeout={int(espera_ms)}")
         con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except Exception as ex:
         print("Error al hacer checkpoint del WAL:", ex)
+    finally:
+        if espera_anterior is not None:
+            try:
+                con.execute(f"PRAGMA busy_timeout={int(espera_anterior)}")
+            except Exception:
+                pass
 
 
 def _asegurar_columna(cursor, tabla, columna, ddl):

@@ -278,9 +278,10 @@ class TestCierreDeLaAppHaceCheckpoint:
         llamado = {}
         original = conection_mod.checkpoint_wal
 
-        def _checkpoint_espia(con):
+        def _checkpoint_espia(con, espera_ms=None):
+            # RB.3: `closeEvent` pasa `espera_ms`; el espia lo reenvia al checkpoint real.
             llamado["con"] = con
-            return original(con)
+            return original(con, espera_ms=espera_ms)
 
         monkeypatch.setattr(mainpages_mod, "checkpoint_wal", _checkpoint_espia)
 
