@@ -160,10 +160,15 @@ class TestU2BisReabrirControlNoPierdeAlResponsableInactivo:
 
         _sembrar_usuario(bd_temporal, "dmesa", "Daniela Mesa", active=0)
 
+        # FS.2 (06-10-2026): el control sembrado declara su tipo, como todo
+        # control real. La precarga de los fisicos identifica el control por
+        # (equipo, TIPO, periodo) -- antes no distinguia Mensual de Anual y
+        # un mes con control anual prestaba sus fisicos al mensual --, asi
+        # que un control sin tipo ya no es el "mensual de junio".
         con = ConexionReal().con
         con.execute(
-            "INSERT INTO controles (equipo, fecha, user_id, activo) "
-            "VALUES ('Clinac 600', '15/06/2026', 'Daniela Mesa', 1)")
+            "INSERT INTO controles (equipo, control, fecha, user_id, activo) "
+            "VALUES ('Clinac 600', 'Mensual', '15/06/2026', 'Daniela Mesa', 1)")
         con.commit()
 
         from PyQt5.QtWidgets import QDateEdit

@@ -331,10 +331,9 @@ CENSO_RAICES = {
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3038"),  # V.4 (28-09): 3033->3038
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1803, "LinealidadBraquiterapia"):  # V.5 (28-09): 1776->1851; P.1 (28-09): 1851->1862; RC.1 (30-09): 1862->1861; PI.9 (05-10): 1861->1803
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3067"),  # V.4 (28-09): 3062->3067
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 273, "controles"):  # A.2 (21-09): 256->269; B.3 (21-09): 269->270; C.1 (25-09): 270->273
-        (LISTA, "actualizar_fisicos: WHERE equipo = ? y desempata el mes en "
-                "Python -- un control anulado del mes prestaría sus físicos"),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 561, "controles"):  # A.2 (21-09): 544->557; B.3 (21-09): 557->558; C.1 (25-09): 558->561
+    # FS.2 (06-10): se retira la entrada de `actualizar_fisicos` (antes en la linea 273): ya no lee `controles` por su cuenta,
+    # pide el control vigente a `services/identidad_control.py::buscar_control_vigente`, que es la UNICA lectura (censada arriba).
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 572, "controles"):  # A.2 (21-09): 544->557; B.3 (21-09): 557->558; C.1 (25-09): 558->561; FS.2 (06-10): 561->572
         (IDENTIDAD, "_fecha_real_del_control (F3): WHERE id = ?, fila ya elegida"),
     ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 167, "controles"):  # A.2 (23-09): 164->165; G.2 (24-09): 165->166; G.3 (24-09): 166->167
         (IDENTIDAD, "_existe_ref: WHERE id = ? AND equipo = ? -- el id ya "
@@ -368,11 +367,11 @@ CENSO_RAICES = {
 # quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
 # en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
 # 70 -> 73 sitios físicos.
-FILAS_ESPERADAS = 79      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`); FS.1 (06-10): -1 (-2 busquedas de create_control retiradas de load.py y seiscientos_anual.py, +1 la unica `identidad_control.py::buscar_control_vigente`)
+FILAS_ESPERADAS = 78      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`); FS.1 (06-10): -1 (-2 busquedas de create_control retiradas de load.py y seiscientos_anual.py, +1 la unica `identidad_control.py::buscar_control_vigente`); FS.2 (06-10): -1 (la consulta propia de `actualizar_fisicos` se retira: usa `buscar_control_vigente`)
                           # RC.2 (30-09): +1, `corregir_calibracion` (IDENTIDAD sobre TipoCalibracion)
                           # PI.3 (02-10): +6, `services/posicion_inicial_braqui.py` (3 LISTA y 3 IDENTIDAD)
                           # PI.9 (05-10): -3, los tres sitios de la clase retirada (`actualizar_ref_bd` y las dos series temporales; LISTA)
-SITIOS_FISICOS_ESPERADOS = 77      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`); FS.1 (06-10): -1 (el mismo recuento de arriba)
+SITIOS_FISICOS_ESPERADOS = 76      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`); FS.1 (06-10): -1 (el mismo recuento de arriba); FS.2 (06-10): -1 (idem)
                                     # RC.2 (30-09): +1 (corregir_calibracion, IDENTIDAD)
                                     # PI.3 (02-10): +6 (los seis del servicio, ninguno se resuelve a dos textos)
                                     # PI.9 (05-10): -3 (los mismos tres sitios; ninguno se resolvia a dos textos)

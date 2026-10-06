@@ -352,12 +352,17 @@ class TestDenominadorDeCobertura:
         #             queda en UNA sola funcion, `services/identidad_control.py::buscar_control_vigente` (lectora de `controles`, con
         #             `filtro_activo`): ENTRA esa, y SALEN las dos `create_control` (la de `load.py` y la de `PruebaAnual600`) que la
         #             hacian cada una a su manera -- ahora solo escriben (INSERT/UPDATE) y delegan la lectura.
+        #   107 -> 106 FS.2 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md, 06-10): la precarga de los fisicos
+        #             (`PruebaMensual600.actualizar_fisicos`) tambien pide el control vigente a `buscar_control_vigente` en vez de
+        #             leer `controles` por su cuenta: SALE esa funcion lectora, no entra ninguna (el ayudante nuevo
+        #             `_seleccionar_fisico` solo lee `users`, que no es del bloque de QC).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 107, (
+        assert len(lectoras) == 106, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
             f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
-            f"inicial y FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) "
-            f"-- 107 funciones esperadas; ahora salen "
+            f"inicial, FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) y "
+            f"FS.2 retiró la lectura propia de `actualizar_fisicos` "
+            f"-- 106 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"

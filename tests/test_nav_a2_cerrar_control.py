@@ -15,7 +15,9 @@ Garantias que este test exige, todas del protocolo de la tarea:
 (e) ARRANQUE LIMPIO -- la exigencia del fisico (SS0.15): la huella de
     estado de la pagina "mensual" tras cerrar+recrear debe ser IGUAL a la
     del arranque, salvo `tabla_filas` (la vista previa lista el control
-    real que se acaba de crear). Parametrizado sobre 600/iX/Halcyon/TAC.
+    real que se acaba de crear) y, desde FS.2 (06-10-2026), `fisico1.enabled`
+    (False -> True: el mes del arranque no tenia control y el de despues si).
+    Parametrizado sobre 600/iX/Halcyon/TAC.
     Rojo-antes-que-verde real: la huella tras "Iniciar" (B) debe diferir de
     la del arranque (A) en varios campos -- si no discriminara, el
     experimento no probaria nada (punto 1-bis del protocolo).
@@ -225,7 +227,18 @@ class TestArranqueLimpioTrasCerrar:
             for campo in huella_a
             if huella_a[campo] != huella_c[campo]
         }
-        assert set(diferencias_ac) <= {"tabla_filas"}, (
+        # FS.2 (06-10-2026, PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md, D2):
+        # la pantalla ya sabe, AL ABRIRSE, si el periodo tiene control. En A
+        # (arranque) el mes no tenia control: Fisico 1 = la sesion, BLOQUEADO.
+        # En C el control que acaba de crear "Iniciar" ya existe: sus
+        # firmantes se precargan y los combos quedan libres. Es la unica
+        # diferencia nueva y es la regla (control existente: combos libres;
+        # control nuevo: Fisico 1 es la sesion), no un residuo de la pagina
+        # cerrada -- se exige el par EXACTO y no se ensancha el conjunto.
+        assert set(diferencias_ac) <= {"tabla_filas", "fisico1.enabled"}, (
             f"Cerrar y recrear dejo la pagina distinta del arranque en "
             f"campos no esperados: {diferencias_ac}")
+        assert diferencias_ac.get("fisico1.enabled") == (False, True), (
+            f"el Fisico 1 debia pasar de bloqueado (mes sin control) a libre "
+            f"(el control ya existe): {diferencias_ac}")
         assert huella_c["tabla_filas"] >= huella_a["tabla_filas"]

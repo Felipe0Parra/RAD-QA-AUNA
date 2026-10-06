@@ -255,6 +255,18 @@ SITIOS_CENSALES_PERMITIDOS = {
         "equipo_id = ?: cuenta las referencias de ESTE equipo cruzando "
         "todos los refs que lo usaron, no selecciona el bloque vigente de "
         "un ref concreto.",
+    # FS.2 (06-10): la prueba de los fisicos al abrir construye por primera
+    # vez, con el constructor de produccion, las pantallas ANUALES de Halcyon
+    # y esta lectura (hoy solo la veia ES1) pasa a verla tambien el frente
+    # dinamico. Es el mismo criterio que ES1 ya documento para esa linea en
+    # `SITIOS_CLAVE_INCOMPLETA_PERMITIDOS` de test_le4.
+    ("data/ManejoDatos/Tablas_Anuales/tablas_anuales.py", 872):
+        "check_imagen_mlc_subida -- HC_imagen_perfil_mlc_anual: clave "
+        "declarada (ref, id_energia), pero el Halcyon anual guarda esta "
+        "tabla SIEMPRE con id_energia=0 (INSERT con el literal en "
+        "halcyon_anual.py); nunca hay mas de un id_energia por ref, asi "
+        "que la ambiguedad que R5 explota no puede darse. Solo pregunta "
+        "si hay imagen subida.",
 }
 
 # Acumulador de la sesión completa de pytest -- una lista de

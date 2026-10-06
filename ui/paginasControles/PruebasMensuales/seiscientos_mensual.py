@@ -26,7 +26,7 @@ from services.mcc_metrics import (
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import usuario_actual as _usuario_actual
 from services.audit_minimo import ACCION_GUARDAR
-from services.fechas_control import mismo_mes as _mismo_mes
+from services.identidad_control import buscar_control_vigente   # FS.2
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
 from ui.util_formato import codigo_de_formato
 from services.vigencia_equipo import es_vigente_en_fecha
@@ -260,61 +260,71 @@ class PruebaMensual600(PruebaBasico):
             mostrar_controles_mensuales(self, tabla_widget, equipo_filtrar=self.equipo_f)
 
     def actualizar_fisicos(self):
-        # F2 (PLAN_TPR_Y_FECHAS_MENSUAL_23-07.md SS2.4): mismo criterio que
-        # create_control -- la identidad es (equipo, mes, anio), nunca la
-        # fecha completa como texto exacto.
-        fecha_elegida = self.date_box.date().toString("MM/yyyy")
+        # FS.2 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md, D2): los combos de los fisicos dicen, ANTES de «Iniciar», lo que
+        # se va a guardar. La identidad del control es UNA sola regla para todas las pantallas
+        # (`services/identidad_control.py`, FS.1): mensual = (equipo, mes, anio); anual = (equipo, anio). Antes (F2 del
+        # 23-07) esta consulta no distinguia Mensual de Anual -- un mes con control anual prestaba sus fisicos al mensual y al
+        # reves -- y pasar a un periodo SIN control dejaba los fisicos del anterior, con los que nacia el control nuevo.
+        #   * periodo CON control -> los dos fisicos guardados, combos libres (el nombre de un firmante hoy inactivo se
+        #     agrega al combo, U2-bis, para que reabrir muestre SIEMPRE al responsable real; lo que NO esta guardado se
+        #     muestra como marcador: no se arrastra el del periodo anterior).
+        #   * periodo SIN control -> Fisico 1 = quien tiene la sesion, BLOQUEADO («obligatoriamente el que tiene la sesion
+        #     iniciada»; se agrega al combo si no es «Fisico Medico»), Fisico 2 libre. El marcador del Fisico 2 se repone solo
+        #     si lo que se veia venia de un control GUARDADO (R2: no heredar sus firmantes); si el fisico lo eligio a mano en un
+        #     periodo sin control, corregir la fecha NO se lo borra (en HEAD se conservaba).
+        # Lo que la precarga agrega a un combo se marca y se retira en la siguiente: la lista de candidatos de un control nuevo
+        # sigue siendo la de los fisicos activos (U2). Corre al construir la pantalla (`preINIGI`) y en cada cambio de la fecha.
+        tipo = "Anual" if self.es_control_anual else "Mensual"
+        fecha_elegida = self.date_box.date().toString("dd/MM/yyyy")
         try:
             with (self.db_manager.obtener_conexion() if hasattr(self, 'equipo_f') and self.equipo_f != 'Tomógrafo' else Conexion().conectar()) as conn:
                 cursor = conn.cursor()
-                # LR3 (DA-47/DA-48): lectura de BLOQUE -- devuelve todos los
-                # controles del equipo y desempata el mes en Python. Sin filtro,
-                # un control ANULADO del mes prestaba sus físicos al formulario.
-                cursor.execute(
-                    "SELECT fecha, user_id, user_id_f2 FROM controles WHERE equipo = ?"
-                    f"{filtro_activo('controles')}",
-                    (self.equipo_f,)
-                )
-                resultado = None
-                for fecha_existente, user_id, user_id_f2 in cursor.fetchall():
-                    if _mismo_mes(fecha_existente, fecha_elegida):
-                        resultado = (user_id, user_id_f2)
-                        break
-
-                if resultado:
-                    # Z8 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): fisico1/
-                    # fisico2 son QComboBox -- setText() no existe ahí
-                    # (AttributeError garantizado, atrapado en silencio por el
-                    # except de abajo). Se seleccionan por texto, mismo patrón
-                    # que el resto del archivo (líneas ~287-289, ~527-530).
-                    #
-                    # U2-bis (PLAN_PESTANA_USUARIOS_02-09.md, O-7): U2 filtró
-                    # `consultar_fisicos_bd` por `active` -- el combo ya NO
-                    # trae a un físico inactivo como candidato para un
-                    # control nuevo (correcto), pero eso mismo dejaba
-                    # `findText` en -1 al reabrir un control YA FIRMADO por
-                    # alguien que hoy está inactivo, y el combo se quedaba
-                    # mostrando a OTRA persona -- en silencio, atribuyendo el
-                    # control a quien no corresponde (contradice DA-47: una
-                    # lectura de IDENTIDAD -- "quién firmó este control" --
-                    # no se filtra). Si el nombre guardado no está entre las
-                    # opciones, se agrega antes de buscarlo: reabrir SIEMPRE
-                    # muestra al responsable real, esté o no activo hoy.
-                    if resultado[0]:
-                        if self.fisico1.findText(resultado[0]) < 0:
-                            self.fisico1.addItem(resultado[0])
-                        indice_f1 = self.fisico1.findText(resultado[0])
-                        if indice_f1 >= 0:
-                            self.fisico1.setCurrentIndex(indice_f1)
-                    if resultado[1]:
-                        if self.fisico2.findText(resultado[1]) < 0:
-                            self.fisico2.addItem(resultado[1])
-                        indice_f2 = self.fisico2.findText(resultado[1])
-                        if indice_f2 >= 0:
-                            self.fisico2.setCurrentIndex(indice_f2)
+                existente = buscar_control_vigente(cursor, self.equipo_f, tipo, fecha_elegida)
+                venia_de_un_control = getattr(self, "_fisicos_vienen_de_un_control", False)
+                self._retirar_candidatos_agregados(self.fisico1, self.fisico2)
+                if existente:
+                    _, _, fisico_1, fisico_2 = existente
+                    self._seleccionar_fisico(cursor, self.fisico1, fisico_1)
+                    self._seleccionar_fisico(cursor, self.fisico2, fisico_2)
+                    self.fisico1.setEnabled(True)
+                    self.fisico2.setEnabled(True)
+                else:
+                    sesion = _usuario_actual(self)
+                    if sesion:
+                        self._seleccionar_fisico(cursor, self.fisico1, sesion)
+                        self.fisico1.setEnabled(False)
+                    if venia_de_un_control:
+                        self._seleccionar_fisico(cursor, self.fisico2, None)
+                    self.fisico2.setEnabled(True)
+                self._fisicos_vienen_de_un_control = bool(existente)
         except Exception as e:
             print(f"Error al actualizar el físico seleccionado: {e}")
 
+    _ROL_AGREGADO_POR_LA_PRECARGA = Qt.UserRole + 1
+
+    @staticmethod
+    def _seleccionar_fisico(cursor, combo, nombre):
+        """FS.2: deja `nombre` seleccionado en `combo`. Si no esta entre las opciones (un firmante hoy inactivo, U2-bis, o
+        una sesion que no es «Fisico Medico») lo agrega CON su `id` (sin el, `user_id_f2` quedaba en None y «Iniciar» dejaba
+        el control sin segundo fisico) y lo marca para retirarlo en la siguiente precarga. Sin `nombre` pone el marcador (el
+        primer item, el unico que no lleva dato)."""
+        if nombre:
+            if combo.findText(nombre) < 0:
+                fila = cursor.execute("SELECT id FROM users WHERE fullname = ?", (nombre,)).fetchone()
+                combo.addItem(nombre, fila[0] if fila else None)
+                combo.setItemData(combo.count() - 1, True, PruebaMensual600._ROL_AGREGADO_POR_LA_PRECARGA)
+            combo.setCurrentIndex(combo.findText(nombre))
+        elif combo.count() and combo.itemData(0) is None:
+            combo.setCurrentIndex(0)
+
+    @staticmethod
+    def _retirar_candidatos_agregados(*combos):
+        """FS.2: retira de los combos lo que una precarga anterior agrego (ver `_seleccionar_fisico`); la lista vuelve a ser la
+        de los candidatos que armo la pantalla al construirse."""
+        for combo in combos:
+            for i in reversed(range(combo.count())):
+                if combo.itemData(i, PruebaMensual600._ROL_AGREGADO_POR_LA_PRECARGA):
+                    combo.removeItem(i)
 
 
     def actualizar_user_id_f2(self, fisicos_disponibles=None):
@@ -452,6 +462,7 @@ class PruebaMensual600(PruebaBasico):
         self.cancel_edit_preview = QPushButton('Cancelar')
         self.cancel_edit_preview.hide()
         self.date_box.dateChanged.connect(self.actualizar_fisicos)
+        self.actualizar_fisicos()   # FS.2: la precarga tambien al ABRIR (la fecha ya esta fijada: dateChanged no se dispara)
 
         preview_toolbar.addWidget(self.btn_delete_preview)
         preview_toolbar.addWidget(self.edit_table_preview)

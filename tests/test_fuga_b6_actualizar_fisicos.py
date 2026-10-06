@@ -75,14 +75,27 @@ class TestB6ActualizarFisicosCierraSiempre:
         monkeypatch.setattr(conection_mod, "_ConexionUnaVez", _ConexionUnaVezEspia)
         _ConexionUnaVezEspia.llamadas.clear()
 
-        def _filtro_que_revienta(tabla):
+        # FS.2 (06-10-2026): `actualizar_fisicos` ya no arma su propia consulta
+        # con `filtro_activo`; su unica lectura es la funcion de identidad de
+        # control (`services/identidad_control.buscar_control_vigente`), y es
+        # AHI donde se inyecta el fallo. Inyectarlo en `filtro_activo` pasaba
+        # en vacio (esa funcion ya no se llama desde aqui y la prueba seguia
+        # verde sin probar nada): por eso se exige que la inyeccion se haya
+        # ejecutado de verdad.
+        invocaciones = []
+
+        def _busqueda_que_revienta(cursor, equipo, tipo, fecha):
+            invocaciones.append((equipo, tipo, fecha))
             raise RuntimeError("fallo inyectado por el test")
 
-        monkeypatch.setattr(mensual_mod, "filtro_activo", _filtro_que_revienta)
+        monkeypatch.setattr(mensual_mod, "buscar_control_vigente", _busqueda_que_revienta)
 
         obj = _mensual_pelado()
         obj.actualizar_fisicos()  # el except genérico lo traga y avisa
 
+        assert invocaciones == [("Tomógrafo", "Mensual", "15/08/2026")], (
+            "la busqueda inyectada no se ejecuto: la prueba no estaria "
+            f"probando que el with cierra cuando el SELECT revienta -- {invocaciones}")
         assert _ConexionUnaVezEspia.llamadas == ["exit"], (
             "el with debe invocar __exit__ exactamente una vez, incluso "
             f"cuando el SELECT revienta -- se registró: {_ConexionUnaVezEspia.llamadas}")
