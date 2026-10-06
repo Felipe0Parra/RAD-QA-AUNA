@@ -424,9 +424,9 @@ def _adq(modelo, estacion, kv, ma, espesor, uid, fecha="2026-09-12"):
     }
 
 
-# Resultado minimo VALIDO de `uniformidad` (id_tipo 7). No se usa `tamano_pixel`:
-# su guardado esta roto en produccion por una columna inexistente (`error_pct`,
-# DP-41), ajeno a esta tarea.
+# Resultado minimo VALIDO de `uniformidad` (id_tipo 7). No se usa `tamano_pixel`: no
+# hace falta aqui (su guardado fallaba en una BD nueva por la columna `error_pct`
+# ausente, DP-41, y lo cerro GI.0 del plan del 06-10; ver test_gi0_estructura_...).
 UNIFORMIDAD = {"Uniformidad": {"max_diferencia": 1.0}, "Centro": {"promedio_hu": 1.0, "desviacion": 2.0}}
 
 

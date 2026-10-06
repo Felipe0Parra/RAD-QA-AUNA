@@ -945,21 +945,21 @@ class ReporteControlSistemaImagenes:
         # Agregar resumen
         tabla.append(['--- RESUMEN ---', '---', '---', '---', '---', '---'])
         resolucion_limite = resultado.get('resolucion_limite', {})
-        mtf_lp_mm = resultado.get('mtf_lp_mm', {})
+        mtf_lp_cm = resultado.get('mtf_lp_cm', {})
         
-        lp_mm_max = resolucion_limite.get('lp_mm_maximo', 'N/A')
+        lp_cm_max = resolucion_limite.get('lp_cm_maximo', 'N/A')
         ultima_region = resolucion_limite.get('ultima_region', 'N/A')
         
-        if isinstance(lp_mm_max, (int, float)):
-            lp_mm_max_str = f"{lp_mm_max:.2f}"
+        if isinstance(lp_cm_max, (int, float)):
+            lp_cm_max_str = f"{lp_cm_max:.2f}"
         else:
-            lp_mm_max_str = str(lp_mm_max)
+            lp_cm_max_str = str(lp_cm_max)
         
-        tabla.append(['Resolución máxima', lp_mm_max_str, '---', '---', '---', ultima_region])
+        tabla.append(['Resolución máxima', lp_cm_max_str, '---', '---', '---', ultima_region])
         
         # MTF
-        mtf_10 = mtf_lp_mm.get('10', 'N/A')
-        mtf_50 = mtf_lp_mm.get('50', 'N/A')
+        mtf_10 = mtf_lp_cm.get('10', 'N/A')
+        mtf_50 = mtf_lp_cm.get('50', 'N/A')
         
         if isinstance(mtf_10, (int, float)):
             mtf_10_str = f"{mtf_10:.2f}"

@@ -411,6 +411,28 @@ def _aplicar_migracion_en(ruta_bd, usuario=None):
             resultado_starshot)
 
 
+def _estado_de_los_renombres(inv_antes, inv_despues):
+    """GI.0 (D9): estado de cada renombrado de `RENOMBRES_DE_COLUMNAS` (la MISMA lista que usa la migración de `Conexion()`,
+    que es quien lo hace: la herramienta no tiene una implementación propia) visto desde las dos fotos del esquema.
+    Devuelve [(tabla, vieja, nueva, estado)] con estado: "renombrada" (la vieja estaba y ya no; la nueva no estaba y ahora sí),
+    "las dos" (quedaron las dos columnas: no se tocó nada) o "sin renombrar" (la vieja sigue y la nueva no existe: SQLite < 3.25).
+    Una base que ya tenía la columna nueva no aparece: no hubo nada que informar."""
+    from data.ManejoDatos.conection import RENOMBRES_DE_COLUMNAS
+    estados = []
+    for tabla, vieja, nueva in RENOMBRES_DE_COLUMNAS:
+        # SQLite compara los nombres de columna sin distinguir mayúsculas
+        antes = {c.lower() for c in inv_antes.get(tabla, set())}
+        despues = {c.lower() for c in inv_despues.get(tabla, set())}
+        v, n = vieja.lower(), nueva.lower()
+        if v in despues and n in despues:
+            estados.append((tabla, vieja, nueva, "las dos"))
+        elif v in antes and n not in antes and n in despues and v not in despues:
+            estados.append((tabla, vieja, nueva, "renombrada"))
+        elif v in despues and n not in despues:
+            estados.append((tabla, vieja, nueva, "sin renombrar"))
+    return estados
+
+
 def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normalizadas,
                     catalogos_antes=None, catalogos_despues=None):
     print("\n--- Cambios de esquema ---")
@@ -418,12 +440,26 @@ def _reportar_diff(inv_antes, inv_despues, sentinelas_antes, sentinelas_normaliz
     if tablas_nuevas:
         print("  Tablas nuevas creadas:", tablas_nuevas)
     hubo_columnas = False
+    renombres = _estado_de_los_renombres(inv_antes, inv_despues)
+    # un renombrado NO es una columna nueva: contarlo así sugeriría una columna vacía al lado de la vieja
+    ya_nombradas = {(t, n) for t, _, n, estado in renombres if estado == "renombrada"}
     for tabla in sorted(inv_despues):
         antes = inv_antes.get(tabla, set())
-        nuevas_cols = inv_despues[tabla] - antes
+        nuevas_cols = {c for c in inv_despues[tabla] - antes if (tabla, c) not in ya_nombradas}
         if nuevas_cols and tabla in inv_antes:
             hubo_columnas = True
             print(f"  {tabla}: columna(s) nueva(s) {sorted(nuevas_cols)}")
+    for tabla, vieja, nueva, estado in renombres:
+        hubo_columnas = True
+        if estado == "renombrada":
+            print(f"  {tabla}: columna renombrada en sitio {vieja} -> {nueva} "
+                  f"(la misma columna con los mismos datos; ninguna columna nueva ni vacía al lado)")
+        elif estado == "las dos":
+            print(f"  ATENCION -- {tabla}: existen las dos columnas {vieja} y {nueva}; no se tocó nada, "
+                  f"revisar a mano cuál conserva los datos")
+        else:
+            print(f"  ATENCION -- {tabla}: la columna {vieja} NO se renombró a {nueva} (SQLite menor que 3.25 u otro error: "
+                  f"ver el «Aviso» de más arriba); la app no podrá guardar la resolución espacial hasta renombrarla")
     if not tablas_nuevas and not hubo_columnas:
         print("  (sin cambios de esquema -- la base ya estaba al día)")
 

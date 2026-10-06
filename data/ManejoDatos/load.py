@@ -3038,7 +3038,7 @@ def mostrar_resolucion_espacial(parent, id_control):
             ('ID Prueba', 'id_prueba'),
             ('Regiones Analizadas', 'regiones_analizadas'),
             ('Regiones Exitosas', 'regiones_exitosas'),
-            ('LP/mm Máximo', 'lp_mm_maximo'),
+            ('LP/mm Máximo', 'lp_cm_maximo'),
             ('Última Región Exitosa', 'ultima_region_exitosa'),
             ('Gap Size Mínimo (cm)', 'gap_size_minimo_cm'),
             ('Nº Picos Totales', 'num_picos_totales'),

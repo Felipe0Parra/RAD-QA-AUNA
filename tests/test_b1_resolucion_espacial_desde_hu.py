@@ -91,7 +91,7 @@ def test_a_valores_del_mtf_no_dependen_de_la_ventana(clave):
         estados = tuple(sorted(
             (k, v.get("status"), v.get("n_peaks_used")) for k, v in resultado["region_results"].items()
         ))
-        resultados.append((estados, resultado["resolucion_limite"]["lp_mm_maximo"]))
+        resultados.append((estados, resultado["resolucion_limite"]["lp_cm_maximo"]))  # GI.0: la clave dice la unidad real (lp/cm)
 
     assert len(set(resultados)) == 1, (
         f"{clave}: resolucion_espacial cambió con la ventana de visualización -- "
@@ -133,5 +133,5 @@ def test_c_ix_pasa_de_no_medible_a_siete_lp_cm():
             corte_255, hu, tam_px, visualizar=False,
             orientacion=orientacion, roll_deg=roll_deg,
         )
-    assert resultado["resolucion_limite"]["lp_mm_maximo"] == 7
+    assert resultado["resolucion_limite"]["lp_cm_maximo"] == 7  # GI.0: antes `lp_mm_maximo`; guardaba lp/cm
     assert resultado["region_results"]["region 8"]["status"].startswith("Fuera del límite de muestreo")

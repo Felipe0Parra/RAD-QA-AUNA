@@ -843,7 +843,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
                 mtf_values[f"{lp_val:.1f}"] = mod / ref if ref > 0 else 0.0
 
     # Interpolación MTF %
-    mtf_lp_mm = {}
+    mtf_lp_cm = {}
     if len(mtf_values) >= 2:
         spacings = sorted([(round(float(k), 3), v) for k, v in mtf_values.items()])
         x = [s[0] for s in spacings]
@@ -853,7 +853,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
         for pct in (10, 20, 30, 40, 50):
             target = pct / 100
             if min(y) <= target <= max(y):
-                mtf_lp_mm[str(pct)] = float(f(target))
+                mtf_lp_cm[str(pct)] = float(f(target))
 
     # Visualización
     if visualizar and corte is not None or canvas is not None:
@@ -873,7 +873,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
                 xs = [float(k) for k in mtf_values.keys()]
                 ys = list(mtf_values.values())
                 ax4.plot(xs, ys, 'o-')
-                for pct, val in mtf_lp_mm.items():
+                for pct, val in mtf_lp_cm.items():
                     ax4.plot(val, int(pct)/100, 'rx')
                     ax4.text(val, int(pct)/100, f"{pct}% {val:.2f}", fontsize=8)
                 ax4.set_ylim(0, 1.05); ax4.grid(True)
@@ -908,7 +908,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
                 xs = [float(k) for k in mtf_values.keys()]
                 ys = list(mtf_values.values())
                 ax4.plot(xs, ys, 'o-')
-                for pct, val in mtf_lp_mm.items():
+                for pct, val in mtf_lp_cm.items():
                     ax4.plot(val, int(pct)/100, 'rx')
                     ax4.text(val, int(pct)/100, f"{pct}% {val:.2f}", fontsize=8)
                 ax4.set_ylim(0, 1.05); ax4.grid(True)
@@ -926,21 +926,21 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
             output_blob = buf.getvalue()  # Imagen en formato BLOB
             buf.close()
 
-    # Encontrar la última región que pasó el análisis (con mayor lp/mm)
+    # Encontrar la última región que pasó el análisis (con mayor lp/cm)
     ultima_region_ok = None
-    max_lp_mm = -1
+    max_lp_cm = -1
 
     for region_name, result in region_results.items():
         if result.get("status") == "OK":
-            lp_mm = result.get("lp/cm", 0)
-            if lp_mm > max_lp_mm:
-                max_lp_mm = lp_mm
+            lp_cm = result.get("lp/cm", 0)
+            if lp_cm > max_lp_cm:
+                max_lp_cm = lp_cm
                 ultima_region_ok = region_name
 
     # Información sobre resolución límite
     resolucion_limite = {
         "ultima_region": ultima_region_ok,
-        "lp_mm_maximo": max_lp_mm
+        "lp_cm_maximo": max_lp_cm
     }
 
     if ultima_region_ok:
@@ -955,7 +955,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
     return {
         "region_results": region_results,
         "mtf_values": mtf_values,
-        "mtf_lp_mm": mtf_lp_mm,
+        "mtf_lp_cm": mtf_lp_cm,
         "num_picos": total_peaks,
         "valores_picos": [round(v, 2) for v in all_peak_values_concat],
         "resolucion_limite": resolucion_limite,

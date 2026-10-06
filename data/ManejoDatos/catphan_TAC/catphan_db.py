@@ -264,7 +264,7 @@ def mapear_resolucion_espacial(resultados_resolucion):
     # CORREGIR: Acceder correctamente a los campos del diccionario
     region_results = resultados_resolucion.get("region_results", {})
     resolucion_limite = resultados_resolucion.get("resolucion_limite", {})
-    mtf_lp_mm = resultados_resolucion.get("mtf_lp_mm", {})
+    mtf_lp_cm = resultados_resolucion.get("mtf_lp_cm", {})
     
     # Filtrar solo regiones con datos válidos
     regiones_validas = {k: v for k, v in region_results.items() 
@@ -274,13 +274,13 @@ def mapear_resolucion_espacial(resultados_resolucion):
     datos_resumen = {
         "regiones_analizadas": len(region_results),
         "regiones_exitosas": len(regiones_validas),
-        "lp_mm_maximo": resolucion_limite.get("lp_mm_maximo"),  
+        "lp_cm_maximo": resolucion_limite.get("lp_cm_maximo"),  
         "ultima_region_exitosa": resolucion_limite.get("ultima_region"),  
         "gap_size_minimo_cm": resolucion_limite.get("gap_size_cm"), 
         "num_picos_totales": resultados_resolucion.get("num_picos"), 
-        "mtf_10_pct": mtf_lp_mm.get("10"),
-        "mtf_20_pct": mtf_lp_mm.get("20"), 
-        "mtf_50_pct": mtf_lp_mm.get("50")
+        "mtf_10_pct": mtf_lp_cm.get("10"),
+        "mtf_20_pct": mtf_lp_cm.get("20"), 
+        "mtf_50_pct": mtf_lp_cm.get("50")
     }
     
     # Datos para tabla detalle por región
@@ -288,7 +288,7 @@ def mapear_resolucion_espacial(resultados_resolucion):
     for region_nombre, region_data in region_results.items():
         region_mapeada = {
             "region_nombre": region_nombre,
-            "lp_mm": region_data.get("lp/mm"), 
+            "lp_cm": region_data.get("lp/mm"), 
             "peak_mean": region_data.get("peak_mean"), 
             "valley_mean": region_data.get("valley_mean"), 
             "gap_size_cm": region_data.get("gap_size_cm"),  
@@ -834,7 +834,7 @@ def guardar_resolucion_espacial(cursor, id_prueba, resultados):
     # 1. Guardar resumen en tabla principal
     cursor.execute("""
         INSERT INTO resolucion_espacial (
-            id_prueba, regiones_analizadas, regiones_exitosas, lp_mm_maximo,
+            id_prueba, regiones_analizadas, regiones_exitosas, lp_cm_maximo,
             ultima_region_exitosa, gap_size_minimo_cm, num_picos_totales,
             mtf_10_pct, mtf_20_pct, mtf_50_pct
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -842,7 +842,7 @@ def guardar_resolucion_espacial(cursor, id_prueba, resultados):
         id_prueba,
         datos_resumen["regiones_analizadas"],
         datos_resumen["regiones_exitosas"],
-        datos_resumen["lp_mm_maximo"],
+        datos_resumen["lp_cm_maximo"],
         datos_resumen["ultima_region_exitosa"],
         datos_resumen["gap_size_minimo_cm"],
         datos_resumen["num_picos_totales"],
@@ -855,13 +855,13 @@ def guardar_resolucion_espacial(cursor, id_prueba, resultados):
     for region in lista_regiones:
         cursor.execute("""
             INSERT INTO resolucion_espacial_regiones (
-                id_prueba, region_nombre, lp_mm, peak_mean, valley_mean,
+                id_prueba, region_nombre, lp_cm, peak_mean, valley_mean,
                 gap_size_cm, n_peaks_used, n_valleys_used, status
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             id_prueba,
             region["region_nombre"],
-            region["lp_mm"],
+            region["lp_cm"],
             round(region["peak_mean"], 3) if region["peak_mean"] is not None else None,
             round(region["valley_mean"], 3) if region["valley_mean"] is not None else None,
             round(region["gap_size_cm"], 3) if region["gap_size_cm"] is not None else None,
@@ -1388,7 +1388,7 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
     """Reconstruye los resultados de resolución espacial desde la BD"""
     # 1. Obtener resumen
     cursor.execute(f"""
-        SELECT regiones_analizadas, regiones_exitosas, lp_mm_maximo, ultima_region_exitosa, gap_size_minimo_cm,
+        SELECT regiones_analizadas, regiones_exitosas, lp_cm_maximo, ultima_region_exitosa, gap_size_minimo_cm,
                 num_picos_totales, mtf_10_pct, mtf_20_pct, mtf_50_pct
         FROM resolucion_espacial WHERE id_prueba = ?{filtro_activo('resolucion_espacial')}
     """, (id_prueba,))
@@ -1397,13 +1397,13 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
     if not resumen:
         return None
     
-    (regiones_analizadas, regiones_exitosas, lp_mm_maximo, ultima_region, gap_size_minimo, num_picos, mtf_10, mtf_20, mtf_50) = resumen
+    (regiones_analizadas, regiones_exitosas, lp_cm_maximo, ultima_region, gap_size_minimo, num_picos, mtf_10, mtf_20, mtf_50) = resumen
     
     # 2. Obtener detalles por región
     cursor.execute(f"""
-        SELECT region_nombre, lp_mm, peak_mean, valley_mean, gap_size_cm, n_peaks_used, n_valleys_used, status
+        SELECT region_nombre, lp_cm, peak_mean, valley_mean, gap_size_cm, n_peaks_used, n_valleys_used, status
         FROM resolucion_espacial_regiones WHERE id_prueba = ?{filtro_activo('resolucion_espacial_regiones')}
-        ORDER BY lp_mm
+        ORDER BY lp_cm
     """, (id_prueba,))
     
     regiones = cursor.fetchall()
@@ -1411,10 +1411,10 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
     # Reconstruir estructura
     region_results = {}
     for region in regiones:
-        (nombre, lp_mm, peak_mean, valley_mean, gap_size, n_peaks, n_valleys, status) = region
+        (nombre, lp_cm, peak_mean, valley_mean, gap_size, n_peaks, n_valleys, status) = region
         
         region_results[nombre] = {
-            "lp/mm": lp_mm,
+            "lp/mm": lp_cm,
             "peak_mean": peak_mean,
             "valley_mean": valley_mean,
             "gap_size_cm": gap_size,
@@ -1424,20 +1424,20 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
         }
     
     # Reconstruir MTF
-    mtf_lp_mm = {}
-    if mtf_10: mtf_lp_mm["10"] = mtf_10
-    if mtf_20: mtf_lp_mm["20"] = mtf_20
-    if mtf_50: mtf_lp_mm["50"] = mtf_50
+    mtf_lp_cm = {}
+    if mtf_10: mtf_lp_cm["10"] = mtf_10
+    if mtf_20: mtf_lp_cm["20"] = mtf_20
+    if mtf_50: mtf_lp_cm["50"] = mtf_50
     
     resolucion_limite = {
         "ultima_region": ultima_region,
-        "lp_mm_maximo": lp_mm_maximo,
+        "lp_cm_maximo": lp_cm_maximo,
         "gap_size_cm": gap_size_minimo
     }
     
     return {
         "region_results": region_results,
-        "mtf_lp_mm": mtf_lp_mm,
+        "mtf_lp_cm": mtf_lp_cm,
         "num_picos": num_picos,
         "resolucion_limite": resolucion_limite,
         "imagen_analisis": imagen_resultado

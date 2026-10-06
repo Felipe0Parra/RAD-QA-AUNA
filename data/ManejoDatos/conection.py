@@ -166,6 +166,55 @@ def _asegurar_columna(cursor, tabla, columna, ddl):
         cursor.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {ddl}")
 
 
+# GI.0 (D9, PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): estas dos columnas guardan lp/cm (D3: es la unidad del formato
+# oficial y del fantoma; `Analisis_Catphan_TAC.resolucion_espacial` interpola sobre `roi_settings[...]["lp/cm"]`) y se
+# llamaban `lp_mm_maximo` y `lp_mm`: el nombre mentia. FUENTE UNICA de lo que se renombra: la usan la migracion de
+# `Conexion` (que corre al abrir la app Y dentro de `scripts/migrar_bd_a_estandar.py`), el informe de esa herramienta y
+# las pruebas. Los valores ya guardados NO se tocan (las filas de 01-04/2026 guardaron lp/mm: las ajustan los fisicos).
+RENOMBRES_DE_COLUMNAS = (
+    ("resolucion_espacial", "lp_mm_maximo", "lp_cm_maximo"),
+    ("resolucion_espacial_regiones", "lp_mm", "lp_cm"),
+)
+RENOMBRE_HECHO = "renombrada"
+RENOMBRE_YA_HECHO = "ya estaba renombrada"
+RENOMBRE_DOS_COLUMNAS = "existen las dos columnas: no se tocó nada"
+RENOMBRE_NADA_QUE_RENOMBRAR = "no existe la columna vieja ni la nueva: nada que renombrar"
+RENOMBRE_SIN_SOPORTE = "SQLite menor que 3.25: no se renombró"
+
+
+def _asegurar_renombre_columna(cursor, tabla, vieja, nueva):
+    """Migración idempotente: renombra `vieja` a `nueva` EN SITIO (`ALTER TABLE ... RENAME COLUMN`).
+
+    Un RENAME COLUMN reescribe solo el esquema: no reconstruye la tabla, no mueve ni una fila y es atómico, así que no
+    puede perder datos (por eso corre al abrir la app y no solo en la herramienta de migración, a diferencia de las
+    reconstrucciones de tabla de DA-69). Devuelve cuál de los `RENOMBRE_*` ocurrió:
+
+      * existe `vieja` y no `nueva`  -> renombra                                   (RENOMBRE_HECHO)
+      * existe solo `nueva`          -> nada                                       (RENOMBRE_YA_HECHO)
+      * existen las dos              -> no toca nada y lo avisa                    (RENOMBRE_DOS_COLUMNAS)
+      * no existe ninguna / no hay tabla -> nada                                   (RENOMBRE_NADA_QUE_RENOMBRAR)
+      * SQLite < 3.25 (sin RENAME COLUMN) -> no renombra y avisa; la app no se cae (RENOMBRE_SIN_SOPORTE)
+
+    Con las dos columnas presentes (caso fabricado: alguien agregó la nueva a mano) se deja la vieja con sus datos: unir o
+    borrar columnas es decisión de una persona, no de una migración automática.
+    """
+    # SQLite compara los nombres de columna sin distinguir mayúsculas: una base con `LP_MM_MAXIMO` SÍ tiene la columna vieja.
+    cols = [c[1].lower() for c in cursor.execute(f"PRAGMA table_info('{tabla}')").fetchall()]
+    if vieja.lower() in cols and nueva.lower() in cols:
+        print(f"Aviso: '{tabla}' tiene las dos columnas '{vieja}' y '{nueva}'; no se tocó nada (revisar a mano).")
+        return RENOMBRE_DOS_COLUMNAS
+    if nueva.lower() in cols:
+        return RENOMBRE_YA_HECHO
+    if vieja.lower() not in cols:
+        return RENOMBRE_NADA_QUE_RENOMBRAR
+    if sqlite3.sqlite_version_info < (3, 25, 0):
+        print(f"Aviso: SQLite {sqlite3.sqlite_version} no soporta RENAME COLUMN (hace falta 3.25 o mayor): "
+              f"'{tabla}.{vieja}' no se renombró a '{nueva}'.")
+        return RENOMBRE_SIN_SOPORTE
+    cursor.execute(f'ALTER TABLE "{tabla}" RENAME COLUMN "{vieja}" TO "{nueva}"')
+    return RENOMBRE_HECHO
+
+
 def _tablas_con_borrado_en_cascada(cur):
     """Tablas cuyo esquema aún declara la cascada vieja de borrado (ver
     `_asegurar_fk_on_delete_restrict`) en alguna FK.
@@ -257,6 +306,7 @@ class Conexion():
             self._asegurar_identidad_dicom_pruebas()  # A.1 (PLAN_HANDOFF_IMAGENES_22-09.md)
             self._asegurar_energia_linealidad()  # G.2 (PLAN_HANDOFF_IMAGENES_22-09.md)
             self._asegurar_criterio_veredicto()  # G.3 (PLAN_HANDOFF_IMAGENES_22-09.md)
+            self._asegurar_error_pct_tamano_pixel()  # GI.0 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -267,6 +317,9 @@ class Conexion():
             # arranque, tras esta línea).
             self._asegurar_secuencias_sin_duplicados()
             self._asegurar_fk_on_delete_restrict()
+            # GI.0 (D9): DESPUÉS de E10 a propósito. El respaldo previo que E10 toma (F1) tiene que conservar la base COMO LLEGÓ, con los
+            # nombres viejos: con las columnas ya renombradas un build anterior no podría guardar la resolución espacial con él.
+            self._asegurar_unidades_resolucion_espacial()  # GI.0 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             # EB2d (DA-57) YA NO CORRE AQUÍ ([[DA-69]], decisión del físico
             # 2026-08-25): `_asegurar_angulo_starshot_sin_unique_de_tabla`
             # RECONSTRUYE una tabla (crear temporal, copiar, DROP, renombrar)
@@ -1075,6 +1128,60 @@ class Conexion():
         self.con.commit()
         cur.close()
 
+    def _asegurar_error_pct_tamano_pixel(self):
+        """GI.0 (DP-41, D8, PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): `tamaño_pixel` gana `error_pct` si no la tiene.
+
+        CAUSA: el `CREATE TABLE` no la declaraba y el escritor (`catphan_db.guardar_tamano_pixel`) la inserta, igual que el
+        visor ("Ver tabla"): en una BD CREADA con el código, guardar "Tamaño de píxel" fallaba siempre con `no column named
+        error_pct` y `guardar_prueba_completa_catphan` devolvía `None` sin decir por qué. Las 5 BD de referencia ya la
+        tienen (alguien la agregó a mano); una instalación nueva no.
+
+          error_pct  REAL  admite NULL: el escritor guarda None si no hay valor teórico; las filas históricas de una BD que
+                           no la tuviera quedan en NULL (no se inventa un valor retroactivo)
+
+        Aditiva e idempotente: en una BD que ya la tiene no toca nada. Va después de `_asegurar_activo_bloque_qc` (`DP-80`:
+        ADD COLUMN añade al final físico; en una BD nueva `error_pct` ya va declarada antes de `activo`)."""
+        cur = self.con.cursor()
+        try:
+            # SQLite compara los nombres sin distinguir mayúsculas (si la columna es `ERROR_PCT` ya existe) y `_asegurar_columna` sí los
+            # distingue: sin esta guarda intentaría un ADD COLUMN duplicado y la excepción cortaría el resto del arranque.
+            existentes = [c[1].lower() for c in cur.execute("PRAGMA table_info('tamaño_pixel')").fetchall()]
+            if "error_pct" not in existentes:
+                _asegurar_columna(cur, "tamaño_pixel", "error_pct", "REAL")
+        except sqlite3.Error as ex:
+            # igual que el renombrado: un paso de GI.0 que falla no puede impedir el resto del arranque (la cadena vive en UN try/except)
+            print(f"Aviso: no se pudo asegurar 'tamaño_pixel.error_pct': {ex}")
+        self.con.commit()
+        cur.close()
+
+    def _asegurar_unidades_resolucion_espacial(self):
+        """GI.0 (D9, PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): `resolucion_espacial.lp_mm_maximo` pasa a `lp_cm_maximo`
+        y `resolucion_espacial_regiones.lp_mm` a `lp_cm`, EN SITIO (`RENOMBRES_DE_COLUMNAS`, una sola implementación en
+        `_asegurar_renombre_columna`).
+
+        CAUSA: las dos columnas guardan lp/cm desde que el análisis interpola sobre el eje `roi_settings[...]["lp/cm"]` (D3: es la
+        unidad del formato oficial y del fantoma) y el nombre decía lp/mm. Un RENAME COLUMN no reconstruye la tabla ni mueve
+        una fila, así que corre al abrir la app (no solo en `scripts/migrar_bd_a_estandar.py`): una BD que no pasara por la
+        herramienta dejaría de guardar la resolución espacial con el código nuevo. La herramienta crea `Conexion()`, así que
+        usa exactamente esta misma implementación y su informe nombra el renombrado.
+
+        Idempotente; sin tocar un solo valor (las filas de 01-04/2026 guardaron lp/mm: las ajustan los físicos, D3).
+
+        Un renombrado que FALLA no puede impedir el resto del arranque: esta cadena vive en UN `try/except` y una excepción aquí
+        omitiría los pasos siguientes (E8, el índice único de controles...). Medido: con una vista rota en la base el `RENAME COLUMN`
+        lanza `error in view ...`. Se avisa y se sigue; la herramienta de migración lo informa como «sin renombrar».
+
+        Va DESPUÉS de E10 (`_asegurar_fk_on_delete_restrict`): el respaldo previo que ese paso toma (F1) conserva la base como llegó
+        (medido: con el renombrado antes de E10 el respaldo ya traía los nombres nuevos y un build anterior no guardaba con él)."""
+        cur = self.con.cursor()
+        for tabla, vieja, nueva in RENOMBRES_DE_COLUMNAS:
+            try:
+                _asegurar_renombre_columna(cur, tabla, vieja, nueva)
+            except sqlite3.Error as ex:
+                print(f"Aviso: no se pudo renombrar '{tabla}.{vieja}' a '{nueva}': {ex}")
+        self.con.commit()
+        cur.close()
+
     def _asegurar_roles_de_sistema(self):
         """E6 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §10): modelo de roles
         real en `users.rol_sistema` ('admin' / 'jefe' / 'fisico').
@@ -1856,6 +1963,7 @@ class Conexion():
                 Y REAL,                                     -- Promedio yizq, yder
                 diferencia_x REAL,                          -- |promedio_x - teorico|
                 diferencia_y REAL,                          -- |promedio_y - teorico|
+                error_pct REAL,                             -- Error porcentual del promedio de X e Y contra el teorico (DP-41, GI.0)
                 FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
             );"""
 
@@ -1898,13 +2006,13 @@ class Conexion():
                 id_prueba INTEGER PRIMARY KEY,
                 regiones_analizadas INTEGER,                -- Cantidad de regiones procesadas
                 regiones_exitosas INTEGER,                  -- Regiones con status "OK"
-                lp_mm_maximo REAL,                         -- Máximo lp/mm logrado
+                lp_cm_maximo REAL,                         -- Máximo lp/cm logrado
                 ultima_region_exitosa VARCHAR(20),         -- Nombre de la última región OK
                 gap_size_minimo_cm REAL,                   -- Gap size de la mejor resolución
                 num_picos_totales INTEGER,                 -- Total de picos detectados
-                mtf_10_pct REAL,                          -- lp/mm para MTF 10%
-                mtf_20_pct REAL,                          -- lp/mm para MTF 20%
-                mtf_50_pct REAL,                          -- lp/mm para MTF 50%
+                mtf_10_pct REAL,                          -- lp/cm para MTF 10%
+                mtf_20_pct REAL,                          -- lp/cm para MTF 20%
+                mtf_50_pct REAL,                          -- lp/cm para MTF 50%
                 FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
             );"""
 
@@ -1913,7 +2021,7 @@ class Conexion():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 id_prueba INTEGER NOT NULL,
                 region_nombre VARCHAR(20),                  -- "region 1", "region 2", etc.
-                lp_mm REAL,                                -- 0.1, 0.2, 0.3, etc.
+                lp_cm REAL,                                -- lp/cm de la region (la region N es N lp/cm)
                 peak_mean REAL,
                 valley_mean REAL,
                 gap_size_cm REAL,

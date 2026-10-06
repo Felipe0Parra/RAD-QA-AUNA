@@ -13,7 +13,11 @@ perder ni un registro de QC**.
 1. **Esquema al día**: crea las tablas y columnas que se han agregado al
    proyecto y que la BD vieja no tiene (por ejemplo `audit_log`,
    `controles.activo`, las columnas nuevas de la calculadora). Nunca borra
-   ni renombra nada.
+   nada. Lo único que **renombra** (en sitio, sin tocar ni un valor) son dos
+   columnas de resolución espacial del Catphan, que guardan lp/cm:
+   `resolucion_espacial.lp_mm_maximo` pasa a `lp_cm_maximo` y
+   `resolucion_espacial_regiones.lp_mm` a `lp_cm`; el reporte lo dice bajo
+   «Cambios de esquema» como «columna renombrada en sitio».
 2. **Catálogos base**: siembra los catálogos internos (tipos de prueba,
    materiales, regiones, energías) solo si están vacíos.
 3. **Corrección del catálogo de equipos** (certificados H2.6/H2.10): las
