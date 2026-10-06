@@ -236,10 +236,10 @@ class DicomVolume:
                 # Extraer metadatos del primer corte (ahora el primero en
                 # posición espacial real, no el primero que devolvió el disco)
                 self.pixel_spacing = getattr(self.cortes[0], 'PixelSpacing', None)
-                self.slice_thickness = getattr(self.cortes[0], 'SliceThickness', None)
+                self.slice_thickness = serie.espesor_mm  # SE.1: UNA sola lectura del espesor (leer_serie), del mismo corte que kv/ma; None si no se publica
                 self.kv = getattr(self.cortes[0], 'KVP', None)
                 self.ma = getattr(self.cortes[0], 'XRayTubeCurrent', None)
-                self.espesor_corte = getattr(self.cortes[0], 'SliceThickness', None)
+                self.espesor_corte = serie.espesor_mm  # SE.1: idem
 
                 # C.2 (22-09): umbral con holgura relativa a la RAM libre en
                 # vez de un tope fijo (el fijo comparaba contra el crudo,

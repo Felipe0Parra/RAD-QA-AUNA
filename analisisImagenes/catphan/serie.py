@@ -81,7 +81,9 @@ class SerieCT:
     series_descartadas: dict  # {serie_uid: n_archivos}
     no_imagen: int
     pixel_mm: tuple
-    espesor_mm: float
+    # SE.1 (05-10-2026, DP-149): el `SliceThickness` del corte espacialmente PRIMERO (el mismo de donde salen kV y mA), o `None` si el equipo no lo
+    # publica (etiqueta ausente, vacia o sin numero). Antes: un `0.0` inventado si faltaba, y una carga que no abria (`float(None)`) si estaba vacia.
+    espesor_mm: Optional[float]
     filas: int
     columnas: int
     etiquetas: dict
@@ -157,7 +159,6 @@ def leer_serie(carpeta: str) -> SerieCT:
     columnas = int(getattr(primero, "Columns"))
     slope0 = float(getattr(primero, "RescaleSlope", 1))
     intercept0 = float(getattr(primero, "RescaleIntercept", 0))
-    espesor_mm = float(getattr(primero, "SliceThickness", 0.0))
 
     for ruta, ds in elegidos:
         pixel_i = tuple(float(v) for v in getattr(ds, "PixelSpacing", (1.0, 1.0)))
@@ -214,6 +215,9 @@ def leer_serie(carpeta: str) -> SerieCT:
     ds_por_ruta = {ruta: ds for ruta, ds in elegidos}
     primero_espacial = ds_por_ruta[cortes[0].ruta]
     etiquetas = {clave: getattr(primero_espacial, clave, None) for clave in ETIQUETAS_SERIE}
+    # SE.1: el espesor sale del MISMO corte que las etiquetas y se dice tal cual lo publica el archivo: un dato que no trae es `None`, nunca un `0.0`
+    # que parece una medida (llegaba a la ventana de metadatos, al JSON archivado con la prueba y al PDF firmado) ni una excepcion que apaga la carga.
+    espesor_mm = _primer_numero(getattr(primero_espacial, "SliceThickness", None))
 
     detalle_series_descartadas = {
         uid: {
