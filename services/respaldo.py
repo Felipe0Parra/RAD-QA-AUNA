@@ -40,10 +40,11 @@ da una foto consistente aunque el checkpoint haya quedado a medias.
 import os
 import re
 import shutil
+import socket
 import sqlite3
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from data.ManejoDatos import conection as _conection
 from services import audit_minimo
@@ -427,3 +428,244 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
     finally:
         if parcial is not None:
             _quitar_con_laterales(parcial)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# RB.2 (05-10-2026, DP-150, decision D2 del fisico: "maximo dos por dia"): a lo sumo UN respaldo por franja del dia.
+#
+# Antes se respaldaba en CADA cierre, y volver a "Inicio" es un cierre (`MainWindow.cerrar` -> `close` -> `closeEvent`): en
+# produccion 39 respaldos en 18 dias, 5 dias con mas de dos, hasta 6 en un dia (M9). Ahora: una copia por franja -- mañana (antes
+# de `HORA_DE_CORTE`) y tarde (desde ella) --, hecha en el PRIMER cierre de la franja. A cambio, lo guardado despues de la copia de
+# la tarde espera a la primera del dia siguiente (P4 del plan).
+#
+# La franja NO se deduce del nombre de los respaldos (con relojes distintos entre equipos el nombre puede llevar la hora de otro
+# equipo, RB.0): se lleva con archivos pequeños en la misma carpeta (compartida por todos los equipos),
+# `franja_<fecha>_<N>.reclamo` (alguien la esta haciendo) y `franja_<fecha>_<N>.hecha` (ya esta hecha).
+HORA_DE_CORTE = 12
+# A-1 de la segunda revision: la franja y el nombre se leen en la zona del SERVICIO (Colombia: UTC-5 todo el año, sin horario de verano), no en la del equipo que cierra:
+# con `datetime.fromtimestamp` a secas, dos equipos con zonas horarias distintas veian el MISMO instante del servidor en franjas distintas (dos copias a la vez, o la franja
+# de la tarde consumida antes de las 12:00 reales). Un desfase fijo y no `ZoneInfo`: el desfase no puede fallar (no depende de la base de zonas horarias del equipo).
+ZONA_DEL_SERVICIO = timezone(timedelta(hours=-5))
+PREFIJO_FRANJA = "franja_"
+SUFIJO_RECLAMO = ".reclamo"
+SUFIJO_HECHA = ".hecha"
+EDAD_MAXIMA_RECLAMO_S = 600                  # un reclamo de mas de 10 minutos es de un cierre que se cayo: se puede retomar
+EDAD_MAXIMA_MARCAS_S = 7 * 24 * 3600         # las marcas de franja de mas de 7 dias se retiran
+EDAD_MAXIMA_PROVISIONAL_S = 24 * 3600        # los provisionales huerfanos de mas de un dia se retiran
+# Puntos de corte inyectables: las pruebas de concurrencia intercalan dos cierres en un punto exacto (intercalados deterministas;
+# lanzar procesos a la vez no basta: con bases pequeñas la copia dura milisegundos y la carrera puede no ocurrir). En produccion
+# `_GANCHOS` esta vacio y `_punto` no hace nada.
+_GANCHOS = {}
+
+
+def franja_de(momento):
+    """`(fecha, n)` de la franja a la que pertenece `momento`: `fecha` es `AAAA-MM-DD`; `n` es 1 (antes de `HORA_DE_CORTE`) o 2
+    (desde ella)."""
+    return momento.strftime("%Y-%m-%d"), (1 if momento.hour < HORA_DE_CORTE else 2)
+
+
+def _punto(nombre):
+    gancho = _GANCHOS.get(nombre)
+    if gancho is not None:
+        gancho()
+
+
+def _marca_de_franja(carpeta, franja, sufijo):
+    return os.path.join(carpeta, f"{PREFIJO_FRANJA}{franja[0]}_{franja[1]}{sufijo}")
+
+
+def _crear_exclusivo(ruta, texto):
+    """Crea `ruta` SOLO si no existe (creacion exclusiva: si varios equipos lo intentan a la vez, uno solo lo logra).
+    `True` si la creo. Un `PermissionError` con el archivo YA presente (en Windows, uno con borrado pendiente) se toma como "ocupado"; si
+    el archivo no esta, es falta de permiso sobre la carpeta (E1 de la revision): no se obtiene y se avisa por consola. (La consola no existe en el .exe
+    `--noconsole`: ahi el aviso no se ve, como todos los `print` de este modulo desde E9; dejar un rastro visible en Registros es la deuda DP-153.)"""
+    try:
+        fd = os.open(ruta, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    except PermissionError as ex:
+        if not os.path.exists(ruta):
+            print(f"[respaldo] sin permiso para crear {os.path.basename(ruta)}: {ex}")
+        return False
+    try:
+        os.write(fd, texto.encode("utf-8"))
+    finally:
+        os.close(fd)
+    return True
+
+
+def _reloj_del_servidor(carpeta):
+    """La hora que ve el servidor de archivos de `carpeta`: la fecha de modificacion de un archivo recien creado ahi. Los equipos de
+    la red no comparten reloj: la edad de un reclamo se mide con el MISMO reloj en los dos extremos."""
+    sonda = os.path.join(carpeta, f"{PREFIJO_FRANJA}sonda_{uuid.uuid4().hex}.tmp")
+    try:
+        with open(sonda, "wb") as f:
+            f.write(b"x")
+        return os.stat(sonda).st_mtime
+    finally:
+        _quitar(sonda)
+
+
+def _hora_segun_el_servidor(carpeta):
+    """La hora de ESTE cierre con el reloj del servidor de archivos de `carpeta`, en la zona del servicio (C1 y A-1 de la revision). Los equipos de la red
+    no comparten reloj, y la franja y el nombre del respaldo tienen que salir del MISMO reloj en todos: con el de cada equipo, un PC
+    adelantado consumiria por adelantado la franja de OTRO dia (o de otra mitad del dia) y los cierres reales de esa franja no
+    respaldarian nada, sin ningun aviso. Si no se puede leer (carpeta sin permiso...), la hora de este equipo."""
+    try:
+        return datetime.fromtimestamp(_reloj_del_servidor(carpeta), tz=ZONA_DEL_SERVICIO).replace(tzinfo=None)
+    except Exception:
+        return datetime.now()
+
+
+def _edad_del_reclamo(reclamo, carpeta):
+    """Segundos que lleva el reclamo, o `None` si ya no existe."""
+    try:
+        creado = os.stat(reclamo).st_mtime
+    except FileNotFoundError:
+        return None
+    return _reloj_del_servidor(carpeta) - creado
+
+
+def _ruta_reclamo(carpeta, franja, generacion):
+    """El reclamo de la franja en su `generacion`: la 1 es `.reclamo`; las siguientes, `.reclamo.2`, `.reclamo.3`..."""
+    base = _marca_de_franja(carpeta, franja, SUFIJO_RECLAMO)
+    return base if generacion == 1 else f"{base}.{generacion}"
+
+
+def _reclamos_de(carpeta, franja):
+    """`{generacion: ruta}` de los reclamos que hay de la franja."""
+    base = os.path.basename(_marca_de_franja(carpeta, franja, SUFIJO_RECLAMO))
+    encontrados = {}
+    for n in os.listdir(carpeta):
+        if n == base:
+            encontrados[1] = os.path.join(carpeta, n)
+        # solo digitos ASCII: `str.isdigit()` acepta '²' y `int('²')` lanza (misma clase que H7): un archivo ajeno en la carpeta compartida detenia los respaldos de la franja
+        elif n.startswith(base + ".") and re.fullmatch(r"[0-9]+", n[len(base) + 1:]) and int(n[len(base) + 1:]) >= 2:
+            encontrados[int(n[len(base) + 1:])] = os.path.join(carpeta, n)
+    return encontrados
+
+
+def _reclamar(carpeta, franja, ahora):
+    """La ruta del reclamo si ESTE cierre lo obtuvo, o `None` (alguien mas la esta haciendo).
+
+    Si hay un reclamo reciente, lo tiene otro cierre. Si el ultimo reclamo es viejo (de un cierre que se cayo), se retoma creando,
+    en EXCLUSIVA, el de la generacion siguiente (`.reclamo.2`...): de varios equipos que vieron el mismo reclamo viejo, uno solo
+    lo crea. No se renombra el reclamo viejo: un renombrado no distingue el viejo del que otro acaba de retomar (mismo nombre) y
+    dos equipos podrian retomarlo a la vez."""
+    texto = f"{socket.gethostname()} pid={os.getpid()} {ahora.isoformat(timespec='seconds')}"
+    existentes = _reclamos_de(carpeta, franja)
+    generacion = max(existentes) if existentes else 0
+    if generacion:
+        edad = _edad_del_reclamo(existentes[generacion], carpeta)
+        if edad is not None:
+            # `abs`: un reclamo con fecha en el FUTURO (reloj del servidor corrido hacia atras) tampoco es de un cierre en curso (C2 de la
+            # revision); sin `abs` su edad es negativa, parece reciente y bloquea la franja hasta que el reloj lo alcance.
+            if abs(edad) < EDAD_MAXIMA_RECLAMO_S:
+                return None
+            _punto("antes_de_retomar")
+    siguiente = _ruta_reclamo(carpeta, franja, generacion + 1)
+    return siguiente if _crear_exclusivo(siguiente, texto) else None
+
+
+def _consumir(reclamo, hecha, carpeta, franja):
+    """Convierte el reclamo en la marca de franja hecha (renombrado) y retira los reclamos viejos que la retomaron. Si el reclamo
+    ya no existia (otro equipo lo retiro al terminar antes), la franja queda marcada igual: este cierre SI hizo su copia."""
+    try:
+        os.replace(reclamo, hecha)
+    except OSError:
+        _crear_exclusivo(hecha, "hecha")
+    try:
+        for ruta in _reclamos_de(carpeta, franja).values():
+            _quitar(ruta)
+    except OSError:
+        pass
+
+
+# Un provisional de RB.1 es `<respaldo>.<pid>-<aleatorio>.parcial` (o, de antes de H1, `<respaldo>.parcial`), con sus laterales de SQLite.
+_PATRON_PROVISIONAL = re.compile(r"(.+?\.db)(?:\.[0-9]+-[0-9a-f]+)?" + re.escape(SUFIJO_PARCIAL)
+                                 + "(?:" + "|".join(re.escape(s) for s in SUFIJOS_LATERALES) + ")?", re.ASCII)
+
+
+def _es_provisional(nombre):
+    """`True` si `nombre` es un provisional de `respaldar_bd` (o un lateral suyo): lo que deja un cierre que se cayo a medias."""
+    m = _PATRON_PROVISIONAL.fullmatch(nombre)
+    return m is not None and _marca_y_contador(m.group(1)) is not None
+
+
+def _limpiar_marcas(carpeta):
+    """Retira las marcas de franja de mas de 7 dias y los provisionales huerfanos de mas de un dia. Best-effort."""
+    try:
+        reloj = _reloj_del_servidor(carpeta)
+        nombres = os.listdir(carpeta)
+    except OSError:
+        return
+    for n in nombres:
+        es_reclamo = SUFIJO_RECLAMO in n and (n.endswith(SUFIJO_RECLAMO) or n.rsplit(".", 1)[-1].isdigit())
+        if n.startswith(PREFIJO_FRANJA) and (n.endswith(SUFIJO_HECHA) or es_reclamo):
+            limite = EDAD_MAXIMA_MARCAS_S
+        elif (n.startswith(PREFIJO_FRANJA) and n.endswith(".tmp")) or _es_provisional(n):
+            limite = EDAD_MAXIMA_PROVISIONAL_S
+        else:
+            continue
+        ruta = os.path.join(carpeta, n)
+        try:
+            if reloj - os.stat(ruta).st_mtime > limite:
+                _quitar(ruta)
+        except OSError:
+            pass
+
+
+def respaldar_al_cerrar(usuario=None, ruta_origen=None, carpeta_destino=None, max_copias=MAX_RESPALDOS, ahora=None):
+    """A lo sumo UN respaldo por franja del dia (mañana: antes de `HORA_DE_CORTE`; tarde: desde ella) y por base de datos, hecho en
+    el primer cierre de la franja (RB.2, decision D2 del fisico: "maximo dos por dia"). Nunca lanza: devuelve la ruta de la copia
+    si este cierre la hizo, o `None` (la franja ya estaba hecha o la esta haciendo otro equipo, o la copia no se pudo hacer: en ese
+    caso la franja NO queda consumida y el siguiente cierre reintenta).
+
+    Pasos: (1) si existe la marca `.hecha` de la franja, nada; (2) se crea el reclamo en EXCLUSIVA (si hay uno reciente, otro la
+    esta haciendo: nada; si el ultimo es viejo, se retoma con la generacion siguiente, tambien en exclusiva); (3) se vuelve a mirar
+    si entretanto aparecio la `.hecha` (otro termino entre el paso 1 y el 2): se suelta el reclamo y nada; (4) `respaldar_bd`: si
+    sale bien, el reclamo pasa a `.hecha`; si falla, se retira; (5) se retiran las marcas viejas.
+
+    La franja y el nombre del respaldo salen de la hora del SERVIDOR de archivos de la carpeta (`_hora_segun_el_servidor`), no del reloj de
+    este equipo (C1 de la revision): asi, equipos con la hora distinta -- y con otra zona horaria, se lee en `ZONA_DEL_SERVICIO` -- se ponen de acuerdo en la franja. Con `ahora` se fija la hora.
+
+    `respaldar_bd` directo (el respaldo previo a una migracion, F1) NO se limita. Si un equipo se cae entre hacer la copia y dejar
+    la `.hecha`, a los 10 minutos otro cierre puede hacer una segunda: se acepta."""
+    try:
+        if ruta_origen is None:
+            ruta_origen = _conection.ruta_base_datos()
+        if not os.path.isfile(ruta_origen):
+            print(f"[respaldo] no existe la BD de origen, no se respalda: {ruta_origen}")
+            return None
+        if carpeta_destino is None:
+            carpeta_destino = carpeta_respaldos(ruta_origen)
+        os.makedirs(carpeta_destino, exist_ok=True)
+        if ahora is None:
+            ahora = _hora_segun_el_servidor(carpeta_destino)          # C1: la franja sale del reloj del servidor, no del de este equipo
+
+        franja = franja_de(ahora)
+        hecha = _marca_de_franja(carpeta_destino, franja, SUFIJO_HECHA)
+        if os.path.exists(hecha):
+            return None
+        _punto("tras_mirar_hecha")
+        reclamo = _reclamar(carpeta_destino, franja, ahora)
+        if reclamo is None:
+            return None
+        _punto("tras_reclamar")
+        destino = None
+        try:
+            if os.path.exists(hecha):
+                return None
+            _punto("antes_de_respaldar")
+            destino = respaldar_bd(usuario=usuario, ruta_origen=ruta_origen, carpeta_destino=carpeta_destino,
+                                   max_copias=max_copias, ahora=ahora)
+            return destino
+        finally:
+            if destino is not None:
+                _consumir(reclamo, hecha, carpeta_destino, franja)
+                _limpiar_marcas(carpeta_destino)
+            else:
+                _quitar(reclamo)
+    except Exception as ex:
+        print(f"[respaldo] no se pudo respaldar al cerrar: {ex}")
+        return None

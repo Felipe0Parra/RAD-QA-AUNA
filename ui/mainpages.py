@@ -21,7 +21,7 @@ from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensu
 from data.ManejoDatos.usuariosManager import UsuarioData
 from services.audit_minimo import usuario_actual as _usuario_actual
 from data.ManejoDatos.conection import Conexion, checkpoint_wal
-from services.respaldo import respaldar_bd
+from services.respaldo import respaldar_al_cerrar
 
 # A.2 (PLAN_NAVEGACION_Y_UNIDADES_10-09.md SS2): claves de pagina que
 # "Cerrar control" puede descartar y recrear. El mensual de BRAQUITERAPIA
@@ -762,7 +762,11 @@ class MainWindow(QMainWindow):
         # rotación, DESPUÉS del checkpoint para que la copia salga completa.
         # Best-effort igual que el checkpoint: un fallo avisa por consola y la
         # app cierra de todas formas.
-        respaldar_bd(usuario=_usuario_actual(self))
+        # RB.2 (PLAN_GUARDADO_SIN_ESPESOR_Y_RESPALDOS_05-10.md, decisión D2 del
+        # físico: "máximo dos por día"): a lo sumo UN respaldo por franja del día
+        # (mañana / tarde), hecho en el primer cierre de la franja. Volver a
+        # "Inicio" también es un cierre: antes cada uno hacía un respaldo.
+        respaldar_al_cerrar(usuario=_usuario_actual(self))
         event.accept()
 
 if __name__ == "__main__":

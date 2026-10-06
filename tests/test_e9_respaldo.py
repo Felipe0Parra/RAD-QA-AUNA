@@ -215,7 +215,8 @@ class TestCloseEventDeProduccion:
         monkeypatch.setattr(mainpages_mod, "Conexion", _ConexionFalsa)
         monkeypatch.setattr(mainpages_mod, "checkpoint_wal",
                             lambda con: llamadas.append("checkpoint"))
-        monkeypatch.setattr(mainpages_mod, "respaldar_bd",
+        # RB.2: `closeEvent` pide el respaldo por franja (`respaldar_al_cerrar`), no el respaldo directo.
+        monkeypatch.setattr(mainpages_mod, "respaldar_al_cerrar",
                             lambda usuario=None: llamadas.append("respaldo"))
         falso = type("VentanaFalsa", (), {"user_id": None})()
         evento = self._Evento()
@@ -234,4 +235,4 @@ class TestCloseEventDeProduccion:
         import inspect
         fuente = inspect.getsource(mainpages_mod.MainWindow.closeEvent)
         assert "Guardando datos o haciendo respaldo" not in fuente
-        assert "respaldar_bd" in fuente
+        assert "respaldar_al_cerrar" in fuente
