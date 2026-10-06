@@ -97,5 +97,12 @@ class TestElCorpusReal:
         """No vacuidad: si alguien vaciara CATPHAN, la regla de abajo pasaria sin mirar nada."""
         assert len(_corpus.CATPHAN) >= 6
 
+    def test_el_registro_del_hospital_entra_en_la_regla(self):
+        """SE.0 (05-10-2026): la carpeta real que llego del hospital (`TOMOGRAFO_SEP26`) vive en un registro aparte de CATPHAN (de CATPHAN iteran pruebas
+        que exigen un valor esperado por clave) y la regla tiene que mirarla igual: si el corpus esta y falta, FALLA."""
+        todas = _corpus.todas_las_series_declaradas()
+        assert "TOMOGRAFO_SEP26" in todas
+        assert set(_corpus.CATPHAN) < set(todas)
+
     def test_si_el_corpus_real_esta_estan_todas_las_series_declaradas(self):
-        verificar_corpus(_corpus.CATPHAN_RAIZ, _corpus.CATPHAN)
+        verificar_corpus(_corpus.CATPHAN_RAIZ, _corpus.todas_las_series_declaradas())

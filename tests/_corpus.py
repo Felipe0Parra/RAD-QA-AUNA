@@ -71,6 +71,29 @@ def serie_catphan(clave):
     return ruta if os.path.isdir(ruta) else None
 
 
+# SE.0 (05-10-2026, DP-149): carpetas reales que llegaron del hospital con un caso que la app tiene que seguir resolviendo. Van APARTE de CATPHAN
+# a proposito: CATPHAN son las seis series con referencias de oro de pylinac, y de ella iteran pruebas que exigen un valor esperado por cada
+# clave (`sorted(CATPHAN)` en test_b2, test_b3 y test_a0); una clave nueva ahi las obligaria a declarar expectativas que nadie midio.
+# La regla de PR.0 (si el corpus esta, tienen que estar TODAS las series declaradas) cubre los dos registros.
+CORPUS_HOSPITAL = {
+    # 20260928: la serie axial (151 cortes, 120 kV / 343 mA / 2.0 mm) MAS un topograma (`LOCALIZER`, `SliceLocation` -135.5, espesor vacio)
+    # en la misma carpeta: la que no dejaba guardar en la version desplegada.
+    "TOMOGRAFO_SEP26": os.path.join("DICOM", "QA Tac Septiembre 2026", "20260928 QA Tomografo Septiembre"),
+}
+
+
+def todas_las_series_declaradas():
+    """`{clave: ruta relativa a CATPHAN_RAIZ}` de TODAS las series del corpus de imagenes (CATPHAN y CORPUS_HOSPITAL): la que mira la regla de PR.0
+    (`tests/test_pr0_corpus_completo.py`: si el corpus esta, tienen que estar todas)."""
+    return {**CATPHAN, **CORPUS_HOSPITAL}
+
+
+def serie_hospital(clave):
+    """Ruta a una carpeta real del hospital (CORPUS_HOSPITAL), o None si no existe (skip honesto)."""
+    ruta = os.path.join(CATPHAN_RAIZ, CORPUS_HOSPITAL[clave])
+    return ruta if os.path.isdir(ruta) else None
+
+
 def mes_primeros(mes, maquina, sub=None):
     """Ruta a una carpeta de un mes de PrimerosMeses, tolerando la grafía IX/iX.
 
