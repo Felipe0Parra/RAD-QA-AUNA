@@ -116,7 +116,7 @@ def _guardar(sesion, categorias, **kw):
 
 
 # Forma del resultado real de `Analisis_Catphan_TAC.resolucion_espacial` con las claves de GI.0 (la misma de test_gi0): seis
-# regiones con todos los numeros distintos, `'lp/cm'` y `'lp/mm'` con el mismo valor para no depender de cual lea el mapeador (GI.1).
+# regiones con todos los numeros distintos, `'lp/cm'` y `'lp/mm'` con el mismo valor para no depender de cual lea el mapeador (hasta GI.1 leia `'lp/mm'`; desde GI.1, `'lp/cm'`).
 RESULTADO_ESPACIAL = {
     "region_results": {
         f"region {n}": {"lp/cm": 2.0 * n, "lp/mm": 2.0 * n, "peak_mean": 100.0 + n, "valley_mean": 50.0 + n,

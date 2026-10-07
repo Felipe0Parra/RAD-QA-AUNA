@@ -196,8 +196,8 @@ def _guardar(sesion, categorias, **kw):
 # Forma del resultado real de `Analisis_Catphan_TAC.resolucion_espacial`, con las claves de GI.0 y con TODOS los numeros distintos entre si
 # (regiones_analizadas 6, regiones_exitosas 5, lp_cm_maximo 10.0, num_picos 12, MTF 5.2/4.1/3.1, un lp/cm, un pico y un gap distintos por
 # region...): un cruce de columnas al escribir o al leer SE NOTA. Cada region trae `'lp/cm'` (lo que produce el analisis) Y `'lp/mm'` con el
-# MISMO valor: hoy el mapeador lee `'lp/mm'` (GI.1 lo cambia a `'lp/cm'`), y asi la prueba verifica el camino del VALOR de las columnas
-# renombradas sin depender de cual de las dos claves lea.
+# MISMO valor: hasta GI.1 el mapeador leia `'lp/mm'` (GI.1 lo cambio a `'lp/cm'`; su prueba, test_gi1_*, ya no pone `'lp/mm'`): esta se queda asi y
+# verifica el camino del VALOR de las columnas renombradas sin depender de cual de las dos claves lea.
 RESULTADO_ESPACIAL = {
     "region_results": {
         f"region {n}": {"lp/cm": 2.0 * n, "lp/mm": 2.0 * n, "peak_mean": 100.0 + n, "valley_mean": 50.0 + n,

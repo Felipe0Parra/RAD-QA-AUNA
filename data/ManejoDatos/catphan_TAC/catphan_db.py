@@ -140,7 +140,7 @@ def mapear_espesor_corte(resultados_espesor, espesor_teorico_dicom):
         return None
         
     espesor_promedio = resultados_espesor.get("espesor_promedio_mm")
-    diferencia = abs(espesor_promedio - espesor_teorico_dicom) if espesor_promedio and espesor_teorico_dicom else None
+    diferencia = abs(espesor_promedio - espesor_teorico_dicom) if espesor_promedio is not None and espesor_teorico_dicom else None
     
     # Extraer espesores individuales
     espesores_ind = resultados_espesor.get("espesores_individuales", {})
@@ -212,10 +212,10 @@ def mapear_resolucion_contraste(resultados_resolucion):
     # Datos para tabla resumen
     datos_resumen = {
         "rois_visibles_cnr": resumen.get("rois_visibles_cnr"),
-        "rois_visibles_visibilidad": resumen.get("rois_visibles_visibilidad_lim"),
+        "rois_visibles_visibilidad": resumen.get("rois_visibles_visibilidad"),
         "total_rois": resumen.get("total_rois"),
-        "pasa_test_cnr": len([r for r in resultados_roi.values() if r.get("pasa_cnr", False)]) >= 4,
-        "pasa_test_visibilidad": resumen.get("pasa_test_visibilidad_lim"),  
+        "pasa_test_cnr": len([r for r in resultados_roi.values() if r.get("pasa_cnr", False)]) >= resumen.get("min_rois_visibles", 4),
+        "pasa_test_visibilidad": resumen.get("pasa_test_visibilidad"),
         "metodo_recomendado": "visibilidad_lim",
         "imagen_analisis": resumen.get("imagen_analisis") # BLOB o None
     }
@@ -268,7 +268,7 @@ def mapear_resolucion_espacial(resultados_resolucion):
     
     # Filtrar solo regiones con datos válidos
     regiones_validas = {k: v for k, v in region_results.items() 
-                        if v.get("status") == "OK" and isinstance(v.get("lp/mm"), (int, float))}
+                        if v.get("status") == "OK" and isinstance(v.get("lp/cm"), (int, float))}
     
     # Datos para tabla resumen 
     datos_resumen = {
@@ -288,7 +288,7 @@ def mapear_resolucion_espacial(resultados_resolucion):
     for region_nombre, region_data in region_results.items():
         region_mapeada = {
             "region_nombre": region_nombre,
-            "lp_cm": region_data.get("lp/mm"), 
+            "lp_cm": region_data.get("lp/cm"),
             "peak_mean": region_data.get("peak_mean"), 
             "valley_mean": region_data.get("valley_mean"), 
             "gap_size_cm": region_data.get("gap_size_cm"),  
@@ -411,7 +411,7 @@ def mapear_linealidad_ct(resultados_linealidad):
         "num_materiales": 7,        # Fijo: 7 materiales del CatPhan
         "rango_hu_min": -1000,      # Rango típico de análisis HU
         "rango_hu_max": 1000,       # Rango típico de análisis HU  
-        "linealidad_aceptable": resultados_linealidad.get("r_squared", 0) >= 0.99,  # Criterio: R² ≥ 0.99
+        "linealidad_aceptable": bool(resultados_linealidad.get("r_squared", 0) >= 0.99),  # Criterio: R² ≥ 0.99 (bool nativo: un numpy.bool_ se guarda como BLOB)
         # G.2: la energía con la que se ajustó la curva (la del protocolo del equipo), guardada con la prueba
         "energia_mev": resultados_linealidad.get("energia_mev"),
     }
@@ -746,7 +746,7 @@ def guardar_espesor_corte(cursor, id_prueba, resultados, espesor_teorico):
         round(datos["espesor_teorico_mm"], 3) if datos["espesor_teorico_mm"] is not None else "No disponible", 
         round(datos["diferencia_mm"], 3) if datos["diferencia_mm"] is not None else "No disponible",
         error_pct := round(datos["diferencia_mm"] / datos["espesor_teorico_mm"] * 100, 3)
-                    if datos["diferencia_mm"] and datos["espesor_teorico_mm"] else "No disponible"
+                    if datos["diferencia_mm"] is not None and datos["espesor_teorico_mm"] else "No disponible"
     ))
     #print(f"  ✓ Espesor de corte guardado para prueba {id_prueba}")
     return True
