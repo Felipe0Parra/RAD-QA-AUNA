@@ -5,7 +5,7 @@ Conecta los resultados de las funciones de análisis con las tablas de base de d
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont
-import json, traceback, os, io
+import json, traceback, os, io, re
 import numpy as np
 from PIL import Image
 from datetime import datetime
@@ -1175,6 +1175,8 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
         resultados_reconstruidos = {}
         
         # Función mejorada para mostrar contenido con imagen
+        # GI.2: la pantalla de cada categoria solo se construye si hay un `label` donde ponerla (más abajo, `... if label is not None else None`). Sin él
+        # (el PDF mensual y el anual, la carga de Valores CT) el contenido se construía y se tiraba, y la excepción de UN constructor devolvía `{}` para TODAS.
         def usar_label_seguro(contenido, kv=None, ma=None, espesor_corte=None, imagen_blob=None):
             if label is not None and label.parent() is not None:
                 if isinstance(contenido, str):
@@ -1207,31 +1209,31 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
             # Reconstruir según la categoría
             if categoria == "espesor":
                 resultado = reconstruir_espesor_corte(cursor, id_prueba, imagen_resultado)
-                texto = tabla_resultados_espesor(resultado)
+                texto = tabla_resultados_espesor(resultado) if label is not None else None
                 usar_label_seguro(texto, kv, ma, espesor_corte, imagen_resultado)
             elif categoria == "tamano_pixel":
                 resultado = reconstruir_tamano_pixel(cursor, id_prueba, imagen_resultado)
-                texto = tabla_resultados_tamano_pixel(resultado)
+                texto = tabla_resultados_tamano_pixel(resultado) if label is not None else None
                 usar_label_seguro(texto, kv, ma, espesor_corte, imagen_resultado)
             elif categoria == "resolucion_contraste":
                 resultado = reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado)
-                contenido = tabla_resultados_resolucion_contraste(resultado)
+                contenido = tabla_resultados_resolucion_contraste(resultado) if label is not None else None
                 usar_label_seguro(contenido, kv, ma, espesor_corte, imagen_resultado)
             elif categoria == "resolucion_espacial":
                 resultado = reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado)
-                contenido = tabla_resultados_resolucion_espacial(resultado)
+                contenido = tabla_resultados_resolucion_espacial(resultado) if label is not None else None
                 usar_label_seguro(contenido, kv, ma, espesor_corte, imagen_resultado)
             elif categoria == "valores_ct":
                 resultado = reconstruir_valores_ct(cursor, id_prueba, imagen_resultado)
-                contenido = tabla_resultados_ct(resultado)
+                contenido = tabla_resultados_ct(resultado) if label is not None else None
                 usar_label_seguro(contenido, kv, ma, espesor_corte, imagen_resultado)
             elif categoria == "linealidad_ct":
                 resultado = reconstruir_linealidad_ct(cursor, id_prueba, imagen_resultado)
-                texto = tabla_resultados_linealidad_ct(resultado)
+                texto = tabla_resultados_linealidad_ct(resultado) if label is not None else None
                 usar_label_seguro(texto, kv, ma, espesor_corte, imagen_resultado)
             elif categoria == "uniformidad":
                 resultado = reconstruir_uniformidad(cursor, id_prueba, imagen_resultado)
-                contenido = tabla_resultados_uniformidad(resultado)
+                contenido = tabla_resultados_uniformidad(resultado) if label is not None else None
                 usar_label_seguro(contenido, kv, ma, espesor_corte, imagen_resultado)
             else:
                 resultado = None
@@ -1261,10 +1263,96 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
         if conn:
             conn.close()
 # ------------------------------------ FUNCIONES DE RECONSTRUCCIÓN POR PRUEBA  ------------------------------------
+# GI.2 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md, H5, H6, D3 y D4): lo que se lee al reabrir es lo que se guardó. Cada lector devuelve la
+# estructura del análisis con los valores guardados: los nombres de clave que el análisis produce, nada que no se haya guardado (D4) y, para lo
+# derivable, un valor derivado AQUÍ y UNA sola vez (decisión del físico, 09-09: «un valor derivado se construye al mostrarlo»), de modo que
+# cada consumidor (pantalla, PDF) lo reciba igual.
+
+# Lo que el escritor guarda en lugar de NULL cuando el análisis no trajo el dato, en columnas que no admiten NULL (`uniformidad_ruido`).
+CENTINELA_NO_DISPONIBLE = "No disponible"
+
+
+def _es_numero(valor):
+    return isinstance(valor, (int, float)) and not isinstance(valor, bool)
+
+
+def _numero_o_none(valor):
+    """El valor guardado si es un número; None si el escritor guardó el texto centinela (o no hay valor)."""
+    return valor if _es_numero(valor) else None
+
+
+def _texto_de_numero(valor, decimales):
+    """El número redondeado, tal como lo muestran las tablas; el texto centinela y lo vacío se dicen como lo que son."""
+    return str(round(valor, decimales)) if _es_numero(valor) else CENTINELA_NO_DISPONIBLE
+
+
+def _bandera_guardada(valor):
+    """La bandera guardada como booleano. Los controles guardados antes de GI.1 llevan un BLOB (`numpy.bool_`): `bool(b'\\x00')` es True, así que
+    se decodifica su valor (sin reescribir la fila)."""
+    if valor is None:
+        return None
+    if isinstance(valor, (bytes, bytearray, memoryview)):
+        datos = bytes(valor)
+        return bool(int.from_bytes(datos, "little")) if datos else None
+    return bool(valor)
+
+
+def _numero_de_region(nombre):
+    """N de «region N» (el análisis nombra así sus ocho regiones de pares de líneas); None si el nombre no termina en un número."""
+    m = re.search(r"(\d+)\s*$", str(nombre or ""))
+    return int(m.group(1)) if m else None
+
+
+def _es_lp_mm(valor, n):
+    """¿Es `valor` la frecuencia de la región N en lp/mm (N / 10)? Los controles de enero a abril de 2026 guardaron así sus regiones."""
+    return n is not None and _es_numero(valor) and valor > 0 and abs(valor * 10 - n) < 1e-6
+
+
+def _es_lp_cm(valor, n):
+    return n is not None and _es_numero(valor) and valor > 0 and abs(valor - n) < 1e-6
+
+
+def _lp_cm_de_la_region(nombre, guardado):
+    """lp/cm de una región reabierta. La región N del fantoma vale N lp/cm por construcción (`Analisis_Catphan_TAC.resolucion_espacial`). Lo
+    guardado manda cuando es un lp/cm utilizable (un número positivo); se deriva del nombre de la región cuando falta (NULL: los controles guardados
+    entre 05/2026 y GI.1), cuando no es positivo (0 o -1 no son una frecuencia) o cuando es la frecuencia en lp/mm de los controles de enero a abril (N / 10)."""
+    n = _numero_de_region(nombre)
+    if _es_numero(guardado) and guardado > 0 and not _es_lp_mm(guardado, n):
+        return guardado
+    return float(n) if n is not None else None
+
+
+def unidad_de_la_fila_espacial(regiones, lp_maximo=None, ultima_region=None):
+    """'lp/mm' o 'lp/cm': la unidad con la que quedó guardada una fila de resolución espacial, deducida de sus propios valores. `regiones` es una
+    lista de (nombre de región, lp guardado). Si alguna región guardó N / 10 la fila está en lp/mm; si guardó N, en lp/cm; sin valores por región se
+    compara la máxima con el número de la última región exitosa. Sin nada que deducir (o con el centinela -1: ninguna región medible) vale la
+    convención de hoy, lp/cm. El lector entrega esta unidad para que quien rotula la máxima y la MTF (GI.3) las convierta a la vez que cambia el
+    rótulo: hasta entonces se muestran en la unidad con la que se guardaron."""
+    candidatos = [(_numero_de_region(nombre), valor) for nombre, valor in regiones]
+    for decide, unidad in ((_es_lp_mm, "lp/mm"), (_es_lp_cm, "lp/cm")):
+        if any(decide(valor, n) for n, valor in candidatos):
+            return unidad
+    resumen = (_numero_de_region(ultima_region), lp_maximo)
+    for decide, unidad in ((_es_lp_mm, "lp/mm"), (_es_lp_cm, "lp/cm")):
+        if decide(resumen[1], resumen[0]):
+            return unidad
+    return "lp/cm"
+
+
+def _minimo_de_rois_visibles():
+    """Cuántos ROI visibles exige el `pasa_test_*` heredado: la misma fuente que el análisis (`criterios.PARAMETROS_HEREDADOS`)."""
+    from analisisImagenes.catphan.criterios import PARAMETROS_HEREDADOS
+    return PARAMETROS_HEREDADOS["resolucion_contraste"]["min_rois_visibles"]
+
+
+# El catálogo `regiones_uniformidad` siembra «Superior»/«Inferior»; el análisis, el escritor y `criterios.unif_max_dif_hu` dicen «Arriba»/«Abajo».
+_REGION_DE_UNIFORMIDAD_EN_EL_ANALISIS = {"Superior": "Arriba", "Inferior": "Abajo"}
+
 
 def reconstruir_espesor_corte(cursor, id_prueba, imagen_resultado):
     """
-    Reconstruye los datos de espesor de corte desde la base de datos
+    Reconstruye los datos de espesor de corte desde la base de datos. Solo lo guardado (D4): los cuatro espesores por rampa, el factor de
+    corrección, las rampas detectadas y la combinación de cortes no se guardan y no se inventan al reabrir.
     """
     cursor.execute(f"""
         SELECT espesor_promedio_mm, espesor_teorico_mm, diferencia_mm, error_pct
@@ -1277,22 +1365,11 @@ def reconstruir_espesor_corte(cursor, id_prueba, imagen_resultado):
     
     espesor_promedio, espesor_teorico, diferencia, error_pct = row
     
-    # Simular espesores individuales (no se guardan en BD, usar promedio)
-    espesores_individuales = {
-        "Izquierda": espesor_promedio,
-        "Abajo": espesor_promedio,
-        "Derecha": espesor_promedio,
-        "Arriba": espesor_promedio
-    }
-    
     resultado = {
         "espesor_promedio_mm": espesor_promedio,
         "espesor_teorico_mm": espesor_teorico,
         "diferencia_mm": diferencia,
-        "factor_correccion": 0.42,
-        "num_rampas_detectadas": 4,
-        "combinacion_slices": False,
-        "espesores_individuales": espesores_individuales,
+        "error_pct": error_pct,
         "imagen_analisis": imagen_resultado  # ✅ Agregar imagen
     }
     
@@ -1302,25 +1379,35 @@ def reconstruir_tamano_pixel(cursor, id_prueba, imagen_resultado):
     """
     Reconstruye los datos de tamaño de pixel desde la base de datos
     """
-    cursor.execute(f"""
-        SELECT valor_teorico_dicom, X, Y, diferencia_x, diferencia_y
-        FROM tamaño_pixel WHERE id_prueba = ?{filtro_activo('tamaño_pixel')}
-    """, (id_prueba,))
+    # `error_pct` entró al esquema con GI.0 (DP-41): una base que nunca lo tuvo se lee igual, sin inventar el dato.
+    con_error_pct = any(c[1] == "error_pct" for c in cursor.execute('PRAGMA table_info("tamaño_pixel")').fetchall())
+    if con_error_pct:
+        cursor.execute(f"""
+            SELECT valor_teorico_dicom, X, Y, diferencia_x, diferencia_y, error_pct
+            FROM tamaño_pixel WHERE id_prueba = ?{filtro_activo('tamaño_pixel')}
+        """, (id_prueba,))
+    else:
+        cursor.execute(f"""
+            SELECT valor_teorico_dicom, X, Y, diferencia_x, diferencia_y
+            FROM tamaño_pixel WHERE id_prueba = ?{filtro_activo('tamaño_pixel')}
+        """, (id_prueba,))
     
     row = cursor.fetchone()
     if not row:
         return None
 
-    (valor_teorico, x, y, diferencia_x, diferencia_y) = row
+    (valor_teorico, x, y, diferencia_x, diferencia_y) = row[:5]
 
     resultado = {
         "X": x,
-        "Y": x,
+        "Y": y,
         "diferencia_x": diferencia_x,
         "diferencia_y": diferencia_y,
         "tam_px_teorico": valor_teorico,
         "imagen_analisis": imagen_resultado # Agregar imagen
     }
+    if con_error_pct:
+        resultado["error_pct"] = row[5]
     return resultado
 
 def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
@@ -1369,15 +1456,29 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
             "pasa_visibilidad_lim": pasa_visibilidad
         }
     
+    # Los controles guardados entre 05/2026 y GI.1 dejaron el conteo de ROI visibles NULL y el veredicto en 0 (`bool(None)`) aunque el detalle
+    # por ROI está completo: se derivan de ese detalle, con el mismo mínimo que usa el análisis, SOLO si el detalle está completo (tantos ROI como
+    # `total_rois`: un detalle parcial no da el conteo). Con el conteo guardado manda lo guardado.
+    visibles_guardados, veredicto_guardado = rois_visibles_visibilidad, pasa_test_visibilidad
+    if rois_visibles_visibilidad is None and resultados_roi and (total_rois is None or len(resultados_roi) == total_rois):
+        rois_visibles_visibilidad = sum(1 for r in resultados_roi.values() if r["pasa_visibilidad_lim"])
+        pasa_test_visibilidad = rois_visibles_visibilidad >= _minimo_de_rois_visibles()
+
     resumen_dict = {
         "rois_visibles_cnr": rois_visibles_cnr,
-        "rois_visibles_visibilidad_lim": rois_visibles_visibilidad,
+        "rois_visibles_visibilidad": rois_visibles_visibilidad,
         "total_rois": total_rois,
-        "pasa_test_cnr": pasa_test_cnr,
-        "pasa_test_visibilidad_lim": pasa_test_visibilidad,
+        "pasa_test_cnr": None if pasa_test_cnr is None else bool(pasa_test_cnr),
+        "pasa_test_visibilidad": None if pasa_test_visibilidad is None else bool(pasa_test_visibilidad),
         "metodo_recomendado": metodo_recomendado,
+        # TRANSICION GI.2 -> GI.3: el constructor del PDF (GI.3) todavía lee estas dos claves con el valor que tenían (lo guardado, NULL/0 en los
+        # controles con el defecto de GI.1). GI.3 pasa el PDF a las claves del análisis de arriba y retira estas dos.
+        "rois_visibles_visibilidad_lim": visibles_guardados,
+        "pasa_test_visibilidad_lim": veredicto_guardado,
         "imagen_analisis": imagen_resultado  # ✅ RECUPERADA DE LA BD
     }
+    # `diametro_minimo_visible` (guardado: el menor ROI visible) NO se entrega en GI.2 a propósito: el PDF (GI.3) pone la marca de aprobado en su fila si HAY valor (presencia, no veredicto) y entregarlo lo imprimiría como aprobado.
+    # GI.3 lo entrega en el mismo cambio que decide esa marca; hasta entonces el PDF dice «N/A» como hoy (CLAVES_QUE_NINGUN_LECTOR_ENTREGA_TODAVIA de tests/test_gi2_lectura_es_lo_guardado.py lo vigila).
     
     return {
         "resultados_roi": resultados_roi,
@@ -1399,14 +1500,14 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
     
     (regiones_analizadas, regiones_exitosas, lp_cm_maximo, ultima_region, gap_size_minimo, num_picos, mtf_10, mtf_20, mtf_50) = resumen
     
-    # 2. Obtener detalles por región
+    # 2. Obtener detalles por región (en el orden de región 1..8: ordenar por la columna `lp_cm` dependía de que no fuera NULL)
     cursor.execute(f"""
         SELECT region_nombre, lp_cm, peak_mean, valley_mean, gap_size_cm, n_peaks_used, n_valleys_used, status
         FROM resolucion_espacial_regiones WHERE id_prueba = ?{filtro_activo('resolucion_espacial_regiones')}
-        ORDER BY lp_cm
+        ORDER BY id
     """, (id_prueba,))
     
-    regiones = cursor.fetchall()
+    regiones = sorted(cursor.fetchall(), key=lambda r: (_numero_de_region(r[0]) is None, _numero_de_region(r[0]) or 0))
     
     # Reconstruir estructura
     region_results = {}
@@ -1414,6 +1515,9 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
         (nombre, lp_cm, peak_mean, valley_mean, gap_size, n_peaks, n_valleys, status) = region
         
         region_results[nombre] = {
+            "lp/cm": _lp_cm_de_la_region(nombre, lp_cm),
+            # TRANSICION GI.2 -> GI.3: el constructor del PDF (GI.3) todavía lee `'lp/mm'` por región con lo que quedó guardado (0.1, 0.2, 0.3 en
+            # los controles de enero a abril; None si NULL). GI.3 pasa el PDF a `'lp/cm'` y retira esta clave.
             "lp/mm": lp_cm,
             "peak_mean": peak_mean,
             "valley_mean": valley_mean,
@@ -1440,6 +1544,9 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
         "mtf_lp_cm": mtf_lp_cm,
         "num_picos": num_picos,
         "resolucion_limite": resolucion_limite,
+        # La unidad con la que quedó guardada la fila, deducida de sus propios valores: la máxima y la MTF de los controles de enero a abril
+        # siguen en lp/mm (así las muestra todavía el PDF, que las rotula lp/mm); GI.3 las convierte con esta unidad al cambiar el rótulo.
+        "unidad_guardada": unidad_de_la_fila_espacial([(r[0], r[1]) for r in regiones], lp_cm_maximo, ultima_region),
         "imagen_analisis": imagen_resultado
     }
 
@@ -1512,7 +1619,7 @@ def reconstruir_linealidad_ct(cursor, id_prueba, imagen_resultado):
             "num_materiales": row[5],
             "rango_hu_min": row[6], 
             "rango_hu_max": row[7],
-            "linealidad_aceptable": bool(row[8]) if row[8] is not None else None,
+            "linealidad_aceptable": _bandera_guardada(row[8]),   # GI.2: los BLOB de antes de GI.1 se decodifican, no se leen como True
             "energia_mev": row[9],   # G.2; NULL en toda prueba anterior
             "imagen_analisis": imagen_resultado
         }
@@ -1551,11 +1658,12 @@ def reconstruir_uniformidad(cursor, id_prueba, imagen_resultado):
     # Reconstruir estructura
     resultados_uniformidad = {}
     
-    # Agregar datos por región
+    # Agregar datos por región, con los nombres del análisis (el catálogo dice «Superior»/«Inferior»). El escritor guarda el texto
+    # 'No disponible' cuando el análisis no trajo el dato (la columna es NOT NULL): reabierto vuelve a ser lo que el análisis tenía, None.
     for nombre_region, hu_promedio, desviacion in regiones:
-        resultados_uniformidad[nombre_region] = {
-            "promedio_hu": hu_promedio,
-            "desviacion": desviacion
+        resultados_uniformidad[_REGION_DE_UNIFORMIDAD_EN_EL_ANALISIS.get(nombre_region, nombre_region)] = {
+            "promedio_hu": _numero_o_none(hu_promedio),
+            "desviacion": _numero_o_none(desviacion)
         }
     
     # Agregar resumen global
@@ -1585,9 +1693,14 @@ def tabla_resultados_espesor(resultados):
     lines.append(f"  Espesor promedio: {resultados.get('espesor_promedio_mm', 'N/A')} mm")
     lines.append(f"  Espesor teórico: {resultados.get('espesor_teorico_mm', 'N/A')} mm") 
     lines.append(f"  Diferencia: {resultados.get('diferencia_mm', 'N/A')} mm")
-    lines.append(f"  Factor corrección: {resultados.get('factor_correccion', 'N/A')}")
-    lines.append(f"  Rampas detectadas: {resultados.get('num_rampas_detectadas', 'N/A')}")
-    lines.append(f"  Combinación slices: {'Sí' if resultados.get('combinacion_slices') else 'No'}")
+    # GI.2 (D4, «guardar y mostrar lo mismo»): estas tres líneas y los espesores por rampa solo se dicen si el diccionario los trae (el del
+    # análisis); lo reabierto de la base no los guardó y no los inventa.
+    if "factor_correccion" in resultados:
+        lines.append(f"  Factor corrección: {resultados.get('factor_correccion', 'N/A')}")
+    if "num_rampas_detectadas" in resultados:
+        lines.append(f"  Rampas detectadas: {resultados.get('num_rampas_detectadas', 'N/A')}")
+    if "combinacion_slices" in resultados:
+        lines.append(f"  Combinación slices: {'Sí' if resultados.get('combinacion_slices') else 'No'}")
     
     # Mostrar espesores individuales
     espesores_ind = resultados.get("espesores_individuales", {})
@@ -1632,7 +1745,7 @@ def tabla_resultados_tamano_pixel(resultados):
         lines.append(f"  Diferencia Y: {diferencia_y if diferencia_y is not None else 'N/A'}")
 
     error_pct = resultados.get('error_pct')
-    lines.append(f"  Error porcentual: {error_pct:.3f}%" if error_pct is not None else "  Error porcentual: N/A")
+    lines.append(f"  Error porcentual: {error_pct:.3f}%" if isinstance(error_pct, (int, float)) else f"  Error porcentual: {error_pct if error_pct is not None else 'N/A'}")   # GI.2 (H1): un valor guardado que no es numero (texto) no tumba la reapertura
     
     lines.append("-" * 50)
     return "\n".join(lines)
@@ -1797,7 +1910,7 @@ def tabla_resultados_resolucion_contraste(resultados):
         return no_visible_widget
 
 def tabla_resultados_resolucion_espacial(resultados):
-    headers = ["Región", "lp/mm", "N° Picos","N° Valles", "Gap Size (cm)"]
+    headers = ["Región", "lp/cm", "N° Picos","N° Valles", "Gap Size (cm)"]   # GI.2 (D3): lp/cm, la unidad del fantoma y de la clave 'lp/cm' del análisis
     tabla_ct = QTableWidget()
     
     # Obtener datos válidos primero
@@ -1807,18 +1920,18 @@ def tabla_resultados_resolucion_espacial(resultados):
     
     # FILTRAR SOLO REGIONES CON DATOS VÁLIDOS
     regiones_validas = {}
-    max_lp_mm = -1
+    max_lp_cm = -1
     region_maxima = None
     
     for region, res in region_results.items():
-        lp_mm = res.get('lp/mm', -1)
+        lp_cm = res.get('lp/cm', -1)
         num_peaks = res.get("n_peaks_used", "N/A")
         num_valleys = res.get("n_valleys_used", "N/A")
         gap_size_cm = res.get("gap_size_cm", "N/A")
         
-        # Verificar que todos los datos sean válidos (no N/A) y que lp/mm sea un número
+        # Verificar que todos los datos sean válidos (no N/A) y que lp/cm sea un número
         datos_completos = (
-            isinstance(lp_mm, (int, float)) and lp_mm > 0 and
+            isinstance(lp_cm, (int, float)) and lp_cm > 0 and
             num_peaks != "N/A" and isinstance(num_peaks, (int, float)) and
             num_valleys != "N/A" and isinstance(num_valleys, (int, float)) and
             gap_size_cm != "N/A" and isinstance(gap_size_cm, (int, float))
@@ -1827,12 +1940,12 @@ def tabla_resultados_resolucion_espacial(resultados):
         # SOLO AGREGAR SI TIENE DATOS COMPLETOS
         if datos_completos:
             regiones_validas[region] = res
-            if lp_mm > max_lp_mm:
-                max_lp_mm = lp_mm
+            if lp_cm > max_lp_cm:
+                max_lp_cm = lp_cm
                 region_maxima = region
     
     #print(f"Regiones con datos válidos: {list(regiones_validas.keys())}")
-    #print(f"Región máxima detectada: {region_maxima} con lp/mm = {max_lp_mm}")
+    #print(f"Región máxima detectada: {region_maxima} con lp/cm = {max_lp_cm}")
     
     # Usar solo las regiones válidas para crear la tabla
     tabla_ct.setColumnCount(len(headers))
@@ -1866,13 +1979,13 @@ def tabla_resultados_resolucion_espacial(resultados):
 
     # Llenar datos SOLO CON REGIONES VÁLIDAS
     for i, (region, res) in enumerate(regiones_validas.items()):
-        lp_mm = res.get('lp/mm','N/A')
+        lp_cm = res.get('lp/cm','N/A')
         num_peaks = res.get("n_peaks_used", "N/A")
         num_valleys = res.get("n_valleys_used", "N/A")
         gap_size_cm = res.get("gap_size_cm", "N/A")
         
         # Formatear valores (ya sabemos que son válidos)
-        lp_mm_str = f"{round(lp_mm, 2)}"
+        lp_cm_str = f"{round(lp_cm, 2)}"
         num_peaks_str = str(num_peaks)
         num_valleys_str = str(num_valleys)
         gap_size_str = f"{round(gap_size_cm, 2)}"
@@ -1882,7 +1995,7 @@ def tabla_resultados_resolucion_espacial(resultados):
         item_region.setTextAlignment(Qt.AlignCenter)
         tabla_ct.setItem(i, 0, item_region)
         
-        item_lp = QTableWidgetItem(lp_mm_str)
+        item_lp = QTableWidgetItem(lp_cm_str)
         item_lp.setTextAlignment(Qt.AlignCenter)
         tabla_ct.setItem(i, 1, item_lp)
         
@@ -1923,11 +2036,15 @@ def tabla_resultados_ct(resultado_completo):
     else:
         # Compatibilidad hacia atrás si se pasa directamente la lista
         resultados = resultado_completo
+    # GI.2: la lista lleva un elemento de metadatos (la imagen: `{'imagen_analisis': ...}` del análisis o `{'_metadata': ...}` de lo reabierto)
+    # SOLO cuando hay imagen; quitar siempre «el último» le quitaba el séptimo material a un control sin imagen (las sesiones 21 y 47). Las
+    # filas de la tabla son las de material, vengan donde vengan.
+    resultados = [r for r in resultados if isinstance(r, dict) and "material" in r]
         
     headers = ["Material", "Promedio HU", "Rango HU Ref.", "Desviación. (HU)", "Rango"]
     tabla_ct = QTableWidget()
     tabla_ct.setColumnCount(len(headers))
-    tabla_ct.setRowCount(len(resultados) - 1)  # Excluir el último elemento si es metadata
+    tabla_ct.setRowCount(len(resultados))
     tabla_ct.setHorizontalHeaderLabels(headers)
     
     # Configurar el estilo de la tabla
@@ -1958,7 +2075,7 @@ def tabla_resultados_ct(resultado_completo):
     materiales = {"Acrilico": "Acrílico", "Teflon": "Teflón"}
 
     # Llenar datos CON CENTRADO
-    for i, res in enumerate(resultados[:-1]):
+    for i, res in enumerate(resultados):
         material = materiales.get(str(res.get("material", "")), str(res.get("material", "")))
         promedio = res.get("promedio_hu", "")
         rango = res.get("rango_hu", ["N/A", "N/A"])
@@ -2063,11 +2180,11 @@ def tabla_resultados_uniformidad(uniformidad):
     headers = ["Posición", "Promedio HU", "Desviación"]
     tabla_un = QTableWidget()
     
-    # Filtrar datos válidos excluyendo "Uniformidad"
+    # Las regiones (todo lo que trae `promedio_hu` y `desviacion`, excluyendo "Uniformidad"). GI.2: una región sin dato (el escritor guarda el texto
+    # 'No disponible'; reabierta vale None) sigue siendo una fila de la tabla y dice que no hay dato, en vez de tumbar la tabla con `round(texto)`.
     datos_validos = {k: v for k, v in uniformidad.items() 
                     if k != "Uniformidad" and isinstance(v, dict) and 
-                    "promedio_hu" in v and "desviacion" in v and 
-                    v["promedio_hu"] is not None}
+                    "promedio_hu" in v and "desviacion" in v}
     
     tabla_un.setColumnCount(len(headers))
     tabla_un.setRowCount(len(datos_validos) + 3)  # +3 para filas adicionales
@@ -2105,11 +2222,11 @@ def tabla_resultados_uniformidad(uniformidad):
         item_pos.setTextAlignment(Qt.AlignCenter)
         tabla_un.setItem(fila_actual, 0, item_pos)
         
-        item_promedio = QTableWidgetItem(str(round(res["promedio_hu"], 1)))
+        item_promedio = QTableWidgetItem(_texto_de_numero(res["promedio_hu"], 1))
         item_promedio.setTextAlignment(Qt.AlignCenter)
         tabla_un.setItem(fila_actual, 1, item_promedio)
         
-        item_desviacion = QTableWidgetItem(str(round(res["desviacion"], 1)))
+        item_desviacion = QTableWidgetItem(_texto_de_numero(res["desviacion"], 1))
         item_desviacion.setTextAlignment(Qt.AlignCenter)
         tabla_un.setItem(fila_actual, 2, item_desviacion)
         

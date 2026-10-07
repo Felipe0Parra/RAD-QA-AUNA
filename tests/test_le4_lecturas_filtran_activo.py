@@ -210,10 +210,10 @@ EXCEPCIONES_LITERALES = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1086):  # A.1 (23-09): 1021->1068; A.2 (23-09): 1068->1074; G.2 (24-09): 1074->1077; G.3 (24-09): 1077->1086
         "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
         "del LEFT JOIN (variable `filtro_p`) en consultar_pruebas_disponibles",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1449):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437; G.2 (24-09): 1437->1440; G.3 (24-09): 1440->1449
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1556):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437; G.2 (24-09): 1437->1440; G.3 (24-09): 1440->1449; GI.2 (06-10): 1449->1556
         "valores_ct -- filtro_activo('valores_ct') se califica con el alias "
         "'vc.' del JOIN (variable `filtro_vc`) en reconstruir_valores_ct",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1541):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528; G.2 (24-09): 1528->1532; G.3 (24-09): 1532->1541
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1648):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528; G.2 (24-09): 1528->1532; G.3 (24-09): 1532->1541; GI.2 (06-10): 1541->1648
         "uniformidad_ruido -- filtro_activo('uniformidad_ruido') se califica "
         "con el alias 'ur.' del JOIN (variable `filtro_ur`) en "
         "reconstruir_uniformidad",
