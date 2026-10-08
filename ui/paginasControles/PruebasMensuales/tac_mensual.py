@@ -13,7 +13,7 @@ from analisisImagenes.catphan import criterios
 from analisisImagenes.catphan.obligatorios import evaluar_categoria, aviso_de_faltantes, etiqueta_de, redondear_espesor, ParametrosObligatoriosFaltantes
 from analisisImagenes.Analisis_Catphan_TAC import *
 from services.ventana_edicion import puede_editarse as _puede_editarse_control, mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
-from data.ManejoDatos.catphan_TAC.catphan_db import ControlNoEditable
+from data.ManejoDatos.catphan_TAC.catphan_db import ControlNoEditable, png_de_corte
 from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan, tabla_resultados_espesor, tabla_resultados_tamano_pixel, tabla_resultados_resolucion_contraste, tabla_resultados_resolucion_espacial, tabla_resultados_ct, tabla_resultados_uniformidad)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from datetime import datetime
@@ -389,6 +389,17 @@ def _parametros_de_volumen(vol):
             redondear_espesor(espesor))
 
 
+# GI.5: lo que el aviso de imagen faltante le agrega al físico (el informe PDF imprime el par de imágenes de una prueba solo si están las dos: `reportes_control_sistema_imagenes`)
+AVISO_PAR_DE_IMAGENES = "Mientras falte una de las dos imágenes, el informe PDF no muestra las imágenes de esta prueba."
+
+
+def _misma_serie(adquisicion_a, adquisicion_b):
+    """GI.5: ¿dos adquisiciones registradas (`_registrar_adquisicion`) son de la MISMA serie DICOM? Sin identidad en alguna de las dos, no se puede afirmar: `False`."""
+    uid_a = ((adquisicion_a or {}).get('adquisicion') or {}).get('serie_uid')
+    uid_b = ((adquisicion_b or {}).get('adquisicion') or {}).get('serie_uid')
+    return bool(uid_a) and uid_a == uid_b
+
+
 class PruebaMensualTAC(PruebaMensual600):
     def __init__(self, user_id):
         #print("PruebaMensualTAC       __init__ called")
@@ -427,6 +438,8 @@ class PruebaMensualTAC(PruebaMensual600):
         # A.1 (23-09): adquisicion del volumen CON EL QUE SE CORRIO cada prueba,
         # por categoria -- ver `_registrar_adquisicion`.
         self.adquisicion_por_categoria = {}
+        # GI.5: la imagen (PNG) del corte CON EL QUE SE ANALIZO cada prueba, fijada al analizar, por categoria -- guardar ya no relee la carpeta.
+        self.imagenes_corte_por_categoria = {}
         self.tam_px_teorico = None
         self.criterios_por_categoria = {}      # G.3: criterio y veredicto de cada prueba (se guarda con ella)
         self.reconstruido = False  # Mantenemos para compatibilidad backwards
@@ -1027,7 +1040,7 @@ class PruebaMensualTAC(PruebaMensual600):
         equipo = getattr(self, 'equipo_f', None)
         QMessageBox.information(self, f"Protocolo de {equipo}", texto_origen(equipo))
 
-    def _registrar_adquisicion(self, categoria):
+    def _registrar_adquisicion(self, categoria, imagen_del_corte=None):
         """A.1 (PLAN_HANDOFF_IMAGENES_22-09.md §0.4, "segundo camino"): fija la
         adquisición del volumen CON EL QUE SE ACABA DE CORRER la prueba
         `categoria` (nombre de la BD: `espesor`, `tamano_pixel`, ...).
@@ -1037,11 +1050,20 @@ class PruebaMensualTAC(PruebaMensual600):
         con dos carpetas en la misma sesión, las pruebas de la primera
         quedaban grabadas con los parámetros de la segunda (la sesión 47 del
         22-09 salió toda con 125/100/2.0 habiendo mezclado iX y Halcyon). Aquí
-        se toma en el momento de correrla, y es lo que el guardado usa."""
+        se toma en el momento de correrla, y es lo que el guardado usa.
+
+        GI.5: `imagen_del_corte` (bytes PNG del corte tal como se eligió, ver `imagen_dicom_cargada`) se fija en el mismo momento y por la misma razón: la imagen
+        guardada con la prueba es la del corte con que se analizó, aunque después se elija otro o la carpeta ya no esté. Sin ella la categoría queda sin imagen
+        fijada (nunca con la de otra prueba)."""
         vol = getattr(getattr(self, 'visualizador_principal', None), 'vol', None)
         if vol is None:
             self.adquisicion_por_categoria.pop(categoria, None)
+            self.imagenes_corte_por_categoria.pop(categoria, None)
             return
+        if imagen_del_corte:
+            self.imagenes_corte_por_categoria[categoria] = imagen_del_corte
+        else:
+            self.imagenes_corte_por_categoria.pop(categoria, None)
         kv, ma, espesor_corte = _parametros_de_volumen(vol)
         adquisicion = getattr(vol, 'adquisicion', None)
         self.adquisicion_por_categoria[categoria] = {
@@ -1069,15 +1091,29 @@ class PruebaMensualTAC(PruebaMensual600):
             widgets['criterio'].setText(criterios.texto_html(juicios))
         return juicios
 
-    def _registrar_adquisicion_linealidad(self):
+    def _registrar_adquisicion_linealidad(self, imagen_del_corte=None):
         """La linealidad sale de los HU de `valores_ct`, así que su adquisición
         es la de ESA prueba si se corrió en esta sesión (aunque después se haya
-        cargado otra carpeta); solo si no hay, la del volumen activo."""
+        cargado otra carpeta); solo si no hay, la del volumen activo.
+
+        GI.5: lo mismo con su imagen. Si no hay Valores CT en la sesión (ya se guardó, o es un control reabierto) los HU salen de la base y la imagen de la prueba es el corte que el
+        físico acaba de elegir EN LA PÁGINA DE LINEALIDAD (`imagen_del_corte`); un recálculo sin corte nuevo (p. ej. al cambiar la energía) conserva la imagen ya fijada solo si
+        sigue siendo la MISMA serie (una carpeta cargada después no puede prestarle su imagen a una prueba corrida con la anterior)."""
         adq_valores_ct = self.adquisicion_por_categoria.get('valores_ct')
         if adq_valores_ct:
             self.adquisicion_por_categoria['linealidad_ct'] = adq_valores_ct
+            # GI.5: y también su imagen: la linealidad sale de los HU del CTP404 que midió Valores CT, así que su corte es el mismo
+            imagen_valores_ct = self.imagenes_corte_por_categoria.get('valores_ct')
+            if imagen_valores_ct:
+                self.imagenes_corte_por_categoria['linealidad_ct'] = imagen_valores_ct
+            else:
+                self.imagenes_corte_por_categoria.pop('linealidad_ct', None)
         else:
-            self._registrar_adquisicion('linealidad_ct')
+            previa = self.adquisicion_por_categoria.get('linealidad_ct')
+            imagen_previa = self.imagenes_corte_por_categoria.get('linealidad_ct')
+            self._registrar_adquisicion('linealidad_ct', imagen_del_corte)
+            if not imagen_del_corte and imagen_previa and _misma_serie(previa, self.adquisicion_por_categoria.get('linealidad_ct')):
+                self.imagenes_corte_por_categoria['linealidad_ct'] = imagen_previa
 
     # Asigna los parámetros de adquisición (kv, ma, espesor de corte) desde el visualizador principal
     def asignar_parametros_adquisicion(self, reconstruido=False):
@@ -1213,7 +1249,14 @@ class PruebaMensualTAC(PruebaMensual600):
         # Obtener el volumen HU y el corte seleccionado
         try:
             imagen_analisis = visualizador_activo.vol.volumen_hu[corte]
-            imagen_grafica = visualizador_activo.vol.get_volumen_normalizado(wl, ww)[corte]
+            # GI.5: solo ESTE corte se normaliza (antes: el volumen entero para quedarse con un corte; pico de +400 a +900 MB en las series reales). Mismo
+            # resultado bit a bit (misma operación sobre el mismo corte, con la misma guarda de ancho); se COPIA porque `get_corte_normalizado` devuelve el array
+            # de su caché y ni el análisis ni nadie debe poder alterarlo.
+            _ww_efectivo = ww if ww > 0 else 1
+            imagen_grafica = visualizador_activo.vol.get_corte_normalizado(corte, wl - _ww_efectivo / 2, wl + _ww_efectivo / 2)
+            if imagen_grafica is None:
+                raise IndexError(corte)
+            imagen_grafica = imagen_grafica.copy()
             tam_px = visualizador_activo.vol.get_pixel_spacing()
         except IndexError:
             print(f"Error: El índice de corte {corte} está fuera de rango.")
@@ -1474,9 +1517,11 @@ class PruebaMensualTAC(PruebaMensual600):
         return "\n".join(lines)
     
     # Intenta actualizar la gráfica de Linealidad del CT si hay energía, μ y HU
-    def try_actualizar_linealidad_ct(self):
+    def try_actualizar_linealidad_ct(self, imagen_del_corte=None):
         """
         Si hay energía seleccionada, μ cargados y HU disponibles, calcula y muestra Linealidad del CT.
+
+        GI.5: `imagen_del_corte` es el PNG del corte que el físico acaba de elegir en la página de Linealidad (lo pasa `imagen_dicom_cargada`); ver `_registrar_adquisicion_linealidad`.
         """
         # Requisitos básicos
         if not hasattr(self, "tabla_linealidad_ct"):
@@ -1560,7 +1605,7 @@ class PruebaMensualTAC(PruebaMensual600):
             #print(" Análisis de Linealidad del CT completado")
             #print(f"   Resultados: {linealidad}")
             self.resultados_linealidad_ct = linealidad  # Almacenar para guardado
-            self._registrar_adquisicion_linealidad()
+            self._registrar_adquisicion_linealidad(imagen_del_corte)
             self._mostrar_criterio('linealidad_ct', linealidad)      # G.3
             if linealidad:
                 self._agregar_botones_guardado_post_analisis("linealidad_numero_ct")
@@ -1596,6 +1641,13 @@ class PruebaMensualTAC(PruebaMensual600):
         if imagen_analisis is None or imagen_grafica is None or tam_px is None:
             print("Error: No se pudo procesar el corte seleccionado.")
             return
+        # GI.5: la imagen del corte tal como se ELIGIÓ, codificada UNA vez y antes de que ningún análisis la toque; cada prueba que se corra con este corte la
+        # registra junto a su adquisición (`_registrar_adquisicion`). Si no se puede codificar, ninguna prueba queda con imagen fijada y el guardado lo avisa.
+        try:
+            png_del_corte = png_de_corte(imagen_grafica)
+        except Exception as e:
+            print(f"No se pudo codificar la imagen del corte: {e}")
+            png_del_corte = None
         # Determinar la categoría asociada al corte
 
         for categoria, widget in self.pruebas_categorias.items():
@@ -1634,7 +1686,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         continue
 
                     self.resultados_espesor = resultados_espesor  # Almacenar para guardado
-                    self._registrar_adquisicion('espesor')
+                    self._registrar_adquisicion('espesor', png_del_corte)
                     error = (abs((self.espesor_corte_val) - resultados_espesor.get("espesor_promedio_mm", None)) / self.espesor_corte_val) * 100 if self.espesor_corte_val and resultados_espesor.get("espesor_promedio_mm", None) else None
                     espesor_teorico_mm = self.espesor_corte_val if self.espesor_corte_val else None
                     resultados_espesor['espesor_teorico_mm'] = espesor_teorico_mm
@@ -1655,7 +1707,7 @@ class PruebaMensualTAC(PruebaMensual600):
 
                     resultados_tamano_pixel = tamano_pixel(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self._canvas_de(pestana))
                     self.resultados_tamano_pixel = resultados_tamano_pixel  # Almacenar para guardado
-                    self._registrar_adquisicion('tamano_pixel')
+                    self._registrar_adquisicion('tamano_pixel', png_del_corte)
                     self.tam_px_teorico = tam_px  # Almacenar valor teórico
 
                     # Calcular promedio de los valores medidos (x_arriba, x_abajo, y_izquierda, y_derecha)
@@ -1686,7 +1738,7 @@ class PruebaMensualTAC(PruebaMensual600):
 
                     resultados_resolucion = resolucion_espacial(imagen_grafica, imagen_analisis, tam_px, visualizar=True, canvas=self._canvas_de(pestana), orientacion=orientacion_serie, roll_deg=roll_deg_serie)
                     self.resultados_resolucion_espacial = resultados_resolucion  # Almacenar para guardado
-                    self._registrar_adquisicion('resolucion_espacial')
+                    self._registrar_adquisicion('resolucion_espacial', png_del_corte)
                     self._mostrar_criterio('resolucion_espacial', resultados_resolucion)      # G.3
                     texto = tabla_resultados_resolucion_espacial(resultados_resolucion)
                     self._escribir_resultado(pestana, texto)
@@ -1731,7 +1783,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         roll_deg=roll_deg_serie,
                     )
                     self.resultados_resolucion_contraste = resolucion
-                    self._registrar_adquisicion('resolucion_contraste')
+                    self._registrar_adquisicion('resolucion_contraste', png_del_corte)
                     self._mostrar_criterio('resolucion_contraste', resolucion)      # G.3
                     imprimir_resultados_contraste_bajo(resolucion)
                     tabla_widget = tabla_resultados_resolucion_contraste(resolucion)
@@ -1765,7 +1817,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         visualizar=True,
                         canvas=self._canvas_de(pestana),
                     )
-                    self._registrar_adquisicion('valores_ct')
+                    self._registrar_adquisicion('valores_ct', png_del_corte)
                     self._mostrar_criterio('valores_ct', self.resultados_ct)      # G.3
                 
                     tabla_widget = tabla_resultados_ct(self.resultados_ct)
@@ -1780,7 +1832,7 @@ class PruebaMensualTAC(PruebaMensual600):
                 elif categoria == 'linealidad_numero_ct':
                     #print("*** ENTRANDO EN CONDICIÓN DE LINEALIDAD CT ***")
                     
-                    resultados_linealidad = self.try_actualizar_linealidad_ct()
+                    resultados_linealidad = self.try_actualizar_linealidad_ct(imagen_del_corte=png_del_corte)
                     # Agregar botones de guardado después del análisis completado
 
                     if resultados_linealidad:
@@ -1796,7 +1848,7 @@ class PruebaMensualTAC(PruebaMensual600):
                                                         canvas=self._canvas_de(pestana),
                                                         **criterios.parametros_de_analisis('uniformidad', self.equipo_f))
                     self.resultados_uniformidad = uniformidad_resultados  # Almacenar para guardado
-                    self._registrar_adquisicion('uniformidad')
+                    self._registrar_adquisicion('uniformidad', png_del_corte)
                     self._mostrar_criterio('uniformidad', uniformidad_resultados)      # G.3
                     
                     # Reemplazar el QLabel con QTableWidget
@@ -2097,14 +2149,15 @@ class PruebaMensualTAC(PruebaMensual600):
             
             # IMPORTANTE: Usar context manager para evitar locks
             try:
-                # Obtener información completa de imagen DICOM para guardado como BLOB
-                info_dicom = self._obtener_info_imagen_dicom()
+                # GI.5: la imagen de cada prueba es la del corte con que se ANALIZÓ (`imagenes_corte_por_categoria`): guardar ya no relee la carpeta DICOM.
+                avisos_de_imagen = []
                 
                 id_sesion = guardar_prueba_completa_catphan(
                     user_id = self.user_id, fecha = fecha_actual, equipo = self.equipo_f,
                     kv = self.kv_actual, ma = self.ma_actual, espesor_corte = self.espesor_corte_val,
                     resultados_por_categoria = resultados_por_categoria, tam_px_teorico = self.tam_px_teorico,
-                    id_sesion = self.ref, info_dicom = info_dicom, output_blob = output_blob,
+                    id_sesion = self.ref, output_blob = output_blob,
+                    imagenes_corte_por_categoria = self.imagenes_corte_por_categoria, avisos = avisos_de_imagen,
                     adquisicion_por_categoria = self.adquisicion_por_categoria,
                     criterios_por_categoria = self.criterios_por_categoria
                 )
@@ -2125,6 +2178,9 @@ class PruebaMensualTAC(PruebaMensual600):
                 return False
             
             if id_sesion:
+                if avisos_de_imagen:
+                    # GI.5: se guardó, pero sin alguna de las dos imágenes: se dice cuál
+                    QMessageBox.warning(self, "Imagen sin guardar", "\n".join(avisos_de_imagen) + "\n\n" + AVISO_PAR_DE_IMAGENES)
                 QMessageBox.information(self, "Guardado exitoso", 
                                     f"✅ {categoria.replace('_', ' ').title()} guardado correctamente.\n"
                                     f"ID de sesión: {self.ref}")
@@ -2177,55 +2233,6 @@ class PruebaMensualTAC(PruebaMensual600):
             return False
 
         return True
-
-    def _obtener_info_imagen_dicom(self):
-        """
-        Obtiene la información completa del corte DICOM seleccionado para guardar como BLOB
-        
-        Returns:
-            dict: Información del corte con 'ruta_carpeta', 'indice_corte', 'wl', 'ww'
-        """
-        try:
-            if hasattr(self, 'corte_seleccionado_info') and self.corte_seleccionado_info:
-                info = self.corte_seleccionado_info
-                ruta_carpeta = info.get('ruta_carpeta_dicom')
-                indice_corte = info.get('indice_corte')
-                wl = info.get('wl')
-                ww = info.get('ww')
-                
-                if ruta_carpeta:
-                    #print(f"✅ Info DICOM completa encontrada:")
-                    #print(f"   Ruta: {ruta_carpeta}")
-                    #print(f"   Corte: {indice_corte}")
-                    #print(f"   WL/WW: {wl}/{ww}")
-                    
-                    return {
-                        'ruta_carpeta': ruta_carpeta,
-                        'indice_corte': indice_corte,
-                        'wl': wl,
-                        'ww': ww
-                    }
-                    
-            # Fallback: intentar obtener del visualizador principal
-            if hasattr(self, 'visualizador_principal') and self.visualizador_principal:
-                ruta_carpeta = getattr(self.visualizador_principal, 'ruta_carpeta', None)
-                if ruta_carpeta:
-                    #print(f"✅ Ruta DICOM desde visualizador principal: {ruta_carpeta}")
-                    #print("⚠️ Usando valores por defecto para corte y ventana")
-                    
-                    return {
-                        'ruta_carpeta': ruta_carpeta,
-                        'indice_corte': None,  # Usará corte central
-                        'wl': None,
-                        'ww': None
-                    }
-                    
-            print("⚠️ No se encontró información de DICOM")
-            return None
-            
-        except Exception as e:
-            print(f"❌ Error al obtener info DICOM: {e}")
-            return None
 
     def guardar_resultados_catphan(self):
         """
@@ -2300,8 +2307,8 @@ class PruebaMensualTAC(PruebaMensual600):
             
             # Usar try-catch específico para manejo de locks
             try:
-                # Obtener información completa de imagen DICOM para guardado como BLOB
-                info_dicom = self._obtener_info_imagen_dicom()
+                # GI.5: la imagen de cada prueba es la del corte con que se ANALIZÓ (`imagenes_corte_por_categoria`): guardar ya no relee la carpeta DICOM.
+                avisos_de_imagen = []
                 
                 id_sesion = guardar_prueba_completa_catphan(
                     user_id=self.user_id,
@@ -2313,7 +2320,8 @@ class PruebaMensualTAC(PruebaMensual600):
                     resultados_por_categoria=resultados_por_categoria,
                     tam_px_teorico=self.tam_px_teorico,
                     id_sesion=self.ref,  # Usar el self.ref como id_sesion
-                    info_dicom=info_dicom,
+                    imagenes_corte_por_categoria=self.imagenes_corte_por_categoria,
+                    avisos=avisos_de_imagen,
                     adquisicion_por_categoria=self.adquisicion_por_categoria,
                     criterios_por_categoria=self.criterios_por_categoria
                 )
@@ -2334,6 +2342,8 @@ class PruebaMensualTAC(PruebaMensual600):
             
             if id_sesion:
                 # Éxito
+                if avisos_de_imagen:
+                    QMessageBox.warning(self, "Imagen sin guardar", "\n".join(avisos_de_imagen) + "\n\n" + AVISO_PAR_DE_IMAGENES)     # GI.5
                 QMessageBox.information(self, "Guardado exitoso", 
                                     f"✅ Resultados guardados correctamente.\n"
                                     f"ID de sesión: {self.ref}\n"
@@ -2500,6 +2510,7 @@ class PruebaMensualTAC(PruebaMensual600):
             self.resultados_linealidad_ct = None
             self.resultados_uniformidad = None
             self.adquisicion_por_categoria = {}
+            self.imagenes_corte_por_categoria = {}
             self.criterios_por_categoria = {}
             #print("🧹 Todos los resultados CatPhan limpiados")
         else:
@@ -2519,6 +2530,7 @@ class PruebaMensualTAC(PruebaMensual600):
             elif categoria == "uniformidad":
                 self.resultados_uniformidad = None
             self.adquisicion_por_categoria.pop(categoria, None)
+            self.imagenes_corte_por_categoria.pop(categoria, None)
             self.criterios_por_categoria.pop(categoria, None)
             #print(f"🧹 Resultado de {categoria} limpiado")
 

@@ -55,7 +55,10 @@ def formularios():
 def avisos(monkeypatch):
     """Los QMessageBox.warning / critical que ve el fisico: [(titulo, texto)]."""
     visto = []
-    monkeypatch.setattr(QMessageBox, "warning", lambda parent, titulo, texto, *a, **k: visto.append((titulo, texto)))
+    # GI.5: "Imagen sin guardar" es OTRO aviso (la prueba se guardo sin alguna de sus dos imagenes) y tiene su propia cobertura en test_gi5; los guardados
+    # sinteticos de aqui no traen imagenes por construccion, y esta prueba es solo sobre la puerta W1 y los datos obligatorios.
+    monkeypatch.setattr(QMessageBox, "warning",
+                        lambda parent, titulo, texto, *a, **k: None if titulo == "Imagen sin guardar" else visto.append((titulo, texto)))
     monkeypatch.setattr(QMessageBox, "critical", lambda parent, titulo, texto, *a, **k: visto.append((titulo, texto)))
     return visto
 

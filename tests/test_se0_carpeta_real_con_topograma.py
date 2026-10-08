@@ -116,10 +116,11 @@ class TestCarpetaRealDelHospital:
         assert (obj.kv_val_esp.text(), obj.ma_val_esp.text(), obj.ec_val_esp.text()) == ("120 kV", "343 mA", "2.0 mm")
         assert obj._verificar_datos_basicos() is True and avisos == []
 
-        obj._registrar_adquisicion("espesor")
+        obj._registrar_adquisicion("espesor", b"PNG-DEL-CORTE")          # GI.5: el analisis real fija la imagen del corte; sin ella el guardado avisa «Imagen sin guardar»
         ok = obj.guardar_resultado_individual("espesor", {
             "espesor_promedio_mm": 1.9, "espesor_teorico_mm": obj.espesor_corte_val, "diferencia_mm": 0.1,
-            "espesores_individuales": {"Izquierda": 1.9, "Abajo": 1.9, "Derecha": 1.9, "Arriba": 1.9}, "num_rampas_detectadas": 4})
+            "espesores_individuales": {"Izquierda": 1.9, "Abajo": 1.9, "Derecha": 1.9, "Arriba": 1.9}, "num_rampas_detectadas": 4},
+            output_blob=b"RESULTADO")
         assert ok is not False and avisos == []
         filas = bd_temporal.execute(
             "SELECT kv, ma, espesor_corte, desviacion_protocolo FROM pruebas WHERE id_sesion = ? AND activo = 1", (obj.ref,)).fetchall()

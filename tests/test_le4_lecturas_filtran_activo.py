@@ -207,13 +207,13 @@ EXCEPCIONES_LITERALES = {
     # LF1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-LF1): mismo patrón, aplicado a
     # las 30 tablas nuevas -- variable intermedia califica filtro_activo()
     # con el alias del JOIN antes de interpolarse.
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1110):  # A.1 (23-09): 1021->1068; A.2 (23-09): 1068->1074; G.2 (24-09): 1074->1077; G.3 (24-09): 1077->1086; GI.4 (07-10): 1086->1110
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1132):  # A.1 (23-09): 1021->1068; A.2 (23-09): 1068->1074; G.2 (24-09): 1074->1077; G.3 (24-09): 1077->1086; GI.4 (07-10): 1086->1110; GI.5 (07-10): 1110->1132
         "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
         "del LEFT JOIN (variable `filtro_p`) en consultar_pruebas_disponibles",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1630):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437; G.2 (24-09): 1437->1440; G.3 (24-09): 1440->1449; GI.2 (06-10): 1449->1556; GI.3 (07-10): 1556->1606; GI.4 (07-10): 1606->1630
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1652):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437; G.2 (24-09): 1437->1440; G.3 (24-09): 1440->1449; GI.2 (06-10): 1449->1556; GI.3 (07-10): 1556->1606; GI.4 (07-10): 1606->1630; GI.5 (07-10): 1630->1652
         "valores_ct -- filtro_activo('valores_ct') se califica con el alias "
         "'vc.' del JOIN (variable `filtro_vc`) en reconstruir_valores_ct",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1722):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528; G.2 (24-09): 1528->1532; G.3 (24-09): 1532->1541; GI.2 (06-10): 1541->1648; GI.3 (07-10): 1648->1698; GI.4 (07-10): 1698->1722
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1744):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528; G.2 (24-09): 1528->1532; G.3 (24-09): 1532->1541; GI.2 (06-10): 1541->1648; GI.3 (07-10): 1648->1698; GI.4 (07-10): 1698->1722; GI.5 (07-10): 1722->1744
         "uniformidad_ruido -- filtro_activo('uniformidad_ruido') se califica "
         "con el alias 'ur.' del JOIN (variable `filtro_ur`) en "
         "reconstruir_uniformidad",
@@ -451,8 +451,8 @@ SITIOS_OPACOS_PERMITIDOS = {
     # el cuerpo de la función, el resolver de AN1 lo trata como texto vacío
     # -- no aparece en el censo de opacos (verificado, no es un hueco: el
     # INSERT lo arma cada llamador con columnas explícitas, MI0).
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 753): "anular_datos_especificos (EB2c) -- `sql_anular_bloque(tabla, [\"id_prueba\"])` compone el UPDATE con el AND de vigencia ya incluido; es la ESCRITURA que anula las hijas del `id_prueba` ANTERIOR, no una lectura",  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729; GI.4 (07-10): 729->753
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 975): "INSERT (linealidad_ct)",  # A.1 (23-09): 886->933; A.2 (23-09): 933->939; G.2 (24-09): 939->942; G.3 (24-09): 942->951; GI.4 (07-10): 951->975
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 775): "anular_datos_especificos (EB2c) -- `sql_anular_bloque(tabla, [\"id_prueba\"])` compone el UPDATE con el AND de vigencia ya incluido; es la ESCRITURA que anula las hijas del `id_prueba` ANTERIOR, no una lectura",  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729; GI.4 (07-10): 729->753; GI.5 (07-10): 753->775
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 997): "INSERT (linealidad_ct)",  # A.1 (23-09): 886->933; A.2 (23-09): 933->939; G.2 (24-09): 939->942; G.3 (24-09): 942->951; GI.4 (07-10): 951->975; GI.5 (07-10): 975->997
     ("data/ManejoDatos/conection.py", 765): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",  # R.1: 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682; G.2 (24-09): 682->683; G.3 (24-09): 683->684; PI.2 (01-10): 684->685; RB.3 (05-10): 685->712; GI.0: 712->765
     ("data/ManejoDatos/conection.py", 865): "DDL/migración (EB2d, DA-57, tabla temporal de la migración que retira el UNIQUE de angulo_starshot)",  # R.1: 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782; G.2 (24-09): 782->783; G.3 (24-09): 783->784; PI.2 (01-10): 784->785; RB.3 (05-10): 785->812; GI.0: 812->865
     ("data/ManejoDatos/conection.py", 2706): "INSERT (users, no está en TABLAS_ANULABLES)",  # R1: 2091->2160; R.1: 2224->2309; T.0: 2309->2363; B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461; G.2 (24-09): 2461->2482; G.3 (24-09): 2482->2508; PI.2 (01-10): 2508->2571; RB.3 (05-10): 2571->2598; GI.0: 2598->2706

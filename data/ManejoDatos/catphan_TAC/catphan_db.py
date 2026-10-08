@@ -421,6 +421,18 @@ def mapear_linealidad_ct(resultados_linealidad):
 
 # ------------------------------------ FUNCIONES DE GUARDADO -------------------------------------------
 
+def png_de_corte(corte_normalizado):
+    """GI.5 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): los bytes PNG de un corte ya normalizado a 8 bits -- el que se ve en pantalla y con el que se analiza.
+
+    Es la UNICA definicion de como se archiva la imagen de un corte: la usan `convertir_corte_dicom_a_blob` (la relectura de la carpeta, que conservan los
+    llamadores anteriores) y la pantalla al ANALIZAR, para fijar el corte con el que se corrio cada prueba sin volver a abrir la carpeta al guardar."""
+    buffer = io.BytesIO()
+    Image.fromarray(corte_normalizado).save(buffer, format='PNG')
+    blob_data = buffer.getvalue()
+    buffer.close()
+    return blob_data
+
+
 def convertir_corte_dicom_a_blob(ruta_carpeta_dicom, indice_corte=None, wl=None, ww=None):
     """
     Convierte un corte específico de una carpeta DICOM a BLOB para almacenar en base de datos.
@@ -486,17 +498,8 @@ def convertir_corte_dicom_a_blob(ruta_carpeta_dicom, indice_corte=None, wl=None,
                 #print("❌ No se pudo obtener el corte HU")
                 return None
         
-        # Convertir a imagen PIL y luego a BLOB
-        imagen_pil = Image.fromarray(corte_imagen)
-        
-        # Guardar en buffer como PNG
-        buffer = io.BytesIO()
-        imagen_pil.save(buffer, format='PNG')
-        blob_data = buffer.getvalue()
-        buffer.close()
-        
-        #print(f"✅ Corte DICOM convertido a BLOB: {len(blob_data)} bytes (PNG)")
-        return blob_data
+        # Convertir a imagen PNG (GI.5: el mismo codificador que usa la pantalla al analizar)
+        return png_de_corte(corte_imagen)
         
     except Exception as e:
         #print(f"❌ Error al convertir corte DICOM a BLOB: {e}")
@@ -530,7 +533,8 @@ class ControlNoEditable(Exception):
 
 def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_corte, resultados_por_categoria, 
                                     tam_px_teorico=None, id_sesion=None, info_dicom=None, output_blob=None,
-                                    adquisicion_por_categoria=None, criterios_por_categoria=None):
+                                    adquisicion_por_categoria=None, criterios_por_categoria=None,
+                                    imagenes_corte_por_categoria=None, avisos=None):
     """Guarda las categorías de una sesión de CatPhan: una fila de `pruebas`
     por categoría (anular+insertar, EB2c) y sus tablas hijas.
 
@@ -550,6 +554,12 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
     veredicto con que se juzgó cada prueba, archivados como JSON en `pruebas.criterio_veredicto` para que el PDF de un
     control reabierto diga lo mismo que el del día (§12.4: lo archivado no se recalcula). Sin él (llamadores anteriores)
     queda en `NULL`.
+
+    `imagenes_corte_por_categoria` (GI.5): `{categoria: bytes PNG}` -- la imagen del corte CON EL QUE SE ANALIZÓ cada prueba, fijada por la pantalla al analizar
+    (`png_de_corte`). Antes la imagen original salía de `info_dicom`: se VOLVÍA A ABRIR la carpeta al guardar (pico de +0.6 a +1.5 GB y, sin la carpeta, la
+    prueba quedaba sin imagen) y se tomaba UN solo corte, el último elegido, para las siete pruebas. Una categoría que trae su imagen no relee nada; sin el
+    argumento (llamadores anteriores) se conserva `info_dicom`. La imagen del RESULTADO (`output_blob`) ya no depende de la original: si falta una de las dos
+    se guarda la otra (o se conserva la del reguardado anterior) y, si `avisos` es una lista, se le añade qué imagen quedó sin guardar.
     """
     conn = None
     print("Guardando")
@@ -596,7 +606,10 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             raise ParametrosObligatoriosFaltantes("\n\n".join(aviso_de_faltantes(p, etiqueta_de(c)) for c, p in incompletas))
 
         imagen_blob = None
-        if info_dicom and info_dicom.get('ruta_carpeta'):
+        # GI.5: la carpeta solo se vuelve a abrir si alguna categoria NO trae su imagen fijada al analizar (llamadores anteriores); con todas fijadas no se lee nada.
+        _fijadas = imagenes_corte_por_categoria or {}
+        _sin_fijar = [c for c in resultados_por_categoria if mapeo_tipos.get(c) and not _fijadas.get(c)]
+        if info_dicom and info_dicom.get('ruta_carpeta') and _sin_fijar:
             ruta_carpeta = info_dicom['ruta_carpeta']
             indice_corte = info_dicom.get('indice_corte')
             wl = info_dicom.get('wl')
@@ -635,8 +648,17 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             # Mismo criterio que el UPDATE/INSERT original: una imagen
             # nueva reemplaza a la anterior; sin imagen nueva, se conserva
             # la que ya hubiera (si la había).
-            imagen_path_usar = imagen_blob if imagen_blob else imagen_path_anterior
-            imagen_resultado_usar = output_blob if imagen_blob else imagen_resultado_anterior
+            # GI.5: la original sale de lo FIJADO al analizar (esta categoria) y, solo para los llamadores anteriores, de la relectura de la carpeta; la del
+            # resultado ya no depende de que haya una original (antes un `output_blob` que SÍ llegó se descartaba si la carpeta ya no estaba).
+            imagen_original_nueva = (imagenes_corte_por_categoria or {}).get(categoria) or imagen_blob
+            imagen_path_usar = imagen_original_nueva or imagen_path_anterior
+            imagen_resultado_usar = output_blob or imagen_resultado_anterior
+            if avisos is not None:
+                _prueba = etiqueta_de(categoria)
+                if not imagen_path_usar:
+                    avisos.append(f"«{_prueba}» se guardó sin la imagen del corte analizado: no se pudo obtener al analizar.")
+                if not imagen_resultado_usar:
+                    avisos.append(f"«{_prueba}» se guardó sin la imagen de su resultado: el análisis no la entregó.")
 
             # A.1: la adquisición de ESTA categoría (la del volumen con el que
             # se corrió), no una única para toda la llamada.

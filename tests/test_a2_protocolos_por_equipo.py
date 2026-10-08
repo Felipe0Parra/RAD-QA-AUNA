@@ -468,6 +468,7 @@ def _pantalla(app, equipo_f):
     obj = PruebaMensualTAC.__new__(PruebaMensualTAC)
     QWidget.__init__(obj)
     obj.adquisicion_por_categoria = {}
+    obj.imagenes_corte_por_categoria = {}      # GI.5
     if equipo_f is not None:
         obj.equipo_f = equipo_f
     return obj
