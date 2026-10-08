@@ -307,6 +307,7 @@ class Conexion():
             self._asegurar_energia_linealidad()  # G.2 (PLAN_HANDOFF_IMAGENES_22-09.md)
             self._asegurar_criterio_veredicto()  # G.3 (PLAN_HANDOFF_IMAGENES_22-09.md)
             self._asegurar_error_pct_tamano_pixel()  # GI.0 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
+            self._asegurar_criterio_visibilidad_roi()  # GI.8c (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -1154,6 +1155,28 @@ class Conexion():
         self.con.commit()
         cur.close()
 
+    def _asegurar_criterio_visibilidad_roi(self):
+        """GI.8c (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): `resolucion_contraste_rois` gana el criterio con que se juzgo la visibilidad de cada inserto.
+
+        CAUSA: el analisis devuelve por cada ROI `criterio_visibilidad` («manual» si el fisico se pronuncio sobre ese inserto en el posicionador, «calculo» si
+        la visibilidad calculada lo dio por visible, «ninguno» si no) y el conteo `rois_visibles_visibilidad` y el veredicto `pasa_test_visibilidad` incluyen ese
+        juicio, pero el escritor no lo guardaba: un control reabierto o impreso no distinguia lo medido de lo que una persona decidio a ojo.
+
+          criterio_visibilidad  TEXT  'manual' / 'calculo' / 'ninguno'; NULL en todo control anterior (no hay forma honesta de saber que criterio se uso: no
+                                      se rellena, DA-13) y en un resultado reconstruido que no lo trae
+
+        Aditiva e idempotente; sin relleno retroactivo; no cambia el significado de ninguna columna existente. Va despues de `_asegurar_activo_bloque_qc`
+        (`DP-80`: ADD COLUMN anade al final fisico). Igual que GI.0, un paso que falla no impide el resto del arranque (la cadena vive en UN try/except)."""
+        cur = self.con.cursor()
+        try:
+            existentes = [c[1].lower() for c in cur.execute("PRAGMA table_info('resolucion_contraste_rois')").fetchall()]
+            if existentes and "criterio_visibilidad" not in existentes:
+                _asegurar_columna(cur, "resolucion_contraste_rois", "criterio_visibilidad", "TEXT")
+        except sqlite3.Error as ex:
+            print(f"Aviso: no se pudo asegurar 'resolucion_contraste_rois.criterio_visibilidad': {ex}")
+        self.con.commit()
+        cur.close()
+
     def _asegurar_unidades_resolucion_espacial(self):
         """GI.0 (D9, PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): `resolucion_espacial.lp_mm_maximo` pasa a `lp_cm_maximo`
         y `resolucion_espacial_regiones.lp_mm` a `lp_cm`, EN SITIO (`RENOMBRES_DE_COLUMNAS`, una sola implementación en
@@ -1983,6 +2006,7 @@ class Conexion():
             visibilidad_lim REAL,                       -- Criterio de Rose
             pasa_cnr BOOLEAN,
             pasa_visibilidad_lim BOOLEAN,               -- Criterio recomendado
+            criterio_visibilidad TEXT,                  -- 'manual' / 'calculo' / 'ninguno' (GI.8c); NULL en lo guardado antes
             FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
         );"""
 

@@ -251,7 +251,9 @@ def mapear_resolucion_contraste(resultados_resolucion):
             "snr": roi_data.get("snr"),
             "visibilidad_lim": roi_data.get("visibilidad_lim"),
             "pasa_cnr": roi_data.get("pasa_cnr", False),
-            "pasa_visibilidad_lim": roi_data.get("pasa_visibilidad_lim", False)
+            "pasa_visibilidad_lim": roi_data.get("pasa_visibilidad_lim", False),
+            # GI.8c: con qué criterio se juzgó este inserto ('manual' / 'calculo' / 'ninguno'); un resultado reconstruido de un control anterior no lo trae: None
+            "criterio_visibilidad": roi_data.get("criterio_visibilidad")
         }
         lista_rois.append(roi_mapeado)
     
@@ -879,8 +881,8 @@ def guardar_resolucion_contraste(cursor, id_prueba, resultados):
             INSERT INTO resolucion_contraste_rois (
                 id_prueba, diametro_mm, centro_x, centro_y, roi_promedio_hu,
                 background_promedio_hu, contraste_michelson, cnr, snr,
-                visibilidad_lim, pasa_cnr, pasa_visibilidad_lim
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                visibilidad_lim, pasa_cnr, pasa_visibilidad_lim, criterio_visibilidad
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             id_prueba,
             to_native(roi["diametro_mm"]),
@@ -893,7 +895,8 @@ def guardar_resolucion_contraste(cursor, id_prueba, resultados):
             to_native(roi["snr"]),
             to_native(roi["visibilidad_lim"]),
             bool(roi["pasa_cnr"]),
-            bool(roi["pasa_visibilidad_lim"])
+            bool(roi["pasa_visibilidad_lim"]),
+            roi["criterio_visibilidad"]
         ))
     return True
 
@@ -1411,6 +1414,22 @@ def _bandera_entera(valor):
     return None if bandera is None else int(bandera)
 
 
+CRITERIO_MANUAL = "manual"
+
+
+def insertos_juzgados_a_mano(resultados_roi):
+    """GI.8c: (n, m) -- cuantos de los m insertos del bajo contraste tienen el criterio «manual» (el fisico se pronuncio sobre ellos) y cuantos hay. (0, m) si
+    ninguno, y tambien en un control anterior a GI.8c (criterio NULL: no se sabe, no se inventa)."""
+    rois = [r for r in (resultados_roi or {}).values() if isinstance(r, dict)]
+    return sum(1 for r in rois if r.get("criterio_visibilidad") == CRITERIO_MANUAL), len(rois)
+
+
+def nota_visibilidad_a_mano(resultados_roi):
+    """GI.8c: LA nota que la pantalla y el informe PDF ponen junto al contraste cuando el fisico juzgo algun inserto a mano; None cuando ninguno (no se dice nada)."""
+    n, m = insertos_juzgados_a_mano(resultados_roi)
+    return None if n == 0 else f"Visibilidad: {n} de {m} insertos juzgados a mano"
+
+
 def _numero_de_region(nombre):
     """N de «region N» (el análisis nombra así sus ocho regiones de pares de líneas); None si el nombre no termina en un número."""
     m = re.search(r"(\d+)\s*$", str(nombre or ""))
@@ -1552,7 +1571,7 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
     # 2. Obtener detalles por ROI
     cursor.execute(f"""
         SELECT diametro_mm, centro_x, centro_y, roi_promedio_hu, background_promedio_hu,
-                contraste_michelson, cnr, snr, visibilidad_lim, pasa_cnr, pasa_visibilidad_lim
+                contraste_michelson, cnr, snr, visibilidad_lim, pasa_cnr, pasa_visibilidad_lim, criterio_visibilidad
         FROM resolucion_contraste_rois WHERE id_prueba = ?{filtro_activo('resolucion_contraste_rois')}
         ORDER BY diametro_mm DESC
     """, (id_prueba,))
@@ -1563,7 +1582,7 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
     resultados_roi = {}
     for roi in rois:
         (diametro, centro_x, centro_y, roi_prom, bg_prom,
-        contraste, cnr, snr, visibilidad, pasa_cnr, pasa_visibilidad) = roi
+        contraste, cnr, snr, visibilidad, pasa_cnr, pasa_visibilidad, criterio_visibilidad) = roi
         
         nombre_roi = f"{diametro}mm"
         resultados_roi[nombre_roi] = {
@@ -1576,7 +1595,8 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
             "snr": snr,
             "visibilidad_lim": visibilidad,
             "pasa_cnr": _bandera_entera(pasa_cnr),      # GI.3: 0/1 (None si nadie lo midió o no se entiende), aun si se guardó como BLOB o texto
-            "pasa_visibilidad_lim": _bandera_entera(pasa_visibilidad)
+            "pasa_visibilidad_lim": _bandera_entera(pasa_visibilidad),
+            "criterio_visibilidad": criterio_visibilidad        # GI.8c: tal como se guardó (NULL en un control anterior)
         }
     
     # Los controles guardados entre 05/2026 y GI.1 dejaron el conteo de ROI visibles NULL y el veredicto en 0 (`bool(None)`) aunque el detalle
@@ -1997,6 +2017,12 @@ def tabla_resultados_resolucion_contraste(resultados):
         """)
         
         layout_contenedor.addWidget(info_resumen)
+        nota_manual = nota_visibilidad_a_mano(resultados_roi)          # GI.8c
+        if nota_manual:
+            etiqueta_manual = QLabel(nota_manual)
+            etiqueta_manual.setObjectName("nota_visibilidad_a_mano")
+            etiqueta_manual.setAlignment(Qt.AlignCenter)
+            layout_contenedor.addWidget(etiqueta_manual)
         layout_contenedor.addWidget(tabla_contraste)
         layout_contenedor.setContentsMargins(0, 0, 0, 0)
         layout_contenedor.setSpacing(5)
@@ -2038,7 +2064,15 @@ def tabla_resultados_resolucion_contraste(resultados):
         
         layout.addWidget(mensaje)
         layout.addWidget(info_resumen)
-        no_visible_widget.setMaximumHeight(120)
+        nota_manual = nota_visibilidad_a_mano(resultados_roi)          # GI.8c: el fisico pudo haber descartado a mano todos los insertos
+        if nota_manual:
+            etiqueta_manual = QLabel(nota_manual)
+            etiqueta_manual.setObjectName("nota_visibilidad_a_mano")
+            etiqueta_manual.setAlignment(Qt.AlignCenter)
+            layout.addWidget(etiqueta_manual)
+            no_visible_widget.setMaximumHeight(150)
+        else:
+            no_visible_widget.setMaximumHeight(120)
         
         return no_visible_widget
 

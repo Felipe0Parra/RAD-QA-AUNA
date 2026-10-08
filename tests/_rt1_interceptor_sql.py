@@ -149,18 +149,18 @@ SITIOS_CENSALES_PERMITIDOS = {
         "censo (OB1, censo.total): el observador necesita el total SIN "
         "filtrar para poder calcular `anuladas = total - activas`; la "
         "consulta de al lado (línea 146) sí filtra, y es la que compara.",
-    ("data/ManejoDatos/conection.py", 766):  # R.1 (11-09): 594->679; B.1 (21-09): 680->682; A.1 (23-09): 682->683; G.2 (24-09): 683->684; G.3 (24-09): 684->685; PI.2 (01-10): 685->686; RB.3 (05-10): 686->713; GI.0: 713->766
+    ("data/ManejoDatos/conection.py", 767):  # R.1 (11-09): 594->679; B.1 (21-09): 680->682; A.1 (23-09): 682->683; G.2 (24-09): 683->684; G.3 (24-09): 684->685; PI.2 (01-10): 685->686; RB.3 (05-10): 686->713; GI.0: 713->766; GI.8c (08-10): 766->767
         "migración (E10, _asegurar_fk_on_delete_restrict): "
         "`INSERT INTO \"{temporal}\" SELECT * FROM \"{nombre}\"` copia la "
         "tabla ENTERA al reconstruirla para cambiar sus FK. Filtrar aquí "
         "no sería una lectura más estricta: BORRARÍA el histórico.",
-    ("data/ManejoDatos/conection.py", 866):  # R.1 (11-09): 694->779; B.1 (21-09): 780->782; A.1 (23-09): 782->783; G.2 (24-09): 783->784; G.3 (24-09): 784->785; PI.2 (01-10): 785->786; RB.3 (05-10): 786->813; GI.0: 813->866
+    ("data/ManejoDatos/conection.py", 867):  # R.1 (11-09): 694->779; B.1 (21-09): 780->782; A.1 (23-09): 782->783; G.2 (24-09): 783->784; G.3 (24-09): 784->785; PI.2 (01-10): 785->786; RB.3 (05-10): 786->813; GI.0: 813->866; GI.8c (08-10): 866->867
         "migración (EB2d, DA-57, _asegurar_angulo_starshot_sin_unique_de_tabla): "
         "mismo patrón que E10 arriba -- copia la tabla ENTERA al "
         "reconstruirla para retirar el UNIQUE(ref, spoke_index) de tabla "
         "(no partial, bloqueaba anular+insertar). Filtrar aquí borraría "
         "el histórico que la propia migración existe para preservar.",
-    ("data/ManejoDatos/conection.py", 570):  # B.1 (21-09): 484->486; A.1 (23-09): 486->487; G.2 (24-09): 487->488; G.3 (24-09): 488->489; PI.2 (01-10): 489->490; RB.3 (05-10): 490->517; GI.0: 517->570
+    ("data/ManejoDatos/conection.py", 571):  # B.1 (21-09): 484->486; A.1 (23-09): 486->487; G.2 (24-09): 487->488; G.3 (24-09): 488->489; PI.2 (01-10): 489->490; RB.3 (05-10): 490->517; GI.0: 517->570; GI.8c (08-10): 570->571
         "R.1 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md, _techo_de_ids): censo del "
         "id más alto que un puntero vivo hacia `equipos` todavía menciona, "
         "sobre `equipos_medicion`/`calculadora_dosimetrica`. Tiene que ver "

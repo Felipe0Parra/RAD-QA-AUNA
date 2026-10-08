@@ -1772,7 +1772,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     resolucion = resolucion_contraste(
                         imagen_grafica, imagen_analisis, tam_px,
                         catphan=catphan,          # ← instancia con offsets aplicados
-                        visibilidad_manual=dlg.visibilidad_manual,
+                        visibilidad_manual=visibilidad,       # GI.8c: solo si ACEPTO el posicionador; un Cancelar no es un juicio (antes se pasaba `dlg.visibilidad_manual` aunque se cancelara y quedaba archivado como «juzgado a mano»)
                         visualizar=True,
                         canvas=self._canvas_de(pestana),
                         # G.3: qué cuenta como ROI visible (parámetros heredados, sin fuente normativa): un solo

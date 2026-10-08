@@ -448,6 +448,11 @@ def resolucion_contraste(corte_255, corte_hu, tam_px: float,
             roi_prom = roi_std = contraste_michelson = None
             diferencia_hu = cnr = snr = visibilidad = area_px = None
             pasa_cnr = pasa_vis = False
+            # GI.8c: un ROI que no se pudo medir no tiene juicio: antes `pasa_vis_final`, `pasa_cnr_final`, `manual_para_este_roi` y `criterio` quedaban con lo del ROI
+            # ANTERIOR del bucle (o el análisis entero reventaba con `UnboundLocalError` si el no medido era el primero), y el criterio que se guarda habría salido mal
+            pasa_cnr_final = pasa_vis_final = False
+            manual_para_este_roi = None
+            criterio = "ninguno"
 
         else:
             roi_prom = float(np.mean(v_roi))

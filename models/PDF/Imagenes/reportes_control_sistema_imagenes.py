@@ -51,7 +51,7 @@ from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
 from models.PDF.PDFWindow import PdfViewer
 
 # Importar funciones de reconstrucción desde catphan_db
-from data.ManejoDatos.catphan_TAC.catphan_db import _bandera_guardada, reconstruir_resultados_desde_bd
+from data.ManejoDatos.catphan_TAC.catphan_db import _bandera_guardada, nota_visibilidad_a_mano, reconstruir_resultados_desde_bd
 from services.anulacion import filtro_activo
 from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad, filas_medidas
 from analisisImagenes.catphan.escala import CLAVE_EN_ADQUISICION as CLAVE_ESCALA, nota_escala
@@ -867,6 +867,10 @@ class ReporteControlSistemaImagenes:
         tabla.append(['--- RESUMEN ---', '---', '---'])
         tabla.append(['ROIs visibles', _celda_numero(resumen.get('rois_visibles_visibilidad'), "{:g}"), veredicto])
         tabla.append(['Diámetro mínimo visible [mm]', _celda_numero(resumen.get('diametro_minimo_visible'), "{:g}"), veredicto])
+        # GI.8c: si el físico juzgó algún inserto a mano, el informe lo dice (la MISMA nota que la pantalla); sin juicio manual no se añade nada
+        nota_manual = nota_visibilidad_a_mano(resultados_roi)
+        if nota_manual:
+            tabla.append([nota_manual, '', ''])
         
         return pd.DataFrame(tabla, columns=['Resolución de contraste', '', ''])
     
