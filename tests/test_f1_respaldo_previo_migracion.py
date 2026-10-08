@@ -78,7 +78,7 @@ class TestBdLegadaSeRespaldaAntesDeMigrar:
         conexion = Conexion()  # arranque real: dispara F1 y luego E10
         try:
             carpeta = os.path.join(carpeta_respaldos(ruta), "pre_migracion")
-            archivos = os.listdir(carpeta)
+            archivos = [n for n in os.listdir(carpeta) if n != "LEEME_RESTAURAR.txt"]      # RS.2: el LEEME no es un respaldo
             assert len(archivos) == 1
             respaldo = os.path.join(carpeta, archivos[0])
 

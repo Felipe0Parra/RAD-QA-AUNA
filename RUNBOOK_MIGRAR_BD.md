@@ -94,9 +94,13 @@ solo MUESTRA lo que haría. Revise el reporte:
 
 ### Paso 3 — Usar
 
-Copie el archivo ya migrado como `BaseDatosQA.db` junto al ejecutable
-`RAD-QA.exe` (reemplazando el que esté, previa copia de seguridad de ese
-también). Abra la aplicación y verifique un par de controles conocidos.
+Cierre RAD-QA en todos los equipos. Mueva a otra carpeta (sin borrar)
+`BaseDatosQA.db` y, si existen, `BaseDatosQA.db-wal` y `BaseDatosQA.db-shm`:
+un `-wal` viejo junto a un `.db` recién copiado se aplica encima y lo deshace
+(la base queda con filas que no son las del archivo copiado, o dañada, sin
+aviso). Copie el archivo ya migrado como `BaseDatosQA.db` junto al ejecutable
+`RAD-QA.exe` (la copia de seguridad del anterior es lo que movió a esa otra
+carpeta). Abra la aplicación y verifique un par de controles conocidos.
 
 ---
 
@@ -113,10 +117,14 @@ La herramienta los entiende y los consolida automáticamente al `.db`
 principal antes de hacer el backup, así no se pierde ningún registro
 reciente. Al transportar una BD entre computadores, lo más seguro sigue
 siendo copiar los tres archivos juntos si existen (o cerrar la aplicación
-antes de copiar — al cerrar, la app deja el `.db` completo).
+antes de copiar: al cerrarla con la ventana, la app deja el `.db` completo;
+volver a «Inicio» no es cerrarla, y tras una caída o un cierre forzado puede
+quedar un `-wal` con contenido junto al `.db`).
 
-**¿Cómo deshago una migración?** Restaure el `.bak` que quedó al lado del
-archivo (renombrarlo de vuelta). Nada más hace falta.
+**¿Cómo deshago una migración?** Cierre RAD-QA, mueva a otra carpeta
+`BaseDatosQA.db`, `BaseDatosQA.db-wal` y `BaseDatosQA.db-shm` (como en el
+Paso 3) y copie el `.bak` que quedó al lado del archivo como `BaseDatosQA.db`.
+Nada más hace falta.
 
 **¿Dónde queda constancia de lo que se hizo?** En la salida de la terminal
 (puede copiarla/pegarla) y en la tabla `audit_log` de la propia BD migrada

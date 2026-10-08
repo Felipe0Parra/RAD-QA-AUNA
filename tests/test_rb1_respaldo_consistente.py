@@ -205,11 +205,11 @@ class TestFotoConsistente:
             ruta = respaldar_bd(ruta_origen=origen, carpeta_destino=carpeta, ahora=AHORA)
         finally:
             con.close()
-        assert sorted(os.listdir(carpeta)) == [os.path.basename(ruta)]
+        assert sorted(n for n in os.listdir(carpeta) if n != respaldo.NOMBRE_LEEME_RESTAURAR) == [os.path.basename(ruta)]
         c = sqlite3.connect(ruta)
         c.execute("SELECT COUNT(*) FROM datos").fetchone()
         c.close()
-        assert sorted(os.listdir(carpeta)) == [os.path.basename(ruta)], "abrir y cerrar la copia no debe crear -wal ni -shm"
+        assert sorted(n for n in os.listdir(carpeta) if n != respaldo.NOMBRE_LEEME_RESTAURAR) == [os.path.basename(ruta)], "abrir y cerrar la copia no debe crear -wal ni -shm"
 
     def test_la_copia_queda_en_el_modo_normal_de_un_solo_archivo(self, tmp_path):
         origen, con = _bd_wal(tmp_path, filas=50)
@@ -248,7 +248,7 @@ class TestFotoConsistente:
         finally:
             con.close()
         assert _estado_de_la_copia(ruta)[:2] == ("ok", 50)
-        assert sorted(os.listdir(str(carpeta))) == sorted([os.path.basename(ruta), ajeno])
+        assert sorted(n for n in os.listdir(str(carpeta)) if n != respaldo.NOMBRE_LEEME_RESTAURAR) == sorted([os.path.basename(ruta), ajeno])
         with open(os.path.join(str(carpeta), ajeno), "rb") as f:
             assert f.read() == b"restos de otra copia"
 
@@ -449,7 +449,7 @@ class TestElProvisionalEsDeCadaCopia:
         assert a == destino and b == destino, "las dos copias llegan a buen puerto (cada una comprueba la suya antes de renombrar)"
         assert os.path.getsize(destino) > 0
         assert _estado_de_la_copia(destino)[:2] == ("ok", 3000)
-        assert sorted(os.listdir(carpeta)) == [_nombre(AHORA)], "ningun provisional queda atras"
+        assert sorted(n for n in os.listdir(carpeta) if n != respaldo.NOMBRE_LEEME_RESTAURAR) == [_nombre(AHORA)], "ningun provisional queda atras"
 
     def test_varios_procesos_a_la_vez_no_dejan_archivos_vacios_ni_errores(self, tmp_path):
         """PRUEBA DE HUMO (no fija una carrera concreta: eso lo hace el intercalado de arriba): 3 procesos llamando a `respaldar_bd` a la
@@ -475,7 +475,7 @@ class TestElProvisionalEsDeCadaCopia:
             ruta = os.path.join(carpeta, nombre)
             assert os.path.getsize(ruta) > 0, nombre
             assert _estado_de_la_copia(ruta)[0] == "ok", nombre
-        for archivo in os.listdir(carpeta):
+        for archivo in (n for n in os.listdir(carpeta) if n != respaldo.NOMBRE_LEEME_RESTAURAR):      # RS.2: el LEEME_RESTAURAR.txt no es un respaldo
             assert respaldo._marca_y_contador(archivo) is not None, f"quedo algo que no es un respaldo: {archivo}"
             assert os.path.getsize(os.path.join(carpeta, archivo)) > 0, archivo
 
@@ -872,7 +872,7 @@ class TestOrigenOcupado:
         devuelto = json.loads([l for l in r.stdout.strip().splitlines() if l.strip()][-1])
         assert devuelto is not None and os.path.basename(devuelto) == _nombre(datetime(2026, 10, 5, 12, 0, 0))
         assert _estado_de_la_copia(devuelto)[:2] == ("ok", 500)
-        assert sorted(os.listdir(carpeta)) == [os.path.basename(devuelto)]
+        assert sorted(n for n in os.listdir(carpeta) if n != respaldo.NOMBRE_LEEME_RESTAURAR) == [os.path.basename(devuelto)]
 
 
 # ---------------------------------------------------------------------------------- las pruebas que ya existian

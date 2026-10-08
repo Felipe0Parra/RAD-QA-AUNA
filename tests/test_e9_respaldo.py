@@ -21,6 +21,7 @@ from data.ManejoDatos.conection import checkpoint_wal
 from services.respaldo import (
     MAX_RESPALDOS,
     NOMBRE_CARPETA_RESPALDOS,
+    NOMBRE_LEEME_RESTAURAR,
     carpeta_respaldos,
     respaldar_bd,
 )
@@ -98,7 +99,8 @@ class TestCopiaValidaYCompleta:
         r2 = respaldar_bd(ruta_origen=origen, carpeta_destino=destino)
 
         assert r1 is not None and r2 is not None and r1 != r2
-        assert len(os.listdir(destino)) == 2
+        # RS.2: la carpeta lleva ademas el LEEME_RESTAURAR.txt, que no es un respaldo
+        assert len([n for n in os.listdir(destino) if n != NOMBRE_LEEME_RESTAURAR]) == 2
 
 
 class TestRotacion:
@@ -111,7 +113,7 @@ class TestRotacion:
                                 max_copias=3) for _ in range(6)]
         assert all(c is not None for c in creados)
 
-        restantes = sorted(os.listdir(destino))
+        restantes = sorted(n for n in os.listdir(destino) if n != NOMBRE_LEEME_RESTAURAR)      # RS.2: el LEEME no es un respaldo
         assert len(restantes) == 3
         # Las que quedan son exactamente las 3 ÚLTIMAS creadas.
         assert restantes == sorted(os.path.basename(c) for c in creados[-3:])

@@ -53,6 +53,17 @@ from services.registro_errores import avisar_consola, registrar_error
 PREFIJO_RESPALDO = "BaseDatosQA_"
 SUFIJO_RESPALDO = ".db"
 NOMBRE_CARPETA_RESPALDOS = "respaldos_bd"
+# RS.2 (C1 de la auditoria del 06-10, medido por V4): copiar un respaldo encima de `BaseDatosQA.db` dejando al lado un `-wal` con contenido NO restaura: SQLite aplica ese `-wal` viejo sobre el
+# archivo restaurado (595 filas de `audit_log` en vez de las 554 del respaldo, con `integrity_check` en ok y sin aviso) o lo deja danado. La carpeta de respaldos lleva, una sola vez, el
+# procedimiento correcto. Solo texto ASCII (se abre con cualquier editor, sin simbolos, DA-18); cuatro lineas.
+NOMBRE_LEEME_RESTAURAR = "LEEME_RESTAURAR.txt"
+TEXTO_LEEME_RESTAURAR = (
+    "COMO RESTAURAR UN RESPALDO DE LA BASE DE DATOS\n"
+    "1. Cierre RAD-QA en todos los equipos.\n"
+    "2. Mueva a otra carpeta (no los borre) BaseDatosQA.db y, si existen, BaseDatosQA.db-wal y BaseDatosQA.db-shm: un -wal viejo junto al archivo restaurado se aplica encima y lo deshace.\n"
+    "3. Copie el respaldo elegido con el nombre BaseDatosQA.db a la carpeta donde estaba la base de datos (la que contiene la carpeta respaldos_bd), abra la aplicacion y compruebe un par de controles conocidos.\n"
+    "Lo que se guardo despues de la fecha del respaldo elegido no estara en la base restaurada: por eso los archivos del paso 2 se mueven y no se borran.\n"
+)
 # N~10 (decisión del plan §17): historial suficiente para volver varias
 # sesiones atrás sin que la carpeta crezca sin límite (~10 x tamaño de la BD).
 MAX_RESPALDOS = 10
@@ -149,6 +160,18 @@ def _nombre_nuevo(existentes, ahora):
         return f"{PREFIJO_RESPALDO}{marca_ultimo}_{contador_ultimo + 1:02d}{SUFIJO_RESPALDO}"
     segundo_siguiente = datetime.strptime(marca_ultimo, _FORMATO_MARCA) + timedelta(seconds=1)
     return f"{PREFIJO_RESPALDO}{segundo_siguiente.strftime(_FORMATO_MARCA)}{SUFIJO_RESPALDO}"
+
+
+def _dejar_leeme(carpeta):
+    """RS.2: deja en la carpeta de respaldos el procedimiento para restaurar, UNA sola vez (si el archivo ya esta, no se reescribe). No cuenta como respaldo: la rotacion solo reconoce el
+    nombre exacto de un respaldo (RB.0). Nunca lanza: un LEEME que no se pudo escribir no impide el respaldo."""
+    ruta = os.path.join(carpeta, NOMBRE_LEEME_RESTAURAR)
+    try:
+        if os.path.isfile(ruta) and os.path.getsize(ruta) == 0:
+            os.remove(ruta)         # RS.2 (revision): un LEEME de 0 bytes (el proceso cayo entre crearlo y escribirlo) no existe: se rehace
+        _crear_exclusivo(ruta, TEXTO_LEEME_RESTAURAR)
+    except Exception:
+        pass
 
 
 def _avisar(texto, excepcion=None):
@@ -393,6 +416,7 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
                 os.replace(parcial, destino)
                 parcial = None
                 _rotar(carpeta_destino, max_copias)
+                _dejar_leeme(carpeta_destino)        # RS.2: el procedimiento de restauracion aparece junto al primer respaldo HECHO (un fallo no deja nada en la carpeta)
 
                 audit_minimo.registrar(
                     usuario, audit_minimo.ACCION_GUARDAR, tabla="backup",
@@ -498,8 +522,14 @@ def _crear_exclusivo(ruta, texto):
         return False
     try:
         os.write(fd, texto.encode("utf-8"))
-    finally:
+    except BaseException:
         os.close(fd)
+        fd = None
+        _quitar(ruta)               # RS.2 (revision): un archivo creado y NO escrito (disco lleno...) queda de 0 bytes y, al existir, nada lo reescribiria: se quita
+        raise
+    finally:
+        if fd is not None:
+            os.close(fd)
     return True
 
 
