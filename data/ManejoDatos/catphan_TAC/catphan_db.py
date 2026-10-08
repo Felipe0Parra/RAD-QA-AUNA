@@ -5,7 +5,7 @@ Conecta los resultados de las funciones de análisis con las tablas de base de d
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont
-import json, traceback, os, io, re, numbers
+import json, traceback, os, io, re, numbers, sqlite3
 import numpy as np
 from PIL import Image
 from datetime import datetime
@@ -15,8 +15,14 @@ from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
 from services.anulacion import filtro_activo, reemplazar_bloque, sql_anular_bloque
 from services.ventana_edicion import puede_editarse, mensaje_bloqueo_edicion
+from analisisImagenes.catphan.errores_guardado import CategoriaNoGuardada, CAUSA_SIN_DATOS, CAUSA_NO_CONVERTIBLES
+from services.registro_errores import registrar_error, avisar_consola
 from analisisImagenes.catphan.obligatorios import (evaluar_categoria, aviso_de_faltantes, etiqueta_de,
                                                    ParametrosObligatoriosFaltantes)
+
+# GI.6: cuanto espera el escritor a que otro proceso suelte la base antes de rendirse con «database is locked» (la pantalla lo traduce). Nombrada para que una prueba
+# pueda bajarla sin esperar 30 s de verdad.
+ESPERA_BD_OCUPADA_MS = 30000
 
 # ------------------------------------ FUNCIONES PARA MOSTRAR IMÁGENES ------------------------------------
 
@@ -562,10 +568,14 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
     se guarda la otra (o se conserva la del reguardado anterior) y, si `avisos` es una lista, se le añade qué imagen quedó sin guardar.
     """
     conn = None
-    print("Guardando")
+    avisar_consola("Guardando")
     try:
         conn = Conexion().conectar()
-        conn.execute("PRAGMA busy_timeout = 30000")
+        if conn is None:
+            # GI.6 (revision, P2): `Conexion.conectar()` traga su error (lo imprime a una consola que el `.exe` no tiene) y devuelve `None`; antes se hacia `None.execute(...)` y salia un
+            # `AttributeError` («error inesperado») en lugar de decir que la base no se pudo abrir.
+            raise sqlite3.OperationalError("unable to open database file")
+        conn.execute(f"PRAGMA busy_timeout = {ESPERA_BD_OCUPADA_MS}")
         cursor = conn.cursor()
 
         # GI.4 (A10): la puerta W1 tambien vive AQUI, no solo en la pantalla -- ningun llamador futuro la salta. Una sesion sin control (`id_sesion=None`,
@@ -579,7 +589,7 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
         if 'equipo' not in columnas:
             cursor.execute("ALTER TABLE pruebas ADD COLUMN equipo TEXT")
             conn.commit()
-            print("✅ Columna 'equipo' agregada a pruebas")
+            avisar_consola("Columna 'equipo' agregada a pruebas")
 
         if id_sesion is None:
             fecha_formateada = datetime.strptime(fecha, "%Y-%m-%d").strftime("%Y%m%d")
@@ -693,23 +703,34 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             if id_prueba_anterior is not None:
                 anular_datos_especificos(cursor, categoria, id_prueba_anterior)
 
-            if categoria == "espesor":
-                guardar_espesor_corte(cursor, id_prueba, resultados, espesor_categoria)
-            elif categoria == "tamano_pixel":
-                guardar_tamano_pixel(cursor, id_prueba, resultados, tam_px_teorico)
-            elif categoria == "resolucion_contraste":
-                guardar_resolucion_contraste(cursor, id_prueba, resultados)
-            elif categoria == "resolucion_espacial":
-                guardar_resolucion_espacial(cursor, id_prueba, resultados)
-            elif categoria == "valores_ct":
-                guardar_valores_ct(cursor, id_prueba, resultados)
-            elif categoria == "linealidad_ct":
-                guardar_linealidad_ct(cursor, id_prueba, resultados)
-            elif categoria == "uniformidad":
-                guardar_uniformidad(cursor, id_prueba, resultados)
+            # GI.6: antes se ignoraba lo que devolvia cada `guardar_*`: una prueba cuyas filas hijas NO entraron (`False`) anulaba la vigente buena, no insertaba la nueva y se daba
+            # por guardada. Ahora o entran sus filas o no se guarda NADA de la llamada (el `except` de abajo revierte y relanza). Un error de la base se deja pasar tal cual (la
+            # pantalla lo traduce por su causa); un error de Python al convertir los resultados es un dato incompleto de ESA prueba.
+            try:
+                if categoria == "espesor":
+                    guardado = guardar_espesor_corte(cursor, id_prueba, resultados, espesor_categoria)
+                elif categoria == "tamano_pixel":
+                    guardado = guardar_tamano_pixel(cursor, id_prueba, resultados, tam_px_teorico)
+                elif categoria == "resolucion_contraste":
+                    guardado = guardar_resolucion_contraste(cursor, id_prueba, resultados)
+                elif categoria == "resolucion_espacial":
+                    guardado = guardar_resolucion_espacial(cursor, id_prueba, resultados)
+                elif categoria == "valores_ct":
+                    guardado = guardar_valores_ct(cursor, id_prueba, resultados)
+                elif categoria == "linealidad_ct":
+                    guardado = guardar_linealidad_ct(cursor, id_prueba, resultados)
+                elif categoria == "uniformidad":
+                    guardado = guardar_uniformidad(cursor, id_prueba, resultados)
+                else:
+                    guardado = True
+            except sqlite3.Error:
+                raise
+            except Exception as e:
+                raise CategoriaNoGuardada(categoria, CAUSA_NO_CONVERTIBLES) from e
+            if not guardado:
+                raise CategoriaNoGuardada(categoria, CAUSA_SIN_DATOS)
         
         conn.commit()
-        print(f"✅ Prueba CatPhan guardada exitosamente con ID de sesión: {id_sesion}")
 
         # A6.7 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): esta función es el
         # único punto de entrada real de las 9 de catphan_db.py (los 2
@@ -723,24 +744,28 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
         # así que abrir su propia conexión aquí (sin `con=`) no compite por
         # ningún lock (EB0 no aplica -- no hay transacción abierta que
         # compartir).
-        _registrar_auditoria(_nombre_usuario, ACCION_GUARDAR, "pruebas", ref=id_sesion,
-                             detalle=f"CatPhan: {', '.join(resultados_por_categoria)}")
+        # GI.6: el guardado YA esta hecho (commit): que la auditoria falle no lo convierte en un guardado fallido (antes el `except` de abajo lo habria dado por fallado y la pantalla
+        # diria que no se guardo lo que SI esta en la base). Revision (P3): el aviso por consola de aqui llevaba un simbolo y, con una salida que no lo admite (stdout redirigido en
+        # cp1252/ascii), lanzaba `UnicodeEncodeError` justo despues del commit; ahora ninguna salida de consola puede romper el guardado (`avisar_consola`).
+        avisar_consola(f"Prueba CatPhan guardada con ID de sesion: {id_sesion}")
+        try:
+            _registrar_auditoria(_nombre_usuario, ACCION_GUARDAR, "pruebas", ref=id_sesion,
+                                 detalle=f"CatPhan: {', '.join(resultados_por_categoria)}")
+        except Exception as e_auditoria:
+            registrar_error(f"La auditoría del guardado de CatPhan (sesión {id_sesion}) falló; el guardado SÍ se hizo", e_auditoria)
 
         return id_sesion
         
-    except (ControlNoEditable, ParametrosObligatoriosFaltantes):
-        # GI.4: son los dos rechazos con motivo que el fisico debe leer. Los demas errores siguen como siempre (rollback y `None`): GI.6 decide que hacer con ellos.
+    except BaseException:
+        # GI.4 / GI.6: cualquier fallo revierte la transaccion ENTERA y se RELANZA tal cual (antes: `print_exc` a una consola que el `.exe` no tiene y `return None`, y la pantalla decia
+        # siempre «Error al guardar X en la base de datos»). La pantalla traduce la causa (`errores_guardado.traducir`) y deja el rastro en error_log.txt.
         if conn:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass            # un rollback que falla no debe tapar la causa original
         raise
 
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        import traceback
-        traceback.print_exc()
-        return None
-        
     finally:
         if conn:
             conn.close()
@@ -931,14 +956,18 @@ def guardar_valores_ct(cursor, id_prueba, resultados):
         "Acrilico": 5, "Delrin": 6, "Teflon": 7
     }
     
+    insertadas = 0
     for material_data in datos:
         material_nombre = material_data["material"]  # ✅ CORREGIR: usar "material"
+        if not material_nombre:
+            continue        # el elemento de METADATOS que `valor_numero_ct` agrega al final (la imagen del analisis): no es un material ni una fila
         id_material = mapeo_materiales.get(material_nombre)
-        
+
         if not id_material:
-            #print(f"⚠️  Material desconocido: {material_nombre}")
-            continue
-            
+            # GI.6 (revision, P1): antes `continue` -- la prueba se daba por guardada con filas de menos (o con ninguna) y anulaba la vigente buena. Un material que la tabla no conoce
+            # rechaza la prueba entera: el escritor lo dice como «resultados incompletos» y el nombre queda en error_log.txt.
+            raise ValueError(f"Material desconocido en Valores CT: {material_nombre!r}")
+
         cursor.execute("""
             INSERT INTO valores_ct (
                 id_prueba, id_material, promedio_hu, error_absoluto, error_relativo
@@ -950,57 +979,54 @@ def guardar_valores_ct(cursor, id_prueba, resultados):
             material_data["error_absoluto"],
             material_data["error_relativo"]
         ))
-    
+        insertadas += 1
+
     #print(f"  ✓ Valores CT guardados para prueba {id_prueba}")
-    return True
+    return insertadas > 0           # GI.6 (revision, P1): solo metadatos = nada que guardar
 
 def guardar_linealidad_ct(cursor, id_prueba, resultados):
     """
     Guarda los resultados de linealidad CT en la base de datos.
-    
+
+    GI.6: ya NO se traga lo que le pasa (antes un `except Exception` devolvia `False` y el escritor lo ignoraba: una linealidad que no se pudo guardar anulaba la vigente buena
+    y se daba por guardada). Un error de la base o de la conversion sube hasta el escritor, que revierte y lo relanza.
+
     Args:
         cursor: Cursor de la base de datos
         id_prueba (int): ID de la prueba
         resultados (dict): Resultados de la función linealidad_ct()
     """
     if not resultados:
-        #print("No hay resultados de linealidad CT para guardar")
         return False
-    
-    try:
-        # Mapear los resultados usando la función existente
-        datos_mapeados = mapear_linealidad_ct(resultados)
-        
-        # Insertar en la tabla linealidad_ct
-        sql_insert = """
-            INSERT INTO linealidad_ct (
-                id_prueba, pendiente, intercepto, r_cuadrado, 
-                referencia, escala_contraste, num_materiales, 
-                rango_hu_min, rango_hu_max, linealidad_aceptable, energia_mev
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        
-        valores = (
-            id_prueba,
-            datos_mapeados["pendiente"],
-            datos_mapeados["intercepto"],
-            datos_mapeados["r_cuadrado"],
-            datos_mapeados["referencia"],
-            datos_mapeados["escala_contraste"],
-            datos_mapeados["num_materiales"],
-            datos_mapeados["rango_hu_min"],
-            datos_mapeados["rango_hu_max"],
-            datos_mapeados["linealidad_aceptable"],
-            datos_mapeados["energia_mev"],
-        )
-        
-        cursor.execute(sql_insert, valores)
-        #print(f"✓ Linealidad CT guardada para prueba {id_prueba}")
-        return True
-        
-    except Exception as e:
-        #print(f"✗ Error guardando linealidad CT: {e}")
-        return False
+
+    # Mapear los resultados usando la función existente
+    datos_mapeados = mapear_linealidad_ct(resultados)
+
+    # Insertar en la tabla linealidad_ct
+    sql_insert = """
+        INSERT INTO linealidad_ct (
+            id_prueba, pendiente, intercepto, r_cuadrado, 
+            referencia, escala_contraste, num_materiales, 
+            rango_hu_min, rango_hu_max, linealidad_aceptable, energia_mev
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+
+    valores = (
+        id_prueba,
+        datos_mapeados["pendiente"],
+        datos_mapeados["intercepto"],
+        datos_mapeados["r_cuadrado"],
+        datos_mapeados["referencia"],
+        datos_mapeados["escala_contraste"],
+        datos_mapeados["num_materiales"],
+        datos_mapeados["rango_hu_min"],
+        datos_mapeados["rango_hu_max"],
+        datos_mapeados["linealidad_aceptable"],
+        datos_mapeados["energia_mev"],
+    )
+
+    cursor.execute(sql_insert, valores)
+    return True
 
 def guardar_uniformidad(cursor, id_prueba, resultados):
     """Guarda resultados de uniformidad - SOLO CAMPOS EXISTENTES"""
@@ -1019,9 +1045,9 @@ def guardar_uniformidad(cursor, id_prueba, resultados):
         id_region = mapeo_regiones.get(region_nombre)
         
         if not id_region:
-            #print(f"⚠️  Región desconocida: {region_nombre}")
-            continue
-            
+            # GI.6 (revision, P1): inalcanzable hoy (`mapear_uniformidad` solo emite las cinco regiones del mapa), pero un `continue` aqui seria una fila perdida sin aviso.
+            raise ValueError(f"Region desconocida en Uniformidad: {region_nombre!r}")
+
         cursor.execute("""
             INSERT INTO uniformidad_ruido (
                 id_prueba, id_region, hu_promedio, desviacion
@@ -1084,34 +1110,34 @@ def validar_resultados_catphan(resultados_por_categoria, modo="completo"):
     # Verificar categorías requeridas solo en modo completo
     for categoria in categorias_requeridas:
         if categoria not in resultados_por_categoria:
-            errores.append(f"Falta la categoría requerida: {categoria}")
+            errores.append(f"Falta la prueba requerida: «{etiqueta_de(categoria)}»")        # GI.6 (revision, P7): el nombre de la pestaña, no el identificador interno
     
     # Validar cada categoría presente (independientemente del modo)
     for categoria, resultados in resultados_por_categoria.items():
         if not resultados:
-            errores.append(f"La categoría '{categoria}' no tiene resultados válidos")
+            errores.append(f"La prueba «{etiqueta_de(categoria)}» no tiene resultados válidos")
             continue
             
         # Validaciones específicas por categoría
         if categoria == "espesor":
             if not isinstance(resultados, dict):
-                errores.append(f"Los resultados de {categoria} deben ser un diccionario")
+                errores.append(f"Los resultados de «{etiqueta_de(categoria)}» no tienen la forma esperada")
             elif "espesor_promedio_mm" not in resultados:
-                errores.append(f"Faltan datos de espesor promedio en {categoria}")
+                errores.append(f"Faltan datos del espesor promedio en «{etiqueta_de(categoria)}»")
                 
         elif categoria == "tamano_pixel":
             if not isinstance(resultados, dict):
-                errores.append(f"Los resultados de {categoria} deben ser un diccionario")
+                errores.append(f"Los resultados de «{etiqueta_de(categoria)}» no tienen la forma esperada")
                 
         elif categoria == "valores_ct":
             if not isinstance(resultados, list):
-                errores.append(f"Los resultados de {categoria} deben ser una lista")
+                errores.append(f"Los resultados de «{etiqueta_de(categoria)}» no tienen la forma esperada")
             elif not resultados:
-                errores.append(f"La lista de resultados de {categoria} está vacía")
+                errores.append(f"La lista de resultados de «{etiqueta_de(categoria)}» está vacía")
                 
         elif categoria == "uniformidad":
             if not isinstance(resultados, dict):
-                errores.append(f"Los resultados de {categoria} deben ser un diccionario")
+                errores.append(f"Los resultados de «{etiqueta_de(categoria)}» no tienen la forma esperada")
     
     return len(errores) == 0, errores
 

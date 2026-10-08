@@ -414,13 +414,18 @@ class TestElEscritorNoDependeDeLaPantalla:
 
     def test_una_sesion_sin_control_id_none_no_consulta_la_puerta(self, app, bd_temporal, monkeypatch):
         """La ruta antigua (`id_sesion=None`: el escritor inventa una sesion `AAAAMMDD_marca`) no tiene control al que preguntarle: la puerta no se consulta.
-        (Con `foreign_keys=ON` esa sesion inventada ya no puede entrar a `pruebas` -- la FK apunta a `controles` --: es anterior a este plan y no se toca.)"""
+        (Con `foreign_keys=ON` esa sesion inventada ya no puede entrar a `pruebas` -- la FK apunta a `controles` --: es anterior a este plan y no se toca.)
+        GI.6: antes ese fallo se tragaba y el escritor devolvia `None`; ahora se relanza la causa (`FOREIGN KEY`) y la pantalla la traduce."""
+        import sqlite3
         import data.ManejoDatos.catphan_TAC.catphan_db as db
         monkeypatch.setattr(db, "puede_editarse", lambda *a, **k: pytest.fail("se consulto la puerta W1 sin control"))
-        self._guardar(None)
+        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+            self._guardar(None)
 
-    def test_una_excepcion_que_no_es_nuestra_sigue_devolviendo_none_como_antes(self, app, bd_temporal, monkeypatch):
-        """GI.6 es quien decide que hacer con los demas errores del escritor: aqui solo se relanzan los dos nuevos, con motivo."""
+    def test_una_excepcion_que_no_es_nuestra_se_relanza_y_no_deja_nada(self, app, bd_temporal, monkeypatch):
+        """GI.6 (era `..._sigue_devolviendo_none_como_antes`, de GI.4): el escritor ya no devuelve `None` ante los demas errores; revierte y los relanza (envueltos en
+        `CategoriaNoGuardada` si el fallo fue de Python al guardar esa prueba) para que la pantalla diga la causa."""
+        from analisisImagenes.catphan.errores_guardado import CategoriaNoGuardada
         import data.ManejoDatos.catphan_TAC.catphan_db as db
 
         def _falla(*a, **k):
@@ -428,7 +433,9 @@ class TestElEscritorNoDependeDeLaPantalla:
 
         monkeypatch.setattr(db, "guardar_espesor_corte", _falla)
         ref = self._control(bd_temporal)
-        assert self._guardar(ref) is None and _todas(bd_temporal, ref) == 0
+        with pytest.raises(CategoriaNoGuardada):
+            self._guardar(ref)
+        assert _todas(bd_temporal, ref) == 0
 
 
 # ------------------------------------------------------------------------------------------ la puerta W1 (A10)

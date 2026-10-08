@@ -335,7 +335,7 @@ CENSO_RAICES = {
     # pide el control vigente a `services/identidad_control.py::buscar_control_vigente`, que es la UNICA lectura (censada arriba).
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 572, "controles"):  # A.2 (21-09): 544->557; B.3 (21-09): 557->558; C.1 (25-09): 558->561; FS.2 (06-10): 561->572
         (IDENTIDAD, "_fecha_real_del_control (F3): WHERE id = ?, fila ya elegida"),
-    ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 170, "controles"):  # A.2 (23-09): 164->165; G.2 (24-09): 165->166; G.3 (24-09): 166->167; GI.4 (07-10): 167->170
+    ("ui/paginasControles/PruebasMensuales/tac_mensual.py", 172, "controles"):  # A.2 (23-09): 164->165; G.2 (24-09): 165->166; G.3 (24-09): 166->167; GI.4 (07-10): 167->170; GI.6 (07-10): 170->172
         (IDENTIDAD, "_existe_ref: WHERE id = ? AND equipo = ? -- el id ya "
                     "nombra la fila; el equipo es una guarda, no un "
                     "selector"),

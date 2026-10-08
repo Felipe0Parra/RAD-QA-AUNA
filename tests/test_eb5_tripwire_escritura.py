@@ -255,12 +255,11 @@ SITIOS_OPACOS_PERMITIDOS = {
         "reemplazar_bloque (EB1) -- sql_anular_bloque(...) compone siempre "
         "'SET activo = 0' más el AND de vigencia. Mismo helper, mismo "
         "template verificado a mano.",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 775):  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729; GI.4 (07-10): 729->753; GI.5 (07-10): 753->775
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 800):  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729; GI.4 (07-10): 729->753; GI.5 (07-10): 753->775; GI.6 (07-10): 775->800
         "anular_datos_especificos (EB2c) -- sql_anular_bloque(...), mismo "
         "template 'SET activo = 0' de EB1.",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 997):  # A.1 (23-09): 886->933; A.2 (23-09): 933->939; G.2 (24-09): 939->942; G.3 (24-09): 942->951; GI.4 (07-10): 951->975; GI.5 (07-10): 975->997
-        "INSERT (linealidad_ct) -- no aplica a EB5, un INSERT nunca muta el "
-        "bloque vigente.",
+    # GI.6 (07-10): el INSERT de `guardar_linealidad_ct` (catphan_db.py:997) sale de esta lista: la funcion ya no envuelve su cuerpo en un `try/except` que se tragaba el fallo, asi que el
+    # analizador resuelve su SQL (Trampa 6 del CLAUDE.md: una variable tocada dentro de un `try` se da por irresoluble). Sigue siendo un INSERT, que nunca muta el bloque vigente.
     ("data/ManejoDatos/conection.py", 765):  # R.1 (11-09): 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682; G.2 (24-09): 682->683; G.3 (24-09): 683->684; PI.2 (01-10): 684->685; RB.3 (05-10): 685->712; GI.0: 712->765
         "DDL (E10 -- CREATE TABLE de la tabla temporal de la migración "
         "CASCADE->RESTRICT) -- no aplica a EB5.",

@@ -206,13 +206,14 @@ class TestRollback:
 
         monkeypatch.setattr(catphan_db, "guardar_linealidad_ct", _falla)
 
-        resultado = _guardar(sesion, {
-            "espesor": {"espesor_promedio_mm": 3.0},
-            "linealidad_ct": {"pendiente": 1.0, "intercepto": 0.0, "r_squared": 0.999},
-        })
-        assert resultado is None, (
-            "guardar_prueba_completa_catphan atrapa la excepción y devuelve "
-            "None -- mismo contrato de siempre")
+        # GI.6: antes el escritor atrapaba la excepcion y devolvia `None` (la pantalla decia siempre «Error al guardar»); ahora revierte la transaccion entera y RELANZA
+        # (aqui envuelta en `CategoriaNoGuardada`: el fallo fue de Python al guardar la linealidad), para que la pantalla diga la causa.
+        from analisisImagenes.catphan.errores_guardado import CategoriaNoGuardada
+        with pytest.raises(CategoriaNoGuardada):
+            _guardar(sesion, {
+                "espesor": {"espesor_promedio_mm": 3.0},
+                "linealidad_ct": {"pendiente": 1.0, "intercepto": 0.0, "r_squared": 0.999},
+            })
 
         con = _con(bd_temporal)
         filas_pruebas = con.execute(

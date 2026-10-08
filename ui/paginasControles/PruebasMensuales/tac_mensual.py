@@ -14,6 +14,8 @@ from analisisImagenes.catphan.obligatorios import evaluar_categoria, aviso_de_fa
 from analisisImagenes.Analisis_Catphan_TAC import *
 from services.ventana_edicion import puede_editarse as _puede_editarse_control, mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
 from data.ManejoDatos.catphan_TAC.catphan_db import ControlNoEditable, png_de_corte
+from analisisImagenes.catphan.errores_guardado import traducir as _traducir_error_de_guardado, GRAVEDAD_AVISO, CategoriaNoGuardada
+from services.registro_errores import registrar_error, avisar_consola
 from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan, tabla_resultados_espesor, tabla_resultados_tamano_pixel, tabla_resultados_resolucion_contraste, tabla_resultados_resolucion_espacial, tabla_resultados_ct, tabla_resultados_uniformidad)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from datetime import datetime
@@ -2138,14 +2140,13 @@ class PruebaMensualTAC(PruebaMensual600):
             # Validar resultados EN MODO INDIVIDUAL
             es_valido, errores = validar_resultados_catphan(resultados_por_categoria, modo="individual")
             if not es_valido:
-                error_msg = f"Errores de validación para {categoria}:\n" + "\n".join(errores)
+                error_msg = f"Errores de validación para «{etiqueta_de(categoria)}»:\n" + "\n".join(errores)         # GI.6 (revision, P7): el nombre de la pestaña, no la clave interna
                 QMessageBox.warning(self, "Validación fallida", error_msg)
-                print(f"❌ Errores de validación en {categoria}: {errores}")
+                avisar_consola(f"Errores de validacion en {categoria}")           # GI.6: una salida de consola que falla no rompe el guardado
                 return False
             
             # Guardar en base de datos
             fecha_actual = self.date_box.date().toString("yyyy-MM-dd")
-            print(fecha_actual)
             
             # IMPORTANTE: Usar context manager para evitar locks
             try:
@@ -2169,12 +2170,8 @@ class PruebaMensualTAC(PruebaMensual600):
                 QMessageBox.warning(self, "Falta un dato obligatorio", str(incompleto))
                 return False
             except Exception as db_error:
-                print(f"❌ Error específico de base de datos: {db_error}")
-                if "database is locked" in str(db_error).lower():
-                    QMessageBox.warning(self, "Base de datos ocupada", 
-                                    "La base de datos está ocupada. Espera unos segundos e intenta nuevamente.")
-                else:
-                    QMessageBox.critical(self, "Error de base de datos", f"Error en la base de datos:\n{str(db_error)}")
+                # GI.6: la causa (traducida, sin texto crudo de SQLite) se le dice al físico y la técnica completa queda en error_log.txt
+                self._decir_error_de_guardado(categoria, db_error)
                 return False
             
             if id_sesion:
@@ -2182,7 +2179,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     # GI.5: se guardó, pero sin alguna de las dos imágenes: se dice cuál
                     QMessageBox.warning(self, "Imagen sin guardar", "\n".join(avisos_de_imagen) + "\n\n" + AVISO_PAR_DE_IMAGENES)
                 QMessageBox.information(self, "Guardado exitoso", 
-                                    f"✅ {categoria.replace('_', ' ').title()} guardado correctamente.\n"
+                                    f"«{etiqueta_de(categoria)}» se guardó correctamente.\n"
                                     f"ID de sesión: {self.ref}")
                 #print(f"{categoria} guardado exitosamente con ID de sesión: {self.ref}")
                 
@@ -2191,15 +2188,26 @@ class PruebaMensualTAC(PruebaMensual600):
                 return True
             else:
                 QMessageBox.critical(self, "Error de guardado", 
-                                    f"❌ Error al guardar {categoria} en la base de datos.")
+                                    f"No se pudo guardar «{etiqueta_de(categoria)}»: la base de datos no confirmó el guardado. No se guardó nada.")
                 return False
                 
         except Exception as e:
-            QMessageBox.critical(self, "Error inesperado", 
-                                f"❌ Error al guardar {categoria}:\n{str(e)}")
-            print(f"❌ Error inesperado al guardar {categoria}: {e}")
-            traceback.print_exc()
-            return False
+            # GI.6: lo que falle fuera del escritor (p. ej. la lectura de la guarda con la base ocupada) también se traduce y se registra
+            return self._decir_error_de_guardado(categoria, e)
+
+    def _decir_error_de_guardado(self, categoria, excepcion, contexto="Guardar"):
+        """GI.6 (A9): un guardado que falla DICE la causa. Traduce la excepción a un mensaje para el físico (`errores_guardado.traducir`: sin texto crudo de SQLite, con qué
+        hacer) y deja la causa técnica completa en `error_log.txt` (`registrar_error`; el `.exe` no tiene consola). Un aviso transitorio (la base ocupada) sale como advertencia;
+        lo demás, como error. Devuelve `False` (el valor de «no se guardó»)."""
+        if not categoria and isinstance(excepcion, CategoriaNoGuardada):
+            categoria = excepcion.categoria                  # «Guardar todos» no sabe cual de las pruebas fallo; la excepcion si
+        prueba = etiqueta_de(categoria) if categoria else None
+        # Primero el registro, para que el mensaje solo prometa `error_log.txt` si de verdad se pudo escribir (revision de GI.6, P5)
+        registrado = registrar_error(f"{contexto}{' «' + prueba + '»' if prueba else ''} falló (control {getattr(self, 'ref', None)}, usuario {getattr(self, 'user_id', None)})", excepcion)
+        mensaje = _traducir_error_de_guardado(excepcion, prueba, registrado=registrado)
+        mostrar = QMessageBox.warning if mensaje.gravedad == GRAVEDAD_AVISO else QMessageBox.critical
+        mostrar(self, mensaje.titulo, mensaje.texto)
+        return False
 
     def _parametros_de_guardado(self, categoria):
         """GI.4: kV, mA y espesor con los que se guardaría la prueba `categoria` y cuáles no sirven. Es la MISMA resolución que aplica el escritor
@@ -2332,12 +2340,7 @@ class PruebaMensualTAC(PruebaMensual600):
                 QMessageBox.warning(self, "Falta un dato obligatorio", str(incompleto))
                 return
             except Exception as db_error:
-                print(f"❌ Error específico de base de datos: {db_error}")
-                if "database is locked" in str(db_error).lower():
-                    QMessageBox.warning(self, "Base de datos ocupada", 
-                                    "La base de datos está ocupada. Espera unos segundos e intenta nuevamente.")
-                else:
-                    QMessageBox.critical(self, "Error de base de datos", f"Error en la base de datos:\n{str(db_error)}")
+                self._decir_error_de_guardado(None, db_error, contexto="Guardar todos")      # GI.6
                 return
             
             if id_sesion:
@@ -2345,7 +2348,7 @@ class PruebaMensualTAC(PruebaMensual600):
                 if avisos_de_imagen:
                     QMessageBox.warning(self, "Imagen sin guardar", "\n".join(avisos_de_imagen) + "\n\n" + AVISO_PAR_DE_IMAGENES)     # GI.5
                 QMessageBox.information(self, "Guardado exitoso", 
-                                    f"✅ Resultados guardados correctamente.\n"
+                                    f"Resultados guardados correctamente.\n"
                                     f"ID de sesión: {self.ref}\n"
                                     f"Fecha: {fecha_actual}\n"
                                     f"Categorías guardadas: {len(resultados_por_categoria)}")
@@ -2356,15 +2359,10 @@ class PruebaMensualTAC(PruebaMensual600):
                 
             else:
                 QMessageBox.critical(self, "Error de guardado", 
-                                    "❌ Error al guardar los resultados en la base de datos.\n"
-                                    "Revisa la consola para más detalles.")
-                print("❌ Error al guardar resultados CatPhan")
+                                    "No se pudieron guardar los resultados: la base de datos no confirmó el guardado. No se guardó nada.")
                 
         except Exception as e:
-            QMessageBox.critical(self, "Error inesperado", 
-                                f"❌ Error inesperado al guardar:\n{str(e)}")
-            print(f"❌ Error inesperado en guardar_resultados_catphan: {e}")
-            traceback.print_exc()
+            self._decir_error_de_guardado(None, e, contexto="Guardar todos")      # GI.6
             
         finally:
             # Rehabilitar botón
