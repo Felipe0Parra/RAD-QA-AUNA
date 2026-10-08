@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
                               QPushButton, QLabel, QSlider, QSizePolicy, QGroupBox, QCheckBox, QComboBox, QListWidget)
 from PyQt5.QtCore import Qt
 from data.ManejoDatos.catphan_TAC.leer_dicom import GeometriaCatphan
+from analisisImagenes.catphan.orientacion import angulo_en_imagen
 # posicionador_manual.py — reemplaza tu clase PosicionadorDialog completa
 
 
@@ -346,8 +347,9 @@ class PosicionadorDialog(QDialog):
 
             # Posición teórica (sin offset local) en modo individual — overlay de referencia
             if self._modo == "individual" and es_seleccionado:
+                # OR.1: el círculo de referencia se dibuja con la MISMA transformación que la posición real (antes salía en espejo en un fantoma invertido)
                 centro_teo, radio_teo = c.posicion_roi(
-                    c.ROI_CONFIG[nombre]["angulo"], c.ROI_DIST_MM, c.ROI_CONFIG[nombre]["radio_mm"]
+                    angulo_en_imagen(c.ROI_CONFIG[nombre]["angulo"], c.orientacion, c.roll_deg), c.ROI_DIST_MM, c.ROI_CONFIG[nombre]["radio_mm"]
                 )
                 ax.add_patch(mpatches.Circle(
                     centro_teo, radio_teo,
@@ -610,8 +612,8 @@ class GeometriaCatphanCT(GeometriaCatphan):
     distancia radial (distancia_mm), por lo que _calcular_roi_float la lee
     del ROI_CONFIG en lugar de usar ROI_DIST_MM fija.
  
-    No se usan offsets locales: el phantom CTP404 se ajusta solo de forma
-    global (Δx, Δy, Δθ). Esa decisión es intencional.
+    Ajuste manual del físico: global (Δx, Δy, Δθ, en el marco de la imagen) y
+    local por material (offsets_locales); desde OR.1 valor_numero_ct mide con ambos.
     """
  
     ROI_CONFIG = {
@@ -624,19 +626,21 @@ class GeometriaCatphanCT(GeometriaCatphan):
         "Aire":         {"angulo": 270, "distancia_mm": 58, "radio_mm": 6},
     }
  
-    # offsets locales no aplican; el dict se mantiene vacío para no romper
-    # llamadas heredadas que pudieran consultarlo.
-    def __init__(self, corte_hu: np.ndarray, tam_px: float):
+    # El ajuste LOCAL por material (offsets_locales) SÍ se aplica: lo llena el diálogo, lo lee
+    # _calcular_roi_float y cuenta en lo dibujado y, desde OR.1, en lo medido.
+    def __init__(self, corte_hu: np.ndarray, tam_px: float, orientacion: str = "normal", roll_deg: float = 0.0):
         # D.0 (23-09): hereda la detección de la base -- corte_hu, nunca la
         # imagen ventaneada; el TypeError de GeometriaCatphan cubre también
         # esta subclase.
-        super().__init__(corte_hu, tam_px)
+        # OR.1: y también la orientación y el giro de la serie (los mismos para los cuatro módulos: el fantoma es rígido); con los valores
+        # por defecto ("normal", 0.0) el comportamiento es el de antes.
+        super().__init__(corte_hu, tam_px, orientacion=orientacion, roll_deg=roll_deg)
         # Sobreescribir offsets_locales con keys del ROI_CONFIG correcto
         self.offsets_locales = {nombre: [0.0, 0.0] for nombre in self.ROI_CONFIG}
  
     def _calcular_roi_float(self, nombre):
         info     = self.ROI_CONFIG[nombre]
-        ang_rad  = np.radians(info["angulo"] + self.offset_ang)
+        ang_rad  = np.radians(angulo_en_imagen(info["angulo"], self.orientacion, self.roll_deg) + self.offset_ang)       # OR.1
         dist_px  = info["distancia_mm"] / self.tam_px
         radio_px = info["radio_mm"]     / self.tam_px
 
@@ -656,8 +660,8 @@ class PosicionadorDialogCT(QDialog):
     """
     Posicionador manual para el módulo de Número CT (CTP404).
  
-    Solo expone ajuste GLOBAL (Δx, Δy, Δθ): mueve los 7 ROIs en bloque.
-    No hay modo Individual ni modo Manual — innecesarios para este módulo.
+    Expone el ajuste GLOBAL (Δx, Δy, Δθ: mueve los 7 ROIs en bloque) y el ajuste
+    INDIVIDUAL por material (dx, dy); no hay modo Manual (innecesario para este módulo).
  
     Uso:
         catphan_ct = GeometriaCatphanCT(corte_hu, tam_px)  # D.0: geometría desde HU

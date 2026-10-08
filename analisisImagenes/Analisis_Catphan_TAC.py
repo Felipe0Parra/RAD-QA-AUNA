@@ -1,21 +1,9 @@
 from data.ManejoDatos.catphan_TAC.leer_dicom import GeometriaCatphan, DicomVolume
 from scipy.signal import find_peaks
+from analisisImagenes.catphan.orientacion import angulo_en_imagen
 
 
-def _angulo_efectivo(angulo_nominal, orientacion, roll_deg):
-    """D.1 (23-09, PLAN_HANDOFF_IMAGENES_22-09.md): traduce un ángulo NOMINAL
-    (definido para el fantoma sin girar, orientación normal) a su posición
-    real, dados el giro medido por el motor pylinac (`roll_deg`, en su
-    propio marco -- volteado si `orientacion == "invertido"`) y si el
-    fantoma está invertido. Fórmula validada empíricamente (giro sintético
-    grande + HU real de materiales conocidos de CTP404, la única forma de
-    fijar el signo de una composición espejo+giro sin ambigüedad): un
-    fantoma invertido se refleja (180 - ángulo) antes de sumar el giro; uno
-    normal solo suma el giro. Con orientacion="normal"/roll_deg=0.0 (los
-    valores por defecto de D.0) esto es angulo_nominal, sin cambio."""
-    if orientacion == "invertido":
-        return 180.0 - angulo_nominal + roll_deg
-    return angulo_nominal + roll_deg
+# OR.1: la transformacion angulo nominal -> angulo en la imagen vive en UN solo sitio (`analisisImagenes/catphan/orientacion.py`).
 
 
 # ---------------------------------------------- Espesor de corte ----------------------------------------------
@@ -421,7 +409,7 @@ def resolucion_contraste(corte_255, corte_hu, tam_px: float,
         # D.1: las ROI de fondo se ubican con posicion_roi(angulo,...), que
         # no pasa por _calcular_roi_float -- necesitan el mismo ángulo
         # efectivo que ya usa catphan.obtener_roi(nombre) para el inserto.
-        angulo      = _angulo_efectivo(roi_info["angulo"], orientacion, roll_deg)
+        angulo      = angulo_en_imagen(roi_info["angulo"], orientacion, roll_deg)
         radio_mm    = roi_info["radio_mm"]
         diametro_mm = roi_info["diametro_mm"]
 
@@ -659,7 +647,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
     definidas para el fantoma SIN girar en orientación normal -- el
     ángulo de cada punto de muestra se traduce a ese mismo marco NOMINAL
     antes de compararlo contra `boundaries` (es la transformación
-    INVERSA de la que usa `_angulo_efectivo`: aquí se parte de dónde
+    INVERSA de `angulo_en_imagen` (OR.1): aquí se parte de dónde
     ESTÁ la muestra y se pregunta qué región nominal le corresponde).
     """
     import cv2
@@ -693,12 +681,9 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
     ys, xs = np.where(mask)
     angles_deg = np.degrees(np.arctan2(ys - catphan.centro[1], xs - catphan.centro[0]))
     # D.1: angulo MEDIDO -> angulo NOMINAL equivalente (inversa de
-    # _angulo_efectivo), para que `boundaries` (definido sin giro, sin
+    # angulo_en_imagen), para que `boundaries` (definido sin giro, sin
     # invertir) siga delimitando las regiones correctas.
-    if orientacion == "invertido":
-        angles_deg = 180.0 - angles_deg + roll_deg
-    else:
-        angles_deg = angles_deg - roll_deg
+    angles_deg = angulo_en_imagen(angles_deg, orientacion, roll_deg, inversa=True)
     angles = np.radians(np.mod(angles_deg, 360.0))
     idx = np.argsort(angles)
     angles_sorted = angles[idx]
@@ -1053,7 +1038,7 @@ def mostrar_regiones_anillo(corte, corte_hu, tam_px: float, boundaries=None, roi
 
 # ---------------------------------------------- Prueba Valor del Número CT ------------------------------------
 
-def valor_numero_ct(corte_255, corte_hu,tam_px, catphan=None,visualizar=True, canvas=None) -> list:
+def valor_numero_ct(corte_255, corte_hu,tam_px, catphan=None,visualizar=True, canvas=None, orientacion: str = "normal", roll_deg: float = 0.0) -> list:
     """
     Calcula el promedio HU y errores para cada ROI.
     Args:
@@ -1082,16 +1067,13 @@ def valor_numero_ct(corte_255, corte_hu,tam_px, catphan=None,visualizar=True, ca
     # 1. Preparar detectar geometría (rois)
     from data.ManejoDatos.catphan_TAC.posicionador_manual import GeometriaCatphanCT
     if catphan is None:
-        catphan = GeometriaCatphanCT(corte_hu, tam_px)  # D.0: geometría desde HU
+        catphan = GeometriaCatphanCT(corte_hu, tam_px, orientacion=orientacion, roll_deg=roll_deg)  # D.0: geometría desde HU; OR.1: con la orientación y el giro de la serie
     resultados = []    
     output = cv2.cvtColor(corte_255, cv2.COLOR_GRAY2BGR) if visualizar else None
     # 2. Analizar cada ROI definido
     for material, roi_info in catphan_rois.items():
-        centro, radio = catphan.posicion_roi(
-            roi_info["angulo"], 
-            roi_info["distancia"], 
-            roi_info["radio"]
-        )
+        # OR.1: la posición sale de la MISMA fuente con la que se dibuja y se ajusta a mano (`obtener_roi`: geometría + orientación y giro de la serie + ajuste del físico)
+        centro, radio = catphan.obtener_roi(material)
         mask = np.zeros(corte_hu.shape, dtype=np.uint8)
         area_int =int(radio * 0.8) # 70% del radio para evitar bordes
         cv2.circle(mask, centro, area_int, 1, -1)

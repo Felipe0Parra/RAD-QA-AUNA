@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 import pyqtgraph as pg
 from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modulos
 from analisisImagenes.catphan import escala as escala_mod
+from analisisImagenes.catphan.orientacion import angulo_en_imagen
 from analisisImagenes.catphan import ventana as ventana_mod
 from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie, ventana_de_serie
 from data.ManejoDatos.catphan_TAC.ventana_metadatos import mostrar_ventana_metadatos
@@ -822,17 +823,14 @@ class GeometriaCatphan:
 
     def _calcular_roi_float(self, nombre):
         info      = self.ROI_CONFIG[nombre]
-        # D.1 (23-09): angulo NOMINAL -> angulo EFECTIVO, dado el giro y la
-        # orientación medidos por el motor. Fórmula validada empíricamente
-        # (giro sintético grande + HU real de materiales conocidos, ver
-        # PLAN_HANDOFF_IMAGENES_22-09.md D.1): un fantoma invertido se
-        # refleja (180 - angulo) antes de sumar el giro; uno normal solo
-        # suma el giro. Con orientacion="normal"/roll_deg=0.0 (D.0) esto
-        # es angulo_nominal, igual que antes de D.1.
-        if self.orientacion == "invertido":
-            angulo_efectivo = 180.0 - info["angulo"] + self.roll_deg
-        else:
-            angulo_efectivo = info["angulo"] + self.roll_deg
+        # D.1 (23-09) / OR.1 (08-10): angulo NOMINAL -> angulo en la imagen, dado el
+        # giro y la orientación medidos por el motor. La cuenta vive en UN solo
+        # sitio (`analisisImagenes/catphan/orientacion.py`): un fantoma invertido
+        # se refleja (180 - angulo) y su giro entra con el signo CONTRARIO (al
+        # voltear la imagen cambia el sentido del giro que mide pylinac: 180 -
+        # angulo - giro); uno normal solo suma el giro. Con orientacion="normal"/
+        # roll_deg=0.0 (D.0) esto es angulo_nominal, igual que antes de D.1.
+        angulo_efectivo = angulo_en_imagen(info["angulo"], self.orientacion, self.roll_deg)       # OR.1: UNA definición (analisisImagenes/catphan/orientacion.py)
         ang_rad   = np.radians(angulo_efectivo + self.offset_ang)
         dist_px   = self.ROI_DIST_MM / self.tam_px
         radio_px  = info["radio_mm"]  / self.tam_px

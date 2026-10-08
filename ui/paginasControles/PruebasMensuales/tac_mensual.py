@@ -1802,7 +1802,7 @@ class PruebaMensualTAC(PruebaMensual600):
                         GeometriaCatphanCT,
                         PosicionadorDialogCT,
                     )
-                    catphan_ct = GeometriaCatphanCT(imagen_analisis, tam_px)  # D.0: geometría desde HU
+                    catphan_ct = GeometriaCatphanCT(imagen_analisis, tam_px, orientacion=orientacion_serie, roll_deg=roll_deg_serie)  # D.0: geometría desde HU; OR.1: con la orientación y el giro de la serie
                 
                     # 2. Abrir posicionador — bloquea hasta confirmar o cancelar
                     dlg = PosicionadorDialogCT(catphan_ct, imagen_grafica, parent=self)

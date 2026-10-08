@@ -9,13 +9,14 @@ detector nuevo: `slice_matcher.py` pasa a llamar `motor.analizar`, que ya
 mide orientación y giro (`roll_deg`) -- el fantoma es rígido, así que son
 los mismos para los cuatro módulos.
 
-La fórmula que traduce un ángulo NOMINAL a su posición real
-(`_angulo_efectivo`, en `Analisis_Catphan_TAC.py`) se validó de forma
-puramente empírica, no analítica: un giro sintético GRANDE y conocido
-aplicado a un corte real (con y sin espejo), contra el HU real de los 7
-materiales de CTP404 en sus ángulos nominales -- la única forma de fijar
-sin ambigüedad el signo de una composición espejo+giro. Ver el detalle en
-el propio plan (bloque OBSTÁCULOS ENCONTRADOS de D.1).
+La fórmula que traduce un ángulo NOMINAL a su posición real se validó
+aquí de forma empírica, no analítica: un giro sintético GRANDE y conocido
+aplicado a un corte real, contra el HU real de los 7 materiales de CTP404
+en sus ángulos nominales. OJO (OR.1, 08-10): esa validación solo ejercitó
+giros grandes en orientación NORMAL; el signo para el fantoma INVERTIDO (que
+esta prueba no discrimina) estaba mal por 2R y lo corrigió OR.1 -- la
+fórmula vive hoy en `analisisImagenes/catphan/orientacion.py` y su prueba
+es `test_or1_una_transformacion_de_orientacion.py`.
 
 Los 2 escenarios de verificación que pide el plan:
   (a) `QA Halcyon Catphan` (la única serie invertida del corpus) pasa de
