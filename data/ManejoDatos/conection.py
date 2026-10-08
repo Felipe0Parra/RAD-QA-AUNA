@@ -2090,9 +2090,9 @@ class Conexion():
             pasa_ui BOOLEAN NOT NULL,                 -- UI <= threshold
             pasa_inu BOOLEAN NOT NULL,                -- INU <= threshold
             pasa_global BOOLEAN NOT NULL,             -- Ambos criterios
-            ui_threshold_pct REAL,                    -- Umbral UI usado (2.0%)
-            inu_threshold_pct REAL,                   -- Umbral INU usado (2.0%)
-            hu_tolerancia REAL,                       -- Tolerancia HU usada (40.0)
+            ui_threshold_pct REAL,                    -- Umbral UI [%] con que se JUZGO (el que recibio el analisis, GI.8b); 'No disponible' si no vino
+            inu_threshold_pct REAL,                   -- Umbral INU [%] con que se JUZGO (idem)
+            hu_tolerancia REAL,                       -- Tolerancia [HU] con que se juzgo cada ROI contra el centro (la del perfil del equipo); 'No disponible' si no vino
             FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT
         );  """
 

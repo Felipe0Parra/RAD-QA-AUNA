@@ -1399,6 +1399,10 @@ def uniformidad(corte_255, corte_hu, tam_px, visualizar:bool=True, canvas=None, 
             "pasa_inu": uniformity_pass_inu,
             "pasa_global": bool(uniformity_pass_ui and uniformity_pass_inu),
             "inu_warning": inu_warning,
+            # GI.8b: los umbrales con que SE JUZGO (la copia guardada manda: el escritor los guarda tal cual, no constantes)
+            "ui_threshold_pct": ui_threshold_pct,
+            "inu_threshold_pct": inu_threshold_pct,
+            "hu_tolerancia": hu_tolerancia,
         }
 
     if visualizar and output is not None:

@@ -797,7 +797,9 @@ def _resultado_uniformidad(pasa_ui, pasa_inu):
             rois[nombre].update({"ui": round(0.1 * n, 3), "pasa_tolerancia_rel_centro": True})
     rois["Uniformidad"] = {"max_diferencia": 5.5, "desviacion_global": 1.7, "uniformity_index_max": 0.4, "uniformity_index_roi": "Arriba",
                            "integral_non_uniformity": 0.01234, "integral_non_uniformity_pct": 1.234, "pasa_ui": pasa_ui,
-                           "pasa_inu": pasa_inu, "pasa_global": bool(pasa_ui and pasa_inu), "inu_warning": None}
+                           "pasa_inu": pasa_inu, "pasa_global": bool(pasa_ui and pasa_inu), "inu_warning": None,
+                           # GI.8b: los tres umbrales con que se juzgo (el analisis los devuelve); valores distintos de los 2.0 / 2.0 / 40.0 de antes
+                           "ui_threshold_pct": 3.5, "inu_threshold_pct": 4.5, "hu_tolerancia": 12.5}
     rois["imagen_analisis"] = None
     return rois
 

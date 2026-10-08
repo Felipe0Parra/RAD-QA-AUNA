@@ -255,7 +255,7 @@ SITIOS_OPACOS_PERMITIDOS = {
         "reemplazar_bloque (EB1) -- sql_anular_bloque(...) compone siempre "
         "'SET activo = 0' más el AND de vigencia. Mismo helper, mismo "
         "template verificado a mano.",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 800):  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729; GI.4 (07-10): 729->753; GI.5 (07-10): 753->775; GI.6 (07-10): 775->800
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 801):  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729; GI.4 (07-10): 729->753; GI.5 (07-10): 753->775; GI.6 (07-10): 775->800; GI.8b (08-10): 800->801
         "anular_datos_especificos (EB2c) -- sql_anular_bloque(...), mismo "
         "template 'SET activo = 0' de EB1.",
     # GI.6 (07-10): el INSERT de `guardar_linealidad_ct` (catphan_db.py:997) sale de esta lista: la funcion ya no envuelve su cuerpo en un `try/except` que se tragaba el fallo, asi que el

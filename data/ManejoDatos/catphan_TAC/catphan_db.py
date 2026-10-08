@@ -375,9 +375,10 @@ def mapear_uniformidad(resultados_uniformidad):
         "pasa_ui": uniformidad_global.get("pasa_ui"),
         "pasa_inu": uniformidad_global.get("pasa_inu"),
         "pasa_global": uniformidad_global.get("pasa_global"),
-        "ui_threshold_pct": 2.0,  # Valor por defecto usado en la función
-        "inu_threshold_pct": 2.0,  # Valor por defecto usado en la función
-        "hu_tolerancia": 40.0  # Valor por defecto usado en la función
+        # GI.8b: los umbrales que el análisis USÓ (los devuelve en su resultado); un resultado que no los trae queda en None (el escritor dice «No disponible»), nunca una constante
+        "ui_threshold_pct": uniformidad_global.get("ui_threshold_pct"),
+        "inu_threshold_pct": uniformidad_global.get("inu_threshold_pct"),
+        "hu_tolerancia": uniformidad_global.get("hu_tolerancia")
     }
     
     # ✅ CORREGIR: Datos para tabla uniformidad_ruido (regiones individuales)
