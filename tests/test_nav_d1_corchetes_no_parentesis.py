@@ -133,8 +133,8 @@ BASELINE_D1_PENDIENTE = {
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 929, '%'),
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 930, '%'),
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 937, '%'),
-    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1995, 'mm'),  # A.1 (23-09): 1591->1638; A.2 (23-09): 1638->1644; G.2 (24-09): 1644->1648; G.3 (24-09): 1648->1657; GI.2 (06-10): 1657->1770; GI.3 (07-10): 1770->1823; GI.4 (07-10): 1823->1854; GI.5 (07-10): 1854->1876; GI.6 (07-10): 1876->1902; GI.8b (08-10): 1902->1903; GI.8c (08-10): 1903->1923; GI.8d (08-10): 1923->1943; GI.8e (08-10): 1943->1995
-    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 2154, 'cm'),  # A.1 (23-09): 1734->1781; A.2 (23-09): 1781->1787; G.2 (24-09): 1787->1791; G.3 (24-09): 1791->1800; GI.2 (06-10): 1800->1913; GI.3 (07-10): 1913->1968; GI.4 (07-10): 1968->1999; GI.5 (07-10): 1999->2021; GI.6 (07-10): 2021->2047; GI.8b (08-10): 2047->2048; GI.8c (08-10): 2048->2082; GI.8d (08-10): 2082->2102; GI.8e (08-10): 2102->2154
+    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 2011, 'mm'),  # A.1 (23-09): 1591->1638; A.2 (23-09): 1638->1644; G.2 (24-09): 1644->1648; G.3 (24-09): 1648->1657; GI.2 (06-10): 1657->1770; GI.3 (07-10): 1770->1823; GI.4 (07-10): 1823->1854; GI.5 (07-10): 1854->1876; GI.6 (07-10): 1876->1902; GI.8b (08-10): 1902->1903; GI.8c (08-10): 1903->1923; GI.8d (08-10): 1923->1943; GI.8e (08-10): 1943->1995; GI.8f (08-10): 1995->2011
+    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 2170, 'cm'),  # A.1 (23-09): 1734->1781; A.2 (23-09): 1781->1787; G.2 (24-09): 1787->1791; G.3 (24-09): 1791->1800; GI.2 (06-10): 1800->1913; GI.3 (07-10): 1913->1968; GI.4 (07-10): 1968->1999; GI.5 (07-10): 1999->2021; GI.6 (07-10): 2021->2047; GI.8b (08-10): 2047->2048; GI.8c (08-10): 2048->2082; GI.8d (08-10): 2082->2102; GI.8e (08-10): 2102->2154; GI.8f (08-10): 2154->2170
     ('data/ManejoDatos/catphan_TAC/leer_dicom.py', 1627, 'mm'),  # A.1 (18-09): 951->956; C.2 (22-09): 956->1142->1164; D.0 (23-09): 1164->1258; D.1 (23-09): 1258->1290; A.1 (23-09): 1290->1294; A.3 (23-09): 1294->1319; B.2 (25-09): 1319->1351; B.3 (25-09): 1351->1366; SE.5 (05-10): 1366->1414; OR.1 (08-10): 1414->1412; CD.1 (08-10): 1412->1566; CD.2 (08-10): 1566->1567; CD.3 (08-10): 1567->1627
     ('data/ManejoDatos/conection.py', 2093, 'HU'),  # R.1 (11-09): 1649->1734; T.0 (16-09): 1734->1788; B.1 (21-09): 1788->1817; A.1 (23-09): 1817->1857; A.2 (23-09): 1857->1861; G.2 (24-09): 1861->1882; G.3 (24-09): 1882->1908; PI.2 (01-10): 1908->1909; RB.3 (05-10): 1909->1936; GI.0: 1936->2044; GI.8c (08-10): 2044->2068; GI.8d (08-10): 2068->2093
     ('data/ManejoDatos/conection.py', 2118, 'HU'),  # R.1 (11-09): 1672->1757; T.0 (16-09): 1757->1811; B.1 (21-09): 1811->1840; A.1 (23-09): 1840->1880; A.2 (23-09): 1880->1884; G.2 (24-09): 1884->1905; G.3 (24-09): 1905->1931; PI.2 (01-10): 1931->1932; RB.3 (05-10): 1932->1959; GI.0: 1959->2067; GI.8c (08-10): 2067->2091; GI.8d (08-10): 2091->2118
@@ -165,31 +165,31 @@ BASELINE_D1_PENDIENTE = {
     ('data/ManejoDatos/load.py', 4132, 'mm'),  # FS.1 (06-10): 4108->4113; GI.3 (07-10): 4113->4132
     ('data/ManejoDatos/load.py', 4165, 'mm'),  # FS.1 (06-10): 4141->4146; GI.3 (07-10): 4146->4165
     ('data/ManejoDatos/load.py', 4195, 'mm'),  # FS.1 (06-10): 4171->4176; GI.3 (07-10): 4176->4195
-    ('models/PDF/Anual/reportes_anuales.py', 342, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 353, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 375, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 385, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 430, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 440, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 486, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 496, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 507, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 517, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 537, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 537, 'cm'),
-    ('models/PDF/Anual/reportes_anuales.py', 547, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 547, 'cm'),
-    ('models/PDF/Anual/reportes_anuales.py', 670, 'mm'),
-    ('models/PDF/Anual/reportes_anuales.py', 691, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 691, 'cm'),
-    ('models/PDF/Anual/reportes_anuales.py', 727, 'cm'),
-    ('models/PDF/Anual/reportes_anuales.py', 755, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 755, 'cGy/UM'),
-    ('models/PDF/Anual/reportes_anuales.py', 760, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 765, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 770, '%'),
-    ('models/PDF/Anual/reportes_anuales.py', 777, 'nC'),
-    ('models/PDF/Anual/reportes_anuales.py', 802, 'cm'),
+    ('models/PDF/Anual/reportes_anuales.py', 396, '%'),  # GI.8f (08-10): 342->396
+    ('models/PDF/Anual/reportes_anuales.py', 407, '%'),  # GI.8f (08-10): 353->407
+    ('models/PDF/Anual/reportes_anuales.py', 429, '%'),  # GI.8f (08-10): 375->429
+    ('models/PDF/Anual/reportes_anuales.py', 439, '%'),  # GI.8f (08-10): 385->439
+    ('models/PDF/Anual/reportes_anuales.py', 484, '%'),  # GI.8f (08-10): 430->484
+    ('models/PDF/Anual/reportes_anuales.py', 494, '%'),  # GI.8f (08-10): 440->494
+    ('models/PDF/Anual/reportes_anuales.py', 540, '%'),  # GI.8f (08-10): 486->540
+    ('models/PDF/Anual/reportes_anuales.py', 550, '%'),  # GI.8f (08-10): 496->550
+    ('models/PDF/Anual/reportes_anuales.py', 561, '%'),  # GI.8f (08-10): 507->561
+    ('models/PDF/Anual/reportes_anuales.py', 571, '%'),  # GI.8f (08-10): 517->571
+    ('models/PDF/Anual/reportes_anuales.py', 591, '%'),  # GI.8f (08-10): 537->591
+    ('models/PDF/Anual/reportes_anuales.py', 591, 'cm'),  # GI.8f (08-10): 537->591
+    ('models/PDF/Anual/reportes_anuales.py', 601, '%'),  # GI.8f (08-10): 547->601
+    ('models/PDF/Anual/reportes_anuales.py', 601, 'cm'),  # GI.8f (08-10): 547->601
+    ('models/PDF/Anual/reportes_anuales.py', 724, 'mm'),  # GI.8f (08-10): 670->724
+    ('models/PDF/Anual/reportes_anuales.py', 745, '%'),  # GI.8f (08-10): 691->745
+    ('models/PDF/Anual/reportes_anuales.py', 745, 'cm'),  # GI.8f (08-10): 691->745
+    ('models/PDF/Anual/reportes_anuales.py', 781, 'cm'),  # GI.8f (08-10): 727->781
+    ('models/PDF/Anual/reportes_anuales.py', 809, '%'),  # GI.8f (08-10): 755->809
+    ('models/PDF/Anual/reportes_anuales.py', 809, 'cGy/UM'),  # GI.8f (08-10): 755->809
+    ('models/PDF/Anual/reportes_anuales.py', 814, '%'),  # GI.8f (08-10): 760->814
+    ('models/PDF/Anual/reportes_anuales.py', 819, '%'),  # GI.8f (08-10): 765->819
+    ('models/PDF/Anual/reportes_anuales.py', 824, '%'),  # GI.8f (08-10): 770->824
+    ('models/PDF/Anual/reportes_anuales.py', 831, 'nC'),  # GI.8f (08-10): 777->831
+    ('models/PDF/Anual/reportes_anuales.py', 856, 'cm'),  # GI.8f (08-10): 802->856
     ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 944, '%'),  # E.3 (24-09): 851->867; E.2 (24-09): 867->945; G.2 (24-09): 945->946; G.3 (24-09): 946->982; B.3 (25-09): 982->991; GI.3 (07-10): 991->940; GI.8c (08-10): 940->944
     ('models/PDF/Mensuales/reportes_mensuales.py', 802, 'cm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1076, 'mm'),
@@ -242,16 +242,16 @@ BASELINE_D1_PENDIENTE = {
     ('models/PDF/Mensuales/reportes_mensuales.py', 1592, 's'),  # V.3 (28-09): 1587->1592
     ('models/PDF/Mensuales/reportes_mensuales.py', 1638, 's'),  # V.3 (28-09): 1633->1638
     ('models/PDF/Mensuales/reportes_mensuales.py', 1639, 's'),  # V.3 (28-09): 1634->1639
-    ('models/PDF/pdf.py', 1626, 'mm'),  # E.1 (24-09): 1533->1546; E.2 (24-09): 1546->1581; G.3 (24-09): 1581->1591; PI.8 (04-10): 1591->1626
-    ('models/PDF/pdf.py', 1627, 'mm'),  # E.1 (24-09): 1534->1547; E.2 (24-09): 1547->1582; G.3 (24-09): 1582->1592; PI.8 (04-10): 1592->1627
-    ('models/PDF/pdf.py', 1692, 'mm'),  # E.1 (24-09): 1599->1612; E.2 (24-09): 1612->1647; G.3 (24-09): 1647->1657; PI.8 (04-10): 1657->1692
-    ('models/PDF/pdf.py', 1693, 'mm'),  # E.1 (24-09): 1600->1613; E.2 (24-09): 1613->1648; G.3 (24-09): 1648->1658; PI.8 (04-10): 1658->1693
-    ('models/PDF/pdf.py', 1747, 'mm'),  # E.1 (24-09): 1654->1667; E.2 (24-09): 1667->1702; G.3 (24-09): 1702->1712; PI.8 (04-10): 1712->1747
-    ('models/PDF/pdf.py', 2063, 'mm'),  # E.1 (24-09): 1970->1983; E.2 (24-09): 1983->2018; G.3 (24-09): 2018->2028; PI.8 (04-10): 2028->2063
-    ('models/PDF/pdf.py', 2239, '°'),  # E.1 (24-09): 2146->2159; E.2 (24-09): 2159->2194; G.3 (24-09): 2194->2204; PI.8 (04-10): 2204->2239
-    ('models/PDF/pdf.py', 2240, '°'),  # E.1 (24-09): 2147->2160; E.2 (24-09): 2160->2195; G.3 (24-09): 2195->2205; PI.8 (04-10): 2205->2240
-    ('models/PDF/pdf.py', 2291, '°'),  # E.1 (24-09): 2198->2211; E.2 (24-09): 2211->2246; G.3 (24-09): 2246->2256; PI.8 (04-10): 2256->2291
-    ('models/PDF/pdf.py', 2292, '°'),  # E.1 (24-09): 2199->2212; E.2 (24-09): 2212->2247; G.3 (24-09): 2247->2257; PI.8 (04-10): 2257->2292
+    ('models/PDF/pdf.py', 1649, 'mm'),  # E.1 (24-09): 1533->1546; E.2 (24-09): 1546->1581; G.3 (24-09): 1581->1591; PI.8 (04-10): 1591->1626; GI.8f (08-10): 1626->1649
+    ('models/PDF/pdf.py', 1650, 'mm'),  # E.1 (24-09): 1534->1547; E.2 (24-09): 1547->1582; G.3 (24-09): 1582->1592; PI.8 (04-10): 1592->1627; GI.8f (08-10): 1627->1650
+    ('models/PDF/pdf.py', 1715, 'mm'),  # E.1 (24-09): 1599->1612; E.2 (24-09): 1612->1647; G.3 (24-09): 1647->1657; PI.8 (04-10): 1657->1692; GI.8f (08-10): 1692->1715
+    ('models/PDF/pdf.py', 1716, 'mm'),  # E.1 (24-09): 1600->1613; E.2 (24-09): 1613->1648; G.3 (24-09): 1648->1658; PI.8 (04-10): 1658->1693; GI.8f (08-10): 1693->1716
+    ('models/PDF/pdf.py', 1770, 'mm'),  # E.1 (24-09): 1654->1667; E.2 (24-09): 1667->1702; G.3 (24-09): 1702->1712; PI.8 (04-10): 1712->1747; GI.8f (08-10): 1747->1770
+    ('models/PDF/pdf.py', 2086, 'mm'),  # E.1 (24-09): 1970->1983; E.2 (24-09): 1983->2018; G.3 (24-09): 2018->2028; PI.8 (04-10): 2028->2063; GI.8f (08-10): 2063->2086
+    ('models/PDF/pdf.py', 2262, '°'),  # E.1 (24-09): 2146->2159; E.2 (24-09): 2159->2194; G.3 (24-09): 2194->2204; PI.8 (04-10): 2204->2239; GI.8f (08-10): 2239->2262
+    ('models/PDF/pdf.py', 2263, '°'),  # E.1 (24-09): 2147->2160; E.2 (24-09): 2160->2195; G.3 (24-09): 2195->2205; PI.8 (04-10): 2205->2240; GI.8f (08-10): 2240->2263
+    ('models/PDF/pdf.py', 2314, '°'),  # E.1 (24-09): 2198->2211; E.2 (24-09): 2211->2246; G.3 (24-09): 2246->2256; PI.8 (04-10): 2256->2291; GI.8f (08-10): 2291->2314
+    ('models/PDF/pdf.py', 2315, '°'),  # E.1 (24-09): 2199->2212; E.2 (24-09): 2212->2247; G.3 (24-09): 2247->2257; PI.8 (04-10): 2257->2292; GI.8f (08-10): 2292->2315
     ('services/MLCs_calibration_service.py', 112, 'mm'),
     ('services/MLCs_calibration_service.py', 256, 'mm'),
     ('services/MLCs_calibration_service.py', 315, 'mm'),

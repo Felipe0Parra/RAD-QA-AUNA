@@ -1227,6 +1227,22 @@ def _decir_que_no_se_pudo_mostrar(label, categoria, error, datos_a_salvo=True):
         pass        # el widget ya no existe (se cerró la pestaña mientras tanto): no hay dónde decirlo
 
 
+class ResultadosNoLeidos(dict):
+    """GI.8f: lo que `reconstruir_resultados_desde_bd` devuelve cuando la reapertura FALLA: un diccionario VACIO -- todo llamador que pregunte `if not resultados` o compare con `{}` sigue igual --
+    que ademas lleva en `causa` la excepcion. Así el informe anual puede decir POR QUÉ omitió la sección (la base ocupada se dice como tal) en vez de recibir un `{}` mudo."""
+    def __init__(self, causa):
+        super().__init__()
+        # sin los marcos del rastro: ya se registro, y retenerlo mantendria vivas las filas leidas (las imagenes guardadas) mientras alguien conserve el resultado
+        self.causa = causa.with_traceback(None) if isinstance(causa, BaseException) else causa
+
+
+def _registrar_que_no_se_pudo_leer(categorias, error):
+    """GI.8f: sin pantalla (el informe PDF mensual y el anual) la causa de que la reapertura fallara ya no se pierde en una consola que el `.exe` no tiene: queda en `error_log.txt` (y,
+    como antes, en la consola de desarrollo). Quien llama recibe `{}` y decide (el informe mensual dice «Sin resultados»; el anual dice que omitió la sección)."""
+    traceback.print_exc()
+    registrar_error(f"No se pudieron reconstruir los resultados de imágenes ({', '.join(categorias or ['todas'])})", error)
+
+
 def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canvas=None):
     """
     Reconstruye la estructura de diccionarios de resultados desde la base de datos
@@ -1363,8 +1379,8 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
         error_msg = f"Error al reconstruir resultados: {e}"
         #print(f"❌ {error_msg}")
         # GI.3: con `label` la pestaña lo dice (también si el fallo es de la base y no de una prueba); sin `label` (el PDF) el informe avisa que no pudo reconstruir
-        _decir_que_no_se_pudo_mostrar(label, ", ".join(categorias or ["todas"]), e, datos_a_salvo=False) if label is not None else traceback.print_exc()
-        return {}
+        _decir_que_no_se_pudo_mostrar(label, ", ".join(categorias or ["todas"]), e, datos_a_salvo=False) if label is not None else _registrar_que_no_se_pudo_leer(categorias, e)
+        return ResultadosNoLeidos(e)
         
     finally:
         if conn:

@@ -24,6 +24,9 @@ from models.PDF.Mensuales.reportes_mensuales import (_obtener_datos_tabla_relaci
 from models.PDF.Imagenes.reportes_control_sistema_imagenes import ReporteControlSistemaImagenes, titulo_del_informe
 from services.anulacion import filtro_activo
 from data.ManejoDatos.catphan_TAC.catphan_db import reconstruir_resultados_desde_bd
+from services.registro_errores import registrar_error
+import sqlite3
+from typing import NamedTuple, Optional
 
 
 class ReporteMensual:
@@ -112,12 +115,19 @@ def reporte_anual(self, fecha, maquina="", id_maquina="",
         # --- INTEGRAR SISTEMA DE IMÁGENES SI EXISTE (solo para Halcyon e iX) ---
         if maquina in ['Clinac ix', 'Halcyon']:
             print(f"Verificando datos del sistema de imágenes para {maquina}...")
-            tablas_img = obtener_tablas_sistema_imagenes_para_pdf(db, ref_id)
+            seccion_img = obtener_tablas_sistema_imagenes_y_motivo(db, ref_id)
+            tablas_img, motivo_img = seccion_img.tablas, seccion_img.motivo
+            if tablas_img or motivo_img:
+                # GI.8f: el título sale siempre que la sección exista (con sus tablas o con el aviso de que se omitió)
+                tablas_reporte['titulo_sistema_imagenes'] = titulo_del_informe()
             if tablas_img:
                 print(f"Se encontraron {len(tablas_img)} tablas del sistema de imágenes")
                 # Añadir las tablas del sistema de imágenes al diccionario principal
-                tablas_reporte['titulo_sistema_imagenes'] = titulo_del_informe()
                 tablas_reporte.update(tablas_img)
+            elif motivo_img:
+                # GI.8f: un error al leer las pruebas de imagen ya no se confunde con «este año no hubo pruebas de imagen»: el informe lo dice y el físico lo ve al generarlo
+                tablas_reporte['aviso_sistema_imagenes'] = AVISO_SECCION_OMITIDA.format(motivo=motivo_img)
+                QMessageBox.warning(self, "Sección de imágenes", texto_del_aviso_de_omision(motivo_img, seccion_img.registrado))
             else:
                 print("No se encontraron datos del sistema de imágenes para esta sesión")
         
@@ -162,29 +172,65 @@ def _recopilar_datos_completos(db, ref_id, config_tablas, maquina):
     
     return datos_completos
 
-def obtener_tablas_sistema_imagenes_para_pdf(db, ref):
+AVISO_SECCION_OMITIDA = "La sección de imágenes no se incluyó: {motivo}."
+MOTIVO_BASE_OCUPADA = "la base de datos estaba ocupada por otro programa"
+MOTIVO_NO_SE_PUDO_LEER = "no se pudieron leer las pruebas de imagen guardadas de esta sesión"
+INDICACION_BASE_OCUPADA = "Vuelva a generar el informe en unos segundos."
+
+
+class SeccionDeImagenes(NamedTuple):
+    """GI.8f: lo que el informe anual sabe de la sección de imágenes de una sesión. `tablas`: las tablas procesadas (`{}` si no hay sección). `motivo`: por qué NO hay sección, dicho para una
+    persona (`None` si no hay pruebas de imagen, que no es un error, o si la sección está). `registrado`: si la causa técnica quedó escrita en `error_log.txt` (`None` si no hubo error)."""
+    tablas: dict
+    motivo: Optional[str]
+    registrado: Optional[bool]
+
+
+def _motivo_de_la_omision(error):
+    """GI.8f: la causa de que la sección de imágenes no entrara al informe, dicha para una persona (sin texto crudo de SQLite ni nombres de clases): la base ocupada se dice como tal; lo
+    demás, que no se pudieron leer las pruebas guardadas. La causa técnica completa queda en `error_log.txt`."""
+    if isinstance(error, sqlite3.OperationalError) and "locked" in str(error).lower():
+        return MOTIVO_BASE_OCUPADA
+    return MOTIVO_NO_SE_PUDO_LEER
+
+
+def texto_del_aviso_de_omision(motivo, registrado):
+    """GI.8f: el diálogo que ve el físico al generar un informe sin la sección de imágenes: una frase con el motivo; si la base estaba ocupada, qué hacer (en el documento firmado no va
+    una indicación); y dónde está el detalle técnico SOLO si de verdad quedó escrito."""
+    partes = [f"El informe se generará sin la sección de imágenes: {motivo}."]
+    if motivo == MOTIVO_BASE_OCUPADA:
+        partes.append(INDICACION_BASE_OCUPADA)
+    if registrado:
+        partes.append("El detalle técnico quedó en el archivo error_log.txt, junto al programa.")
+    return "\n\n".join(partes)
+
+
+def obtener_tablas_sistema_imagenes_y_motivo(db, ref):
     """
     Obtiene solo las tablas del sistema de imágenes para incluir en el PDF anual
     Sin generar un PDF separado, solo retorna las tablas procesadas
-    
+
     Args:
         db: Conexión a la base de datos
         ref (int): ID de la sesión
-    
+
     Returns:
-        dict: Diccionario con las tablas del sistema de imágenes procesadas
+        `SeccionDeImagenes(tablas, motivo, registrado)`: las tablas del sistema de imágenes procesadas y el MOTIVO por el que no hay sección. Sin pruebas de imagen en la sesión las tablas
+        son `{}` y el motivo es `None` (no es un error, no se avisa). Si algo lanza al leerlas, o si la sesión TIENE pruebas de imagen guardadas y la lectura no devuelve ninguna (el lector
+        captura sus propios fallos, los registra y devuelve `{}`), las tablas son `{}` y el motivo dice la causa (GI.8f: antes se imprimía a una consola que el `.exe` no tiene y el informe
+        salía sin la sección, indistinguible de «este año no hubo pruebas de imagen»); la causa técnica completa queda en `error_log.txt`.
     """
     try:
         reporte_img = ReporteControlSistemaImagenes()
         
         # Verificar si hay datos disponibles
         if not reporte_img._verificar_pruebas_disponibles(db, ref):
-            return {}
+            return SeccionDeImagenes({}, None, None)
         
         # Obtener información de la sesión
         info_sesion = reporte_img._obtener_info_sesion(db, ref)
         if not info_sesion:
-            return {}
+            return SeccionDeImagenes({}, None, None)
         
         # Agregar db y ref al info_sesion para procesamiento
         info_sesion['db'] = db
@@ -202,7 +248,11 @@ def obtener_tablas_sistema_imagenes_para_pdf(db, ref):
         )
         
         if not resultados:
-            return {}
+            # GI.8f: la sesión TIENE pruebas de imagen guardadas (se verificó arriba) y el lector no devolvió ninguna. El lector captura sus propios fallos (los registra en error_log.txt y
+            # devuelve `{}`): un `{}` aquí no es «este año no hubo pruebas de imagen», es que no se pudieron leer (el informe mensual lo trata igual: «Sin resultados»).
+            registrado = registrar_error(f"El informe anual no pudo incluir la sección de imágenes (sesión {ref})",
+                                         detalle="Hay pruebas de imagen guardadas y la lectura no devolvió ninguna. Si la lectura falló por una excepción, su causa está en la entrada anterior.")
+            return SeccionDeImagenes({}, _motivo_de_la_omision(getattr(resultados, "causa", None)), registrado)
         
         # Procesar resultados para generar las tablas
         tablas_reporte = reporte_img._procesar_resultados_para_reporte(
@@ -212,13 +262,17 @@ def obtener_tablas_sistema_imagenes_para_pdf(db, ref):
             imagenes_resultados
         )
         
-        return tablas_reporte
+        return SeccionDeImagenes(tablas_reporte, None, None)
         
     except Exception as e:
         print(f"Error obteniendo tablas del sistema de imágenes: {e}")
-        import traceback
-        traceback.print_exc()
-        return {}
+        registrado = registrar_error(f"El informe anual no pudo incluir la sección de imágenes (sesión {ref})", e)
+        return SeccionDeImagenes({}, _motivo_de_la_omision(e), registrado)
+
+
+def obtener_tablas_sistema_imagenes_para_pdf(db, ref):
+    """Solo las tablas (`{}` si no hay o si falló la lectura): la misma función que `obtener_tablas_sistema_imagenes_y_motivo`, sin el motivo."""
+    return obtener_tablas_sistema_imagenes_y_motivo(db, ref).tablas
 
 def obtener_energia(db, id_energia):
     """Obtiene la energía a partir del ID"""

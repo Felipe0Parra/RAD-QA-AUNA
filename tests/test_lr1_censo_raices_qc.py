@@ -217,7 +217,7 @@ CENSO_RAICES = {
                 "gemelo sin filtrar de load.py:214, que sí filtra desde D3"),
 
     # -- models/PDF ------------------------------------------------------
-    ("models/PDF/Anual/reportes_anuales.py", 140, "controles"):
+    ("models/PDF/Anual/reportes_anuales.py", 150, "controles"):  # GI.8f (08-10): 140->150
         (LISTA, "referencia del control ANUAL por (fecha, equipo, control)"),
     ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 244, "controles"):  # E.3 (24-09): 199->201; E.2 (24-09): 201->204; G.3 (24-09): 204->205; B.3 (25-09): 205->206; GI.3 (07-10): 206->244
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),

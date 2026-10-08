@@ -48,6 +48,22 @@ TABLAS_INFORME_IMAGENES = [
     'uniformidad', 'imagen_uniformidad',
 ]
 
+# GI.8f (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): las dos claves de TEXTO de la seccion de imagenes del informe ANUAL de iX y Halcyon. El productor
+# (`reportes_anuales.reporte_anual`) pone el titulo cuando hay seccion (con tablas o con aviso) y el aviso cuando la seccion se omitio por un error; el generador anual solo dibuja
+# lo que esta en su orden de categorias, y el titulo que `E.1` asigno nunca estuvo en ese orden (la rama que lo imprime no se ejecutaba: el PDF anual no decia "Analisis de CatPhan").
+CLAVE_TITULO_IMAGENES = 'titulo_sistema_imagenes'
+CLAVE_AVISO_IMAGENES = 'aviso_sistema_imagenes'
+
+
+def categorias_de_imagenes_anual(tablas_dict):
+    """GI.8f: lo que el informe ANUAL de iX y Halcyon dibuja de la seccion de imagenes, en orden: el titulo, las tablas del informe de imagenes que haya (en el orden de
+    `TABLAS_INFORME_IMAGENES`) y, si la seccion se omitio, el aviso con el motivo. UNA sola definicion para las dos maquinas (antes eran dos copias del mismo bucle)."""
+    categorias = [CLAVE_TITULO_IMAGENES] if CLAVE_TITULO_IMAGENES in tablas_dict else []
+    categorias += [c for c in TABLAS_INFORME_IMAGENES if c in tablas_dict]
+    if CLAVE_AVISO_IMAGENES in tablas_dict:
+        categorias.append(CLAVE_AVISO_IMAGENES)
+    return categorias
+
 
 # Anchos [pt] de la tabla de parámetros: las columnas de VALOR más anchas que las de etiqueta, para que un
 # nombre de protocolo sin espacios ("Pelvis_iCBCT_2.0_IQ!", 100 pt a 10 pt de letra) no se parta a mitad de
@@ -1067,12 +1083,8 @@ def generar_reporte_pdf_multitabla_anual(tablas_dict, fecha, user, tipo_reporte=
             'equipos', 'factores_campo', 'factores_transmision',
             'factores_sobre_eje', 'control_camaras'
         ]
-        # Agregar tablas del sistema de imágenes si existen
-        orden_categorias_img = TABLAS_INFORME_IMAGENES
-        # Agregar al final las tablas de imágenes si existen
-        for cat_img in orden_categorias_img:
-            if cat_img in tablas_dict:
-                orden_categorias.append(cat_img)
+        # Agregar al final la seccion del sistema de imágenes si existe (título, tablas y, si se omitió, el aviso)
+        orden_categorias += categorias_de_imagenes_anual(tablas_dict)
 
     elif maquina == 'Halcyon':
         orden_categorias = [
@@ -1081,12 +1093,8 @@ def generar_reporte_pdf_multitabla_anual(tablas_dict, fecha, user, tipo_reporte=
             'precision_posicion_multilaminas', 'imagen_perfil_mlc', 'dosimetria', 'linealidad_unidades_monitor',
             'tamanos_campo_dosis'
         ]
-        # Agregar tablas del sistema de imágenes si existen
-        orden_categorias_img = TABLAS_INFORME_IMAGENES
-        # Agregar al final las tablas de imágenes si existen
-        for cat_img in orden_categorias_img:
-            if cat_img in tablas_dict:
-                orden_categorias.append(cat_img)
+        # Agregar al final la seccion del sistema de imágenes si existe (título, tablas y, si se omitió, el aviso)
+        orden_categorias += categorias_de_imagenes_anual(tablas_dict)
 
     else:
         orden_categorias = [
@@ -1108,7 +1116,22 @@ def generar_reporte_pdf_multitabla_anual(tablas_dict, fecha, user, tipo_reporte=
             from reportlab.lib.styles import getSampleStyleSheet
             styles = getSampleStyleSheet()
             elements.append(Spacer(1, 0.2*inch))
-            elements.append(Paragraph(tablas_dict[categoria], styles['Heading2']))
+            # GI.8f (revision): ni el estilo `Heading2` de reportlab ni el espacio que le sigue se unian a lo que viene despues: el titulo podia quedar solo al pie de una pagina, con su primera
+            # tabla (o su aviso) en la siguiente. Tanto el titulo como su espacio se unen al siguiente flowable, y asi el titulo va siempre con lo que presenta.
+            titulo_de_la_seccion = Paragraph(tablas_dict[categoria], styles['Heading2'])
+            titulo_de_la_seccion.keepWithNext = 1
+            elements.append(titulo_de_la_seccion)
+            espacio_del_titulo = Spacer(1, 0.2*inch)
+            espacio_del_titulo.keepWithNext = 1
+            elements.append(espacio_del_titulo)
+            continue
+
+        # GI.8f: la seccion de imagenes se omitio por un error: el informe lo dice (y por que) en vez de omitirla en silencio
+        if categoria == CLAVE_AVISO_IMAGENES:
+            from reportlab.platypus import Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+            from xml.sax.saxutils import escape
+            elements.append(Paragraph(escape(str(tablas_dict[categoria])), getSampleStyleSheet()['Normal']))
             elements.append(Spacer(1, 0.2*inch))
             continue
 
