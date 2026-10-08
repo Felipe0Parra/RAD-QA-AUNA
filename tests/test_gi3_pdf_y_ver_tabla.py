@@ -702,13 +702,14 @@ def test_lo_recien_analizado_y_lo_reabierto_tienen_los_mismos_encabezados_y_el_m
 
 
 def test_tac_mensual_no_define_ninguna_copia_de_los_constructores_de_pantalla():
-    """UNA sola definicion de lo que se ve de cada prueba: los seis constructores son los de `catphan_db`, importados; el modulo de `tac_mensual` ya no los define."""
+    """UNA sola definicion de lo que se ve de cada prueba: los siete constructores son los de `catphan_db`, importados; el modulo de `tac_mensual` ya no los define (GI.8g retiro
+    tambien el de la linealidad, que era el unico que quedaba)."""
     arbol = ast.parse(TAC_MENSUAL.read_text(encoding="utf-8"))
     definidas = {n.name for n in ast.walk(arbol) if isinstance(n, ast.FunctionDef) and n.name.startswith("tabla_resultados_")}
-    assert definidas == {"tabla_resultados_linealidad"}, f"copias locales de los constructores: {sorted(definidas)}"
+    assert definidas == set(), f"copias locales de los constructores: {sorted(definidas)}"
     importadas = {a.name for n in ast.walk(arbol) if isinstance(n, ast.ImportFrom) and (n.module or "").endswith("catphan_db") for a in n.names}
     esperadas = {"tabla_resultados_espesor", "tabla_resultados_tamano_pixel", "tabla_resultados_resolucion_contraste", "tabla_resultados_resolucion_espacial",
-                 "tabla_resultados_ct", "tabla_resultados_uniformidad"}
+                 "tabla_resultados_ct", "tabla_resultados_linealidad_ct", "tabla_resultados_uniformidad"}
     assert esperadas <= importadas
     import ui.paginasControles.PruebasMensuales.tac_mensual as tac
     for nombre in esperadas:
@@ -716,15 +717,14 @@ def test_tac_mensual_no_define_ninguna_copia_de_los_constructores_de_pantalla():
 
 
 def test_el_texto_de_linealidad_de_un_analisis_recien_hecho_no_lanza_con_nada(app):
-    from ui.paginasControles.PruebasMensuales.tac_mensual import PruebaMensualTAC
-    metodo = PruebaMensualTAC.tabla_resultados_linealidad
+    """GI.8g: lo recien analizado se dice con el mismo constructor que lo reabierto (`catphan_db.tabla_resultados_linealidad_ct`); no lanza ni escribe «None» con ningun valor."""
     completo = {"pendiente": 1.5, "intercepto": -3.25, "r_squared": 0.99912345, "referencia": 0.5, "escala_contraste": 0.000123456789}
-    assert "HU = 1.5000 * (μ) + -3.2500" in metodo(None, completo) and "(R²): 0.9991" in metodo(None, completo)
+    assert "Pendiente: 1.500" in C.tabla_resultados_linealidad_ct(completo) and "R²: 0.9991" in C.tabla_resultados_linealidad_ct(completo)
     for hostil in HOSTILES:
         for clave in completo:
-            texto = metodo(None, dict(completo, **{clave: hostil}))
+            texto = C.tabla_resultados_linealidad_ct(dict(completo, **{clave: hostil}))
             assert "None" not in texto
-    assert metodo(None, {}) == "No hay resultados de linealidad disponibles." and "N/A" in metodo(None, {"pendiente": 1.0})
+    assert C.tabla_resultados_linealidad_ct({}) == "No hay resultados de linealidad CT disponibles." and "N/A" in C.tabla_resultados_linealidad_ct({"pendiente": 1.0})
 
 
 def test_las_pantallas_de_un_analisis_recien_hecho_formatean_los_escalares_de_numpy(app):

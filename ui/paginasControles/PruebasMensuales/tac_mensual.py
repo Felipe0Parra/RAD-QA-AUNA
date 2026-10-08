@@ -16,7 +16,7 @@ from services.ventana_edicion import puede_editarse as _puede_editarse_control, 
 from data.ManejoDatos.catphan_TAC.catphan_db import ControlNoEditable, png_de_corte
 from analisisImagenes.catphan.errores_guardado import traducir as _traducir_error_de_guardado, GRAVEDAD_AVISO, CategoriaNoGuardada
 from services.registro_errores import registrar_error, avisar_consola
-from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan, tabla_resultados_espesor, tabla_resultados_tamano_pixel, tabla_resultados_resolucion_contraste, tabla_resultados_resolucion_espacial, tabla_resultados_ct, tabla_resultados_uniformidad)
+from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan, tabla_resultados_espesor, tabla_resultados_tamano_pixel, tabla_resultados_resolucion_contraste, tabla_resultados_resolucion_espacial, tabla_resultados_ct, tabla_resultados_linealidad_ct, tabla_resultados_uniformidad)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from datetime import datetime
 from enum import Enum
@@ -934,7 +934,7 @@ class PruebaMensualTAC(PruebaMensual600):
             
             
             
-            self.visualizador_principal.imagen_cargada.connect(lambda: visualizador.lbl_imagen.setText("✅ Imagen cargada correctamente"))
+            self.visualizador_principal.imagen_cargada.connect(lambda: visualizador.lbl_imagen.setText("Imagen cargada correctamente"))
           
             try:
                 print("Resultados: ")
@@ -955,7 +955,7 @@ class PruebaMensualTAC(PruebaMensual600):
                     
                     self.visualizador_principal.idx_actual = 0
                     print("Imagen subida")
-                    visualizador.lbl_imagen.setText("✅ Imagen cargada correctamente")
+                    visualizador.lbl_imagen.setText("Imagen cargada correctamente")
                     #QTimer.singleShot(600, self.automatizacion)
        
 
@@ -986,7 +986,7 @@ class PruebaMensualTAC(PruebaMensual600):
                             self.visualizador_principal.info_label.show()
                             self.visualizador_principal.elegir_corte_btn.show()
                             
-                            visualizador.lbl_imagen.setText("✅ Imagen cargada correctamente")
+                            visualizador.lbl_imagen.setText("Imagen cargada correctamente")
                             #QTimer.singleShot(600, self.automatizacion)
                             
                             visualizador.lbl_imagen.setStyleSheet("""
@@ -1494,30 +1494,6 @@ class PruebaMensualTAC(PruebaMensual600):
             print(f"❌ Error al cargar valores CT desde BD: {e}")
             return False
 
-    def tabla_resultados_linealidad(self, resultados):
-        """
-        Formatea los resultados de linealidad del CT para mostrar en texto.
-        """
-        if not resultados:
-            return "No hay resultados de linealidad disponibles."
-        
-        import numbers
-
-        def _n(clave, formato):
-            # GI.3: un valor que falta o que no es un número se dice «N/A»; no tumba el texto ni se escribe un 0 que el análisis no dio.
-            valor = resultados.get(clave)
-            return format(valor, formato) if isinstance(valor, numbers.Real) and not isinstance(valor, bool) else "N/A"
-
-        lines = []
-        lines.append("Resultados de Linealidad del Número CT:")
-        lines.append("-------------------------------------------------------------")
-        lines.append("  Ecuación de la recta: HU = {} * (μ) + {}".format(_n("pendiente", ".4f"), _n("intercepto", ".4f")))
-        lines.append("  Coeficiente de determinación (R²): {}".format(_n("r_squared", ".4f")))
-        lines.append("  Referencia: {}".format(_n("referencia", ".4f")))
-        lines.append("  Escala de contraste = {}".format(_n("escala_contraste", ".9f")))
-        lines.append("-------------------------------------------------------------")
-        return "\n".join(lines)
-    
     # Intenta actualizar la gráfica de Linealidad del CT si hay energía, μ y HU
     def try_actualizar_linealidad_ct(self, imagen_del_corte=None):
         """
@@ -1601,7 +1577,7 @@ class PruebaMensualTAC(PruebaMensual600):
             linealidad = linealidad_ct(datos=mu_vals, hu_promedio=hu_vals, visualizar=True, canvas=self._canvas_de(pestana))
             if isinstance(linealidad, dict):
                 linealidad["energia_mev"] = self.energia_linealidad_mev   # G.2: se guarda con la prueba
-            texto = self.tabla_resultados_linealidad(linealidad)
+            texto = tabla_resultados_linealidad_ct(linealidad)
             self._escribir_resultado(pestana, texto)
             
             #print(" Análisis de Linealidad del CT completado")
@@ -1631,8 +1607,8 @@ class PruebaMensualTAC(PruebaMensual600):
         orientacion_serie = getattr(_vis_activo, 'orientacion', 'normal')
         roll_deg_serie = getattr(_vis_activo, 'roll_deg', 0.0)
 
-        # GI.3: UNA sola definición de lo que se ve de las SEIS pruebas de abajo, la de `catphan_db` (importada arriba): lo recién analizado y lo reabierto de la
-        # base se muestran con el mismo código. La séptima (linealidad) NO: su texto del análisis recién hecho es otro (`tabla_resultados_linealidad`, sin energía ni veredicto).
+        # GI.3 / GI.8g: UNA sola definición de lo que se ve de las SIETE pruebas, la de `catphan_db` (importada arriba): lo recién analizado y lo reabierto de la
+        # base se muestran con el mismo código (la linealidad se muestra en `try_actualizar_linealidad_ct`, con `tabla_resultados_linealidad_ct`).
 
         # Verificar si el visualizador principal tiene volumen cargado
         visualizador_principal = getattr(self, 'visualizador_principal', None)

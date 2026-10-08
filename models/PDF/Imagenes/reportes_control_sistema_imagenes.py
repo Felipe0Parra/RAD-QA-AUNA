@@ -51,7 +51,7 @@ from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
 from models.PDF.PDFWindow import PdfViewer
 
 # Importar funciones de reconstrucción desde catphan_db
-from data.ManejoDatos.catphan_TAC.catphan_db import TEXTO_SIN_REGION_MEDIBLE, _bandera_guardada, es_sin_region_medible, nota_visibilidad_a_mano, reconstruir_resultados_desde_bd
+from data.ManejoDatos.catphan_TAC.catphan_db import R2_MINIMO_LINEALIDAD, TEXTO_SIN_REGION_MEDIBLE, _bandera_guardada, es_sin_region_medible, nota_visibilidad_a_mano, reconstruir_resultados_desde_bd
 from services.anulacion import filtro_activo
 from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad, filas_medidas
 from analisisImagenes.catphan.escala import CLAVE_EN_ADQUISICION as CLAVE_ESCALA, nota_escala
@@ -1013,7 +1013,7 @@ class ReporteControlSistemaImagenes:
         else:
             tabla.append(['R² (coef. correlación)', r2_str])
             tabla.append(['Escala de contraste', escala_str])
-            tabla.append(['Linealidad aceptable (R²≥0.99)', _celda_veredicto(linealidad_ok)])
+            tabla.append([f'Linealidad aceptable (R²≥{R2_MINIMO_LINEALIDAD:g})', _celda_veredicto(linealidad_ok)])
         
         return pd.DataFrame(tabla, columns=['Linealidad CT', ''])
     

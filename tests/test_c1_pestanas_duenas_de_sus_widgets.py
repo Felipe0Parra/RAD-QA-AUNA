@@ -114,9 +114,11 @@ def _ejes_dibujados(tab):
 
 
 def _hay_linealidad(tab):
-    """El texto del ajuste ("Ecuación de la recta: HU = ...") está en la pestaña. No vale buscar "Linealidad": el título
+    """El texto del ajuste ("RESULTADOS DE LINEALIDAD CT ... Pendiente: ...", el único de `catphan_db`, GI.8g) está en la pestaña. No vale buscar "Linealidad": el título
     de la pestaña ("Resultados de Linealidad del CT") ya lo dice sin haber corrido nada."""
-    return any("Ecuación de la recta" in t for t in _textos(tab))
+    import re
+    # el texto COMPLETO: con el ajuste, la energia (un numero: la pestana la pone ANTES de armar el texto, revision de GI.8g) y el veredicto
+    return any("RESULTADOS DE LINEALIDAD CT" in t and "Pendiente:" in t and re.search(r"Energía \[MeV\]: \d", t) and re.search(r"Linealidad: (ACEPTABLE|NO ACEPTABLE)", t) for t in _textos(tab))
 
 
 CLAVES = sorted(FORMULARIOS)

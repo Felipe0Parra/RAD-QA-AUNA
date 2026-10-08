@@ -76,7 +76,7 @@ def crear_widget_con_imagen_y_resultados(texto_resultados, imagen_blob, kv, ma, 
 
     from PyQt5.QtWidgets import  QLabel
     # 1. Crear texto con parámetros de adquisición
-    contenido_completo = f"""📊 Parámetros: {kv} kV | {ma} mA | {espesor_corte} mm
+    contenido_completo = f"""Parámetros: {kv} kV | {ma} mA | {espesor_corte} mm
                         {texto_resultados}"""
     
     # 2. Actualizar el label con el texto completo
@@ -107,7 +107,7 @@ def crear_widget_con_parametros_imagen_y_contenido(widget_contenido, label_objet
     from PyQt5.QtWidgets import QLabel
     
     # 1. Crear texto con parámetros de adquisición
-    contenido_completo = f"""📊 Parámetros: {kv} kV | {ma} mA | {espesor_corte} mm
+    contenido_completo = f"""Parámetros: {kv} kV | {ma} mA | {espesor_corte} mm
                         """
     
     # 2. Actualizar el label con parámetros y reemplazar con la tabla
@@ -407,6 +407,16 @@ def mapear_uniformidad(resultados_uniformidad):
     
     return datos_global, regiones_uniformidad
 
+# GI.8g (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): el criterio heredado de la linealidad (R² mínimo) vive en UN solo sitio. Lo usan el escritor (`mapear_linealidad_ct`), el texto de la
+# pantalla (`veredicto_de_linealidad`) y el rótulo del informe PDF; antes el 0.99 estaba escrito en el escritor y, aparte, en el rótulo del informe.
+R2_MINIMO_LINEALIDAD = 0.99
+
+
+def linealidad_es_aceptable(r_squared):
+    """True si `r_squared` alcanza el mínimo heredado. Un bool nativo (un `numpy.bool_` se guardaría como BLOB, GI.1)."""
+    return bool(r_squared >= R2_MINIMO_LINEALIDAD)
+
+
 def mapear_linealidad_ct(resultados_linealidad):
     """
     Mapea los resultados de linealidad_ct() a la estructura de BD.
@@ -429,7 +439,7 @@ def mapear_linealidad_ct(resultados_linealidad):
         "num_materiales": 7,        # Fijo: 7 materiales del CatPhan
         "rango_hu_min": -1000,      # Rango típico de análisis HU
         "rango_hu_max": 1000,       # Rango típico de análisis HU  
-        "linealidad_aceptable": bool(resultados_linealidad.get("r_squared", 0) >= 0.99),  # Criterio: R² ≥ 0.99 (bool nativo: un numpy.bool_ se guarda como BLOB)
+        "linealidad_aceptable": linealidad_es_aceptable(resultados_linealidad.get("r_squared", 0)),  # Criterio: R² ≥ 0.99 (bool nativo: un numpy.bool_ se guarda como BLOB)
         # G.2: la energía con la que se ajustó la curva (la del protocolo del equipo), guardada con la prueba
         "energia_mev": resultados_linealidad.get("energia_mev"),
     }
@@ -1923,7 +1933,7 @@ def tabla_resultados_espesor(resultados):
         return "No hay resultados de espesor disponibles."
         
     lines = []
-    lines.append("🔍 RESULTADOS DE ESPESOR DE CORTE")
+    lines.append("RESULTADOS DE ESPESOR DE CORTE")
     lines.append("-" * 50)
     # GI.4: un valor que el análisis dejó en `None` no se escribe como «None mm». El espesor teórico es el que publica la serie (lo que el equipo no publica
     # se dice «(no publicado)»); la diferencia sin él no existe y dice «N/A», como cuando el diccionario no trae la clave.
@@ -1944,7 +1954,7 @@ def tabla_resultados_espesor(resultados):
     espesores_ind = resultados.get("espesores_individuales", {})
     if isinstance(espesores_ind, dict) and espesores_ind:
         lines.append("")
-        lines.append("  📏 Espesores individuales:")
+        lines.append("  Espesores individuales:")
         for direccion, valor in espesores_ind.items():
             lines.append(f"    {direccion}: {valor} mm")
 
@@ -1956,7 +1966,7 @@ def tabla_resultados_tamano_pixel(resultados):
         return "No hay resultados de tamaño de pixel disponibles."
         
     lines = []
-    lines.append("📐 RESULTADOS DE TAMAÑO DE PIXEL")
+    lines.append("RESULTADOS DE TAMAÑO DE PIXEL")
     lines.append("-" * 50)
 
     # Mostrar medidas individuales
@@ -2068,7 +2078,7 @@ def tabla_resultados_resolucion_contraste(resultados):
             tabla_contraste.setItem(i, 2, item_visibilidad)
             
             # Estado (siempre visible ya que filtramos)
-            item_estado = QTableWidgetItem("✓ Visible")
+            item_estado = QTableWidgetItem("Visible")
             item_estado.setTextAlignment(Qt.AlignCenter)
             item_estado.setForeground(QColor("#27ae60"))  # Verde
             font_estado = item_estado.font()
@@ -2086,7 +2096,7 @@ def tabla_resultados_resolucion_contraste(resultados):
         
         # Agregar información de resumen
         info_resumen = QLabel(
-            f"✅ Círculos detectados: {len(rois_visibles)}/{resumen.get('total_rois', 'N/A')} | "
+            f"Círculos detectados: {len(rois_visibles)}/{resumen.get('total_rois', 'N/A')} | "
             f"Método: Visibilidad (Rose) | "
             f"Umbral: {resumen.get('visibilidad_lim', 'N/A')}"
         )
@@ -2121,7 +2131,7 @@ def tabla_resultados_resolucion_contraste(resultados):
         no_visible_widget = QWidget()
         layout = QVBoxLayout(no_visible_widget)
         
-        mensaje = QLabel("⚠️ No se detectaron círculos de contraste visibles")
+        mensaje = QLabel("No se detectaron círculos de contraste visibles")
         mensaje.setAlignment(Qt.AlignCenter)
         mensaje.setStyleSheet("""
             QLabel {
@@ -2375,6 +2385,16 @@ def tabla_resultados_ct(resultado_completo):
     
     return tabla_ct
 
+def veredicto_de_linealidad(resultados):
+    """GI.8g: True / False / None -- el veredicto heredado de la linealidad que dice el texto de la pantalla. Lo guardado manda: si el resultado trae `linealidad_aceptable` (uno
+    reabierto de la base; con NULL no se juzga, igual que el informe PDF dice «N/A») se lee por su valor; un análisis recién hecho no lo trae y se juzga con la MISMA regla que el escritor
+    (`linealidad_es_aceptable`) sobre su R²; sin un R² numérico no hay veredicto."""
+    if "linealidad_aceptable" in resultados:
+        return _bandera_guardada(resultados["linealidad_aceptable"])
+    r_cuadrado = resultados.get("r_squared")
+    return linealidad_es_aceptable(r_cuadrado) if _es_numero(r_cuadrado) else None
+
+
 def tabla_resultados_linealidad_ct(resultados):
     """
     Genera una tabla de texto con los resultados de linealidad CT.
@@ -2389,7 +2409,7 @@ def tabla_resultados_linealidad_ct(resultados):
         return "No hay resultados de linealidad CT disponibles."
         
     lines = []
-    lines.append("📈 RESULTADOS DE LINEALIDAD CT")
+    lines.append("RESULTADOS DE LINEALIDAD CT")
     lines.append("-" * 50)
     
     # Mostrar parámetros de la regresión (GI.3: un valor guardado que no es un número se dice tal cual y no tumba la pantalla)
@@ -2403,11 +2423,10 @@ def tabla_resultados_linealidad_ct(resultados):
     lines.append(f"  Energía [MeV]: {_formateado(energia_mev, 'g')}" if energia_mev is not None
                  else "  Energía [MeV]: no registrada")
     
-    # Mostrar evaluación de calidad
-    linealidad_aceptable = resultados.get('linealidad_aceptable')
+    # Mostrar evaluación de calidad (GI.8g: con palabras, DA-18; el veredicto sale de la regla única de `veredicto_de_linealidad`)
+    linealidad_aceptable = veredicto_de_linealidad(resultados)
     if linealidad_aceptable is not None:
-        estado = "✓ ACEPTABLE" if linealidad_aceptable else "✗ NO ACEPTABLE"
-        lines.append(f"  Linealidad: {estado}")
+        lines.append(f"  Linealidad: {'ACEPTABLE' if linealidad_aceptable else 'NO ACEPTABLE'}")
     
     lines.append("-" * 50)
     return "\n".join(lines)

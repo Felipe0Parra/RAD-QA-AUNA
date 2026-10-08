@@ -2988,7 +2988,7 @@ def mostrar_valores_ct(parent, id_control):
             ('Error Absoluto', 'error_absoluto'),
             ('Error Relativo', 'error_relativo')
         ],
-        'mensaje_vacio': '⚠️ No se encontraron datos de Valores CT para este control'
+        'mensaje_vacio': 'No se encontraron datos de Valores CT para este control'
     }
     _mostrar_tabla_generica(parent, id_control, config)
 
@@ -3003,7 +3003,7 @@ def mostrar_uniformidad_ruido(parent, id_control):
             ('HU Promedio', 'hu_promedio'),  # ⚠️ TYPO en tu BD: debería ser "hu_promedio"
             ('Desviación', 'desviacion')
         ],
-        'mensaje_vacio': '⚠️ No se encontraron datos de Uniformidad y Ruido para este control'
+        'mensaje_vacio': 'No se encontraron datos de Uniformidad y Ruido para este control'
     }
     _mostrar_tabla_generica(parent, id_control, config)
 
@@ -3027,7 +3027,7 @@ def mostrar_uniformidad_global(parent, id_control):
             ('INU Threshold %', 'inu_threshold_pct'),
             ('HU Tolerancia', 'hu_tolerancia')
         ],
-        'mensaje_vacio': '⚠️ No se encontraron datos de Uniformidad Global para este control'
+        'mensaje_vacio': 'No se encontraron datos de Uniformidad Global para este control'
     }
     _mostrar_tabla_generica(parent, id_control, config)
 
@@ -3051,7 +3051,7 @@ def mostrar_resolucion_espacial(parent, id_control):
             ('MTF 20% [lp/cm]', 'mtf_20_pct'),
             ('MTF 50% [lp/cm]', 'mtf_50_pct')
         ],
-        'mensaje_vacio': '⚠️ No se encontraron datos de Resolución Espacial para este control'
+        'mensaje_vacio': 'No se encontraron datos de Resolución Espacial para este control'
     }
     nombres = [col[1] for col in config['columnas']]
     i_maxima, i_ultima = nombres.index('lp_cm_maximo'), nombres.index('ultima_region_exitosa')
@@ -3085,7 +3085,7 @@ def mostrar_linealidad_ct(parent, id_control):
             ('Rango HU Min', 'rango_hu_min'),
             ('Rango HU Max', 'rango_hu_max')
         ],
-        'mensaje_vacio': '⚠️ No se encontraron datos de Linealidad CT para este control'
+        'mensaje_vacio': 'No se encontraron datos de Linealidad CT para este control'
     }
     _mostrar_tabla_generica(parent, id_control, config)
 
@@ -3101,7 +3101,7 @@ def mostrar_espesor_corte_analisis(parent, id_control):
             ('Diferencia (mm)', 'diferencia_mm'),
             ('Error (%)', 'error_pct')  # ⚠️ TYPO en tu BD: debería ser "error_pct"
         ],
-        'mensaje_vacio': '⚠️ No se encontraron datos de Espesor de Corte para este control'
+        'mensaje_vacio': 'No se encontraron datos de Espesor de Corte para este control'
     }
     _mostrar_tabla_generica(parent, id_control, config)
 
@@ -3119,7 +3119,7 @@ def mostrar_tamaño_pixel(parent, id_control):
             ('Diferencia Y', 'diferencia_y'),
             ('Error (%)', 'error_pct')
         ],
-        'mensaje_vacio': '⚠️ No se encontraron datos de Tamaño de Pixel para este control'
+        'mensaje_vacio': 'No se encontraron datos de Tamaño de Pixel para este control'
     }
     _mostrar_tabla_generica(parent, id_control, config)
 
