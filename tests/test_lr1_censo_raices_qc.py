@@ -241,13 +241,13 @@ CENSO_RAICES = {
         (IDENTIDAD, "datos de la linealidad ya referenciada, WHERE id = ?"),
 
     # -- scripts ---------------------------------------------------------
-    ("scripts/migrar_bd_a_estandar.py", 121, "controles"):
+    ("scripts/migrar_bd_a_estandar.py", 178, "controles"):  # RS.4 (08-10): 121->178
         (CENSO, "migración (_contar_centinela): cuenta las filas con el "
                 "centinela histórico de 2º físico para saber si hay que "
                 "normalizarlas. Tiene que ver TODAS -- una fila anulada con "
                 "el centinela sigue teniendo el dato mal y hay que "
                 "arreglarlo igual"),
-    ("scripts/migrar_bd_a_estandar.py", 355, "controles"):
+    ("scripts/migrar_bd_a_estandar.py", 412, "controles"):  # RS.4 (08-10): 355->412
         (CENSO, "migración (UPDATE que normaliza el centinela a NULL): "
                 "misma razón que la cuenta de arriba -- filtrar dejaría el "
                 "histórico a medio migrar, que es peor que no migrarlo"),

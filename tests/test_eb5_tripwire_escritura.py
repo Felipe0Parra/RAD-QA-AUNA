@@ -119,7 +119,7 @@ SITIOS_LITERALES_PERMITIDOS = {
     # existir, no porque se haya relajado el criterio -- y el test
     # `test_sitios_literales_coinciden_con_la_lista_revisada` es lo que
     # obligó a hacerlo explícito en vez de dejar una excepción muerta.
-    ("scripts/migrar_bd_a_estandar.py", 355):
+    ("scripts/migrar_bd_a_estandar.py", 412):  # RS.4 (08-10): 355->412
         "migración H5 (centinela de segundo físico): normaliza "
         "controles.user_id_f2 a NULL para el centinela histórico ' ---- ' "
         "-- censal a propósito (tiene que alcanzar TAMBIÉN las filas "

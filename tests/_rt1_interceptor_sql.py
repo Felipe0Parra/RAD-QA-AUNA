@@ -138,11 +138,11 @@ SITIOS_CENSALES_PERMITIDOS = {
         "T.4, misma razón que la línea 133 -- identidad por lote sobre "
         "`TipoCalibracion`, para que una calibración anulada también siga "
         "identificándose en su rastro de auditoría.",
-    ("scripts/migrar_bd_a_estandar.py", 147):
+    ("scripts/migrar_bd_a_estandar.py", 204):  # RS.4 (08-10): 147->204
         "censo (_contar_qc): cuenta el TOTAL de filas de cada tabla de QC "
         "antes y después de migrar, para verificar que ninguna se pierde. "
         "Filtrar por activo ocultaría justo la pérdida que vigila.",
-    ("scripts/migrar_bd_a_estandar.py", 179):
+    ("scripts/migrar_bd_a_estandar.py", 236):  # RS.4 (08-10): 179->236
         "censo (_contar_todas_las_tablas): igual que el anterior, extendido "
         "a las ~69 tablas que E10 puede recrear en una corrida.",
     ("scripts/observador_contrato.py", 154):
@@ -174,12 +174,12 @@ SITIOS_CENSALES_PERMITIDOS = {
     # histórico a medio normalizar. Declaradas también en ES1
     # (`SITIOS_CENSALES_LITERALES`), y el test cruzado exige que sigan
     # coincidiendo.
-    ("scripts/migrar_bd_a_estandar.py", 121):
+    ("scripts/migrar_bd_a_estandar.py", 178):  # RS.4 (08-10): 121->178
         "migración (_contar_centinela): cuenta las filas de `controles` con "
         "el centinela histórico de 2º físico. Una fila anulada con el dato "
         "mal sigue teniendo el dato mal -- filtrar aquí haría que la cuenta "
         "y el UPDATE de la línea 339 discreparan en silencio.",
-    ("scripts/migrar_bd_a_estandar.py", 355):
+    ("scripts/migrar_bd_a_estandar.py", 412):  # RS.4 (08-10): 355->412
         "migración (el UPDATE que normaliza ese centinela a NULL): misma "
         "razón que la cuenta de la línea 121, y la otra mitad de la misma "
         "operación -- filtrar una de las dos deja la migración a medias.",

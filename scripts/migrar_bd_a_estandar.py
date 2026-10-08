@@ -47,6 +47,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from services.duplicados_control import duplicados_controles
+from services.respaldo import ESTADO_OK, _copiar_con_api, _integridad, _nombre_provisional, _quitar_con_laterales
 
 CENTINELA_SEGUNDO_FISICO = " ---- "
 
@@ -85,17 +86,73 @@ def _consolidar_wal(ruta_bd):
     """I3/F-BD3 (lección R2 aplicada a la propia herramienta): en modo WAL,
     los commits recientes pueden vivir SOLO en el archivo `-wal` -- una BD
     traída de otra máquina puede llegar así (el rebuild del físico del 23-07
-    traía un -wal de 473 KB sin consolidar). Sin este paso: el backup de
-    `--aplicar` copiaba solo el `.db` (backup incompleto) y el dry-run
+    traía un -wal de 473 KB sin consolidar). Sin este paso el dry-run
     simulaba sobre una copia sin esos datos. `wal_checkpoint(TRUNCATE)`
     consolida todo al `.db` y deja el `-wal` en cero -- preserva el contenido
-    lógico, solo lo reubica -- de modo que una copia simple del `.db` ya es
-    la base completa."""
+    lógico, solo lo reubica.
+
+    RS.4 (C4): el resultado del checkpoint ya no se ignora. Si otro programa
+    tiene una lectura a medias (la aplicación abierta sobre la misma base) el
+    checkpoint no puede terminar y parte de lo confirmado sigue SOLO en el
+    `-wal`: se avisa. El respaldo previo ya no depende de esto (se hace con la
+    API de respaldo de SQLite, que lee a través del `-wal`; ver
+    `_respaldo_previo`). Solo avisa y la migración sigue (decisión de la revisión): lo que corre después es una transacción que SQLite serializa con los
+    demás escritores, y el respaldo previo se comprueba aparte; no hay valor de retorno porque nadie decide con él."""
     con = sqlite3.connect(ruta_bd)
     try:
-        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        ocupada = con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
     finally:
         con.close()
+    if ocupada:
+        print("AVISO: no se pudo consolidar el archivo -wal de la base: otro programa la está usando "
+              "(¿la aplicación abierta?). Lo confirmado sigue a salvo y el respaldo previo lo incluye, "
+              "pero conviene cerrar la aplicación antes de migrar.")
+
+
+class RespaldoPrevioNoValido(Exception):
+    """RS.4: la copia de seguridad previa a la migración no quedó íntegra y completa; la migración no corre."""
+
+
+def _filas_que_faltan(ruta_bd, ruta_copia):
+    """`[(tabla, filas en la base, filas en la copia)]` de las tablas cuyo número de filas en la copia no es el de la base."""
+    en_base = sqlite3.connect(ruta_bd)
+    en_copia = sqlite3.connect(ruta_copia)
+    try:
+        base, copia = _contar_todas_las_tablas(en_base), _contar_todas_las_tablas(en_copia)
+    finally:
+        en_base.close()
+        en_copia.close()
+    return [(t, base.get(t), copia.get(t)) for t in sorted(set(base) | set(copia)) if base.get(t) != copia.get(t)]
+
+
+def _respaldo_previo(ruta_bd, respaldo):
+    """RS.4 (C4, PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): el respaldo previo a la migración es una copia COMPROBADA, hecha con la misma
+    función que los respaldos de la aplicación (`services.respaldo`).
+
+    Antes se copiaba solo el archivo `.db` (`shutil.copy`): con una lectura a medias de otro programa el checkpoint no termina, parte de lo
+    confirmado sigue solo en el `-wal` y la copia salió con 534 de 684 filas, integridad `ok` y `rc=0`, en 5 de 5 corridas. Ahora: (1) copia con la
+    API de respaldo de SQLite (una foto consistente que incluye lo que solo vive en el `-wal`), a un archivo provisional propio; (2) comprueba su
+    integridad con una conexión nueva; (3) comprueba que tiene TODAS las filas de cada tabla; solo entonces la renombra a `respaldo`. Si algo falla
+    lanza `RespaldoPrevioNoValido` y no queda ningún archivo a medias."""
+    parcial = _nombre_provisional(respaldo)
+    try:
+        try:
+            _copiar_con_api(ruta_bd, parcial)
+        except Exception as ex:
+            raise RespaldoPrevioNoValido(f"no se pudo copiar la base ({type(ex).__name__}: {ex})") from ex
+        estado, detalle = _integridad(parcial)
+        if estado != ESTADO_OK:
+            raise RespaldoPrevioNoValido(f"la copia no pasó la comprobación de integridad ({estado}: {detalle})")
+        faltan = _filas_que_faltan(ruta_bd, parcial)
+        if faltan:
+            lista = "; ".join(f"{t}: {b} filas en la base y {c} en la copia" for t, b, c in faltan[:5])
+            raise RespaldoPrevioNoValido(f"la copia no tiene las mismas filas que la base ({lista}): puede que otro programa esté escribiendo en ella")
+        try:
+            os.replace(parcial, respaldo)
+        except OSError as ex:           # en Windows un antivirus o el indexador con el archivo abierto lo impide: ALERTA y no una traza de Python
+            raise RespaldoPrevioNoValido(f"no se pudo dejar la copia con su nombre definitivo ({type(ex).__name__}: {ex})") from ex
+    finally:
+        _quitar_con_laterales(parcial)
 
 
 def _copiar_set_sqlite(ruta_origen, ruta_destino):
@@ -651,13 +708,18 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         sys.exit(1)
 
     # I3/F-BD3: consolidar el WAL de la BD entrante ANTES del backup --
-    # preserva el contenido lógico (solo lo reubica del -wal al .db), y
-    # garantiza que el backup por copia simple del .db sea la base COMPLETA
-    # aunque la BD haya llegado con un -wal sin consolidar.
+    # preserva el contenido lógico (solo lo reubica del -wal al .db). RS.4: el
+    # backup ya no depende de esto (se hace con la API de respaldo de SQLite,
+    # que lee a través del -wal); si otro programa impide consolidar, se avisa.
     _consolidar_wal(ruta_bd)
 
     respaldo = f"{ruta_bd}.pre_migracion_{datetime.now():%Y%m%d_%H%M%S}.bak"
-    shutil.copy(ruta_bd, respaldo)
+    try:
+        _respaldo_previo(ruta_bd, respaldo)
+    except RespaldoPrevioNoValido as ex:
+        print(f"ALERTA: no se pudo hacer una copia completa y comprobada de la base antes de migrar: {ex}. "
+              f"Se aborta sin hacer ningún cambio.")
+        sys.exit(1)
     print(f"Backup creado: {respaldo}")
 
     (sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc,

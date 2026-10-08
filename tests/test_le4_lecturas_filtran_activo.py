@@ -146,9 +146,9 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("data/ManejoDatos/load.py", 2947): "tabla dinámica (_mostrar_tabla_generica -- módulo TAC/Catphan: 'config[\"tabla\"]' es una de las 7 hijas de TAC, PENDIENTE-LF hoy; JOIN literal con 'pruebas' (también PENDIENTE-LF). LF: corregido el gap que decía \"ninguna está en TABLAS_ANULABLES\" (cierto antes de LF2) -- ahora filtra las DOS con `filtro_t`/`filtro_p` calificados por alias, invisibles para el detector de texto por ir en variables intermedias)",  # FS.1 (06-10): 2942->2947
     # scripts/: excepciones censales explícitas (contrato regla 5) --
     # documentadas en cada archivo, no solo aquí.
-    ("scripts/migrar_bd_a_estandar.py", 147): "migración/censo (_contar_qc)",
-    ("scripts/migrar_bd_a_estandar.py", 179): "migración/censo (_contar_todas_las_tablas)",
-    ("scripts/migrar_bd_a_estandar.py", 311): "migración/censo (_contar_catalogos_base)",
+    ("scripts/migrar_bd_a_estandar.py", 204): "migración/censo (_contar_qc)",  # RS.4 (08-10): 147->204
+    ("scripts/migrar_bd_a_estandar.py", 236): "migración/censo (_contar_todas_las_tablas)",  # RS.4 (08-10): 179->236
+    ("scripts/migrar_bd_a_estandar.py", 368): "migración/censo (_contar_catalogos_base)",  # RS.4 (08-10): 311->368
     ("scripts/observador_contrato.py", 154): "censo (OB1, censo.total -- cuenta TODAS las filas a propósito)",
     ("scripts/observador_contrato.py", 158): "censo (OB1, censo.activas -- calcula su propio filtro, no importa filtro_activo para no arrastrar PyQt5)",
     ("scripts/observador_contrato.py", 167): "censo (OB1, vigente -- mismo motivo)",
@@ -371,13 +371,13 @@ SITIOS_CENSALES_LITERALES = {
         "T.4, misma razón que la línea 133 -- identidad por lote sobre "
         "TipoCalibracion, para que una calibración anulada también siga "
         "identificándose en su rastro.",
-    ("scripts/migrar_bd_a_estandar.py", 121):
+    ("scripts/migrar_bd_a_estandar.py", 178):  # RS.4 (08-10): 121->178
         "migración (_contar_centinela): cuenta las filas de `controles` con "
         "el centinela histórico de 2º físico (' ---- ') para decidir si hay "
         "que normalizarlas. Tiene que ver TODAS: una fila anulada con el "
         "dato mal sigue teniendo el dato mal, y filtrar dejaría el histórico "
         "a medio migrar.",
-    ("scripts/migrar_bd_a_estandar.py", 355):
+    ("scripts/migrar_bd_a_estandar.py", 412):  # RS.4 (08-10): 355->412
         "migración (el UPDATE que normaliza ese centinela a NULL): misma "
         "razón que la cuenta de arriba -- si la cuenta ve una fila y el "
         "UPDATE no, la migración se quedaría a medias sin avisar.",
