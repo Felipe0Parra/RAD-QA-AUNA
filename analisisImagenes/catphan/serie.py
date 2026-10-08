@@ -80,7 +80,7 @@ class SerieCT:
     cortes: list  # list[CorteCT], en orden espacial ascendente
     series_descartadas: dict  # {serie_uid: n_archivos}
     no_imagen: int
-    pixel_mm: tuple
+    pixel_mm: Optional[tuple]   # CD.3: el PixelSpacing que publica el archivo, o None si no lo trae (antes (1.0, 1.0): un tamaño de pixel inventado)
     # SE.1 (05-10-2026, DP-149): el `SliceThickness` del corte espacialmente PRIMERO (el mismo de donde salen kV y mA), o `None` si el equipo no lo
     # publica (etiqueta ausente, vacia o sin numero). Antes: un `0.0` inventado si faltaba, y una carga que no abria (`float(None)`) si estaba vacia.
     espesor_mm: Optional[float]
@@ -98,12 +98,46 @@ class SerieCT:
     # `series_descartadas` conserva su forma para lo que ya la usa.
     # {serie_uid: {"n", "modelo", "estacion", "descripcion_serie"}}
     detalle_series_descartadas: dict = field(default_factory=dict)
+    # CD.3 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md, B6): lo que la carga dejo FUERA, contado aparte para decirlo. `ilegibles`: archivos .dcm que no se pudieron leer (antes se
+    # sumaban a `no_imagen` y se presentaban como «es normal»; un subdirectorio llamado `x.dcm` y los `._x.dcm` de macOS no son archivos dañados y no cuentan). `sin_extension`: nombres de
+    # cortes de CT DE ESTA SERIE cuyo archivo no termina en .dcm (antes se ignoraban sin aviso: se cargaban 101 cortes de 102 y nadie lo sabia); `sin_extension_otras`: los de OTRA serie de la
+    # carpeta (un localizador sin .dcm no hace incompleta la serie que se carga, pero tampoco se lee).
+    ilegibles: int = 0
+    sin_extension: list = field(default_factory=list)
+    sin_extension_otras: list = field(default_factory=list)
 
 
 def _normal_desde_orientacion(iop):
     fila = np.array(iop[0:3], dtype=float)
     columna = np.array(iop[3:6], dtype=float)
     return np.cross(fila, columna)
+
+
+def _pixel_mm(ds):
+    """CD.3: el `PixelSpacing` que el archivo publica como tupla de floats, o `None` si no lo trae."""
+    valor = getattr(ds, "PixelSpacing", None)
+    if valor is None:
+        return None
+    return tuple(float(v) for v in valor)
+
+
+def _encabezado_dicom(ruta):
+    """CD.3: el encabezado DICOM de `ruta` (sin pixeles), o `None` si no es un archivo DICOM legible. Sin `force`: un archivo que no es DICOM falla en el preambulo, rapido."""
+    try:
+        return pydicom.dcmread(ruta, stop_before_pixels=True)
+    except Exception:
+        return None
+
+
+def es_archivo_dicom(ruta) -> bool:
+    """CD.3: ¿`ruta` es un archivo DICOM (de cualquier clase), sea cual sea su nombre?"""
+    return _encabezado_dicom(ruta) is not None
+
+
+def es_corte_de_ct(ruta) -> bool:
+    """CD.3: ¿este archivo (sea cual sea su nombre) es un corte de CT?"""
+    ds = _encabezado_dicom(ruta)
+    return ds is not None and str(getattr(ds, "SOPClassUID", "")) == CT_IMAGE_STORAGE
 
 
 def leer_serie(carpeta: str) -> SerieCT:
@@ -122,17 +156,33 @@ def leer_serie(carpeta: str) -> SerieCT:
       apilar de forma consistente.
     - Si el paso entre cortes no es uniforme, lo anota en `avisos` sin
       fallar (algunas reconstrucciones legítimas varían el paso).
+    - CD.3: dice lo que dejó fuera -- `ilegibles` (archivos .dcm que no se
+      pudieron leer; no cuentan una subcarpeta `x.dcm` ni los `._x.dcm` de
+      macOS), `sin_extension` (cortes de CT de la serie elegida cuyo archivo
+      no termina en .dcm, que la carga no lee) y `sin_extension_otras` (los
+      de otra serie) -- y deja `pixel_mm` en `None` si el archivo no trae
+      `PixelSpacing`, en vez de inventar (1.0, 1.0).
     """
     candidatos = []
     no_imagen = 0
+    ilegibles = 0
+    sin_extension_todas = []                              # [(nombre, SeriesInstanceUID)] de los cortes de CT que la carga NO lee (solo lee .dcm)
     for nombre in sorted(os.listdir(carpeta)):
-        if not nombre.lower().endswith(".dcm"):
-            continue
         ruta = os.path.join(carpeta, nombre)
+        if not os.path.isfile(ruta):
+            continue                                      # CD.3 (revision): una subcarpeta -- aunque se llame `x.dcm` -- no es un archivo que la carga deba leer ni echar de menos
+        if not nombre.lower().endswith(".dcm"):
+            ds_sin_extension = _encabezado_dicom(ruta)
+            if ds_sin_extension is not None and str(getattr(ds_sin_extension, "SOPClassUID", "")) == CT_IMAGE_STORAGE:
+                sin_extension_todas.append((nombre, str(getattr(ds_sin_extension, "SeriesInstanceUID", ""))))     # CD.3: se cuenta para decirlo
+            continue
+        if nombre.startswith("._"):
+            no_imagen += 1                                # CD.3 (revision): el «recurso» que macOS deja junto a cada archivo en un disco FAT/exFAT (AppleDouble): ni es un corte ni un archivo dañado
+            continue
         try:
             ds = pydicom.dcmread(ruta, stop_before_pixels=True)
         except Exception:
-            no_imagen += 1
+            ilegibles += 1                                # CD.3: antes `no_imagen += 1` (se presentaba como «es normal»)
             continue
         if str(getattr(ds, "SOPClassUID", "")) != CT_IMAGE_STORAGE:
             no_imagen += 1
@@ -149,21 +199,22 @@ def leer_serie(carpeta: str) -> SerieCT:
 
     serie_uid = max(por_serie, key=lambda k: len(por_serie[k]))
     elegidos = por_serie[serie_uid]
+    sin_extension = [n for n, uid in sin_extension_todas if uid == serie_uid]            # CD.3: los de ESTA serie hacen que falten cortes
+    sin_extension_otras = [n for n, uid in sin_extension_todas if uid != serie_uid]
     series_descartadas = {
         uid: len(items) for uid, items in por_serie.items() if uid != serie_uid
     }
 
     primero = elegidos[0][1]
-    pixel_mm = tuple(float(v) for v in getattr(primero, "PixelSpacing", (1.0, 1.0)))
+    pixel_mm = _pixel_mm(primero)
     filas = int(getattr(primero, "Rows"))
     columnas = int(getattr(primero, "Columns"))
     slope0 = float(getattr(primero, "RescaleSlope", 1))
     intercept0 = float(getattr(primero, "RescaleIntercept", 0))
 
     for ruta, ds in elegidos:
-        pixel_i = tuple(float(v) for v in getattr(ds, "PixelSpacing", (1.0, 1.0)))
         if (
-            pixel_i != pixel_mm
+            _pixel_mm(ds) != pixel_mm
             or int(getattr(ds, "Rows")) != filas
             or int(getattr(ds, "Columns")) != columnas
             or float(getattr(ds, "RescaleSlope", 1)) != slope0
@@ -242,6 +293,9 @@ def leer_serie(carpeta: str) -> SerieCT:
         etiquetas=etiquetas,
         avisos=avisos,
         detalle_series_descartadas=detalle_series_descartadas,
+        ilegibles=ilegibles,
+        sin_extension=sin_extension,
+        sin_extension_otras=sin_extension_otras,
     )
 
 
@@ -340,7 +394,7 @@ def adquisicion_de_serie(serie: SerieCT) -> dict:
         "kernel": _valor_simple(e.get("ConvolutionKernel")),
         "filtro": _valor_simple(e.get("FilterType")),
         "fov_mm": _valor_simple(e.get("ReconstructionDiameter")),
-        "pixel_mm": _valor_simple(serie.pixel_mm[0]),
+        "pixel_mm": None if serie.pixel_mm is None else _valor_simple(serie.pixel_mm[0]),     # CD.3: sin PixelSpacing, vacio y no 1.0
         "posicion_paciente": _valor_simple(e.get("PatientPosition")),
         "n_cortes": len(serie.cortes),
     }

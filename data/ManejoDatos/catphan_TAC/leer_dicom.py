@@ -12,7 +12,7 @@ from data.ManejoDatos.catphan_TAC.slice_matcher import detectar_y_resolver_modul
 from analisisImagenes.catphan import escala as escala_mod
 from analisisImagenes.catphan.orientacion import angulo_en_imagen
 from analisisImagenes.catphan import ventana as ventana_mod
-from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie, ventana_de_serie
+from analisisImagenes.catphan.serie import adquisicion_de_serie, es_archivo_dicom, es_corte_de_ct, leer_serie, ventana_de_serie
 from data.ManejoDatos.catphan_TAC.ventana_metadatos import mostrar_ventana_metadatos
 from html import escape as html_escape
 from services.registro_errores import registrar_error
@@ -153,11 +153,20 @@ def motivo_de_fallo_al_instalar(carpeta, error, ruta_anterior, recuperada=True, 
     return f"No se pudo cargar la carpeta «{carpeta}»: {causa}. No se cambió nada. {quedo}"
 
 
+# CD.3 (revision): cuantos archivos de una carpeta se abren para mirar si son DICOM al explicar por que no cargo. Mas alla, el aviso dice «al menos N»: no se inventa un numero ni se
+# abren decenas de miles de archivos solo para redactar un aviso.
+TOPE_ARCHIVOS_A_REVISAR = 2000
+
+
 def motivo_de_no_carga(carpeta, error):
     """SE.5 (PLAN_GUARDADO_SIN_ESPESOR_Y_RESPALDOS_05-10.md, DP-149): por qué una carpeta no cargó, dicho para una persona. Sin Qt: mira la carpeta y el texto del
     error de `DicomVolume.error_de_carga`. Antes elegir una carpeta que no servía (la de arriba de la que tiene los `.dcm`, una vacía, archivos sin extensión, una
     serie no uniforme) no hacía NADA en pantalla: `_load_dicoms` atrapaba la excepción con un `print` y el físico no sabía si había elegido mal o si el programa
-    había fallado -- con el campo de espesor de solo lectura, eso terminaba en 'no deja guardar'."""
+    había fallado -- con el campo de espesor de solo lectura, eso terminaba en 'no deja guardar'.
+
+    CD.3 (B5, B6 y revisión): un archivo DICOM sin la extensión .dcm se reconoce por su CONTENIDO (los cortes con nombre de UID, «1.2.840...», tienen puntos); si hay `.dcm` pero ninguno es un
+    corte de CT legible, el aviso cuenta aparte los que no se pudieron leer y los cortes de CT sin `.dcm` (antes decía solo «ninguno es una imagen de CT: pueden ser estructuras de
+    radioterapia», que es falso con archivos dañados y esconde cortes que bastaría renombrar); una falta de memoria se dice como tal."""
     if not carpeta or not os.path.isdir(carpeta):
         return f"La carpeta elegida no existe o no se puede abrir: {carpeta}"
     try:
@@ -166,6 +175,12 @@ def motivo_de_no_carga(carpeta, error):
         return f"No se pudo leer la carpeta elegida ({ex})."
     archivos = [e for e in entradas if os.path.isfile(os.path.join(carpeta, e))]
     con_dcm = [e for e in archivos if e.lower().endswith(".dcm")]
+    sin_dcm = [e for e in archivos if not e.lower().endswith(".dcm")]
+
+    def cortes_de_ct_sin_dcm():
+        revisados = sin_dcm[:TOPE_ARCHIVOS_A_REVISAR]
+        return [e for e in revisados if es_corte_de_ct(os.path.join(carpeta, e))], len(sin_dcm) > TOPE_ARCHIVOS_A_REVISAR
+
     if not con_dcm:
         con_dicom_adentro = []
         for sub in (e for e in entradas if os.path.isdir(os.path.join(carpeta, e))):
@@ -178,20 +193,42 @@ def motivo_de_no_carga(carpeta, error):
             nombres = ", ".join(f"'{n}'" for n in con_dicom_adentro[:3]) + (f" y {len(con_dicom_adentro) - 3} más" if len(con_dicom_adentro) > 3 else "")
             return (f"La carpeta elegida no tiene archivos DICOM (.dcm) directamente: están una carpeta más adentro, en {nombres}. "
                     "Elija esa subcarpeta.")
-        sin_extension = [e for e in archivos if "." not in e]
+        # CD.3 (B6): un archivo DICOM sin la extension .dcm se reconoce por su CONTENIDO, no por su nombre: los cortes con nombre de UID («1.2.840...») tienen puntos y se declaraban «sin archivos
+        # DICOM». Un archivo que no es DICOM (notas.txt) no cuenta; uno sin punto en el nombre sigue contando como antes.
+        dicom_sin_extension = [e for e in sin_dcm[:TOPE_ARCHIVOS_A_REVISAR] if es_archivo_dicom(os.path.join(carpeta, e))]
+        sin_extension = dicom_sin_extension or [e for e in sin_dcm if "." not in e]
         if sin_extension:
+            cuantos = f"al menos {len(sin_extension)}" if dicom_sin_extension and len(sin_dcm) > TOPE_ARCHIVOS_A_REVISAR else str(len(sin_extension))
             return (f"La carpeta elegida no tiene archivos con extensión .dcm, y la aplicación solo lee archivos .dcm. "
-                    f"Hay {len(sin_extension)} archivo(s) sin extensión, por ejemplo '{sin_extension[0]}'.")
+                    f"Hay {cuantos} archivo(s) sin extensión .dcm, por ejemplo '{sin_extension[0]}'.")
         if not entradas:
             return "La carpeta elegida está vacía."
         return "La carpeta elegida no tiene archivos DICOM (.dcm)."
     texto = str(error or "")
     if "CT Image Storage" in texto:
-        return (f"La carpeta tiene {len(con_dcm)} archivo(s) .dcm, pero ninguno es una imagen de CT (CT Image Storage): "
-                "pueden ser estructuras de radioterapia u otros objetos DICOM.")
+        ilegibles = [e for e in con_dcm if not e.startswith("._") and not es_archivo_dicom(os.path.join(carpeta, e))]
+        cortes_sin_dcm, tope = cortes_de_ct_sin_dcm()
+        if not ilegibles:
+            mensaje = (f"La carpeta tiene {len(con_dcm)} archivo(s) .dcm, pero ninguno es una imagen de CT (CT Image Storage): "
+                       "pueden ser estructuras de radioterapia u otros objetos DICOM.")
+        else:
+            leidos_que_no_son_ct = len([e for e in con_dcm if not e.startswith("._")]) - len(ilegibles)
+            partes = [f"{len(ilegibles)} no se pudieron leer (dañados o incompletos)"]
+            if leidos_que_no_son_ct:
+                partes.append(f"{leidos_que_no_son_ct} no son imagen de CT (pueden ser estructuras de radioterapia u otros objetos DICOM)")
+            mensaje = f"La carpeta tiene {len(con_dcm)} archivo(s) .dcm, pero ninguno se pudo leer como imagen de CT: " + " y ".join(partes) + "."
+        if cortes_sin_dcm:
+            ejemplos = ", ".join(f"'{n}'" for n in cortes_sin_dcm[:3]) + (f" y {len(cortes_sin_dcm) - 3} más" if len(cortes_sin_dcm) > 3 else "")
+            cuantos = f"al menos {len(cortes_sin_dcm)}" if tope else str(len(cortes_sin_dcm))
+            mensaje += (f" Además hay {cuantos} corte(s) de CT cuyo archivo no termina en .dcm ({ejemplos}): la aplicación solo lee archivos .dcm. "
+                        "Renómbrelos con la extensión .dcm y cargue la carpeta de nuevo.")
+        return mensaje
     if "no es uniforme" in texto:
         return ("Los cortes de la serie principal de la carpeta no tienen el mismo tamaño, espaciado o escala "
                 f"(PixelSpacing, Rows, Columns, RescaleSlope, RescaleIntercept), así que no se pueden apilar en un volumen. Detalle: {texto}")
+    if texto == "MemoryError" or "Unable to allocate" in texto:
+        return ("No hay memoria suficiente para cargar esta carpeta. Cierre otros programas (o cargue una serie con menos cortes) y vuelva a intentarlo. "
+                f"Detalle: {texto}")
     return f"No se pudo cargar la carpeta como una serie de CT. Detalle: {texto or 'sin detalle'}"
 
 
@@ -262,6 +299,9 @@ class DicomVolume:
         self.series_descartadas = {}
         self.detalle_series_descartadas = {}
         self.no_imagen = 0
+        self.ilegibles = 0                  # CD.3: archivos .dcm que no se pudieron leer
+        self.sin_extension = []             # CD.3: cortes de CT de esta serie cuyo archivo no termina en .dcm (la carga solo lee .dcm)
+        self.sin_extension_otras = []       # CD.3: los de otra serie de la carpeta
         self.avisos = []
 
         _registrar_etapa("inicio _load_dicoms", self.ruta_carpeta)
@@ -274,6 +314,9 @@ class DicomVolume:
             self.series_descartadas = serie.series_descartadas
             self.detalle_series_descartadas = serie.detalle_series_descartadas
             self.no_imagen = serie.no_imagen
+            self.ilegibles = serie.ilegibles
+            self.sin_extension = serie.sin_extension
+            self.sin_extension_otras = serie.sin_extension_otras
             self.avisos = serie.avisos
 
             for uid, n in serie.series_descartadas.items():
@@ -282,6 +325,10 @@ class DicomVolume:
             if serie.no_imagen:
                 print(f"Advertencia: {serie.no_imagen} archivo(s) de la carpeta "
                       "no son CT Image Storage y se ignoraron.")
+            if serie.ilegibles:
+                print(f"Advertencia: {serie.ilegibles} archivo(s) .dcm de la carpeta no se pudieron leer y se ignoraron.")
+            if serie.sin_extension:
+                print(f"Advertencia: {len(serie.sin_extension)} corte(s) de CT de la carpeta no terminan en .dcm y no se leyeron.")
             for aviso in serie.avisos:
                 print(f"Advertencia: {aviso}")
 
@@ -343,8 +390,15 @@ class DicomVolume:
             _registrar_etapa("EXCEPCION en _load_dicoms", str(e))
             print(f"Error durante la carga de DICOM: {e}")
             self.error_de_carga = str(e) or type(e).__name__
-            self.volumen = None
-            self.volumen_hu = None
+            self._soltar_lo_leido()
+
+    def _soltar_lo_leido(self):
+        """CD.3 (revision): una carga que falla no deja nada vivo -- ni el volumen, ni los cortes leidos (los arreglos ya decodificados y el `PixelData` de cada corte: otras dos veces el
+        volumen crudo) -- mientras el aviso del fallo esta abierto: es justo cuando falta memoria y la carpeta anterior sigue activa."""
+        self.volumen = None
+        self.volumen_hu = None
+        self.cortes = []
+        gc.collect()
 
     def _medir_escala_de_hu(self):
         """B.3: mide el corrimiento de la escala de HU y lo DECLARA en la adquisición de la serie (que es lo que la
@@ -404,8 +458,12 @@ class DicomVolume:
                               f"volumen_hu dtype={self.volumen_hu.dtype}")
 
         except Exception as e:
+            # CD.3 (B5): ya no hay volumen. Antes `volumen_hu` quedaba como el volumen CRUDO sin escala (unidades equivocadas con apariencia de HU) y un fallo al decodificar los pixeles
+            # dejaba `error_de_carga` en None («Detalle: sin detalle»).
             print(f"Advertencia: Error en conversión HU: {e}")
-            self.volumen_hu = self.volumen.astype(np.float32) if self.volumen is not None else None
+            _registrar_etapa("EXCEPCION en _load_standard_volume", str(e))
+            self.error_de_carga = str(e) or type(e).__name__
+            self._soltar_lo_leido()
 
     def _load_large_volume(self):
         """Carga optimizada para volúmenes grandes."""
@@ -456,7 +514,9 @@ class DicomVolume:
 
         except Exception as e:
             print(f"Advertencia: Error en carga optimizada: {e}")
-            self.volumen_hu = None
+            _registrar_etapa("EXCEPCION en _load_large_volume", str(e))
+            self.error_de_carga = str(e) or type(e).__name__          # CD.3: el motivo real llega al aviso (antes «Detalle: sin detalle»)
+            self._soltar_lo_leido()
 
     """Métodos para obtener información del volumen"""
     def get_shape(self):

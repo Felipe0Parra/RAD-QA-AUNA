@@ -15,8 +15,11 @@ carpeta mixta de A.3), y lo hace ANTES de cualquier análisis:
      fila por fila. Si las imágenes son de otro equipo, la ventana lo dice
      arriba y en rojo.
   4. LA CARPETA -- series descartadas (y de qué modelo), archivos que no son
-     imagen CT, paso no uniforme. Dos niveles: informativo (un RTSTRUCT es
-     normal y no debe gritar) y atención (más de una serie).
+     imagen CT, paso no uniforme y (CD.3) lo que la carga dejó fuera: archivos
+     .dcm que no se pudieron leer y cortes de CT cuyo archivo no termina en .dcm.
+     Dos niveles: informativo (un RTSTRUCT es normal y no debe gritar) y
+     atención (más de una serie; archivos ilegibles; cortes de la serie que
+     faltan por llamarse sin .dcm).
 
 Botones Continuar y Cancelar. Cancelar no carga nada. Continuar con alguna fila
 que no cumple pide una confirmación explícita; la desviación queda archivada
@@ -109,6 +112,11 @@ class ModeloVentana:
         return f"{cuerpo}.\n\n{cola}\n\n¿Desea continuar?"
 
 
+def _ejemplos(nombres) -> str:
+    """Hasta tres nombres entre comillas y «y N más» si hay más."""
+    return ", ".join(f"'{n}'" for n in nombres[:3]) + (f" y {len(nombres) - 3} más" if len(nombres) > 3 else "")
+
+
 def _carpeta(vol, adq: dict) -> list:
     filas = []
     n_cortes = adq.get("n_cortes")
@@ -140,6 +148,18 @@ def _carpeta(vol, adq: dict) -> list:
     if no_imagen:
         filas.append((INFO, f"{no_imagen} archivo(s) que no son imagen CT (por ejemplo, un RTSTRUCT) "
                             f"se ignoraron: es normal."))
+    # CD.3 (B6): lo que la carga dejo fuera y NO es normal -- la serie puede estar incompleta
+    ilegibles = getattr(vol, "ilegibles", 0) or 0
+    if ilegibles:
+        filas.append((ATENCION, f"{ilegibles} archivo(s) .dcm no se pudieron leer (dañados o incompletos) y se ignoraron: la serie puede estar incompleta."))
+    sin_extension = list(getattr(vol, "sin_extension", None) or [])
+    if sin_extension:
+        filas.append((ATENCION, f"{len(sin_extension)} corte(s) de CT no se leyeron porque su archivo no termina en .dcm ({_ejemplos(sin_extension)}): la serie puede estar incompleta. "
+                                "Renómbrelos con la extensión .dcm y cargue la carpeta de nuevo."))
+    otras = list(getattr(vol, "sin_extension_otras", None) or [])
+    if otras:
+        filas.append((INFO, f"{len(otras)} corte(s) de CT de otra serie tampoco se leyeron porque su archivo no termina en .dcm ({_ejemplos(otras)}): "
+                            "no pertenecen a la serie que se carga."))
     for aviso in getattr(vol, "avisos", None) or []:
         filas.append((ATENCION, str(aviso)))
     return filas
