@@ -1,6 +1,8 @@
 import os
 import sys
 import gc
+import hashlib
+import traceback
 import weakref
 from datetime import datetime
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel, QSlider, QWidget, QPushButton, QFileDialog, QDialog, QFrame, QApplication, QMessageBox)
@@ -12,6 +14,7 @@ from analisisImagenes.catphan.orientacion import angulo_en_imagen
 from analisisImagenes.catphan import ventana as ventana_mod
 from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie, ventana_de_serie
 from data.ManejoDatos.catphan_TAC.ventana_metadatos import mostrar_ventana_metadatos
+from services.registro_errores import registrar_error
 import pydicom
 import pydicom.data
 
@@ -131,6 +134,22 @@ def _tamano_volumen_estimado_bytes(dicoms):
             continue
         total += filas * columnas * (bits // 8)
     return total
+
+
+def motivo_de_fallo_al_instalar(carpeta, error, ruta_anterior, recuperada=True, por_que=None):
+    """CD.1 (B1): el aviso cuando la carpeta SI se leyo pero instalarla fallo a medias (el dibujo, la deteccion de modulos...) y el visor volvio a la carpeta anterior. Sin Qt. Dice cual
+    carpeta, por que (el texto de la causa; el rastro completo va a `error_log.txt`) y que quedo activo: nada cambio -- salvo que la anterior no se pudo recuperar
+    (`recuperada=False`: se vuelve a leer del disco porque guardarla en memoria subia el pico de la carga), y entonces lo dice. `por_que` es la razon de esa no recuperacion cuando no es
+    que la carpeta no abriera: hoy, que la carpeta ya no contiene la misma serie que estaba cargada (revision de CD.1, R2-01)."""
+    causa = str(error).strip() or type(error).__name__
+    if ruta_anterior and not recuperada:
+        if por_que:
+            cola = f"La carpeta que estaba cargada ({ruta_anterior}) {por_que}"
+        else:
+            cola = f"Tampoco se pudo volver a abrir la carpeta que estaba cargada ({ruta_anterior})"
+        return f"No se pudo cargar la carpeta «{carpeta}»: {causa}. {cola}: no hay ninguna carpeta cargada. Elija la carpeta otra vez."
+    quedo = f"Sigue activa la carpeta anterior: {ruta_anterior}." if ruta_anterior else "No hay ninguna carpeta cargada."
+    return f"No se pudo cargar la carpeta «{carpeta}»: {causa}. No se cambió nada. {quedo}"
 
 
 def motivo_de_no_carga(carpeta, error):
@@ -466,6 +485,16 @@ class DicomVolume:
         if self.volumen_hu is not None:
             return self.volumen_hu.shape[0]
         return 0
+
+    def firma_de_serie(self):
+        """CD.1 (revision, R2-01): la identidad de la serie cargada -- (UID de la serie, numero de cortes, huella de los SOPInstanceUID en orden) --, barata (unos bytes por corte, sin
+        tocar un pixel). El visor no guarda el volumen anterior mientras detecta modulos (subia el pico de memoria), asi que, si la instalacion de la carpeta nueva falla y hay que
+        volver a leer la anterior, esta firma dice si lo que se vuelve a leer es la MISMA serie: una carpeta puede cambiar en disco (otra serie copiada encima, cortes agregados o
+        retirados) entre la primera lectura y la recuperacion."""
+        huella = hashlib.sha256()
+        for ds in self.cortes:
+            huella.update(str(getattr(ds, "SOPInstanceUID", "")).encode("utf-8", "replace") + b"\n")
+        return (self.serie_uid, len(self.cortes), huella.hexdigest())
 
     def get_corte(self, idx):
         """
@@ -921,6 +950,7 @@ class VisualizadorDicom(QWidget):
         super().__init__(parent)
         self.idx_actual = 0
         self.vol = None
+        self.ruta_carpeta = None          # CD.1: sin carpeta cargada, ninguna ruta (antes el atributo no existia hasta elegir una)
         self.target_canvas = target_canvas
         self.use_external_canvas = target_canvas is not None
 
@@ -1041,29 +1071,32 @@ class VisualizadorDicom(QWidget):
 
     def seleccionar_carpeta(self):
         opciones = QFileDialog.Options()
-        self.ruta_carpeta = QFileDialog.getExistingDirectory(
+        ruta = QFileDialog.getExistingDirectory(
             self, "Seleccionar Carpeta DICOM", "", options=opciones
         )
 
-        if self.ruta_carpeta:
-            self.visualizar_imagen_cargada()
-            return self.ruta_carpeta
+        # CD.1 (B2): cancelar el selector NO cambia nada. Antes se asignaba `''` a `ruta_carpeta` con el volumen anterior activo y todo lo que despues leyera la ruta del
+        # visor (las pruebas que se guardaban, el detector de modulos) trabajaba con una ruta vacia.
+        if not ruta:
+            return None
 
-        return None
+        self.visualizar_imagen_cargada(ruta)
+        return self.ruta_carpeta                 # la carpeta que queda ACTIVA: la elegida si cargo; la anterior (o None) si no
 
     def visualizar_imagen_cargada(self, ruta_carpeta=None):
-        if ruta_carpeta:
-            self.ruta_carpeta = ruta_carpeta
-
+        # CD.1 (revision, P-04): la carpeta a cargar es LOCAL hasta que queda instalada. `self.ruta_carpeta` es la de la carpeta ACTIVA y no se toca antes: una excepcion del constructor del
+        # volumen o de la ventana de A.3 dejaba `ruta_carpeta` apuntando a la carpeta elegida con el volumen anterior todavia activo.
+        ruta = ruta_carpeta or self.ruta_carpeta
+        if not ruta:
+            return
 
         # Cargar volumen DICOM
-        vol_nuevo = DicomVolume(self.ruta_carpeta)
+        vol_nuevo = DicomVolume(ruta)
         if vol_nuevo.volumen_hu is None:
             # SE.5: una carpeta que no carga lo DICE (antes: un `print` y nada en pantalla), y el volumen anterior, si lo había, sigue activo (como al
             # cancelar la ventana de A.3): el volumen fallido no lo reemplaza.
             print("Error: No se pudo cargar el volumen DICOM.")
-            texto = motivo_de_no_carga(self.ruta_carpeta, vol_nuevo.error_de_carga)
-            self.ruta_carpeta = self.vol.ruta_carpeta if self.vol is not None else None
+            texto = motivo_de_no_carga(ruta, vol_nuevo.error_de_carga)
             QMessageBox.warning(self, "Carpeta DICOM", texto)
             return
 
@@ -1075,64 +1108,83 @@ class VisualizadorDicom(QWidget):
         # todo como estaba antes de elegir la carpeta (un volumen anterior, si
         # lo había, sigue siendo el activo).
         if not bool(self.confirmador_de_carga(self, vol_nuevo, self.equipo_seleccionado)):
-            self.ruta_carpeta = self.vol.ruta_carpeta if self.vol is not None else None
             return
 
-        self.vol = vol_nuevo
-        self.sel_imagen_btn.hide()
+        # CD.1 (B1): o la carpeta nueva queda instalada ENTERA, o la anterior sigue activa INTACTA y se avisa con el motivo. Antes el volumen nuevo se instalaba, el cuadro de carga modal se
+        # abria y cualquier fallo del medio (el dibujo con el corte de la serie anterior fuera de rango, la deteccion de modulos...) dejaba el cuadro abierto y modal, la señal sin emitir
+        # y la etiqueta y los parametros de la serie anterior con el volumen nuevo.
+        anterior = self._foto_de_la_carga()
+        try:
+            self.vol = vol_nuevo
+            self.ruta_carpeta = ruta
+            self.idx_actual = 0                                   # el corte 0 de la serie NUEVA (el de la anterior puede no existir en ella)
+            self._reponer_deslizador_de_cortes()
+            self.sel_imagen_btn.hide()
 
-        ##############################################################################
-        """                          INTERFAZ D CARGA                              """
-        ##############################################################################
+            ##############################################################################
+            """                          INTERFAZ D CARGA                              """
+            ##############################################################################
 
-        self.loading_dialog = LoadingDialog(self, "Detectando módulos…")
-        self.loading_dialog.show()
+            self.loading_dialog = LoadingDialog(self, "Detectando módulos…")
+            self.loading_dialog.show()
 
-        # ¡IMPORTANTE!  Forzamos a Qt a procesar todos los eventos pendientes
-        # (pintado del dialogo, movimiento del ratón, etc.) antes de que
-        # la UI se bloquee por la función larga.
-        QApplication.processEvents()
+            # ¡IMPORTANTE!  Forzamos a Qt a procesar todos los eventos pendientes
+            # (pintado del dialogo, movimiento del ratón, etc.) antes de que
+            # la UI se bloquee por la función larga.
+            QApplication.processEvents()
 
-        #print("\n   ⋇⋇ Volumen DICOM cargado correctamente.")
+            #print("\n   ⋇⋇ Volumen DICOM cargado correctamente.")
 
-        # Mostrar controles
-        self.slider_wl.show()
-        self.slider_ww.show()
-        self.slider_wl_label.show()
-        self.slider_ww_label.show()
-        self.info_label.show()
-        self.elegir_corte_btn.show()
+            # Mostrar controles
+            self.slider_wl.show()
+            self.slider_ww.show()
+            self.slider_wl_label.show()
+            self.slider_ww_label.show()
+            self.info_label.show()
+            self.elegir_corte_btn.show()
 
-        # B.2: el rango de los deslizadores y su valor inicial salen del volumen y de la ventana del DICOM
-        self._ajustar_ventana_al_volumen()
+            # B.2: el rango de los deslizadores y su valor inicial salen del volumen y de la ventana del DICOM
+            self._ajustar_ventana_al_volumen()
 
-        # Aplicar ventana inicial
-        self.actualizar_ventana()
+            # Aplicar ventana inicial
+            self.actualizar_ventana()
 
-        # Emitir señal
-        #print("\n   ⪧ Señal de imagen enviada generada")
+            # Emitir señal
+            #print("\n   ⪧ Señal de imagen enviada generada")
 
-        self.resultados, self.cortes = detectar_y_resolver_modulos(
-            ruta_dicom=self.ruta_carpeta,
-        )
-        # D.1 (23-09): orientación y giro medidos por el motor para esta
-        # serie -- el fantoma es rígido, los cuatro módulos comparten el
-        # mismo valor; se toma de cualquiera que haya salido confiable.
-        # Sin ninguno confiable, "normal"/0.0 (mismo comportamiento que
-        # antes de D.1).
-        _primer_resultado = next(
-            (r for r in self.resultados.values() if r.confiable), None
-        )
-        self.orientacion = getattr(_primer_resultado, "orientacion", "normal")
-        self.roll_deg = getattr(_primer_resultado, "roll_deg", 0.0)
-            # ------------------------------------------------------------------
-        # 4️⃣  Ocultar dialogo y continuar con el resto de la UI
-        # ------------------------------------------------------------------
-        self.loading_dialog.close()          # o .accept() / .hide()
-        del self.loading_dialog              # liberar referencia
+            self.resultados, self.cortes = detectar_y_resolver_modulos(
+                ruta_dicom=ruta,
+            )
+            # D.1 (23-09): orientación y giro medidos por el motor para esta
+            # serie -- el fantoma es rígido, los cuatro módulos comparten el
+            # mismo valor; se toma de cualquiera que haya salido confiable.
+            # Sin ninguno confiable, "normal"/0.0 (mismo comportamiento que
+            # antes de D.1).
+            _primer_resultado = next(
+                (r for r in self.resultados.values() if r.confiable), None
+            )
+            self.orientacion = getattr(_primer_resultado, "orientacion", "normal")
+            self.roll_deg = getattr(_primer_resultado, "roll_deg", 0.0)
+            # parametros de la adquisición -- dentro del `try` (revision de CD.1, R2-04): lo que la instalacion asigna se asigna aqui, para que un fallo lo deshaga todo con la misma foto
+            self.kv = self.vol.kv
+            self.ma = self.vol.ma
+            self.espesor_corte = self.vol.espesor_corte
+        except Exception as e:
+            self._cerrar_el_dialogo_de_carga()
+            carpeta_nueva = vol_nuevo.ruta_carpeta
+            vol_nuevo = None                                      # la serie que no se instalo se suelta ANTES de volver a leer la anterior (no suman memoria)
+            registrar_error(f"Cargar la carpeta DICOM «{carpeta_nueva}» falló; la carpeta anterior se intenta recuperar", e)   # primero el rastro completo: despues se sueltan los marcos
+            # los marcos del rastro de la excepcion retienen sus variables locales (un corte, una vista del volumen nuevo -- que mantiene vivo el volumen entero): se sueltan ANTES de volver a
+            # leer la carpeta anterior, o el pico de memoria suma las dos series (revision de CD.1, R2-02). El marco de esta funcion sigue en ejecucion y `clear_frames` lo respeta.
+            traceback.clear_frames(e.__traceback__)
+            recuperada, por_que = self._restaurar_la_carga(anterior)
+            QMessageBox.warning(self, "Carpeta DICOM", motivo_de_fallo_al_instalar(carpeta_nueva, e, anterior["ruta_carpeta"], recuperada, por_que))
+            return
+        finally:
+            self._cerrar_el_dialogo_de_carga()                   # el cuadro de carga se cierra SIEMPRE (idempotente)
 
-        # ------------------------------------------------------------------
-        # ------------------------------------------------------------------
+        # La instalacion termina con el `try`. Lo que sigue solo ANUNCIA la carpeta ya instalada (la señal) y muestra el cuadro informativo de cortes: si el cuadro falla, la carpeta
+        # nueva queda instalada y el fallo sube como cualquier otro del cuadro (revision de CD.1, R2-04).
         self.imagen_cargada.emit(self.vol)
 
 
@@ -1140,10 +1192,6 @@ class VisualizadorDicom(QWidget):
         print(self.cortes)
         print("VISUALIZADOR QUE EMITE:", id(self))
         self.mostrar_popup_cortes(self.resultados)
-        # parametros de la adquisición
-        self.kv = self.vol.kv
-        self.ma = self.vol.ma
-        self.espesor_corte = self.vol.espesor_corte
 
         # Mostrar uso de memoria
         #print(f"   📊 Uso de memoria del volumen: {self.vol.get_memory_usage():.1f} MB")
@@ -1152,6 +1200,110 @@ class VisualizadorDicom(QWidget):
 
 
 ##########################################################################################################################################
+
+    # --- CD.1: la carga instala la carpeta nueva entera o deja la anterior intacta ---------------------------------------------------------------------------------------
+    # lo que la INSTALACION (el `try` de `visualizar_imagen_cargada`) escribe de la serie en el visor y que la foto tiene que poder reponer: los resultados de la deteccion, los cortes
+    # sugeridos, la orientacion y el giro, el rango de la ventana (`_ajustar_ventana_al_volumen`) y los parametros de adquisicion (kv, ma, espesor_corte). Sin carpeta cargada ninguno existe.
+    ATRIBUTOS_DE_LA_SERIE = ("resultados", "cortes", "orientacion", "roll_deg", "rango_ventana", "kv", "ma", "espesor_corte")
+
+    def _foto_de_la_carga(self):
+        """Lo que `visualizar_imagen_cargada` cambia en el visor (la ruta y el corte activos, los tres deslizadores con sus rangos, valores y ayudas, las tres etiquetas, y los atributos de
+        `ATRIBUTOS_DE_LA_SERIE`), para poder volver atras si instalar la carpeta nueva falla a medias -- EXCEPTO el volumen: guardarlo vivo mientras pylinac detecta los
+        modulos subia el pico de memoria de la carga hasta +205 MB (medido, TOMOGRAFO -> HALCYON_JUN: 912 -> 1117 MB) y C.2 acababa de bajarlo. Se guarda la RUTA de la carpeta activa y la
+        FIRMA de su serie (`DicomVolume.firma_de_serie`); si hay que volver, se vuelve a leer (solo en el camino de un fallo) y se comprueba que sigue siendo la misma serie."""
+        sliders = {n: (s.minimum(), s.maximum(), s.value()) for n, s in (("corte", self.slider_corte), ("wl", self.slider_wl), ("ww", self.slider_ww))}
+        return {
+            # `ruta_carpeta` es la de la carpeta ACTIVA: el visor no la asume suya hasta que la instala (`visualizar_imagen_cargada` trabaja con una ruta local)
+            "ruta_carpeta": self.ruta_carpeta, "idx_actual": self.idx_actual, "sliders": sliders,
+            "firma": None if self.vol is None else self.vol.firma_de_serie(),
+            "etiquetas": (self.slider_wl_label.text(), self.slider_ww_label.text(), self.info_label.text()),
+            "ayudas": (self.slider_wl.toolTip(), self.slider_ww.toolTip()),
+            "serie": {k: self.__dict__[k] for k in self.ATRIBUTOS_DE_LA_SERIE if k in self.__dict__},
+        }
+
+    def _reponer_deslizador_de_cortes(self):
+        """El deslizador de cortes toma el rango de la serie ACTIVA y vuelve al corte 0, sin disparar el redibujado (no es un cambio del fisico)."""
+        self.slider_corte.blockSignals(True)
+        try:
+            self.slider_corte.setRange(0, max(self.vol.get_num_cortes() - 1, 0))
+            self.slider_corte.setValue(0)
+        finally:
+            self.slider_corte.blockSignals(False)
+
+    def _cerrar_el_dialogo_de_carga(self):
+        """Cierra el cuadro modal «Detectando módulos…» si esta abierto; idempotente."""
+        dialogo = self.__dict__.pop("loading_dialog", None)
+        if dialogo is not None:
+            dialogo.close()
+            dialogo.deleteLater()
+
+    def _restaurar_la_carga(self, foto):
+        """Vuelve al estado de `foto`: el volumen anterior (se vuelve a leer su carpeta y se comprueba que sigue siendo la MISMA serie), su corte, sus deslizadores, sus etiquetas, su
+        orientacion y sus parametros. Si no habia nada cargado, o la carpeta anterior no se puede recuperar, el visor queda SIN carpeta cargada: controles ocultos, el boton de seleccionar a la
+        vista, el lienzo vacio y ningun resultado ni parametro de ninguna serie. Devuelve `(recuperada, por_que)`: `recuperada` es `False` si habia una carpeta y no se pudo recuperar -- porque ya
+        no abre o porque ya no contiene la misma serie --; `por_que` es entonces la razon de la segunda (en la primera es `None`)."""
+        ruta = foto["ruta_carpeta"]
+        self.vol = None                                              # primero se suelta la serie que no se instalo: la anterior se vuelve a leer sin sumar su memoria
+        gc.collect()
+        recuperada, por_que = ruta is None, None
+        if ruta is not None:
+            try:
+                volumen = DicomVolume(ruta)
+            except Exception as e:                                   # la carpeta pudo desaparecer (una unidad de red, un USB retirado)
+                registrar_error(f"No se pudo volver a abrir la carpeta anterior «{ruta}»", e)
+            else:
+                if volumen.volumen_hu is None:                       # `DicomVolume` atrapa sus propios errores de lectura: no lanza, deja `volumen_hu` en None
+                    registrar_error(f"No se pudo volver a abrir la carpeta anterior «{ruta}»", detalle=f"Detalle: {volumen.error_de_carga}")
+                elif foto["firma"] is not None and volumen.firma_de_serie() != foto["firma"]:
+                    por_que = "ya no contiene la misma serie que estaba cargada"
+                    registrar_error(f"La carpeta anterior «{ruta}» {por_que}", detalle=f"firma al cargarla: {foto['firma']}\nfirma ahora: {volumen.firma_de_serie()}")
+                else:
+                    self.vol, recuperada = volumen, True
+        self.ruta_carpeta = ruta if self.vol is not None else None
+        self.idx_actual = foto["idx_actual"] if self.vol is not None else 0
+        for k in self.ATRIBUTOS_DE_LA_SERIE:
+            if self.vol is not None and k in foto["serie"]:
+                setattr(self, k, foto["serie"][k])
+            else:
+                self.__dict__.pop(k, None)                           # sin carpeta cargada no hay resultados, cortes ni orientacion de ninguna serie
+        for nombre, slider in (("corte", self.slider_corte), ("wl", self.slider_wl), ("ww", self.slider_ww)):
+            minimo, maximo, valor = foto["sliders"][nombre]
+            slider.blockSignals(True)
+            try:
+                slider.setRange(minimo, maximo)
+                slider.setValue(valor)
+            finally:
+                slider.blockSignals(False)
+        self.slider_wl.setToolTip(foto["ayudas"][0])
+        self.slider_ww.setToolTip(foto["ayudas"][1])
+        if self.vol is not None:
+            try:
+                self.actualizar_ventana()                                  # vuelve a dibujar el corte de la serie anterior
+            except Exception as e:                                         # un dibujo que falla no debe tapar el aviso del fallo original
+                print(f"Aviso: no se pudo redibujar la carpeta anterior: {e}")
+            # el redibujado reescribe las etiquetas con su propio formato: las de antes se reponen DESPUES para que el visor quede exactamente como estaba
+            self.slider_wl_label.setText(foto["etiquetas"][0])
+            self.slider_ww_label.setText(foto["etiquetas"][1])
+            self.info_label.setText(foto["etiquetas"][2])
+        else:
+            self.slider_wl_label.setText(foto["etiquetas"][0])
+            self.slider_ww_label.setText(foto["etiquetas"][1])
+            for w in (self.slider_wl, self.slider_ww, self.slider_wl_label, self.slider_ww_label, self.info_label, self.elegir_corte_btn):
+                w.hide()
+            self.sel_imagen_btn.show()
+            self.info_label.setText("Corte: 0/0")
+            if self.use_external_canvas and self._current_figure is not None:      # el lienzo no se queda con el corte de la serie que no se instalo
+                self._current_figure.clear()
+                self.target_canvas.draw_idle()
+        return recuperada, por_que
+
+    def _acotar_el_corte(self):
+        """CD.1 (guarda del dibujo): un `idx_actual` que no cabe en el volumen activo se acota a su primer o ultimo corte. Antes `get_corte_normalizado` devolvia `None` y el dibujo lanzaba
+        `TypeError`; no dibujar dejaria en el lienzo el corte de la serie anterior, y eso es lo que esta tarea no permite."""
+        if self.vol is not None:
+            n = self.vol.get_num_cortes()
+            if n > 0 and not 0 <= self.idx_actual < n:
+                self.idx_actual = min(max(self.idx_actual, 0), n - 1)
 
     def _ajustar_ventana_al_volumen(self):
         """B.2: el rango de los deslizadores de nivel y ventana y su valor inicial salen del volumen cargado y de la
@@ -1198,6 +1350,7 @@ class VisualizadorDicom(QWidget):
         if not self._pending_update or not self.vol or self.vol.volumen_hu is None:
             return
 
+        self._acotar_el_corte()          # CD.1
         try:
             wl = self.slider_wl.value()
             ww = self.slider_ww.value()
@@ -1278,6 +1431,7 @@ class VisualizadorDicom(QWidget):
 
     def actualizar_ventana(self):
         import numpy as np
+        self._acotar_el_corte()          # CD.1
 
 
 

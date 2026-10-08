@@ -18,8 +18,9 @@ DESCRIPCION_AXIAL = "RT_ABDOMEN_PELVIS 2,00 Br36 S3 CD"
 DESCRIPCION_TOPOGRAMA = "Topograma 0,60 Tr20 cor"
 
 
-def escribir_corte(ruta, serie_uid, z, kv, ma, espesor, descripcion, tipo_de_imagen, instancia, con_slice_location=True):
-    """Escribe UN corte CT sintetico en `ruta`. `espesor`: numero, `None` (etiqueta vacia) o `AUSENTE` (sin etiqueta)."""
+def escribir_corte(ruta, serie_uid, z, kv, ma, espesor, descripcion, tipo_de_imagen, instancia, con_slice_location=True, semilla=0, rango_pixeles=(900, 1100)):
+    """Escribe UN corte CT sintetico en `ruta`. `espesor`: numero, `None` (etiqueta vacia) o `AUSENTE` (sin etiqueta). `semilla` y `rango_pixeles` (CD.1): dos series del mismo tamaño tienen por
+    omision PIXELES IDENTICOS en el mismo indice; con otra semilla o otro rango se distinguen una de otra (el lienzo, los rangos de la ventana)."""
     ds = Dataset()
     ds.file_meta = FileMetaDataset()
     ds.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
@@ -48,7 +49,7 @@ def escribir_corte(ruta, serie_uid, z, kv, ma, espesor, descripcion, tipo_de_ima
     ds.ImagePositionPatient = [0, 0, float(z)]
     if con_slice_location:
         ds.SliceLocation = float(z)
-    ds.PixelData = (np.random.default_rng(int(abs(z)) + 1).integers(900, 1100, (64, 64))).astype(np.int16).tobytes()
+    ds.PixelData = (np.random.default_rng(int(abs(z)) + 1 + semilla).integers(rango_pixeles[0], rango_pixeles[1], (64, 64))).astype(np.int16).tobytes()
     ds.BitsAllocated = 16
     ds.BitsStored = 16
     ds.HighBit = 15
@@ -60,16 +61,16 @@ def escribir_corte(ruta, serie_uid, z, kv, ma, espesor, descripcion, tipo_de_ima
     ds.save_as(ruta, write_like_original=False)
 
 
-def serie_axial(carpeta, espesor=2.0, n=5, kv=120, ma=343, espesores_por_corte=None):
+def serie_axial(carpeta, espesor=2.0, n=5, kv=120, ma=343, espesores_por_corte=None, semilla=0, rango_pixeles=(900, 1100)):
     """`n` cortes axiales (de 0 a 2*(n-1) mm). Los archivos se nombran en un orden de disco que NO coincide con el espacial
-    (`corte_<permutacion>.dcm`). `espesores_por_corte`: `{indice espacial: espesor}` para que un corte traiga otro distinto."""
+    (`corte_<permutacion>.dcm`). `espesores_por_corte`: `{indice espacial: espesor}` para que un corte traiga otro distinto. `semilla` y `rango_pixeles`: ver `escribir_corte`."""
     os.makedirs(carpeta, exist_ok=True)
     uid = generate_uid()
     permutacion = [(i * 3 + 1) % n for i in range(n)] if n in (5,) else list(range(n))
     for i in range(n):
         esp = (espesores_por_corte or {}).get(i, espesor)
         escribir_corte(f"{carpeta}/corte_{permutacion[i]}.dcm", uid, i * 2.0, kv, ma, esp, DESCRIPCION_AXIAL,
-                       ["ORIGINAL", "PRIMARY", "AXIAL"], i + 2)
+                       ["ORIGINAL", "PRIMARY", "AXIAL"], i + 2, semilla=semilla, rango_pixeles=rango_pixeles)
     return carpeta
 
 
