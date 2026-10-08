@@ -447,11 +447,12 @@ def test_la_canonizacion_es_por_tabla_y_no_por_nombre(bd_sembrada, monkeypatch):
     assert antes["vigente"] == despues["vigente"]
 
 
-def test_la_version_del_observador_es_la_2_y_cambiar_la_huella_exige_subirla():
+def test_la_version_del_observador_es_la_3_y_cambiar_la_huella_exige_subirla():
     """MX2 de la revision: la version viaja en cada foto y decide si dos fotos son comparables. 1 = huellas con el nombre real
-    de cada columna (hasta GI.0); 2 = con el nombre canonico de los renombrados declarados (GI.0b). Quien cambie como se
-    hashea tiene que subirla, o dos fotos incomparables pasarian por comparables."""
-    assert obs.VERSION_OBSERVADOR == 2
+    de cada columna (hasta GI.0); 2 = con el nombre canonico de los renombrados declarados (GI.0b); 3 = sin las columnas en
+    NULL (GI.8a, `tests/test_gi8a_observador_ignora_columnas_vacias.py`). Quien cambie como se hashea tiene que subirla, o
+    dos fotos incomparables pasarian por comparables."""
+    assert obs.VERSION_OBSERVADOR == 3
 
 
 @pytest.mark.parametrize("orden", ["lp_cm anadida a una base con los nombres viejos", "lp_mm anadida a una base nueva"])
@@ -601,7 +602,7 @@ def test_por_la_linea_de_ordenes_la_foto_cruda_necesita_la_opcion_y_la_anota(tmp
     assert r.returncode == 0, r.stdout + r.stderr
     assert "AVISO" in r.stderr and "la foto la omite" in r.stderr, r.stderr
     foto = json.loads(salida.read_text(encoding="utf-8"))
-    assert foto["tablas_ausentes"] and foto["observador"]["version"] == 2
+    assert foto["tablas_ausentes"] and foto["observador"]["version"] == obs.VERSION_OBSERVADOR
 
 
 # ---------------------------------------------------------------------------

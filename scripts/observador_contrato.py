@@ -169,7 +169,7 @@ def _censo_y_vigente(cur, tabla, columnas, renombres=()):
     grupos = {}
     for fila in cur.fetchall():
         ref_valor = "null" if fila[0] is None else str(fila[0])
-        fila_dict = {_nombre_canonico(tabla, c, renombres): _valor_serializable(v) for c, v in zip(columnas_hash, fila[1:])}
+        fila_dict = {_nombre_canonico(tabla, c, renombres): _valor_serializable(v) for c, v in zip(columnas_hash, fila[1:]) if v is not None}      # GI.8a: sin las columnas en NULL
         grupos.setdefault(ref_valor, []).append(json.dumps(fila_dict, sort_keys=True))
 
     vigente = {}
@@ -196,9 +196,11 @@ CONEXION_PATH = ROOT / "data" / "ManejoDatos" / "conection.py"
 LINEA_RENOMBRADO = ("[esquema] columna renombrada {tabla}.{vieja} -> {nueva} "
                     "(declarada en RENOMBRES_DE_COLUMNAS de conection.py)")
 # 1: huellas con el nombre real de cada columna. 2 (GI.0b): con el nombre canónico de los
-# renombrados declarados. Dos fotos solo se comparan si las tomó la misma versión con la
+# renombrados declarados. 3 (GI.8a, DP-86): la huella de cada fila omite las columnas en NULL,
+# así una columna añadida y vacía no mueve la huella de ningún bloque, y un valor que aparece,
+# desaparece o cambia sí. Dos fotos solo se comparan si las tomó la misma versión con la
 # misma lista de renombrados: si no, las huellas difieren por el instrumento, no por la base.
-VERSION_OBSERVADOR = 2
+VERSION_OBSERVADOR = 3
 
 
 def _renombres_declarados():
@@ -383,6 +385,16 @@ def _cargar(ruta_json):
     return json.loads(Path(ruta_json).read_text(encoding="utf-8"))
 
 
+def _describir_observador(foto):
+    """GI.8a: lo que el mensaje de incompatibilidad dice de una foto: la versión del observador que la tomó y cuántos renombrados llevaba declarados
+    (`sin registro de versión` si es anterior al registro de GI.0b)."""
+    registro = foto.get("observador")
+    if not registro:
+        return "sin registro de versión"
+    renombrados = registro.get("renombres_declarados")
+    return f"versión {registro.get('version')}, con {len(renombrados) if renombrados is not None else 'sin registro de'} renombrados declarados"
+
+
 def comparar(antes, despues, esperado=None, renombres=None):
     """(fallos, info) entre dos fotos de `capturar`. GI.0b: una columna que desaparece
     de `antes` y cuyo destino declarado en `RENOMBRES_DE_COLUMNAS` (`renombres`, por
@@ -405,10 +417,11 @@ def comparar(antes, despues, esperado=None, renombres=None):
     info = []
 
     if antes.get("observador") != despues.get("observador"):
+        # GI.8a (revisión): el mensaje NOMBRA las versiones (antes volcaba los dos diccionarios y la versión quedaba al final, detrás de la lista de renombrados)
         fallos.append(
             "[observador] las dos instantáneas no las tomó la misma versión del "
-            f"observador ({antes.get('observador')} frente a {despues.get('observador')}): "
-            "vuelva a capturar las dos con esta versión")
+            f"observador (la primera: {_describir_observador(antes)}; la segunda: {_describir_observador(despues)}; "
+            f"esta herramienta es la versión {VERSION_OBSERVADOR}): vuelva a capturar las dos con esta versión")
         return fallos, info   # lo demás sería ruido del instrumento, no de la base (H4)
 
     tablas = sorted(set(antes["esquema"]) | set(despues["esquema"]))
