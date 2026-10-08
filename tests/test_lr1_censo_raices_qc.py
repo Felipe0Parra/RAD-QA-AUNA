@@ -192,21 +192,21 @@ CENSO_RAICES = {
     # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2744,; FS.1 (06-10): 2739->2744
     # "controles"), LISTA, "mostrar_controles_tac: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 4500, "controles"):  # RC.2 (30-09): 4566->4495; FS.1 (06-10): 4495->4500
+    ("data/ManejoDatos/load.py", 4519, "controles"):  # RC.2 (30-09): 4566->4495; FS.1 (06-10): 4495->4500; GI.3 (07-10): 4500->4519
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4514, "controles"):  # RC.2 (30-09): 4580->4509; FS.1 (06-10): 4509->4514
+    ("data/ManejoDatos/load.py", 4533, "controles"):  # RC.2 (30-09): 4580->4509; FS.1 (06-10): 4509->4514; GI.3 (07-10): 4514->4533
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4577, "controles"):  # RC.2 (30-09): 4643->4572; FS.1 (06-10): 4572->4577
+    ("data/ManejoDatos/load.py", 4596, "controles"):  # RC.2 (30-09): 4643->4572; FS.1 (06-10): 4572->4577; GI.3 (07-10): 4577->4596
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4587, "controles"):  # RC.2 (30-09): 4653->4582; FS.1 (06-10): 4582->4587
+    ("data/ManejoDatos/load.py", 4606, "controles"):  # RC.2 (30-09): 4653->4582; FS.1 (06-10): 4582->4587; GI.3 (07-10): 4587->4606
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4806, "TipoCalibracion"):  # RC.2 (30-09): 4866->4801; FS.1 (06-10): 4801->4806
+    ("data/ManejoDatos/load.py", 4825, "TipoCalibracion"):  # RC.2 (30-09): 4866->4801; FS.1 (06-10): 4801->4806; GI.3 (07-10): 4806->4825
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4909, "TipoCalibracion"):  # RC.2 (30-09), nuevo: 4903->4904; FS.1 (06-10): 4904->4909
+    ("data/ManejoDatos/load.py", 4928, "TipoCalibracion"):  # RC.2 (30-09), nuevo: 4903->4904; FS.1 (06-10): 4904->4909; GI.3 (07-10): 4909->4928
         (IDENTIDAD, "corregir_calibracion -- UPDATE de UNA celda ya identificada "
                     "por su id físico, WHERE id = ? (mismo criterio que la "
                     "entrada anterior y que el UPDATE genérico de guardarEdicion)"),
@@ -219,11 +219,11 @@ CENSO_RAICES = {
     # -- models/PDF ------------------------------------------------------
     ("models/PDF/Anual/reportes_anuales.py", 140, "controles"):
         (LISTA, "referencia del control ANUAL por (fecha, equipo, control)"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 206, "controles"):  # E.3 (24-09): 199->201; E.2 (24-09): 201->204; G.3 (24-09): 204->205; B.3 (25-09): 205->206
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 244, "controles"):  # E.3 (24-09): 199->201; E.2 (24-09): 201->204; G.3 (24-09): 204->205; B.3 (25-09): 205->206; GI.3 (07-10): 206->244
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 256, "controles"):  # E.3 (24-09): 249->251; E.2 (24-09): 251->254; G.3 (24-09): 254->255; B.3 (25-09): 255->256
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 294, "controles"):  # E.3 (24-09): 249->251; E.2 (24-09): 251->254; G.3 (24-09): 254->255; B.3 (25-09): 255->256; GI.3 (07-10): 256->294
         (IDENTIDAD, "_obtener_info_sesion del PDF de imágenes: WHERE c.id = ?"),
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 432, "controles"):  # E.3 (24-09): 413->417; E.2 (24-09): 417->428; G.3 (24-09): 428->431; B.3 (25-09): 431->432
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 470, "controles"):  # E.3 (24-09): 413->417; E.2 (24-09): 417->428; G.3 (24-09): 428->431; B.3 (25-09): 431->432; GI.3 (07-10): 432->470
         (IDENTIDAD, "_obtener_datos_tabla_principal del PDF: WHERE id = ?"),
     ("models/PDF/Mensuales/reportes_mensuales.py", 166, "controles"):
         (LISTA, "referencia del control MENSUAL por (fecha, equipo, control)"),

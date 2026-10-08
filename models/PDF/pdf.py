@@ -893,8 +893,8 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                             style.append(('FONTNAME', (0, row_idx), (-1, row_idx), 'Helvetica-Bold'))
 
                         # Aplicar estilo a la tabla
-                            style.append(('SPAN', (1, row_idx + 1), (-1, row_idx + 1)))
-                            style.append(('SPAN', (1, row_idx + 2), (-1, row_idx + 2)))
+                            # Las dos filas de resumen (ROIs visibles, diametro minimo visible) conservan sus tres columnas, sin SPAN: la tercera es el veredicto de la
+                            # prueba (Si/No/N/A); fundir las columnas 1 y 2 la hacia desaparecer del informe mensual.
 
 
                 if nombre_tabla == 'parametros_adquisicion':

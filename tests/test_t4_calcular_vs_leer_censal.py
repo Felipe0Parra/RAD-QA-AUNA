@@ -31,7 +31,12 @@ import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
 from ui.paginasControles.PruebasDiarias.braquiterapia import PruebaDiariaBraq
 
-FECHA_FUENTE = "2026-01-01 00:00:00"
+
+def _fecha_fuente():
+    """DP-155 (segunda parte): la fuente de `bd_con_fuente` se registra 60 días antes de la fecha de la corrida, no en un literal. Con el literal 2026-01-01 la
+    edad de la fuente crecía con el tiempo, la actividad esperada decaía (Ir-192, 73.8 días) y hacia noviembre de 2027 la diferencia de 12 horas bajaba del paso de
+    1e-4 del redondeo: la prueba de la hora caía por la FECHA de la corrida, como antes caía por la hora."""
+    return QDate.currentDate().addDays(-60).toString("yyyy-MM-dd") + " 00:00:00"
 
 
 @pytest.fixture(scope="module")
@@ -65,6 +70,15 @@ def _dia_sin_registro():
 
 
 @pytest.fixture
+def reloj(request, monkeypatch):
+    """Fija «ahora» (fecha y hora de Qt) en el instante pedido ANTES de que `bd_con_fuente` calcule la fecha de la fuente: se pide antes que ella."""
+    ahora = QDateTime.fromString(request.param, "yyyy-MM-ddTHH:mm:ss")
+    monkeypatch.setattr(QDateTime, "currentDateTime", staticmethod(lambda: QDateTime(ahora)))
+    monkeypatch.setattr(QDate, "currentDate", staticmethod(lambda: ahora.date()))
+    monkeypatch.setattr(QTime, "currentTime", staticmethod(lambda: ahora.time()))
+
+
+@pytest.fixture
 def bd_con_fuente(monkeypatch, tmp_path):
     ruta = str(tmp_path / "test.db")
     monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
@@ -79,7 +93,7 @@ def bd_con_fuente(monkeypatch, tmp_path):
         "certificado, fecha_cer, intensidad, conversion, activo) "
         "VALUES (1, 'fisico', ?, 'Cambio de fuente', 'SN1', 1.0, ?, 10.0, "
         "1.0, 1)",
-        (FECHA_FUENTE, FECHA_FUENTE))
+        (_fecha_fuente(), _fecha_fuente()))
     conexion.con.execute(
         "INSERT INTO braqui (date, user_id, int_con_box, emerg_con, "
         "blq_puerta, pos_fuente, res_fuente, key_fuente, mon_area, "
@@ -144,12 +158,41 @@ class TestT4CensoDeLasCuatroFilas:
         d.date_box.setDate(_dia_sin_registro())  # día sin registro
         valor_a_una_hora = d.line_1_exp_act_ci.text()
 
-        d.date_box.setTime(QTime(23, 0, 0))  # solo la hora, mismo día
+        # DP-155: antes un literal (`QTime(23, 0, 0)`). La pantalla nace en la hora del reloj y la actividad esperada cambia ~6e-8 por segundo: con el
+        # reloj a menos de ~28 minutos de las 23:00 la diferencia quedaba por debajo del paso de 1e-4 del redondeo y la prueba caía según la hora de la
+        # corrida. 12 horas respecto de la hora de la pantalla separan los dos instantes unos 1.4e-3 (catorce pasos del redondeo) a cualquier hora del día.
+        d.date_box.setTime(d.date_box.time().addSecs(12 * 3600))  # solo la hora, mismo día
 
         assert d.line_1_exp_act_ci.text(), "fila 2 (variante hora): debe seguir calculando"
         assert d.line_1_exp_act_ci.text() != valor_a_una_hora, (
             "mover solo la hora en un día sin registro debe recalcular "
             "para el nuevo instante, no repetir el de la hora anterior")
+
+    @pytest.mark.parametrize("hora", [QTime(0, 0, 0), QTime(11, 59, 59), QTime(22, 59, 59), QTime(23, 0, 0), QTime(23, 59, 59)],
+                             ids=["00:00", "11:59", "22:59", "23:00", "23:59"])
+    def test_fila_2b_vale_con_la_pantalla_en_cualquier_hora_del_dia(self, app, bd_con_fuente, hora):
+        """DP-155: la variante de la hora no depende del reloj de quien corre la prueba. Se fija la hora de partida (incluidas las que dejaban el literal
+        viejo, 23:00, dentro de la ventana en que no cambiaba nada) y se mueve 12 horas."""
+        d = PruebaDiariaBraq(_UsuarioFalso())
+        dia = _dia_sin_registro()
+        d.date_box.setDateTime(QDateTime(dia, hora))
+        valor_a_una_hora = d.line_1_exp_act_ci.text()
+        assert valor_a_una_hora, "precondición: en un día sin registro la pantalla calcula"
+
+        d.date_box.setTime(hora.addSecs(12 * 3600))
+
+        assert d.line_1_exp_act_ci.text() != valor_a_una_hora, f"a las {hora.toString()} mover 12 horas no recalculó"
+
+    @pytest.mark.parametrize("reloj", ["2026-10-07T12:00:00", "2027-12-15T00:17:03", "2028-06-15T12:00:00", "2030-03-01T23:30:00"], indirect=True)
+    def test_fila_2b_vale_con_cualquier_fecha_de_la_corrida(self, app, reloj, bd_con_fuente):
+        """DP-155 (segunda parte): con el reloj en fechas futuras la fuente (60 días antes de «hoy») conserva la misma edad y la diferencia de 12 horas sigue siendo de
+        varios pasos del redondeo. Con la fuente en un literal 2026-01-01 esta prueba cae desde 2027-12 (`logs/GI3/dp155_fecha_rojo.log`)."""
+        d = PruebaDiariaBraq(_UsuarioFalso())
+        d.date_box.setDate(_dia_sin_registro())
+        valor_a_una_hora = d.line_1_exp_act_ci.text()
+        assert valor_a_una_hora, "precondición: en un día sin registro la pantalla calcula"
+        d.date_box.setTime(d.date_box.time().addSecs(12 * 3600))
+        assert d.line_1_exp_act_ci.text() != valor_a_una_hora
 
     def test_fila_3_dia_con_registro_lee_el_guardado(self, app, bd_con_fuente):
         d = PruebaDiariaBraq(_UsuarioFalso())

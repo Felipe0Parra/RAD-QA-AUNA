@@ -5,7 +5,7 @@ Conecta los resultados de las funciones de análisis con las tablas de base de d
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QHeaderView)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont
-import json, traceback, os, io, re
+import json, traceback, os, io, re, numbers
 import numpy as np
 from PIL import Image
 from datetime import datetime
@@ -1132,6 +1132,17 @@ def consultar_pruebas_disponibles(id_sesion):
 
 # ------------------------------------ FUNCIONES DE RECONSTRUCCIÓN -----------------------------------------------
 
+def _decir_que_no_se_pudo_mostrar(label, categoria, error, datos_a_salvo=True):
+    """GI.3: la pantalla de UNA prueba guardada no pudo construirse (o el lector de esa prueba lanzó). Se dice en su propio lugar, con la causa, y las
+    demás pruebas siguen: la pestaña nunca queda muda ni con lo de la prueba anterior. Debe llamarse dentro de un `except` (imprime su traceback)."""
+    traceback.print_exc()
+    try:
+        label.setText(f"No se pudo mostrar esta prueba guardada ({categoria}): {type(error).__name__}: {error}. "
+                      + ("Los datos siguen guardados en la base de datos." if datos_a_salvo else "No se pudo leer la base de datos."))
+    except RuntimeError:
+        pass        # el widget ya no existe (se cerró la pestaña mientras tanto): no hay dónde decirlo
+
+
 def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canvas=None):
     """
     Reconstruye la estructura de diccionarios de resultados desde la base de datos
@@ -1175,8 +1186,8 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
         resultados_reconstruidos = {}
         
         # Función mejorada para mostrar contenido con imagen
-        # GI.2: la pantalla de cada categoria solo se construye si hay un `label` donde ponerla (más abajo, `... if label is not None else None`). Sin él
-        # (el PDF mensual y el anual, la carga de Valores CT) el contenido se construía y se tiraba, y la excepción de UN constructor devolvía `{}` para TODAS.
+        # GI.2: la pantalla de cada categoria solo se construye si hay un `label` donde ponerla (`mostrar`, más abajo). Sin él (el PDF mensual y el
+        # anual, la carga de Valores CT) el contenido se construía y se tiraba, y la excepción de UN constructor devolvía `{}` para TODAS.
         def usar_label_seguro(contenido, kv=None, ma=None, espesor_corte=None, imagen_blob=None):
             if label is not None and label.parent() is not None:
                 if isinstance(contenido, str):
@@ -1192,52 +1203,64 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
             else:
                 pass
                 #print(f"⚠️ Label no disponible, saltando actualización UI")
+
+        # GI.3: la pantalla de CADA prueba se construye aparte. Sin `label` (el PDF mensual y el anual, la carga de Valores CT) no se construye nada.
+        # Con `label`, si el constructor (o la colocación del contenido) lanza, la pestaña de esa prueba lo dice con la causa (nunca queda muda ni
+        # con lo de antes) y los datos que el lector sí leyó se devuelven igual: un fallo de pantalla no vacía la reapertura.
+        def mostrar(constructor, resultado):
+            if label is None:
+                return
+            try:
+                usar_label_seguro(constructor(resultado), kv, ma, espesor_corte, imagen_resultado)
+            except Exception as error:
+                _decir_que_no_se_pudo_mostrar(label, categoria, error)
+
         categoria_encontrada = False
         for prueba in pruebas:
             id_prueba, id_tipo, kv, ma, espesor_corte, imagen_path, imagen_resultado = prueba
             categoria = mapeo_tipos_reverso.get(id_tipo)
-            
+
             if not categoria or categoria not in categorias:
                 continue
-                
+
             categoria_encontrada = True
             ##print(f"🔄 Reconstruyendo categoría: {categoria}")
             ##print(f"   Parámetros: kV={kv}, mA={ma}, espesor={espesor_corte}mm")
             #if imagen_resultado:
             #    #print(f"   📷 Imagen disponible: {len(imagen_resultado)} bytes")
-            
-            # Reconstruir según la categoría
-            if categoria == "espesor":
-                resultado = reconstruir_espesor_corte(cursor, id_prueba, imagen_resultado)
-                texto = tabla_resultados_espesor(resultado) if label is not None else None
-                usar_label_seguro(texto, kv, ma, espesor_corte, imagen_resultado)
-            elif categoria == "tamano_pixel":
-                resultado = reconstruir_tamano_pixel(cursor, id_prueba, imagen_resultado)
-                texto = tabla_resultados_tamano_pixel(resultado) if label is not None else None
-                usar_label_seguro(texto, kv, ma, espesor_corte, imagen_resultado)
-            elif categoria == "resolucion_contraste":
-                resultado = reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado)
-                contenido = tabla_resultados_resolucion_contraste(resultado) if label is not None else None
-                usar_label_seguro(contenido, kv, ma, espesor_corte, imagen_resultado)
-            elif categoria == "resolucion_espacial":
-                resultado = reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado)
-                contenido = tabla_resultados_resolucion_espacial(resultado) if label is not None else None
-                usar_label_seguro(contenido, kv, ma, espesor_corte, imagen_resultado)
-            elif categoria == "valores_ct":
-                resultado = reconstruir_valores_ct(cursor, id_prueba, imagen_resultado)
-                contenido = tabla_resultados_ct(resultado) if label is not None else None
-                usar_label_seguro(contenido, kv, ma, espesor_corte, imagen_resultado)
-            elif categoria == "linealidad_ct":
-                resultado = reconstruir_linealidad_ct(cursor, id_prueba, imagen_resultado)
-                texto = tabla_resultados_linealidad_ct(resultado) if label is not None else None
-                usar_label_seguro(texto, kv, ma, espesor_corte, imagen_resultado)
-            elif categoria == "uniformidad":
-                resultado = reconstruir_uniformidad(cursor, id_prueba, imagen_resultado)
-                contenido = tabla_resultados_uniformidad(resultado) if label is not None else None
-                usar_label_seguro(contenido, kv, ma, espesor_corte, imagen_resultado)
-            else:
-                resultado = None
-            
+
+            # Reconstruir según la categoría. Un lector que lanza (la base, no un valor raro: los lectores toleran lo guardado) con `label` se dice en
+            # esa pestaña y sigue con las demás; sin `label` la reapertura entera falla, como siempre (el informe PDF no sale y lo dice).
+            try:
+                if categoria == "espesor":
+                    resultado = reconstruir_espesor_corte(cursor, id_prueba, imagen_resultado)
+                    mostrar(tabla_resultados_espesor, resultado)
+                elif categoria == "tamano_pixel":
+                    resultado = reconstruir_tamano_pixel(cursor, id_prueba, imagen_resultado)
+                    mostrar(tabla_resultados_tamano_pixel, resultado)
+                elif categoria == "resolucion_contraste":
+                    resultado = reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado)
+                    mostrar(tabla_resultados_resolucion_contraste, resultado)
+                elif categoria == "resolucion_espacial":
+                    resultado = reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado)
+                    mostrar(tabla_resultados_resolucion_espacial, resultado)
+                elif categoria == "valores_ct":
+                    resultado = reconstruir_valores_ct(cursor, id_prueba, imagen_resultado)
+                    mostrar(tabla_resultados_ct, resultado)
+                elif categoria == "linealidad_ct":
+                    resultado = reconstruir_linealidad_ct(cursor, id_prueba, imagen_resultado)
+                    mostrar(tabla_resultados_linealidad_ct, resultado)
+                elif categoria == "uniformidad":
+                    resultado = reconstruir_uniformidad(cursor, id_prueba, imagen_resultado)
+                    mostrar(tabla_resultados_uniformidad, resultado)
+                else:
+                    resultado = None
+            except Exception as error:
+                if label is None:
+                    raise
+                _decir_que_no_se_pudo_mostrar(label, categoria, error)
+                continue
+
             if resultado:
                 resultados_reconstruidos[categoria] = resultado
                 #print(f"  ✅ {categoria} reconstruido exitosamente")
@@ -1255,8 +1278,8 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
     except Exception as e:
         error_msg = f"Error al reconstruir resultados: {e}"
         #print(f"❌ {error_msg}")
-        import traceback
-        traceback.print_exc()
+        # GI.3: con `label` la pestaña lo dice (también si el fallo es de la base y no de una prueba); sin `label` (el PDF) el informe avisa que no pudo reconstruir
+        _decir_que_no_se_pudo_mostrar(label, ", ".join(categorias or ["todas"]), e, datos_a_salvo=False) if label is not None else traceback.print_exc()
         return {}
         
     finally:
@@ -1273,7 +1296,9 @@ CENTINELA_NO_DISPONIBLE = "No disponible"
 
 
 def _es_numero(valor):
-    return isinstance(valor, (int, float)) and not isinstance(valor, bool)
+    """¿Es un número (no un booleano)? `numbers.Real` y no `(int, float)`: el análisis entrega escalares de numpy (`float32`, `int64`) que no son
+    instancias de `float` ni de `int` y que las pantallas de un análisis recién hecho deben formatear igual que los números que lee la base."""
+    return isinstance(valor, numbers.Real) and not isinstance(valor, bool)
 
 
 def _numero_o_none(valor):
@@ -1286,6 +1311,14 @@ def _texto_de_numero(valor, decimales):
     return str(round(valor, decimales)) if _es_numero(valor) else CENTINELA_NO_DISPONIBLE
 
 
+def _formateado(valor, formato, vacio="N/A"):
+    """GI.3: el número con `formato` (el de `format`: '.3f', '.6f', 'g'); `vacio` si no hay valor; un texto guardado se dice tal cual. Ninguna pantalla
+    lanza porque un valor guardado no sea un número (una columna REAL de SQLite admite texto)."""
+    if valor is None:
+        return vacio
+    return format(valor, formato) if _es_numero(valor) else str(valor)
+
+
 def _bandera_guardada(valor):
     """La bandera guardada como booleano. Los controles guardados antes de GI.1 llevan un BLOB (`numpy.bool_`): `bool(b'\\x00')` es True, así que
     se decodifica su valor (sin reescribir la fila)."""
@@ -1294,7 +1327,15 @@ def _bandera_guardada(valor):
     if isinstance(valor, (bytes, bytearray, memoryview)):
         datos = bytes(valor)
         return bool(int.from_bytes(datos, "little")) if datos else None
+    if isinstance(valor, str):                  # un texto se lee por lo que DICE (bool('No') es True); el que no se entiende no es un veredicto
+        return {"1": True, "true": True, "si": True, "sí": True, "0": False, "false": False, "no": False}.get(valor.strip().lower())
     return bool(valor)
+
+
+def _bandera_entera(valor):
+    """La bandera guardada como 0/1 (la forma en que la base la guarda); None si nadie la midió o no se entiende."""
+    bandera = _bandera_guardada(valor)
+    return None if bandera is None else int(bandera)
 
 
 def _numero_de_region(nombre):
@@ -1326,8 +1367,8 @@ def unidad_de_la_fila_espacial(regiones, lp_maximo=None, ultima_region=None):
     """'lp/mm' o 'lp/cm': la unidad con la que quedó guardada una fila de resolución espacial, deducida de sus propios valores. `regiones` es una
     lista de (nombre de región, lp guardado). Si alguna región guardó N / 10 la fila está en lp/mm; si guardó N, en lp/cm; sin valores por región se
     compara la máxima con el número de la última región exitosa. Sin nada que deducir (o con el centinela -1: ninguna región medible) vale la
-    convención de hoy, lp/cm. El lector entrega esta unidad para que quien rotula la máxima y la MTF (GI.3) las convierta a la vez que cambia el
-    rótulo: hasta entonces se muestran en la unidad con la que se guardaron."""
+    convención de hoy, lp/cm. Con esta unidad `en_lp_cm` convierte la máxima y la MTF (GI.3: el lector las entrega ya en lp/cm y «Ver tabla» las
+    convierte fila por fila); el lector la entrega también, como `unidad_guardada`."""
     candidatos = [(_numero_de_region(nombre), valor) for nombre, valor in regiones]
     for decide, unidad in ((_es_lp_mm, "lp/mm"), (_es_lp_cm, "lp/cm")):
         if any(decide(valor, n) for n, valor in candidatos):
@@ -1337,6 +1378,13 @@ def unidad_de_la_fila_espacial(regiones, lp_maximo=None, ultima_region=None):
         if decide(resumen[1], resumen[0]):
             return unidad
     return "lp/cm"
+
+
+def en_lp_cm(valor, unidad):
+    """`valor` en lp/cm: lo guardado en lp/mm (la máxima y la MTF de los controles de enero a abril) se multiplica por 10. Lo que no es una
+    frecuencia positiva (None, el centinela -1 de «ninguna región medible») no se convierte: convertirlo daría -10. Es la única conversión de
+    unidad de la resolución espacial: el lector (PDF mensual y anual) y «Ver tabla» la usan con la unidad que deduce `unidad_de_la_fila_espacial`."""
+    return round(valor * 10, 6) if unidad == "lp/mm" and _es_numero(valor) and valor > 0 else valor
 
 
 def _minimo_de_rois_visibles():
@@ -1425,6 +1473,8 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
     
     (rois_visibles_cnr, rois_visibles_visibilidad, total_rois, diametro_minimo, 
     pasa_test_cnr, pasa_test_visibilidad, metodo_recomendado) = resumen
+    # GI.3: las banderas guardadas se leen por su VALOR (los BLOB de antes de GI.1 y un texto no son verdaderos por existir): ni la derivación de abajo ni el PDF las toman por True
+    pasa_test_cnr, pasa_test_visibilidad = _bandera_guardada(pasa_test_cnr), _bandera_guardada(pasa_test_visibilidad)
     
     # 2. Obtener detalles por ROI
     cursor.execute(f"""
@@ -1452,17 +1502,21 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
             "cnr": cnr,
             "snr": snr,
             "visibilidad_lim": visibilidad,
-            "pasa_cnr": pasa_cnr,
-            "pasa_visibilidad_lim": pasa_visibilidad
+            "pasa_cnr": _bandera_entera(pasa_cnr),      # GI.3: 0/1 (None si nadie lo midió o no se entiende), aun si se guardó como BLOB o texto
+            "pasa_visibilidad_lim": _bandera_entera(pasa_visibilidad)
         }
     
     # Los controles guardados entre 05/2026 y GI.1 dejaron el conteo de ROI visibles NULL y el veredicto en 0 (`bool(None)`) aunque el detalle
     # por ROI está completo: se derivan de ese detalle, con el mismo mínimo que usa el análisis, SOLO si el detalle está completo (tantos ROI como
     # `total_rois`: un detalle parcial no da el conteo). Con el conteo guardado manda lo guardado.
-    visibles_guardados, veredicto_guardado = rois_visibles_visibilidad, pasa_test_visibilidad
-    if rois_visibles_visibilidad is None and resultados_roi and (total_rois is None or len(resultados_roi) == total_rois):
-        rois_visibles_visibilidad = sum(1 for r in resultados_roi.values() if r["pasa_visibilidad_lim"])
-        pasa_test_visibilidad = rois_visibles_visibilidad >= _minimo_de_rois_visibles()
+    if rois_visibles_visibilidad is None:
+        if resultados_roi and (total_rois is None or len(resultados_roi) == total_rois):
+            rois_visibles_visibilidad = sum(1 for r in resultados_roi.values() if r["pasa_visibilidad_lim"])
+            pasa_test_visibilidad = rois_visibles_visibilidad >= _minimo_de_rois_visibles()
+        elif not pasa_test_visibilidad:
+            # GI.3: (conteo NULL, veredicto 0) es la firma del defecto de GI.1 (`bool(None)`), no un veredicto: sin el detalle completo para derivarlo, el
+            # informe firmado no puede decir «No pasa» con un 0 que nadie midió. Un veredicto guardado verdadero se respeta.
+            pasa_test_visibilidad = None
 
     resumen_dict = {
         "rois_visibles_cnr": rois_visibles_cnr,
@@ -1471,15 +1525,12 @@ def reconstruir_resolucion_contraste(cursor, id_prueba, imagen_resultado):
         "pasa_test_cnr": None if pasa_test_cnr is None else bool(pasa_test_cnr),
         "pasa_test_visibilidad": None if pasa_test_visibilidad is None else bool(pasa_test_visibilidad),
         "metodo_recomendado": metodo_recomendado,
-        # TRANSICION GI.2 -> GI.3: el constructor del PDF (GI.3) todavía lee estas dos claves con el valor que tenían (lo guardado, NULL/0 en los
-        # controles con el defecto de GI.1). GI.3 pasa el PDF a las claves del análisis de arriba y retira estas dos.
-        "rois_visibles_visibilidad_lim": visibles_guardados,
-        "pasa_test_visibilidad_lim": veredicto_guardado,
+        # GI.3: el menor ROI visible, tal como se guardó (None si ningún ROI fue visible o si lo guardado no es un número). El PDF pone la marca
+        # de su fila por el veredicto (`pasa_test_visibilidad`), no por que haya un número.
+        "diametro_minimo_visible": _numero_o_none(diametro_minimo),
         "imagen_analisis": imagen_resultado  # ✅ RECUPERADA DE LA BD
     }
-    # `diametro_minimo_visible` (guardado: el menor ROI visible) NO se entrega en GI.2 a propósito: el PDF (GI.3) pone la marca de aprobado en su fila si HAY valor (presencia, no veredicto) y entregarlo lo imprimiría como aprobado.
-    # GI.3 lo entrega en el mismo cambio que decide esa marca; hasta entonces el PDF dice «N/A» como hoy (CLAVES_QUE_NINGUN_LECTOR_ENTREGA_TODAVIA de tests/test_gi2_lectura_es_lo_guardado.py lo vigila).
-    
+
     return {
         "resultados_roi": resultados_roi,
         "resumen": resumen_dict
@@ -1508,17 +1559,18 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
     """, (id_prueba,))
     
     regiones = sorted(cursor.fetchall(), key=lambda r: (_numero_de_region(r[0]) is None, _numero_de_region(r[0]) or 0))
-    
+
+    # La unidad con la que quedó guardada la fila, deducida de sus propios valores (la máxima y la MTF de los controles de enero a abril están
+    # en lp/mm). GI.3: lo que se reabre sale SIEMPRE en lp/cm, convertido aquí y una sola vez; `unidad_guardada` dice con qué se guardó.
+    unidad_guardada = unidad_de_la_fila_espacial([(r[0], r[1]) for r in regiones], lp_cm_maximo, ultima_region)
+
     # Reconstruir estructura
     region_results = {}
     for region in regiones:
         (nombre, lp_cm, peak_mean, valley_mean, gap_size, n_peaks, n_valleys, status) = region
-        
+
         region_results[nombre] = {
             "lp/cm": _lp_cm_de_la_region(nombre, lp_cm),
-            # TRANSICION GI.2 -> GI.3: el constructor del PDF (GI.3) todavía lee `'lp/mm'` por región con lo que quedó guardado (0.1, 0.2, 0.3 en
-            # los controles de enero a abril; None si NULL). GI.3 pasa el PDF a `'lp/cm'` y retira esta clave.
-            "lp/mm": lp_cm,
             "peak_mean": peak_mean,
             "valley_mean": valley_mean,
             "gap_size_cm": gap_size,
@@ -1526,27 +1578,25 @@ def reconstruir_resolucion_espacial(cursor, id_prueba, imagen_resultado):
             "n_valleys_used": n_valleys,
             "status": status
         }
-    
+
     # Reconstruir MTF
     mtf_lp_cm = {}
-    if mtf_10: mtf_lp_cm["10"] = mtf_10
-    if mtf_20: mtf_lp_cm["20"] = mtf_20
-    if mtf_50: mtf_lp_cm["50"] = mtf_50
-    
+    if mtf_10: mtf_lp_cm["10"] = en_lp_cm(mtf_10, unidad_guardada)
+    if mtf_20: mtf_lp_cm["20"] = en_lp_cm(mtf_20, unidad_guardada)
+    if mtf_50: mtf_lp_cm["50"] = en_lp_cm(mtf_50, unidad_guardada)
+
     resolucion_limite = {
         "ultima_region": ultima_region,
-        "lp_cm_maximo": lp_cm_maximo,
+        "lp_cm_maximo": en_lp_cm(lp_cm_maximo, unidad_guardada),
         "gap_size_cm": gap_size_minimo
     }
-    
+
     return {
         "region_results": region_results,
         "mtf_lp_cm": mtf_lp_cm,
         "num_picos": num_picos,
         "resolucion_limite": resolucion_limite,
-        # La unidad con la que quedó guardada la fila, deducida de sus propios valores: la máxima y la MTF de los controles de enero a abril
-        # siguen en lp/mm (así las muestra todavía el PDF, que las rotula lp/mm); GI.3 las convierte con esta unidad al cambiar el rótulo.
-        "unidad_guardada": unidad_de_la_fila_espacial([(r[0], r[1]) for r in regiones], lp_cm_maximo, ultima_region),
+        "unidad_guardada": unidad_guardada,
         "imagen_analisis": imagen_resultado
     }
 
@@ -1704,7 +1754,7 @@ def tabla_resultados_espesor(resultados):
     
     # Mostrar espesores individuales
     espesores_ind = resultados.get("espesores_individuales", {})
-    if espesores_ind:
+    if isinstance(espesores_ind, dict) and espesores_ind:
         lines.append("")
         lines.append("  📏 Espesores individuales:")
         for direccion, valor in espesores_ind.items():
@@ -1722,8 +1772,8 @@ def tabla_resultados_tamano_pixel(resultados):
     lines.append("-" * 50)
 
     # Mostrar medidas individuales
-    lines.append(f"  X: {resultados.get('X', 'N/A')} mm")
-    lines.append(f"  Y: {resultados.get('Y', 'N/A')} mm")
+    lines.append(f"  X: {resultados.get('X') if resultados.get('X') is not None else 'N/A'} mm")
+    lines.append(f"  Y: {resultados.get('Y') if resultados.get('Y') is not None else 'N/A'} mm")
     
     # Mostrar valor teórico y diferencias - TAMBIÉN VERIFICAR AQUÍ
     tam_px_teorico = resultados.get('tam_px_teorico')
@@ -1755,6 +1805,9 @@ def tabla_resultados_resolucion_contraste(resultados):
     Crea una tabla simplificada mostrando solo los círculos visibles
     con su diámetro y valor de contraste/visibilidad.
     """
+    if not resultados:
+        return QLabel("No hay resultados de resolución de contraste disponibles.")
+
     # Obtener datos de los resultados
     resultados_roi = resultados.get("resultados_roi", {})
     resumen = resultados.get("resumen", {})
@@ -1800,7 +1853,7 @@ def tabla_resultados_resolucion_contraste(resultados):
         
         # Llenar datos - ordenar por diámetro descendente
         rois_ordenados = sorted(rois_visibles.items(), 
-                            key=lambda x: x[1].get("diametro_mm", 0), 
+                            key=lambda x: _numero_o_none(x[1].get("diametro_mm")) or 0,      # GI.3: un diámetro guardado como texto no tumba el orden
                             reverse=True)
         
         for i, (nombre, roi_data) in enumerate(rois_ordenados):
@@ -1808,10 +1861,10 @@ def tabla_resultados_resolucion_contraste(resultados):
             contraste = roi_data.get("contraste_michelson", "N/A")
             visibilidad = roi_data.get("visibilidad_lim", "N/A")
             
-            # Formatear valores
-            diametro_str = f"{diametro}" if diametro != "N/A" else "N/A"
-            contraste_str = f"{contraste:.3f}" if contraste != "N/A" and contraste is not None else "N/A"
-            visibilidad_str = f"{visibilidad:.3f}" if visibilidad != "N/A" and visibilidad is not None else "N/A"
+            # Formatear valores (GI.3: un contraste o una visibilidad guardados como texto se dicen tal cual, no tumban la tabla)
+            diametro_str = "N/A" if diametro is None else f"{diametro}"
+            contraste_str = _formateado(contraste, ".3f")
+            visibilidad_str = _formateado(visibilidad, ".3f")
             
             # Insertar datos con centrado
             item_diametro = QTableWidgetItem(diametro_str)
@@ -1847,7 +1900,7 @@ def tabla_resultados_resolucion_contraste(resultados):
         info_resumen = QLabel(
             f"✅ Círculos detectados: {len(rois_visibles)}/{resumen.get('total_rois', 'N/A')} | "
             f"Método: Visibilidad (Rose) | "
-            f"Umbral: {resumen.get('visibility_threshold', 'N/A')}"
+            f"Umbral: {resumen.get('visibilidad_lim', 'N/A')}"
         )
         info_resumen.setAlignment(Qt.AlignCenter)
         info_resumen.setStyleSheet("""
@@ -1891,7 +1944,7 @@ def tabla_resultados_resolucion_contraste(resultados):
         # Agregar información del resumen
         info_resumen = QLabel(
             f"Método: Visibilidad (Rose) | "
-            f"Umbral: {resumen.get('visibility_threshold', 'N/A')} | "
+            f"Umbral: {resumen.get('visibilidad_lim', 'N/A')} | "
             f"ROIs analizados: {resumen.get('total_rois', 'N/A')}"
         )
         info_resumen.setAlignment(Qt.AlignCenter)
@@ -1910,6 +1963,8 @@ def tabla_resultados_resolucion_contraste(resultados):
         return no_visible_widget
 
 def tabla_resultados_resolucion_espacial(resultados):
+    if not resultados:
+        return QLabel("No hay resultados de resolución espacial disponibles.")
     headers = ["Región", "lp/cm", "N° Picos","N° Valles", "Gap Size (cm)"]   # GI.2 (D3): lp/cm, la unidad del fantoma y de la clave 'lp/cm' del análisis
     tabla_ct = QTableWidget()
     
@@ -2039,9 +2094,11 @@ def tabla_resultados_ct(resultado_completo):
     # GI.2: la lista lleva un elemento de metadatos (la imagen: `{'imagen_analisis': ...}` del análisis o `{'_metadata': ...}` de lo reabierto)
     # SOLO cuando hay imagen; quitar siempre «el último» le quitaba el séptimo material a un control sin imagen (las sesiones 21 y 47). Las
     # filas de la tabla son las de material, vengan donde vengan.
+    if not resultados:
+        return QLabel("No hay resultados de valores CT disponibles.")
     resultados = [r for r in resultados if isinstance(r, dict) and "material" in r]
         
-    headers = ["Material", "Promedio HU", "Rango HU Ref.", "Desviación. (HU)", "Rango"]
+    headers = ["Material", "Promedio HU", "Rango HU Ref.", "Error Abs. [HU]", "Rango"]
     tabla_ct = QTableWidget()
     tabla_ct.setColumnCount(len(headers))
     tabla_ct.setRowCount(len(resultados))
@@ -2083,8 +2140,9 @@ def tabla_resultados_ct(resultado_completo):
         err_rel = res.get("error_rel", "N/A")
         
         # Formatear valores
-        promedio_str = f"{round(promedio, 1)}" if promedio else "N/A"
-        rango_str = f"{rango[0]} a {rango[1]}" if rango[0] is not None and rango[1] is not None else "N/A"
+        promedio_str = f"{round(promedio, 1)}" if _es_numero(promedio) else "N/A"      # GI.3: 0.0 HU es un valor; un texto no tumba la tabla
+        rango_str = (f"{rango[0]} a {rango[1]}" if isinstance(rango, (list, tuple)) and len(rango) == 2
+                     and rango[0] is not None and rango[1] is not None else "N/A")
         err_abs_str = str(err_abs) if err_abs is not None else "N/A"
         err_rel_str = str(err_rel) if err_rel is not None else "N/A"
 
@@ -2132,39 +2190,15 @@ def tabla_resultados_linealidad_ct(resultados):
     lines.append("📈 RESULTADOS DE LINEALIDAD CT")
     lines.append("-" * 50)
     
-    # Mostrar parámetros de la regresión
-    pendiente = resultados.get('pendiente')
-    if pendiente is not None:
-        lines.append(f"  Pendiente: {pendiente:.3f}")
-    else:
-        lines.append(f"  Pendiente: N/A")
-        
-    intercepto = resultados.get('intercepto') 
-    if intercepto is not None:
-        lines.append(f"  Intercepto: {intercepto:.3f}")
-    else:
-        lines.append(f"  Intercepto: N/A")
-        
-    r_cuadrado = resultados.get('r_squared')
-    if r_cuadrado is not None:
-        lines.append(f"  R²: {r_cuadrado:.4f}")
-    else:
-        lines.append(f"  R²: N/A")
-        
-    referencia = resultados.get('referencia')
-    if referencia is not None:
-        lines.append(f"  Referencia: {referencia:.6f}")
-    else:
-        lines.append(f"  Referencia: N/A")
-        
-    escala_contraste = resultados.get('escala_contraste')
-    if escala_contraste is not None:
-        lines.append(f"  Escala de contraste: {escala_contraste:.6f}")
-    else:
-        lines.append(f"  Escala de contraste: N/A")
+    # Mostrar parámetros de la regresión (GI.3: un valor guardado que no es un número se dice tal cual y no tumba la pantalla)
+    lines.append(f"  Pendiente: {_formateado(resultados.get('pendiente'), '.3f')}")
+    lines.append(f"  Intercepto: {_formateado(resultados.get('intercepto'), '.3f')}")
+    lines.append(f"  R²: {_formateado(resultados.get('r_squared'), '.4f')}")
+    lines.append(f"  Referencia: {_formateado(resultados.get('referencia'), '.6f')}")
+    lines.append(f"  Escala de contraste: {_formateado(resultados.get('escala_contraste'), '.6f')}")
 
     energia_mev = resultados.get('energia_mev')   # G.2
-    lines.append(f"  Energía [MeV]: {energia_mev:g}" if energia_mev is not None
+    lines.append(f"  Energía [MeV]: {_formateado(energia_mev, 'g')}" if energia_mev is not None
                  else "  Energía [MeV]: no registrada")
     
     # Mostrar evaluación de calidad
@@ -2177,6 +2211,8 @@ def tabla_resultados_linealidad_ct(resultados):
     return "\n".join(lines)
 
 def tabla_resultados_uniformidad(uniformidad):
+    if not uniformidad:
+        return QLabel("No hay resultados de uniformidad disponibles.")
     headers = ["Posición", "Promedio HU", "Desviación"]
     tabla_un = QTableWidget()
     
@@ -2268,7 +2304,7 @@ def tabla_resultados_uniformidad(uniformidad):
         # Fila adicional con información extra (máx diferencia, desviación global, pasa)
         tabla_un.setSpan(fila_actual, 0, 1, 3)  # Combinar las 3 columnas
         info_extra = (f"Máx diferencia: {u.get('max_diferencia','N/A')} HU | "
-                    f"Desv. global: {u.get('desviacion_global','N/A')} | "
+                    f"Desv. global: {u.get('desviacion_global') if u.get('desviacion_global') is not None else 'N/A'} | "
                     f"UI/INU con el umbral heredado (informativo): {u.get('pasa_global','N/A')}")
         item_extra = QTableWidgetItem(info_extra)
         item_extra.setTextAlignment(Qt.AlignCenter)

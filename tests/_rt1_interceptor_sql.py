@@ -119,6 +119,11 @@ def _es_produccion(origen):
 # juzgarlos por su contenido real. Heredarlos sería anular el frente
 # dinámico justo donde aporta.
 SITIOS_CENSALES_PERMITIDOS = {
+    ("data/ManejoDatos/load.py", 2947):  # GI.3 (07-10)
+        "GI.3: «Ver tabla» de las hijas de TAC (`_mostrar_tabla_generica`) une la hija con `pruebas` por `id_prueba` y filtra por sesión: el interceptor ve `pruebas` "
+        "sin el tipo en el WHERE («clave de bloque incompleta»), pero el tipo lo fija la hija (`config['tabla']` solo tiene pruebas de su tipo). `activo` de la hija "
+        "y de `pruebas` se filtra a mano (`filtro_t`/`filtro_p`; ES1 lo declara en test_le4). Hasta GI.3 ninguna prueba ejercitaba este sitio en tiempo de "
+        "ejecución; las de «Ver tabla» de resolución espacial sí.",
     ("services/contexto_auditoria.py", 133):
         "T.4 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §5, DA-47): identidad "
         "por LOTE -- `WHERE id IN (...)` resuelve un grupo de filas de "

@@ -120,7 +120,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
     ("data/ManejoDatos/load.py", 994): "diarias (EB4) -- ya filtra activo a mano, tabla dinámica",  # FS.1 (06-10): 989->994
     ("data/ManejoDatos/load.py", 186): "diarias (D3) -- ya filtra activo a mano, tabla dinámica",
     ("data/ManejoDatos/load.py", 1151): "código muerto (mostrar_db_CambioFuente, sin llamadores)",  # FS.1 (06-10): 1146->1151
-    ("data/ManejoDatos/load.py", 4695): "identidad (fila antes de anular/borrar)",  # RC.2 (30-09): 4761->4690; FS.1 (06-10): 4690->4695
+    ("data/ManejoDatos/load.py", 4714): "identidad (fila antes de anular/borrar)",  # RC.2 (30-09): 4761->4690; FS.1 (06-10): 4690->4695; GI.3 (07-10): 4695->4714
     ("scripts/retirar_tabla_del_esquema.py", 70): "EB7 (DA-50) -- COUNT(*) sobre `tabla`, restringida a la lista blanca CERRADA `TABLAS_RETIRABLES` (equipos_anual, posicionamiento_reposicionamiento). Ninguna de las dos está en TABLAS_ANULABLES ni tiene `activo` -- se retiran del esquema en vez de versionar, filtrar aquí no tendría sentido",
     # NOTA (LF, gap hallado por el subagente que resolvió LF3): hasta aquí
     # decía "TipoCalibracion es raíz DP-31; SistemaMedicion/CondicionesMedicion
@@ -210,14 +210,14 @@ EXCEPCIONES_LITERALES = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1086):  # A.1 (23-09): 1021->1068; A.2 (23-09): 1068->1074; G.2 (24-09): 1074->1077; G.3 (24-09): 1077->1086
         "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
         "del LEFT JOIN (variable `filtro_p`) en consultar_pruebas_disponibles",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1556):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437; G.2 (24-09): 1437->1440; G.3 (24-09): 1440->1449; GI.2 (06-10): 1449->1556
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1606):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437; G.2 (24-09): 1437->1440; G.3 (24-09): 1440->1449; GI.2 (06-10): 1449->1556; GI.3 (07-10): 1556->1606
         "valores_ct -- filtro_activo('valores_ct') se califica con el alias "
         "'vc.' del JOIN (variable `filtro_vc`) en reconstruir_valores_ct",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1648):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528; G.2 (24-09): 1528->1532; G.3 (24-09): 1532->1541; GI.2 (06-10): 1541->1648
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1698):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528; G.2 (24-09): 1528->1532; G.3 (24-09): 1532->1541; GI.2 (06-10): 1541->1648; GI.3 (07-10): 1648->1698
         "uniformidad_ruido -- filtro_activo('uniformidad_ruido') se califica "
         "con el alias 'ur.' del JOIN (variable `filtro_ur`) en "
         "reconstruir_uniformidad",
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 345):  # E.3 (24-09): 326->330; E.2 (24-09): 330->341; G.3 (24-09): 341->344; B.3 (25-09): 344->345
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 383):  # E.3 (24-09): 326->330; E.2 (24-09): 330->341; G.3 (24-09): 341->344; B.3 (25-09): 344->345; GI.3 (07-10): 345->383
         "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
         "del JOIN (variable `filtro_p`) en _obtener_imagenes_blob",
     # LF1b (§6-LF1): 'pruebas' se une con LEFT JOIN a 'controles' (raíz) --
@@ -280,26 +280,26 @@ SITIOS_CLAVE_INCOMPLETA_PERMITIDOS = {
     ("data/ManejoDatos/Tablas_Anuales/tablas_anuales.py", 891):
         "HC_dosimetria_anual -- mismo caso: addsomething(..., 0, ...) con "
         "id_energia=0 literal (halcyon_anual.py:211, antes 198 -- C2 desplazó el sitio).",
-    ("data/ManejoDatos/load.py", 3116):  # FS.1 (06-10): 3111->3116
+    ("data/ManejoDatos/load.py", 3135):  # FS.1 (06-10): 3111->3116; GI.3 (07-10): 3116->3135
         "equipos_medicion (mostrar_equipos) -- fetchall() sin ORDER BY/LIMIT: "
         "trae TODAS las filas activas de ese ref (una LISTA -- el catálogo "
         "completo de equipos del control), no elige una entre varias. No hay "
         "ambigüedad porque no se descarta nada.",
-    ("data/ManejoDatos/load.py", 3318):  # FS.1 (06-10): 3313->3318
+    ("data/ManejoDatos/load.py", 3337):  # FS.1 (06-10): 3313->3318; GI.3 (07-10): 3318->3337
         "analisis_placa_franjas (mostrar_analisis_img) -- mismo caso: "
         "fetchall() sin ORDER BY/LIMIT, trae las 4 franjas completas.",
-    ("data/ManejoDatos/load.py", 3968):  # FS.1 (06-10): 3963->3968
+    ("data/ManejoDatos/load.py", 3987):  # FS.1 (06-10): 3963->3968; GI.3 (07-10): 3968->3987
         "analisis_placa_franjas -- MAX(ref): agregación sobre toda la tabla "
         "(el ref más reciente con algo vigente), no selecciona una fila por "
         "su clave -- el concepto de 'clave incompleta' no aplica a un MAX.",
-    ("data/ManejoDatos/load.py", 4164):  # FS.1 (06-10): 4159->4164
+    ("data/ManejoDatos/load.py", 4183):  # FS.1 (06-10): 4159->4164; GI.3 (07-10): 4164->4183
         "analisis_placa_correcciones -- ORDER BY rowid DESC LIMIT 1 sin "
         "'vertice', pero las 4 columnas leídas (diferencia_arriba/abajo/"
         "izquierda/derecha) son un resumen GLOBAL del análisis, no un dato "
         "específico del vértice de esa fila -- las 4 filas de un mismo ref "
         "cargan el mismo valor en esas columnas (ver esquema en "
         "conection.py:1441). Cualquiera de las 4 sirve igual.",
-    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 231):  # E.3 (24-09): 224->226; E.2 (24-09): 226->229; G.3 (24-09): 229->230; B.3 (25-09): 230->231
+    ("models/PDF/Imagenes/reportes_control_sistema_imagenes.py", 269):  # E.3 (24-09): 224->226; E.2 (24-09): 226->229; G.3 (24-09): 229->230; B.3 (25-09): 230->231; GI.3 (07-10): 231->269
         "pruebas -- COUNT(*): solo pregunta '¿existe al menos una prueba "
         "para esta sesión?', sin importar id_tipo -- un COUNT no elige "
         "fila, cuenta todas.",
@@ -457,14 +457,14 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("data/ManejoDatos/conection.py", 865): "DDL/migración (EB2d, DA-57, tabla temporal de la migración que retira el UNIQUE de angulo_starshot)",  # R.1: 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782; G.2 (24-09): 782->783; G.3 (24-09): 783->784; PI.2 (01-10): 784->785; RB.3 (05-10): 785->812; GI.0: 812->865
     ("data/ManejoDatos/conection.py", 2706): "INSERT (users, no está en TABLAS_ANULABLES)",  # R1: 2091->2160; R.1: 2224->2309; T.0: 2309->2363; B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461; G.2 (24-09): 2461->2482; G.3 (24-09): 2482->2508; PI.2 (01-10): 2508->2571; RB.3 (05-10): 2571->2598; GI.0: 2598->2706
     ("data/ManejoDatos/load.py", 375): "INSERT (controles -- un INSERT nunca necesita filtro)",  # FS.1 (06-10): 370->375
-    ("data/ManejoDatos/load.py", 4387): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",  # RC.2 (30-09): 4376->4382; FS.1 (06-10): 4382->4387
+    ("data/ManejoDatos/load.py", 4406): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",  # RC.2 (30-09): 4376->4382; FS.1 (06-10): 4382->4387; GI.3 (07-10): 4387->4406
     # LF (gap hallado por el subagente que resolvió LF3): decía "no está en
     # TABLAS_ANULABLES" -- cierto antes de LF2, falso después (PENDIENTE-LF).
     # Corregido: la sentencia ahora SÍ llama a `filtro_activo('ResultadosActividad')`
     # -- sigue "opaca" para AN1 no por el filtro sino porque `sql` se
     # reasigna en varias ramas de `guardarEdicion` (misma función que la
     # entrada anterior), irresoluble a propósito por diseño de AN1.
-    ("data/ManejoDatos/load.py", 4726): "DELETE por id_where -- rama else de eliminarRegistro, alcanzable SOLO para tablas fuera del cierre transitivo de QC (catálogos genéricos: equipos, tipos_prueba...). EB3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB3, 24-08): la rama `if` (anular_fila) ya cubre las 59 tablas de TABLAS_ANULABLES desde MI1 -- IV2 garantiza que ninguna descendiente de QC queda fuera de esa lista o de EXCEPCIONES_INVENTARIO, y TestTripwireDeAlcance (test_e7_soft_delete_bloque_qc.py) verifica que ningún llamador real nombra una tabla de QC que no esté en la lista blanca. Ver test_eb3_eliminarregistro_delete_inalcanzable.py",  # RC.2 (30-09): 4792->4721; FS.1 (06-10): 4721->4726
+    ("data/ManejoDatos/load.py", 4745): "DELETE por id_where -- rama else de eliminarRegistro, alcanzable SOLO para tablas fuera del cierre transitivo de QC (catálogos genéricos: equipos, tipos_prueba...). EB3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-EB3, 24-08): la rama `if` (anular_fila) ya cubre las 59 tablas de TABLAS_ANULABLES desde MI1 -- IV2 garantiza que ninguna descendiente de QC queda fuera de esa lista o de EXCEPCIONES_INVENTARIO, y TestTripwireDeAlcance (test_e7_soft_delete_bloque_qc.py) verifica que ningún llamador real nombra una tabla de QC que no esté en la lista blanca. Ver test_eb3_eliminarregistro_delete_inalcanzable.py",  # RC.2 (30-09): 4792->4721; FS.1 (06-10): 4721->4726; GI.3 (07-10): 4726->4745
     ("data/ManejoDatos/obtenerDatosHalcyon.py", 397): "INSERT (halcyon -- un INSERT nunca necesita filtro)",
     ("services/dosis_service.py", 281): "DDL (CREATE TABLE calculadora_dosimetrica, no está en TABLAS_ANULABLES -- tiene su propia columna `vigente`, mecanismo de versionado independiente de este contrato)",
     ("services/dosis_service.py", 391): "INSERT (calculadora_dosimetrica, no está en TABLAS_ANULABLES)",

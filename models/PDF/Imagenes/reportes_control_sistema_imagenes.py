@@ -26,6 +26,8 @@ from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap
 import html
 import json
+import math
+import numbers
 import tempfile
 import pandas as pd
 from io import BytesIO
@@ -49,11 +51,47 @@ from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
 from models.PDF.PDFWindow import PdfViewer
 
 # Importar funciones de reconstrucción desde catphan_db
-from data.ManejoDatos.catphan_TAC.catphan_db import reconstruir_resultados_desde_bd
+from data.ManejoDatos.catphan_TAC.catphan_db import _bandera_guardada, reconstruir_resultados_desde_bd
 from services.anulacion import filtro_activo
 from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad, filas_medidas
 from analisisImagenes.catphan.escala import CLAVE_EN_ADQUISICION as CLAVE_ESCALA, nota_escala
 from analisisImagenes.catphan.criterios import Juicio, texto_fuente, texto_valor
+
+# GI.3: lo que el informe dice donde la base no trae el valor. Nunca «None» ni una marca de correcto/incorrecto (DA-18): palabras.
+NO_DISPONIBLE = "N/A"
+SI, NO = "Sí", "No"
+
+
+def _celda_numero(valor, formato=None, vacio=NO_DISPONIBLE):
+    """El número con `formato` (el de `str.format`: '{:.2f}'; sin formato, `str`); `vacio` si no es un número (None, el texto centinela 'No disponible'
+    o cualquier texto). Acepta los escalares de numpy."""
+    if not isinstance(valor, numbers.Real) or isinstance(valor, bool):
+        return vacio
+    try:
+        if not math.isfinite(valor):                     # el infinito no es una medida: «N/A», no «inf»
+            return vacio
+        return formato.format(valor) if formato else str(valor)
+    except (OverflowError, TypeError, ValueError):       # un entero tan grande que no cabe en un float, o un «número» que str.format no sabe dar
+        return vacio
+
+
+def _celda_valor(valor, formato=None, vacio=NO_DISPONIBLE):
+    """Como `_celda_numero`, pero un texto guardado se dice tal cual (los Valores CT guardan «Fuera de Rango» en `error_relativo`, una columna numérica)."""
+    if valor is None:
+        return vacio
+    return _celda_numero(valor, formato, vacio) if isinstance(valor, numbers.Real) and not isinstance(valor, bool) else str(valor)
+
+
+def _celda_texto(valor, vacio=NO_DISPONIBLE):
+    return vacio if valor is None or str(valor).strip() == "" else str(valor)
+
+
+def _celda_veredicto(valor):
+    """«Sí»/«No» por el veredicto guardado; «N/A» si no hay veredicto (NULL) o no se entiende. Nunca una marca por que haya un número. La bandera se lee por su
+    VALOR con la misma función que los lectores (`_bandera_guardada`): un BLOB de antes de GI.1 o un texto («No») no son verdaderos por existir."""
+    veredicto = _bandera_guardada(valor)
+    return NO_DISPONIBLE if veredicto is None else (SI if veredicto else NO)
+
 
 class ReporteControlSistemaImagenes:
     """
@@ -762,29 +800,10 @@ class ReporteControlSistemaImagenes:
         tabla = []
         tabla.append(['Métrica', 'Valor'])
         
-        espesor_prom = resultado.get('espesor_promedio_mm', 'N/A')
-        espesor_teo = resultado.get('espesor_teorico_mm', 'N/A')
-        diferencia = resultado.get('diferencia_mm', 'N/A')
-        
-        # Formatear valores
-        if isinstance(espesor_prom, (int, float)):
-            espesor_prom_str = f"{espesor_prom:.3f} mm"
-        else:
-            espesor_prom_str = str(espesor_prom)
-        
-        if isinstance(espesor_teo, (int, float)):
-            espesor_teo_str = f"{espesor_teo:.3f} mm"
-        else:
-            espesor_teo_str = str(espesor_teo)
-        
-        if isinstance(diferencia, (int, float)):
-            diferencia_str = f"{diferencia:.3f} mm"
-        else:
-            diferencia_str = str(diferencia)
-        
-        tabla.append(['Espesor promedio medido', espesor_prom_str])
-        tabla.append(['Espesor teórico', espesor_teo_str])
-        tabla.append(['Diferencia', diferencia_str])
+        # GI.3: un valor que falta se dice «N/A», nunca «None».
+        tabla.append(['Espesor promedio medido', _celda_valor(resultado.get('espesor_promedio_mm'), "{:.3f} mm")])
+        tabla.append(['Espesor teórico', _celda_valor(resultado.get('espesor_teorico_mm'), "{:.3f} mm")])
+        tabla.append(['Diferencia', _celda_valor(resultado.get('diferencia_mm'), "{:.3f} mm")])
         
         return pd.DataFrame(tabla, columns=['Espesor de corte', ''])
     
@@ -801,37 +820,10 @@ class ReporteControlSistemaImagenes:
         tabla = []
         tabla.append(['Métrica', 'Valor'])
         
-        tam_teorico = resultado.get('tam_px_teorico', 'N/A')
-        x_medido = resultado.get('X', 'N/A')
-        y_medido = resultado.get('Y', 'N/A')
-        dif_x = resultado.get('diferencia_x', 'N/A')
-        dif_y = resultado.get('diferencia_y', 'N/A')
-        
-        # Formatear valores
-        if isinstance(tam_teorico, (int, float)):
-            tabla.append(['Tamaño teórico', f"{tam_teorico:.3f} mm"])
-        else:
-            tabla.append(['Tamaño teórico', str(tam_teorico)])
-        
-        if isinstance(x_medido, (int, float)):
-            tabla.append(['X medido', f"{x_medido:.3f} mm"])
-        else:
-            tabla.append(['X medido', str(x_medido)])
-        
-        if isinstance(y_medido, (int, float)):
-            tabla.append(['Y medido', f"{y_medido:.3f} mm"])
-        else:
-            tabla.append(['Y medido', str(y_medido)])
-        
-        if isinstance(dif_x, (int, float)):
-            tabla.append(['Diferencia X', f"{dif_x:.3f} mm"])
-        else:
-            tabla.append(['Diferencia X', str(dif_x)])
-        
-        if isinstance(dif_y, (int, float)):
-            tabla.append(['Diferencia Y', f"{dif_y:.3f} mm"])
-        else:
-            tabla.append(['Diferencia Y', str(dif_y)])
+        # GI.3: un valor que falta se dice «N/A», nunca «None».
+        for rotulo, valor in (('Tamaño teórico', resultado.get('tam_px_teorico')), ('X medido', resultado.get('X')), ('Y medido', resultado.get('Y')),
+                              ('Diferencia X', resultado.get('diferencia_x')), ('Diferencia Y', resultado.get('diferencia_y'))):
+            tabla.append([rotulo, _celda_valor(valor, "{:.3f} mm")])
         
         return pd.DataFrame(tabla, columns=['Tamaño de pixel', ''])
     
@@ -851,7 +843,7 @@ class ReporteControlSistemaImagenes:
         resumen = resultado.get('resumen', {})
         
         # Encabezados
-        tabla.append(['Diámetro ROI (mm)', 'Visibilidad', 'Pasa Visibilidad'])
+        tabla.append(['Diámetro ROI [mm]', 'Visibilidad', 'Pasa Visibilidad'])
 
         # Datos por ROI
         resultados_roi = resultado.get('resultados_roi', {})
@@ -859,35 +851,22 @@ class ReporteControlSistemaImagenes:
         # Ordenar ROIs por diámetro (de mayor a menor)
         rois_ordenados = sorted(
             resultados_roi.items(),
-            key=lambda x: int(x[0].replace('mm', '')),
+            key=lambda x: float(x[0].replace('mm', '')),
             reverse=True
         )
         
         for diametro_str, roi_data in rois_ordenados:
             diametro = diametro_str.replace('mm', '')
-            visibilidad = roi_data.get('visibilidad_lim', 'N/A')
-            pasa_vis = '✓' if roi_data.get('pasa_visibilidad_lim', False) else '✗'
-            
-            # Formatear valores numéricos
-            if isinstance(visibilidad, (int, float)):
-                vis_str = f"{visibilidad:.2f}"
-            else:
-                vis_str = str(visibilidad)
-            
-            tabla.append([diametro, vis_str, pasa_vis])
+            tabla.append([diametro,
+                          _celda_numero(roi_data.get('visibilidad_lim'), "{:.2f}"),
+                          _celda_veredicto(roi_data.get('pasa_visibilidad_lim'))])
         
-        # Agregar resumen al final
+        # Agregar resumen al final. GI.3: el conteo y el veredicto son los del análisis (`rois_visibles_visibilidad`, `pasa_test_visibilidad`; el lector
+        # los deriva del detalle por ROI cuando el control los guardó vacíos) y las DOS filas llevan el veredicto de la prueba, no «hay un número».
+        veredicto = _celda_veredicto(resumen.get('pasa_test_visibilidad'))
         tabla.append(['--- RESUMEN ---', '---', '---'])
-        tabla.append([
-            'ROIs visibles',
-            str(resumen.get('rois_visibles_visibilidad_lim', 'N/A')),
-            '✓' if resumen.get('pasa_test_visibilidad_lim', False) else '✗'
-        ])
-        tabla.append([
-            'Diámetro mínimo visible (mm)',
-            str(resumen.get('diametro_minimo_visible', 'N/A')),
-            '✓' if resumen.get('diametro_minimo_visible', False) else '✗'
-        ])
+        tabla.append(['ROIs visibles', _celda_numero(resumen.get('rois_visibles_visibilidad'), "{:g}"), veredicto])
+        tabla.append(['Diámetro mínimo visible [mm]', _celda_numero(resumen.get('diametro_minimo_visible'), "{:g}"), veredicto])
         
         return pd.DataFrame(tabla, columns=['Resolución de contraste', '', ''])
     
@@ -903,43 +882,28 @@ class ReporteControlSistemaImagenes:
         """
         tabla = []
         
-        # Encabezados
-        tabla.append(['Región', 'lp/mm', 'Gap size (cm)', 'Picos', 'Valles', 'Estado'])
+        # Encabezados. GI.3: la frecuencia sale en lp/cm, la unidad del fantoma (la región N vale N lp/cm); el lector la entrega ya en lp/cm
+        # también para los controles de enero a abril, guardados en lp/mm.
+        tabla.append(['Región', 'Frecuencia [lp/cm]', 'Gap size [cm]', 'Picos', 'Valles', 'Estado'])
         
         # Datos por región
         region_results = resultado.get('region_results', {})
         
-        # Ordenar regiones por lp/mm
+        # Ordenar regiones por frecuencia
         regiones_ordenadas = sorted(
             region_results.items(),
-            key=lambda x: x[1].get('lp/mm', 0) if isinstance(x[1].get('lp/mm'), (int, float)) else 0
+            key=lambda x: x[1].get('lp/cm', 0) if isinstance(x[1].get('lp/cm'), (int, float)) else 0
         )
         
+        # Gap, Picos, Valles y Estado de una región que el análisis no midió no están guardados: el informe dice «N/A», no «None».
         for region_nombre, region_data in regiones_ordenadas:
-            lp_mm = region_data.get('lp/mm', 'N/A')
-            gap_size = region_data.get('gap_size_cm', 'N/A')
-            n_peaks = region_data.get('n_peaks_used', 'N/A')
-            n_valleys = region_data.get('n_valleys_used', 'N/A')
-            status = region_data.get('status', 'N/A')
-            
-            # Formatear valores numéricos
-            if isinstance(lp_mm, (int, float)):
-                lp_mm_str = f"{lp_mm:.2f}"
-            else:
-                lp_mm_str = str(lp_mm)
-            
-            if isinstance(gap_size, (int, float)):
-                gap_str = f"{gap_size:.4f}"
-            else:
-                gap_str = str(gap_size)
-            
             tabla.append([
-                region_nombre,
-                lp_mm_str,
-                gap_str,
-                str(n_peaks),
-                str(n_valleys),
-                status
+                _celda_texto(region_nombre),
+                _celda_numero(region_data.get('lp/cm'), "{:.2f}"),
+                _celda_numero(region_data.get('gap_size_cm'), "{:.4f}"),
+                _celda_numero(region_data.get('n_peaks_used')),
+                _celda_numero(region_data.get('n_valleys_used')),
+                _celda_texto(region_data.get('status'))
             ])
         
         # Agregar resumen
@@ -947,32 +911,17 @@ class ReporteControlSistemaImagenes:
         resolucion_limite = resultado.get('resolucion_limite', {})
         mtf_lp_cm = resultado.get('mtf_lp_cm', {})
         
-        lp_cm_max = resolucion_limite.get('lp_cm_maximo', 'N/A')
-        ultima_region = resolucion_limite.get('ultima_region', 'N/A')
-        
-        if isinstance(lp_cm_max, (int, float)):
-            lp_cm_max_str = f"{lp_cm_max:.2f}"
+        lp_cm_max = resolucion_limite.get('lp_cm_maximo')
+        if isinstance(lp_cm_max, numbers.Real) and not isinstance(lp_cm_max, bool) and lp_cm_max <= 0:
+            lp_cm_max_str = "Sin región medible"      # el centinela -1 del análisis: ninguna región se pudo medir (no es una frecuencia)
         else:
-            lp_cm_max_str = str(lp_cm_max)
+            lp_cm_max_str = _celda_numero(lp_cm_max, "{:.2f}")
         
-        tabla.append(['Resolución máxima', lp_cm_max_str, '---', '---', '---', ultima_region])
+        tabla.append(['Resolución máxima', lp_cm_max_str, '---', '---', '---', _celda_texto(resolucion_limite.get('ultima_region'))])
         
         # MTF
-        mtf_10 = mtf_lp_cm.get('10', 'N/A')
-        mtf_50 = mtf_lp_cm.get('50', 'N/A')
-        
-        if isinstance(mtf_10, (int, float)):
-            mtf_10_str = f"{mtf_10:.2f}"
-        else:
-            mtf_10_str = str(mtf_10)
-        
-        if isinstance(mtf_50, (int, float)):
-            mtf_50_str = f"{mtf_50:.2f}"
-        else:
-            mtf_50_str = str(mtf_50)
-        
-        tabla.append(['MTF 10%', mtf_10_str, '---', '---', '---', '---'])
-        tabla.append(['MTF 50%', mtf_50_str, '---', '---', '---', '---'])
+        tabla.append(['MTF 10%', _celda_numero(mtf_lp_cm.get('10'), "{:.2f}"), '---', '---', '---', '---'])
+        tabla.append(['MTF 50%', _celda_numero(mtf_lp_cm.get('50'), "{:.2f}"), '---', '---', '---', '---'])
         
         return pd.DataFrame(tabla, columns=['Resolución espacial', '', '', '', '', ''])
     
@@ -1000,20 +949,20 @@ class ReporteControlSistemaImagenes:
         )
 
         for material_data in materiales_ordenados:
-            nombre = material_data.get('material', 'N/A')
+            nombre = _celda_texto(material_data.get('material'))
             promedio = material_data.get('promedio_hu', 'N/A')
             rango = material_data.get('rango_hu', ['N/A', 'N/A'])
             error_abs = material_data.get('error_abs', 'N/A')
             error_rel = material_data.get('error_rel', 'N/A')
 
             # Formatear valores
-            promedio_str = f"{promedio:.1f}" if isinstance(promedio, (int, float)) else str(promedio)
+            promedio_str = _celda_valor(promedio, "{:.1f}")
             if isinstance(rango, (list, tuple)) and len(rango) == 2 and all(isinstance(v, (int, float)) for v in rango):
                 rango_str = f"{rango[0]:.1f} a {rango[1]:.1f}"
             else:
                 rango_str = "N/A"
-            error_abs_str = f"{error_abs:.1f}" if isinstance(error_abs, (int, float)) else str(error_abs)
-            error_rel_str = f"{error_rel:.2f}" if isinstance(error_rel, (int, float)) else str(error_rel)
+            error_abs_str = _celda_valor(error_abs, "{:.1f}")
+            error_rel_str = _celda_valor(error_rel, "{:.2f}")      # puede ser un texto («Fuera de Rango», DP-107): se dice tal cual
 
             tabla.append([nombre, promedio_str, rango_str, error_abs_str, error_rel_str])
 
@@ -1032,36 +981,21 @@ class ReporteControlSistemaImagenes:
         tabla = []
         tabla.append(['Métrica', 'Valor'])
         
-        pendiente = resultado.get('pendiente', 'N/A')
-        intercepto = resultado.get('intercepto', 'N/A')
-        r_cuadrado = resultado.get('r_squared', 'N/A')
-        escala_contraste = resultado.get('escala_contraste', 'N/A')
-        linealidad_ok = resultado.get('linealidad_aceptable', False)
+        pendiente = resultado.get('pendiente')
+        intercepto = resultado.get('intercepto')
+        r_cuadrado = resultado.get('r_squared')
+        escala_contraste = resultado.get('escala_contraste')
+        linealidad_ok = resultado.get('linealidad_aceptable')
         
-        # Formatear valores
-        if isinstance(pendiente, (int, float)):
-            pendiente_str = f"{pendiente:.6f}"
-        else:
-            pendiente_str = str(pendiente)
-        
-        if isinstance(intercepto, (int, float)):
-            intercepto_str = f"{intercepto:.3f}"
-        else:
-            intercepto_str = str(intercepto)
-        
-        if isinstance(r_cuadrado, (int, float)):
-            r2_str = f"{r_cuadrado:.6f}"
-        else:
-            r2_str = str(r_cuadrado)
-        
-        if isinstance(escala_contraste, (int, float)):
-            escala_str = f"{escala_contraste:.6f}"
-        else:
-            escala_str = str(escala_contraste)
+        # Formatear valores (GI.3: un valor que falta se dice «N/A», nunca «None»)
+        pendiente_str = _celda_valor(pendiente, "{:.6f}")
+        intercepto_str = _celda_valor(intercepto, "{:.3f}")
+        r2_str = _celda_valor(r_cuadrado, "{:.6f}")
+        escala_str = _celda_valor(escala_contraste, "{:.6f}")
         
         # G.2: la energía con la que se ajustó la curva, tal como quedó GUARDADA con la prueba
         energia_mev = resultado.get('energia_mev')
-        energia_str = f"{energia_mev:g}" if isinstance(energia_mev, (int, float)) else self.ENERGIA_NO_REGISTRADA
+        energia_str = _celda_numero(energia_mev, "{:g}", self.ENERGIA_NO_REGISTRADA)
 
         tabla.append(['Energía [MeV]', energia_str])
         tabla.append(['Pendiente', pendiente_str])
@@ -1069,13 +1003,13 @@ class ReporteControlSistemaImagenes:
         if con_criterio:
             # G.3: el valor guardado es el coeficiente de correlación r (D-30), no R²; la regla juzga R² = r².
             tabla.append(['r (coeficiente de correlación)', r2_str])
-            if isinstance(r_cuadrado, (int, float)):
-                tabla.append(['R² (r al cuadrado)', f"{r_cuadrado ** 2:.6f}"])
+            if isinstance(r_cuadrado, numbers.Real) and not isinstance(r_cuadrado, bool):
+                tabla.append(['R² (r al cuadrado)', _celda_numero(r_cuadrado * r_cuadrado, "{:.6f}")])
             tabla.append(['Escala de contraste', escala_str])
         else:
             tabla.append(['R² (coef. correlación)', r2_str])
             tabla.append(['Escala de contraste', escala_str])
-            tabla.append(['Linealidad aceptable (R²≥0.99)', '✓' if linealidad_ok else '✗'])
+            tabla.append(['Linealidad aceptable (R²≥0.99)', _celda_veredicto(linealidad_ok)])
         
         return pd.DataFrame(tabla, columns=['Linealidad CT', ''])
     
@@ -1100,52 +1034,21 @@ class ReporteControlSistemaImagenes:
         # Regiones individuales
         regiones = ['Centro', 'Arriba', 'Derecha', 'Abajo', 'Izquierda']
         
+        # GI.3: el HU de cada región es `promedio_hu` (el nombre del análisis y de lo que reabre el lector); una región sin dato dice «N/A».
         for region in regiones:
             if region in resultado:
                 region_data = resultado[region]
-                hu_prom = region_data.get('hu_promedio', 'N/A')
-                desv = region_data.get('desviacion', 'N/A')
-                
-                # Formatear valores
-                if isinstance(hu_prom, (int, float)):
-                    hu_str = f"{hu_prom:.1f}"
-                else:
-                    hu_str = str(hu_prom)
-                
-                if isinstance(desv, (int, float)):
-                    desv_str = f"{desv:.2f}"
-                else:
-                    desv_str = str(desv)
-                
-                tabla.append([region, hu_str, desv_str])
+                tabla.append([region,
+                              _celda_numero(region_data.get('promedio_hu'), "{:.1f}"),
+                              _celda_numero(region_data.get('desviacion'), "{:.2f}")])
         
         # Agregar métricas globales
         tabla.append(['--- MÉTRICAS GLOBALES ---', '---', '---'])
         
-        max_dif = uniformidad_global.get('max_diferencia', 'N/A')
-        desv_global = uniformidad_global.get('desviacion_global', 'N/A')
-        ui_max = uniformidad_global.get('uniformity_index_max', 'N/A')
-        inu_pct = uniformidad_global.get('integral_non_uniformity_pct', 'N/A')
-        
-        if isinstance(max_dif, (int, float)):
-            max_dif_str = f"{max_dif:.1f} HU"
-        else:
-            max_dif_str = str(max_dif)
-        
-        if isinstance(desv_global, (int, float)):
-            desv_g_str = f"{desv_global:.2f}"
-        else:
-            desv_g_str = str(desv_global)
-        
-        if isinstance(ui_max, (int, float)):
-            ui_str = f"{ui_max:.2f}%"
-        else:
-            ui_str = str(ui_max)
-        
-        if isinstance(inu_pct, (int, float)):
-            inu_str = f"{inu_pct:.2f}%"
-        else:
-            inu_str = str(inu_pct)
+        max_dif_str = _celda_numero(uniformidad_global.get('max_diferencia'), "{:.1f} HU")
+        desv_g_str = _celda_numero(uniformidad_global.get('desviacion_global'), "{:.2f}")
+        ui_str = _celda_numero(uniformidad_global.get('uniformity_index_max'), "{:.2f}%")
+        inu_str = _celda_numero(uniformidad_global.get('integral_non_uniformity_pct'), "{:.2f}%")
         
         # G.3: con criterio archivado, "Diferencia máxima" (máx - mín entre las cinco regiones) no es la métrica del
         # veredicto (máx |región - centro|, en la tabla de criterios): el rótulo lo dice.
@@ -1155,12 +1058,12 @@ class ReporteControlSistemaImagenes:
         tabla.append(['Integral Non-Uniformity (INU)', inu_str, '---'])
         
         # Estado final
-        pasa_global = uniformidad_global.get('pasa_global', False)
+        pasa_global = uniformidad_global.get('pasa_global')
         if con_criterio:
             # G.3: el veredicto está en la tabla de criterios; UI/INU con su umbral heredado quedan como dato.
-            tabla.append(['UI/INU con el umbral heredado (informativo)', 'Sí' if pasa_global else 'No', '---'])
+            tabla.append(['UI/INU con el umbral heredado (informativo)', _celda_veredicto(pasa_global), '---'])
         else:
-            tabla.append(['Pasa prueba de uniformidad', '✓' if pasa_global else '✗', '---'])
+            tabla.append(['Pasa prueba de uniformidad', _celda_veredicto(pasa_global), '---'])
         
         return pd.DataFrame(tabla, columns=['Uniformidad y ruido', '', ''])
     

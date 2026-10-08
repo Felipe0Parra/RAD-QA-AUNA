@@ -22,13 +22,13 @@ GARANTIAS, una por bloque:
   3. LAS PANTALLAS DE LO GUARDADO -- la tabla de resolucion espacial rotula y lee lp/cm; la de Valores CT muestra los siete materiales con y sin
      imagen; la de uniformidad no revienta con texto y dice "No disponible"; la de espesor solo dice lo guardado.
   4. LA REAPERTURA ENTERA -- un ROI en texto ya no tumba las demas categorias.
-  5. LO QUE EL PDF TODAVIA LEE (transicion hasta GI.3) -- el PDF es de GI.3: sus constructores siguen leyendo `'lp/mm'` por region y `*_lim` del
-     resumen de contraste; hasta GI.3 el lector los entrega con el valor que tenian (compuerta de cero diferencias del PDF).
+  5. (RETIRADO POR GI.3) LO QUE EL PDF TODAVIA LEIA -- durante GI.2 el lector conservaba `'lp/mm'` por region y las `*_lim` del resumen de contraste
+     porque el PDF las leia; GI.3 pasa el PDF a las claves del analisis, retira esas dos parejas y las pruebas que fijaban lo que el PDF imprimia
+     entonces (ahora en tests/test_gi3_pdf_y_ver_tabla.py).
   6. TRIPWIRES por AST -- los lectores no nombran lo que no esta guardado; ningun recorte ciego del ultimo elemento.
 
-FRONTERA con GI.3 (lo que esta prueba NO cambia a proposito): los rotulos y los constructores del PDF y la tabla de «Ver tabla»; la maxima
-resolucion y la MTF de los controles de enero a abril siguen en la unidad con la que se guardaron (el PDF los rotula todavia 'lp/mm', y alli son
-lp/mm): el lector deduce la unidad de la fila (`unidad_guardada`) para que GI.3 las convierta al mismo tiempo que cambia el rotulo.
+FRONTERA con GI.3: los rotulos y los constructores del PDF y la tabla de «Ver tabla» son de GI.3. Desde GI.3 el lector entrega la maxima resolucion y la
+MTF de los controles de enero a abril (guardadas en lp/mm) ya en lp/cm, con la unidad de la fila deducida (`unidad_guardada`).
 
 Nunca se conecta a una BD de referencia: las bases son nuevas o copias en un temporal.
 """
@@ -106,10 +106,6 @@ def _celdas(tabla):
 
 def _encabezados(tabla):
     return [tabla.horizontalHeaderItem(c).text() for c in range(tabla.columnCount())]
-
-
-# Las marcas que el PDF (de GI.3) imprime hoy; con escapes para no escribir los simbolos que DA-18 prohibe en textos nuevos. Aqui se fija lo que HEAD imprime.
-VISTO, CRUZ = "\u2713", "\u2717"
 
 
 # ---------------------------------------------------------------------------
@@ -484,7 +480,7 @@ def test_un_resumen_nulo_sin_detalle_por_roi_no_inventa_un_conteo(bd_nueva):
     assert r["rois_visibles_visibilidad"] is None
     _ejecutar(bd_nueva, "UPDATE resolucion_contraste SET total_rois = NULL")      # ni el detalle ni el total guardado: sin nada que contar no se inventa un 0 (C1)
     r = _reabrir(bd_nueva, "resolucion_contraste", sesion)["resumen"]
-    assert r["rois_visibles_visibilidad"] is None and r["total_rois"] is None and r["pasa_test_visibilidad"] is False
+    assert r["rois_visibles_visibilidad"] is None and r["total_rois"] is None and r["pasa_test_visibilidad"] is None      # GI.3: el 0 guardado no es un veredicto
 
 
 # --- resolucion espacial ---
@@ -518,14 +514,14 @@ def test_un_control_nuevo_reabre_lp_cm_por_region_con_la_clave_del_analisis(bd_n
 
 def test_un_control_de_enero_a_abril_reabre_en_lp_cm_desde_el_nombre_de_la_region(bd_nueva):
     """Rojo: la region 3 de un control de enero a abril guardo 0.3 (lp/mm): reabierto debe decir 3.0 lp/cm. La unidad de la fila se deduce de sus
-    propias regiones (0.3 = 3 / 10), y la maxima y la MTF NO se convierten todavia (GI.3 las rotula)."""
+    propias regiones (0.3 = 3 / 10), y la maxima y la MTF (guardadas en lp/mm) salen en lp/cm desde GI.3."""
     sesion = _crear_control(bd_nueva)
     assert _guardar(sesion, {"resolucion_espacial": _espacial_de_ocho_regiones()}) == sesion
     _guardar_espacial_antiguo(bd_nueva, sesion, "region 3", 0.3, {f"region {n}": n / 10 for n in range(1, 9)}, (None, None, 0.2628))
     r = _reabrir(bd_nueva, "resolucion_espacial", sesion)
     assert {n: reg["lp/cm"] for n, reg in r["region_results"].items()} == {f"region {n}": float(n) for n in range(1, 9)}
     assert r["unidad_guardada"] == "lp/mm"
-    assert r["resolucion_limite"]["lp_cm_maximo"] == 0.3 and r["mtf_lp_cm"] == {"50": 0.2628}, "la maxima y la MTF siguen como se guardaron"
+    assert r["resolucion_limite"]["lp_cm_maximo"] == 3.0 and r["mtf_lp_cm"] == {"50": 2.628}, "GI.3: la maxima y la MTF de enero a abril (lp/mm) salen en lp/cm"
 
 
 def test_un_control_guardado_con_el_defecto_de_gi1_reabre_lp_cm_desde_el_nombre_de_la_region(bd_nueva):
@@ -642,7 +638,7 @@ def test_un_roi_en_texto_ya_no_tumba_la_reapertura_de_las_demas_categorias(app, 
 
 
 # ---------------------------------------------------------------------------
-# 5. LO QUE EL PDF TODAVIA LEE (transicion hasta GI.3)
+# 5. LO QUE EL PDF LEE (la transicion GI.2 -> GI.3 termino: GI.3 retiro las claves de transicion y las pruebas que fijaban lo que el PDF imprimia entonces)
 # ---------------------------------------------------------------------------
 
 def _pdf():
@@ -654,31 +650,6 @@ def _filas_pdf(tabla):
     return [list(f) for f in tabla.values.tolist()]
 
 
-def test_transicion_el_pdf_sigue_leyendo_lp_mm_por_region_con_lo_guardado(bd_nueva):
-    """El PDF (GI.3) lee `'lp/mm'` por region: hasta GI.3 el lector entrega ahi lo que se guardo (0.1, 0.2... en enero a abril; None si NULL), asi
-    la tabla impresa de un control reabierto es la de hoy. GI.3 cambia el constructor del PDF a `'lp/cm'` y RETIRA este shim y esta prueba."""
-    sesion = _crear_control(bd_nueva)
-    assert _guardar(sesion, {"resolucion_espacial": _espacial_de_ocho_regiones()}) == sesion
-    _guardar_espacial_antiguo(bd_nueva, sesion, "region 3", 0.3, {f"region {n}": n / 10 for n in range(1, 9)}, (None, None, 0.26))
-    r = _reabrir(bd_nueva, "resolucion_espacial", sesion)
-    assert {n: reg["lp/mm"] for n, reg in r["region_results"].items()} == {f"region {n}": n / 10 for n in range(1, 9)}
-    filas = _filas_pdf(_pdf()._crear_tabla_resolucion_espacial(r))
-    assert [f[:2] for f in filas[1:4]] == [["region 1", "0.10"], ["region 2", "0.20"], ["region 3", "0.30"]]
-    resumen = {f[0]: f[1] for f in filas}
-    assert resumen["Resolución máxima"] == "0.30" and resumen["MTF 50%"] == "0.26"
-
-
-def test_transicion_el_pdf_sigue_leyendo_los_asteriscos_lim_del_resumen_de_contraste(bd_nueva):
-    """El PDF lee `rois_visibles_visibilidad_lim` y `pasa_test_visibilidad_lim` del resumen: hasta GI.3 el lector los entrega con lo guardado
-    (None / 0 en los controles con el defecto de GI.1) y ademas las claves del analisis (derivadas). GI.3 retira las `*_lim` y esta prueba."""
-    sesion = _crear_control(bd_nueva)
-    assert _guardar(sesion, {"resolucion_contraste": _resultado_contraste((15, 9, 8, 7, 6, 5), (15, 9))}) == sesion
-    _forzar_resumen_de_contraste_nulo(bd_nueva)
-    resumen = _reabrir(bd_nueva, "resolucion_contraste", sesion)["resumen"]
-    assert resumen["rois_visibles_visibilidad"] == 6 and resumen["pasa_test_visibilidad"] is True            # derivado
-    assert resumen["rois_visibles_visibilidad_lim"] is None and not resumen["pasa_test_visibilidad_lim"]   # lo guardado, como hoy
-
-
 def test_transicion_el_pdf_de_tamano_de_pixel_imprime_la_y_guardada(bd_nueva):
     """Lo NOMBRADO que cambia en el PDF: 'Y medido' imprime la Y guardada, no la X."""
     sesion = _crear_control(bd_nueva)
@@ -687,57 +658,16 @@ def test_transicion_el_pdf_de_tamano_de_pixel_imprime_la_y_guardada(bd_nueva):
     assert filas["X medido"] == "0.982 mm" and filas["Y medido"] == "0.963 mm"
 
 
-def test_transicion_el_pdf_de_uniformidad_ya_encuentra_los_cinco_roi_por_nombre(bd_nueva):
-    """El PDF itera ['Centro', 'Arriba', 'Derecha', 'Abajo', 'Izquierda']: con los nombres del analisis en lo reabierto las dos filas que faltaban
-    ('Arriba' y 'Abajo', guardadas como 'Superior'/'Inferior') aparecen. Su HU lo arregla GI.3 (el PDF lee `hu_promedio`, el analisis dice `promedio_hu`)."""
+def test_el_pdf_de_uniformidad_encuentra_los_cinco_roi_por_nombre_y_su_hu(bd_nueva):
+    """El PDF itera ['Centro', 'Arriba', 'Derecha', 'Abajo', 'Izquierda']: con los nombres del analisis en lo reabierto aparecen las cinco (GI.2: 'Arriba' y
+    'Abajo', guardadas como 'Superior'/'Inferior') y, desde GI.3, con su HU (el PDF lee `promedio_hu`, el nombre del analisis)."""
     sesion = _crear_control(bd_nueva)
-    assert _guardar(sesion, {"uniformidad": _resultado_uniformidad(True, True)}) == sesion
+    analisis = _resultado_uniformidad(True, True)
+    assert _guardar(sesion, {"uniformidad": analisis}) == sesion
     filas = _filas_pdf(_pdf()._crear_tabla_uniformidad(_reabrir(bd_nueva, "uniformidad", sesion)))
     regiones = [f[0] for f in filas[1:6]]
     assert regiones == ["Centro", "Arriba", "Derecha", "Abajo", "Izquierda"]
-
-
-# --- la compuerta «el PDF no cambia entre GI.2 y GI.3», afirmada sobre lo que el PDF IMPRIME en cada uno de los casos reales (lente reproducir, GI2-R2) ---
-# Son los casos que ya estan en las BD: resumen de contraste guardado (enero a abril y desde GI.1) o NULL (05/2026 a 09/2026), y la frecuencia por region en
-# lp/cm (control nuevo), en lp/mm (enero a abril) o NULL (05/2026 a 09/2026). Los valores esperados son los que el PDF imprime con el lector de HEAD
-# (cada caso pasa tambien contra el `catphan_db.py` de HEAD: es un control de que GI.2 no cambia lo impreso).
-
-@pytest.mark.parametrize("resumen_nulo, visibles, fila_esperada", [
-    (False, (15, 9, 8, 7, 6), ["5", VISTO]),                  # guardado: 5 visibles y pasa
-    (False, (15, 9, 8), ["3", CRUZ]),                         # guardado: 3 visibles y no pasa
-    (True, (15, 9, 8, 7, 6, 5), ["None", CRUZ]),              # NULL (defecto de GI.1): el PDF no ve el conteo DERIVADO (6 y pasa) hasta GI.3
-])
-def test_el_pdf_de_contraste_imprime_en_cada_caso_lo_que_imprime_hoy(bd_nueva, resumen_nulo, visibles, fila_esperada):
-    sesion = _crear_control(bd_nueva)
-    assert _guardar(sesion, {"resolucion_contraste": _resultado_contraste(visibles, (15, 9))}) == sesion
-    if resumen_nulo:
-        _forzar_resumen_de_contraste_nulo(bd_nueva)
-    r = _reabrir(bd_nueva, "resolucion_contraste", sesion)
-    filas = {f[0]: f[1:] for f in _filas_pdf(_pdf()._crear_tabla_resolucion_contraste(r))}
-    assert filas["ROIs visibles"] == fila_esperada
-    assert filas["Diámetro mínimo visible (mm)"] == ["N/A", CRUZ]
-
-
-@pytest.mark.parametrize("como, lp_por_region, maximo, mtf, regiones_esperadas, maxima_esperada, mtf50_esperada", [
-    ("nuevo", None, None, None, [["region 1", "1.00"], ["region 2", "2.00"], ["region 3", "3.00"]], "3.00", "2.60"),
-    ("enero a abril", {f"region {n}": n / 10 for n in range(1, 9)}, 0.3, (None, None, 0.2628),
-     [["region 1", "0.10"], ["region 2", "0.20"], ["region 3", "0.30"]], "0.30", "0.26"),
-    ("defecto de GI.1", {f"region {n}": None for n in range(1, 9)}, 3.0, (None, 2.87, 2.17),
-     [["region 1", "None"], ["region 2", "None"], ["region 3", "None"]], "3.00", "2.17"),
-])
-def test_el_pdf_de_resolucion_espacial_imprime_en_cada_caso_lo_que_imprime_hoy(bd_nueva, como, lp_por_region, maximo, mtf, regiones_esperadas,
-                                                                              maxima_esperada, mtf50_esperada):
-    """El PDF rotula 'lp/mm' y GI.3 lo pasa a lp/cm: hasta entonces imprime lo GUARDADO crudo (1.00 de un control nuevo, 0.10 de uno de enero a abril, None de uno
-    con el defecto de GI.1), la maxima y la MTF como se guardaron; nunca el lp/cm derivado del nombre de la region (que el lector entrega aparte)."""
-    sesion = _crear_control(bd_nueva)
-    assert _guardar(sesion, {"resolucion_espacial": _espacial_de_ocho_regiones()}) == sesion
-    if lp_por_region is not None:
-        _guardar_espacial_antiguo(bd_nueva, sesion, "region 3", maximo, lp_por_region, mtf)
-    r = _reabrir(bd_nueva, "resolucion_espacial", sesion)
-    filas = _filas_pdf(_pdf()._crear_tabla_resolucion_espacial(r))
-    assert [f[:2] for f in filas[1:4]] == regiones_esperadas, como
-    por_nombre = {f[0]: f for f in filas}
-    assert por_nombre["Resolución máxima"][1] == maxima_esperada and por_nombre["MTF 50%"][1] == mtf50_esperada, como
+    assert [f[1] for f in filas[1:6]] == [f"{analisis[r]['promedio_hu']:.1f}" for r in regiones], "el HU de cada region (GI.3: antes N/A)"
 
 
 # ---------------------------------------------------------------------------
@@ -982,26 +912,6 @@ def test_la_tabla_de_resolucion_espacial_exige_los_tres_numeros_de_una_region_me
     assert [f[0] for f in _celdas(tabla)] == ["Región 2"], faltante
 
 
-def test_con_el_resumen_de_contraste_guardado_el_pdf_ve_lo_guardado(bd_nueva):
-    """Transicion: un control CON el resumen guardado (enero a abril y los guardados desde GI.1): las claves `*_lim` que el PDF todavia lee traen lo
-    guardado (5 ROI visibles y el veredicto), el PDF imprime ese conteo y el veredicto impreso de 3 ROI es otro que el de 5."""
-    sesion = _crear_control(bd_nueva)
-
-    def abrir(visibles):                          # guardar otra vez la misma categoria reemplaza el bloque (la fila anterior se anula)
-        assert _guardar(sesion, {"resolucion_contraste": _resultado_contraste(visibles, (15, 9))}) == sesion
-        return _reabrir(bd_nueva, "resolucion_contraste", sesion)
-    cinco = abrir((15, 9, 8, 7, 6))
-    resumen = cinco["resumen"]
-    assert resumen["rois_visibles_visibilidad_lim"] == 5 and bool(resumen["pasa_test_visibilidad_lim"]) is True
-    assert resumen["rois_visibles_visibilidad"] == 5 and resumen["pasa_test_visibilidad"] is True
-    fila_cinco = {f[0]: f[1:] for f in _filas_pdf(_pdf()._crear_tabla_resolucion_contraste(cinco))}["ROIs visibles"]
-    assert fila_cinco[0] == "5"
-    tres = abrir((15, 9, 8))
-    assert tres["resumen"]["rois_visibles_visibilidad_lim"] == 3 and bool(tres["resumen"]["pasa_test_visibilidad_lim"]) is False
-    fila_tres = {f[0]: f[1:] for f in _filas_pdf(_pdf()._crear_tabla_resolucion_contraste(tres))}["ROIs visibles"]
-    assert fila_tres[0] == "3" and fila_tres[1] != fila_cinco[1], "el veredicto impreso de 3 ROI debe ser otro que el de 5"
-
-
 def test_los_veredictos_del_resumen_son_booleanos_y_un_null_no_se_inventa(bd_nueva):
     sesion = _crear_control(bd_nueva)
     assert _guardar(sesion, {"resolucion_contraste": _resultado_contraste((15, 9, 8, 7, 6), (15, 9))}) == sesion
@@ -1120,17 +1030,6 @@ def test_la_pantalla_de_espesor_dice_los_renglones_del_analisis_aunque_valgan_ce
         assert esperado in texto, (esperado, texto)
 
 
-def test_en_un_control_con_lp_cm_nulo_el_pdf_sigue_leyendo_none_en_lp_mm(bd_nueva):
-    """Transicion, el caso NULL: la clave `'lp/mm'` que el PDF todavia lee trae lo GUARDADO crudo (None), no el lp/cm derivado: con el derivado el PDF
-    imprimiria 1.00, 2.00, 3.00 bajo el rotulo 'lp/mm'. GI.3 retira la clave."""
-    sesion = _crear_control(bd_nueva)
-    assert _guardar(sesion, {"resolucion_espacial": _espacial_de_ocho_regiones()}) == sesion
-    _guardar_espacial_antiguo(bd_nueva, sesion, "region 3", 3.0, {f"region {n}": None for n in range(1, 9)}, (None, None, 2.6))
-    r = _reabrir(bd_nueva, "resolucion_espacial", sesion)
-    assert {n: reg["lp/mm"] for n, reg in r["region_results"].items()} == {f"region {n}": None for n in range(1, 9)}
-    assert {n: reg["lp/cm"] for n, reg in r["region_results"].items()} == {f"region {n}": float(n) for n in range(1, 9)}
-
-
 def test_un_roi_sin_veredicto_guardado_no_cuenta_como_visible_en_la_derivacion(bd_nueva):
     sesion = _crear_control(bd_nueva)
     assert _guardar(sesion, {"resolucion_contraste": _resultado_contraste((15, 9, 8, 7), (15, 9))}) == sesion         # 4 visibles: pasaria
@@ -1177,30 +1076,6 @@ def test_la_fila_unica_anulada_de_una_categoria_no_se_lee(bd_nueva, categoria, t
 # 10. SEGUNDA RONDA DE LA REVISION: lo guardado que el lector tiraba, el detalle parcial y el lp_cm no positivo
 # ---------------------------------------------------------------------------
 
-def test_el_diametro_minimo_visible_guardado_no_se_entrega_en_gi2_y_el_pdf_sigue_como_hoy(bd_nueva):
-    """HF1 (lente reproducir) y REG-2 (lente regresion): `diametro_minimo_visible` ESTA guardado (el menor ROI visible; 7 de 8 sesiones reales) y el lector
-    nunca lo entrego: el PDF dice «N/A» y la marca de no pasa en esa fila de todo control. GI.2 NO lo entrega a proposito: el constructor del PDF (GI.3) marca
-    la fila de aprobado si hay valor -- presencia, no veredicto --, asi que entregarlo imprimiria una marca de aprobado por tener un numero (15 mm junto a
-    «ROIs visibles: 1», que no pasa) en un documento firmado: un cambio que ninguna tarea nombra. GI.3 lo entrega en el mismo cambio que decide la marca y
-    retira la entrada de CLAVES_QUE_NINGUN_LECTOR_ENTREGA_TODAVIA. Aqui: (1) el dato esta guardado; (2) el lector no lo entrega; (3) el PDF imprime lo de HEAD."""
-    sesion = _crear_control(bd_nueva)
-    assert _guardar(sesion, {"resolucion_contraste": _resultado_contraste((15, 9, 8, 7), (15, 9))}) == sesion
-    con = _leer(bd_nueva)
-    try:
-        assert con.execute("SELECT diametro_minimo_visible FROM resolucion_contraste").fetchone()[0] == 7        # esta guardado
-    finally:
-        con.close()
-    r = _reabrir(bd_nueva, "resolucion_contraste", sesion)
-    assert "diametro_minimo_visible" not in r["resumen"]
-    fila = {f[0]: f[1:] for f in _filas_pdf(_pdf()._crear_tabla_resolucion_contraste(r))}["Diámetro mínimo visible (mm)"]
-    assert fila == ["N/A", CRUZ]
-    assert _guardar(sesion, {"resolucion_contraste": _resultado_contraste((), (15, 9))}) == sesion        # ningun ROI visible: el escritor guarda NULL
-    r = _reabrir(bd_nueva, "resolucion_contraste", sesion)
-    assert "diametro_minimo_visible" not in r["resumen"], "ni siquiera como None: el PDF imprimiria «None»"
-    fila = {f[0]: f[1:] for f in _filas_pdf(_pdf()._crear_tabla_resolucion_contraste(r))}["Diámetro mínimo visible (mm)"]
-    assert fila == ["N/A", CRUZ]
-
-
 def test_con_un_detalle_parcial_de_roi_no_se_deriva_un_conteo_que_seria_falso(bd_nueva):
     """N16 (lente reproducir): el resumen dice 6 ROI y el detalle guardado trae 3 (una fila anulada): contar los visibles de 3 no es el conteo de 6. Sin
     el detalle completo no se deriva (el conteo queda None: no se inventa)."""
@@ -1210,7 +1085,7 @@ def test_con_un_detalle_parcial_de_roi_no_se_deriva_un_conteo_que_seria_falso(bd
     _ejecutar(bd_nueva, "UPDATE resolucion_contraste_rois SET activo = 0 WHERE diametro_mm IN (15, 9, 8)")
     r = _reabrir(bd_nueva, "resolucion_contraste", sesion)["resumen"]
     assert r["total_rois"] == 6 and len(_reabrir(bd_nueva, "resolucion_contraste", sesion)["resultados_roi"]) == 3
-    assert r["rois_visibles_visibilidad"] is None and r["pasa_test_visibilidad"] is False        # el veredicto guardado (0) tal cual: no se deriva
+    assert r["rois_visibles_visibilidad"] is None and r["pasa_test_visibilidad"] is None        # GI.3: el 0 guardado junto al conteo NULL no es un veredicto
     _ejecutar(bd_nueva, "UPDATE resolucion_contraste SET total_rois = NULL")
     r = _reabrir(bd_nueva, "resolucion_contraste", sesion)["resumen"]
     assert r["rois_visibles_visibilidad"] == 1, "sin `total_rois` guardado se deriva con el detalle que hay"
@@ -1301,7 +1176,7 @@ def test_cada_sesion_real_reabre_con_lo_que_su_tabla_guardo(bd_copia_real):
                         "SELECT COUNT(*) FROM resolucion_contraste_rois WHERE id_prueba = ? AND (activo IS NULL OR activo = 1)", (id_prueba,)).fetchone()[0]
                 elif categoria == "resolucion_espacial":
                     g = con.execute("SELECT * FROM resolucion_espacial WHERE id_prueba = ? AND (activo IS NULL OR activo = 1)", (id_prueba,)).fetchone()
-                    assert todo["resolucion_espacial"]["resolucion_limite"]["lp_cm_maximo"] == g["lp_cm_maximo"]
+                    assert todo["resolucion_espacial"]["resolucion_limite"]["lp_cm_maximo"] == C.en_lp_cm(g["lp_cm_maximo"], todo["resolucion_espacial"]["unidad_guardada"])
                     assert todo["resolucion_espacial"]["resolucion_limite"]["ultima_region"] == g["ultima_region_exitosa"]
                 elif categoria == "valores_ct":
                     n = con.execute("SELECT COUNT(*) FROM valores_ct WHERE id_prueba = ? AND (activo IS NULL OR activo = 1)", (id_prueba,)).fetchone()[0]
@@ -1333,16 +1208,21 @@ def test_los_siete_lectores_existen_y_la_reapertura_los_llama_a_todos():
 
 
 def test_un_resumen_nulo_sin_detalle_no_inventa_el_veredicto(bd_nueva):
-    """HF4.9: sin detalle por ROI el conteo queda None Y el veredicto sigue siendo el guardado (0 = no pasa), no uno derivado."""
+    """HF4.9: sin detalle por ROI el conteo queda None y el veredicto no se deriva. GI.3: tampoco queda el 0 guardado como un «no pasa»: (conteo NULL,
+    veredicto 0) es la firma del defecto de GI.1 (`bool(None)`) y el PDF imprime el veredicto, asi que sin dato dice None («N/A»); un veredicto guardado
+    verdadero se respeta."""
     sesion = _crear_control(bd_nueva)
     assert _guardar(sesion, {"resolucion_contraste": _resultado_contraste((15, 9, 8, 7, 6), (15, 9))}) == sesion
     _forzar_resumen_de_contraste_nulo(bd_nueva)
     _ejecutar(bd_nueva, "DELETE FROM resolucion_contraste_rois")
     r = _reabrir(bd_nueva, "resolucion_contraste", sesion)["resumen"]
-    assert r["rois_visibles_visibilidad"] is None and r["pasa_test_visibilidad"] is False
+    assert r["rois_visibles_visibilidad"] is None and r["pasa_test_visibilidad"] is None
     _ejecutar(bd_nueva, "UPDATE resolucion_contraste SET total_rois = NULL")
     r = _reabrir(bd_nueva, "resolucion_contraste", sesion)["resumen"]
-    assert r["rois_visibles_visibilidad"] is None and r["pasa_test_visibilidad"] is False, "sin detalle ni total guardado el veredicto sigue siendo el guardado"
+    assert r["rois_visibles_visibilidad"] is None and r["pasa_test_visibilidad"] is None, "sin detalle ni total guardado no hay veredicto que decir"
+    _ejecutar(bd_nueva, "UPDATE resolucion_contraste SET pasa_test_visibilidad = 1")
+    r = _reabrir(bd_nueva, "resolucion_contraste", sesion)["resumen"]
+    assert r["rois_visibles_visibilidad"] is None and r["pasa_test_visibilidad"] is True, "un veredicto guardado verdadero se respeta"
 
 
 def test_las_filas_globales_de_la_tabla_de_uniformidad_dicen_lo_guardado(app, bd_nueva):
@@ -1451,20 +1331,13 @@ CONSUMIDORES = {
 
 # Las claves que un constructor lee y NINGUN lector entrega, HOY. Lista REVISADA, corta y con su motivo. Solo puede achicarse: la prueba falla si aparece una
 # nueva (el constructor imprimiria «N/A» o su valor por omision sin que nadie lo haya decidido) y tambien si una entrada deja de ser cierta (el lector ya la
-# entrega: hay que retirarla de aqui). Las que son de GI.3 las retira GI.3 en el mismo cambio que las entrega.
+# entrega: hay que retirarla de aqui). GI.3 entrego `diametro_minimo_visible` y paso el PDF de uniformidad a `promedio_hu`: ya no hay entradas de GI.3.
 CLAVES_QUE_NINGUN_LECTOR_ENTREGA_TODAVIA = {
-    ("PDF", "_crear_tabla_resolucion_contraste"): {
-        "diametro_minimo_visible": "guardado (el menor ROI visible); GI.3 lo entrega con la marca de su fila: el PDF pone la marca de aprobado si HAY valor, "
-                                   "no si el control pasa, y entregarlo en GI.2 imprimiria un cambio que ninguna tarea nombra"},
-    ("PDF", "_crear_tabla_uniformidad"): {
-        "hu_promedio": "el PDF lee `hu_promedio` y el analisis y el lector dicen `promedio_hu`: GI.3 pasa el PDF a `promedio_hu`"},
     ("pantalla", "tabla_resultados_espesor"): {
         "factor_correccion": "solo lo trae el analisis fresco; lo reabierto no lo inventa (D4)",
         "num_rampas_detectadas": "solo lo trae el analisis fresco; lo reabierto no lo inventa (D4)",
         "combinacion_slices": "solo lo trae el analisis fresco; lo reabierto no lo inventa (D4)",
         "espesores_individuales": "solo lo trae el analisis fresco; lo reabierto no lo inventa (D4)"},
-    ("pantalla", "tabla_resultados_resolucion_contraste"): {
-        "visibility_threshold": "no se guarda ni el analisis lo produce con ese nombre: la pantalla dice «Umbral: N/A» (anterior a GI.2; lo decide GI.3)"},
     ("pantalla", "tabla_resultados_ct"): {
         "resultados": "la tabla tambien acepta el diccionario del analisis fresco `{'resultados': [...]}`; lo reabierto es la lista misma"},
 }

@@ -96,13 +96,13 @@ SITIOS_LITERALES_PERMITIDOS = {
         "por su propio id físico. Edición directa de UNA celda (DA-08), no "
         "un reemplazo de bloque -- las hijas de QC de ese control llegan "
         "después, por su propio camino de guardado.",
-    ("data/ManejoDatos/load.py", 4909):  # RC.2 (30-09), nuevo: 4903->4904; FS.1 (06-10): 4904->4909
+    ("data/ManejoDatos/load.py", 4928):  # RC.2 (30-09), nuevo: 4903->4904; FS.1 (06-10): 4904->4909; GI.3 (07-10): 4909->4928
         "corregir_calibracion -- UPDATE de UNA celda de TipoCalibracion ya "
         "identificada por su id físico (tabla LITERAL en el f-string; solo "
         "la columna es dinámica). Corrección con rastro (DA-05/07/08), el "
         "mismo mecanismo PERMANENTE que guardarEdicion, no el patrón G1/G2 "
         "que EB1 elimina: no reemplaza ningún bloque.",
-    ("data/ManejoDatos/load.py", 4917):  # RC.2 (30-09), nuevo: 4911->4912; FS.1 (06-10): 4912->4917
+    ("data/ManejoDatos/load.py", 4936):  # RC.2 (30-09), nuevo: 4911->4912; FS.1 (06-10): 4912->4917; GI.3 (07-10): 4917->4936
         "corregir_calibracion -- UPDATE de ResultadosActividad, el recálculo "
         "derivado de la corrección anterior, en la MISMA transacción y con "
         "su auditoría (DA-52). Solo corre si el dato corregido cambia algo "
@@ -276,14 +276,14 @@ SITIOS_OPACOS_PERMITIDOS = {
         "INSERT (users, admin de arranque) -- no aplica a EB5.",
     ("data/ManejoDatos/load.py", 375):  # FS.1 (06-10): 370->375
         "INSERT (controles, alta de un control nuevo) -- no aplica a EB5.",
-    ("data/ManejoDatos/load.py", 4387):  # RC.2 (30-09): 4376->4382; FS.1 (06-10): 4382->4387
+    ("data/ManejoDatos/load.py", 4406):  # RC.2 (30-09): 4376->4382; FS.1 (06-10): 4382->4387; GI.3 (07-10): 4387->4406
         "guardarEdicion (A3, DA-05/DA-07/DA-08) -- mecanismo GENÉRICO de "
         "edición directa de una celda: tabla y columna dinámicas (elegidas "
         "en la UI), WHERE por id físico O por (ref, energia) según la "
         "tabla. Mecanismo de corrección PERMANENTE, decidido, auditado -- "
         "no el patrón G1/G2 que este plan elimina (que mutaba TODO el "
         "bloque en cada guardado, no un campo puntual con rastro).",
-    ("data/ManejoDatos/load.py", 4726):  # RC.2 (30-09): 4792->4721; FS.1 (06-10): 4721->4726
+    ("data/ManejoDatos/load.py", 4745):  # RC.2 (30-09): 4792->4721; FS.1 (06-10): 4721->4726; GI.3 (07-10): 4726->4745
         "eliminarRegistro, rama else -- DELETE físico, alcanzable SOLO "
         "para tablas fuera del cierre transitivo de QC (catálogos "
         "genéricos). La rama if (anular_fila) cubre las 59 tablas de "

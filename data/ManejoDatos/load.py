@@ -2946,6 +2946,8 @@ def _mostrar_tabla_generica(parent, mes_control, config):
 
     cursor.execute(query, (mes_control,))
     result = cursor.fetchall()
+    if config.get('filas'):                  # GI.3: un ajuste de lo leído, tabla por tabla (la resolución espacial se muestra en lp/cm)
+        result = config['filas'](result)
 
     conn.close()
 
@@ -3031,6 +3033,9 @@ def mostrar_uniformidad_global(parent, id_control):
 
 
 def mostrar_resolucion_espacial(parent, id_control):
+    # GI.3: la máxima y la MTF salen en lp/cm (los controles de enero a abril las guardaron en lp/mm). La unidad la deduce la máxima contra la última región (sin leer
+    # las regiones: este visor trae UNA consulta); es la misma conversión `en_lp_cm` del lector y coincide con su `unidad_guardada` en cada fila real. El centinela -1 se muestra como se guardó.
+    from data.ManejoDatos.catphan_TAC.catphan_db import en_lp_cm, unidad_de_la_fila_espacial
     config = {
         'titulo': 'Resolución Espacial',
         'tabla': 'resolucion_espacial',
@@ -3038,16 +3043,30 @@ def mostrar_resolucion_espacial(parent, id_control):
             ('ID Prueba', 'id_prueba'),
             ('Regiones Analizadas', 'regiones_analizadas'),
             ('Regiones Exitosas', 'regiones_exitosas'),
-            ('LP/mm Máximo', 'lp_cm_maximo'),
+            ('Resolución Máxima [lp/cm]', 'lp_cm_maximo'),
             ('Última Región Exitosa', 'ultima_region_exitosa'),
-            ('Gap Size Mínimo (cm)', 'gap_size_minimo_cm'),
+            ('Gap Size Mínimo [cm]', 'gap_size_minimo_cm'),
             ('Nº Picos Totales', 'num_picos_totales'),
-            ('MTF 10%', 'mtf_10_pct'),
-            ('MTF 20%', 'mtf_20_pct'),
-            ('MTF 50%', 'mtf_50_pct')
+            ('MTF 10% [lp/cm]', 'mtf_10_pct'),
+            ('MTF 20% [lp/cm]', 'mtf_20_pct'),
+            ('MTF 50% [lp/cm]', 'mtf_50_pct')
         ],
         'mensaje_vacio': '⚠️ No se encontraron datos de Resolución Espacial para este control'
     }
+    nombres = [col[1] for col in config['columnas']]
+    i_maxima, i_ultima = nombres.index('lp_cm_maximo'), nombres.index('ultima_region_exitosa')
+    i_en_lp_cm = [i_maxima] + [nombres.index(c) for c in ('mtf_10_pct', 'mtf_20_pct', 'mtf_50_pct')]
+
+    def filas_en_lp_cm(filas):
+        convertidas = []
+        for fila in filas:
+            fila = list(fila)
+            unidad = unidad_de_la_fila_espacial([], fila[i_maxima], fila[i_ultima])
+            for i in i_en_lp_cm:
+                fila[i] = en_lp_cm(fila[i], unidad)
+            convertidas.append(tuple(fila))
+        return convertidas
+    config['filas'] = filas_en_lp_cm
     _mostrar_tabla_generica(parent, id_control, config)
 
 

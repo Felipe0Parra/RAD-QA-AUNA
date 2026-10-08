@@ -133,40 +133,38 @@ BASELINE_D1_PENDIENTE = {
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 929, '%'),
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 930, '%'),
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 937, '%'),
-    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1770, 'mm'),  # A.1 (23-09): 1591->1638; A.2 (23-09): 1638->1644; G.2 (24-09): 1644->1648; G.3 (24-09): 1648->1657; GI.2 (06-10): 1657->1770
-    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1913, 'cm'),  # A.1 (23-09): 1734->1781; A.2 (23-09): 1781->1787; G.2 (24-09): 1787->1791; G.3 (24-09): 1791->1800; GI.2 (06-10): 1800->1913
-    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 2044, 'HU'),  # A.1 (23-09): 1861->1908; A.2 (23-09): 1908->1914; G.2 (24-09): 1914->1918; G.3 (24-09): 1918->1927; GI.2 (06-10): 1927->2044
+    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1823, 'mm'),  # A.1 (23-09): 1591->1638; A.2 (23-09): 1638->1644; G.2 (24-09): 1644->1648; G.3 (24-09): 1648->1657; GI.2 (06-10): 1657->1770; GI.3 (07-10): 1770->1823
+    ('data/ManejoDatos/catphan_TAC/catphan_db.py', 1968, 'cm'),  # A.1 (23-09): 1734->1781; A.2 (23-09): 1781->1787; G.2 (24-09): 1787->1791; G.3 (24-09): 1791->1800; GI.2 (06-10): 1800->1913; GI.3 (07-10): 1913->1968
     ('data/ManejoDatos/catphan_TAC/leer_dicom.py', 1414, 'mm'),  # A.1 (18-09): 951->956; C.2 (22-09): 956->1142->1164; D.0 (23-09): 1164->1258; D.1 (23-09): 1258->1290; A.1 (23-09): 1290->1294; A.3 (23-09): 1294->1319; B.2 (25-09): 1319->1351; B.3 (25-09): 1351->1366; SE.5 (05-10): 1366->1414
     ('data/ManejoDatos/conection.py', 2044, 'HU'),  # R.1 (11-09): 1649->1734; T.0 (16-09): 1734->1788; B.1 (21-09): 1788->1817; A.1 (23-09): 1817->1857; A.2 (23-09): 1857->1861; G.2 (24-09): 1861->1882; G.3 (24-09): 1882->1908; PI.2 (01-10): 1908->1909; RB.3 (05-10): 1909->1936; GI.0: 1936->2044
     ('data/ManejoDatos/conection.py', 2067, 'HU'),  # R.1 (11-09): 1672->1757; T.0 (16-09): 1757->1811; B.1 (21-09): 1811->1840; A.1 (23-09): 1840->1880; A.2 (23-09): 1880->1884; G.2 (24-09): 1884->1905; G.3 (24-09): 1905->1931; PI.2 (01-10): 1931->1932; RB.3 (05-10): 1932->1959; GI.0: 1959->2067
     ('data/ManejoDatos/conection.py', 2081, '%'),  # R.1 (11-09): 1686->1771; T.0 (16-09): 1771->1825; B.1 (21-09): 1825->1854; A.1 (23-09): 1854->1894; A.2 (23-09): 1894->1898; G.2 (24-09): 1898->1919; G.3 (24-09): 1919->1945; PI.2 (01-10): 1945->1946; RB.3 (05-10): 1946->1973; GI.0: 1973->2081
-    ('data/ManejoDatos/load.py', 3043, 'cm'),  # FS.1 (06-10): 3038->3043
-    ('data/ManejoDatos/load.py', 3080, 'mm'),  # FS.1 (06-10): 3075->3080
-    ('data/ManejoDatos/load.py', 3081, 'mm'),  # FS.1 (06-10): 3076->3081
-    ('data/ManejoDatos/load.py', 3082, 'mm'),  # FS.1 (06-10): 3077->3082
-    ('data/ManejoDatos/load.py', 3083, '%'),  # FS.1 (06-10): 3078->3083
-    ('data/ManejoDatos/load.py', 3101, '%'),  # FS.1 (06-10): 3096->3101
-    ('data/ManejoDatos/load.py', 3172, '°'),  # FS.1 (06-10): 3167->3172
-    ('data/ManejoDatos/load.py', 3359, 'cGy/UM'),  # FS.1 (06-10): 3354->3359
-    ('data/ManejoDatos/load.py', 3361, '%'),  # FS.1 (06-10): 3356->3361
-    ('data/ManejoDatos/load.py', 3362, '%'),  # FS.1 (06-10): 3357->3362
-    ('data/ManejoDatos/load.py', 3363, '%'),  # FS.1 (06-10): 3358->3363
-    ('data/ManejoDatos/load.py', 3364, '%'),  # FS.1 (06-10): 3359->3364
-    ('data/ManejoDatos/load.py', 3378, 'MV'),  # FS.1 (06-10): 3373->3378
-    ('data/ManejoDatos/load.py', 3379, 'cGy/UM'),  # FS.1 (06-10): 3374->3379
-    ('data/ManejoDatos/load.py', 3381, '%'),  # FS.1 (06-10): 3376->3381
-    ('data/ManejoDatos/load.py', 3382, '%'),  # FS.1 (06-10): 3377->3382
-    ('data/ManejoDatos/load.py', 3383, '%'),  # FS.1 (06-10): 3378->3383
-    ('data/ManejoDatos/load.py', 3384, '%'),  # FS.1 (06-10): 3379->3384
-    ('data/ManejoDatos/load.py', 3392, '%'),  # FS.1 (06-10): 3387->3392
-    ('data/ManejoDatos/load.py', 3547, 'cm'),  # FS.1 (06-10): 3542->3547
-    ('data/ManejoDatos/load.py', 3622, '%'),  # FS.1 (06-10): 3617->3622
-    ('data/ManejoDatos/load.py', 3622, 'cm'),  # FS.1 (06-10): 3617->3622
-    ('data/ManejoDatos/load.py', 3690, '%'),  # FS.1 (06-10): 3685->3690
-    ('data/ManejoDatos/load.py', 4112, 'mm'),  # FS.1 (06-10): 4107->4112
-    ('data/ManejoDatos/load.py', 4113, 'mm'),  # FS.1 (06-10): 4108->4113
-    ('data/ManejoDatos/load.py', 4146, 'mm'),  # FS.1 (06-10): 4141->4146
-    ('data/ManejoDatos/load.py', 4176, 'mm'),  # FS.1 (06-10): 4171->4176
+    ('data/ManejoDatos/load.py', 3099, 'mm'),  # FS.1 (06-10): 3075->3080; GI.3 (07-10): 3080->3099
+    ('data/ManejoDatos/load.py', 3100, 'mm'),  # FS.1 (06-10): 3076->3081; GI.3 (07-10): 3081->3100
+    ('data/ManejoDatos/load.py', 3101, 'mm'),  # FS.1 (06-10): 3077->3082; GI.3 (07-10): 3082->3101
+    ('data/ManejoDatos/load.py', 3102, '%'),  # FS.1 (06-10): 3078->3083; GI.3 (07-10): 3083->3102
+    ('data/ManejoDatos/load.py', 3120, '%'),  # FS.1 (06-10): 3096->3101; GI.3 (07-10): 3101->3120
+    ('data/ManejoDatos/load.py', 3191, '°'),  # FS.1 (06-10): 3167->3172; GI.3 (07-10): 3172->3191
+    ('data/ManejoDatos/load.py', 3378, 'cGy/UM'),  # FS.1 (06-10): 3354->3359; GI.3 (07-10): 3359->3378
+    ('data/ManejoDatos/load.py', 3380, '%'),  # FS.1 (06-10): 3356->3361; GI.3 (07-10): 3361->3380
+    ('data/ManejoDatos/load.py', 3381, '%'),  # FS.1 (06-10): 3357->3362; GI.3 (07-10): 3362->3381
+    ('data/ManejoDatos/load.py', 3382, '%'),  # FS.1 (06-10): 3358->3363; GI.3 (07-10): 3363->3382
+    ('data/ManejoDatos/load.py', 3383, '%'),  # FS.1 (06-10): 3359->3364; GI.3 (07-10): 3364->3383
+    ('data/ManejoDatos/load.py', 3397, 'MV'),  # FS.1 (06-10): 3373->3378; GI.3 (07-10): 3378->3397
+    ('data/ManejoDatos/load.py', 3398, 'cGy/UM'),  # FS.1 (06-10): 3374->3379; GI.3 (07-10): 3379->3398
+    ('data/ManejoDatos/load.py', 3400, '%'),  # FS.1 (06-10): 3376->3381; GI.3 (07-10): 3381->3400
+    ('data/ManejoDatos/load.py', 3401, '%'),  # FS.1 (06-10): 3377->3382; GI.3 (07-10): 3382->3401
+    ('data/ManejoDatos/load.py', 3402, '%'),  # FS.1 (06-10): 3378->3383; GI.3 (07-10): 3383->3402
+    ('data/ManejoDatos/load.py', 3403, '%'),  # FS.1 (06-10): 3379->3384; GI.3 (07-10): 3384->3403
+    ('data/ManejoDatos/load.py', 3411, '%'),  # FS.1 (06-10): 3387->3392; GI.3 (07-10): 3392->3411
+    ('data/ManejoDatos/load.py', 3566, 'cm'),  # FS.1 (06-10): 3542->3547; GI.3 (07-10): 3547->3566
+    ('data/ManejoDatos/load.py', 3641, '%'),  # FS.1 (06-10): 3617->3622; GI.3 (07-10): 3622->3641
+    ('data/ManejoDatos/load.py', 3641, 'cm'),  # FS.1 (06-10): 3617->3622; GI.3 (07-10): 3622->3641
+    ('data/ManejoDatos/load.py', 3709, '%'),  # FS.1 (06-10): 3685->3690; GI.3 (07-10): 3690->3709
+    ('data/ManejoDatos/load.py', 4131, 'mm'),  # FS.1 (06-10): 4107->4112; GI.3 (07-10): 4112->4131
+    ('data/ManejoDatos/load.py', 4132, 'mm'),  # FS.1 (06-10): 4108->4113; GI.3 (07-10): 4113->4132
+    ('data/ManejoDatos/load.py', 4165, 'mm'),  # FS.1 (06-10): 4141->4146; GI.3 (07-10): 4146->4165
+    ('data/ManejoDatos/load.py', 4195, 'mm'),  # FS.1 (06-10): 4171->4176; GI.3 (07-10): 4176->4195
     ('models/PDF/Anual/reportes_anuales.py', 342, '%'),
     ('models/PDF/Anual/reportes_anuales.py', 353, '%'),
     ('models/PDF/Anual/reportes_anuales.py', 375, '%'),
@@ -192,10 +190,7 @@ BASELINE_D1_PENDIENTE = {
     ('models/PDF/Anual/reportes_anuales.py', 770, '%'),
     ('models/PDF/Anual/reportes_anuales.py', 777, 'nC'),
     ('models/PDF/Anual/reportes_anuales.py', 802, 'cm'),
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 854, 'mm'),  # E.3 (24-09): 714->730; E.2 (24-09): 730->808; G.2 (24-09): 808->809; G.3 (24-09): 809->845; B.3 (25-09): 845->854
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 887, 'mm'),  # E.3 (24-09): 747->763; E.2 (24-09): 763->841; G.2 (24-09): 841->842; G.3 (24-09): 842->878; B.3 (25-09): 878->887
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 907, 'cm'),  # E.3 (24-09): 767->783; E.2 (24-09): 783->861; G.2 (24-09): 861->862; G.3 (24-09): 862->898; B.3 (25-09): 898->907
-    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 991, '%'),  # E.3 (24-09): 851->867; E.2 (24-09): 867->945; G.2 (24-09): 945->946; G.3 (24-09): 946->982; B.3 (25-09): 982->991
+    ('models/PDF/Imagenes/reportes_control_sistema_imagenes.py', 940, '%'),  # E.3 (24-09): 851->867; E.2 (24-09): 867->945; G.2 (24-09): 945->946; G.3 (24-09): 946->982; B.3 (25-09): 982->991; GI.3 (07-10): 991->940
     ('models/PDF/Mensuales/reportes_mensuales.py', 802, 'cm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1076, 'mm'),
     ('models/PDF/Mensuales/reportes_mensuales.py', 1097, '%'),
@@ -346,9 +341,6 @@ BASELINE_D1_PENDIENTE = {
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1546, 'mm'),  # A.2 (21-09): 1518->1531; B.3 (21-09): 1531->1532; C.1 (25-09): 1532->1535; FS.2 (06-10): 1535->1546
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 1719, '°'),  # A.2 (21-09): 1691->1704; B.3 (21-09): 1704->1705; C.1 (25-09): 1705->1708; FS.2 (06-10): 1708->1719
     ('ui/paginasControles/PruebasMensuales/seiscientos_mensual.py', 2511, 'cm'),  # A.2 (21-09): 2305->2364; B.3 (21-09): 2364->2425; B.4 (21-09): 2425->2497; C.1 (25-09): 2497->2500; FS.2 (06-10): 2500->2511
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1654, 'mm'),  # D.1 (23-09): 1595->1602; A.1 (23-09): 1602->1645; A.2 (23-09): 1645->1651; A.3 (23-09): 1651->1653; G.1 (24-09): 1653->1688; G.2 (24-09): 1688->1682; G.3 (24-09): 1682->1705; C.1 (25-09): 1705->1654
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1797, 'cm'),  # D.1 (23-09): 1738->1745; A.1 (23-09): 1745->1788; A.2 (23-09): 1788->1794; A.3 (23-09): 1794->1796; G.1 (24-09): 1796->1831; G.2 (24-09): 1831->1825; G.3 (24-09): 1825->1848; C.1 (25-09): 1848->1797
-    ('ui/paginasControles/PruebasMensuales/tac_mensual.py', 1924, 'HU'),  # D.1 (23-09): 1865->1872; A.1 (23-09): 1872->1915; A.2 (23-09): 1915->1921; A.3 (23-09): 1921->1923; G.1 (24-09): 1923->1958; G.2 (24-09): 1958->1952; G.3 (24-09): 1952->1975; C.1 (25-09): 1975->1924
     ('ui/paginasGuia/SQLtoEXCEL.py', 317, 'cGy/UM'),
     ('ui/paginasGuia/SQLtoEXCEL.py', 318, '%'),
     ('ui/paginasGuia/SQLtoEXCEL.py', 319, '%'),
