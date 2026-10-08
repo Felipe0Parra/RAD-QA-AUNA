@@ -35,6 +35,22 @@ def _bd_sesion_por_defecto():
 
 
 @pytest.fixture(autouse=True, scope="session")
+def _error_log_de_sesion():
+    """RS.1 (DP-153): `services.registro_errores.ruta_error_log()` -- el `error_log.txt` de junto al ejecutable -- apunta a un archivo temporal de la sesion (variable de entorno `RADQA_ERROR_LOG`). Desde GI.6 (guardados) y RS.1
+    (respaldos) las rutas de FALLO escriben ahi, y las pruebas recorren esas rutas a proposito (solo las de respaldo emiten 36 avisos por corrida): sin esto crearian
+    `Codigo_radqa/error_log.txt` en el arbol de trabajo. Las pruebas que quieren LEER el registro lo redirigen ellas mismas (el monkeypatch de funcion gana a este)."""
+    from services.registro_errores import VARIABLE_DE_RUTA
+    ruta = os.path.join(tempfile.mkdtemp(prefix="radqa_tests_log_"), "error_log.txt")
+    anterior = os.environ.get(VARIABLE_DE_RUTA)
+    os.environ[VARIABLE_DE_RUTA] = ruta              # variable de entorno y no un monkeypatch: la heredan tambien los procesos hijos que lanzan algunas pruebas (RB.1)
+    yield
+    if anterior is None:
+        os.environ.pop(VARIABLE_DE_RUTA, None)
+    else:
+        os.environ[VARIABLE_DE_RUTA] = anterior
+
+
+@pytest.fixture(autouse=True, scope="session")
 def _rt1_interceptor_de_sql():
     """RT1 (PLAN_LECTURA_VIGENTE_18-08.md §6-RT1): frente DINÁMICO -- ve el
     SQL ya resuelto de TODA conexión sqlite3 que abra la suite (incluida la

@@ -12,8 +12,17 @@ import traceback
 from datetime import datetime
 
 
+VARIABLE_DE_RUTA = "RADQA_ERROR_LOG"
+
+
 def ruta_error_log():
-    """`error_log.txt` junto al ejecutable si esta congelado (--noconsole); en desarrollo, en la raiz del proyecto. Mismo sitio que escribe `main.py`."""
+    """`error_log.txt` junto al ejecutable si esta congelado (--noconsole); en desarrollo, en la raiz del proyecto. Mismo sitio que escribe `main.py`.
+
+    RS.1: si la variable de entorno `RADQA_ERROR_LOG` trae una ruta, esa manda. Es lo que usa la suite de pruebas para que NINGUN proceso -- tampoco los hijos que algunas pruebas lanzan
+    para simular a otro equipo escribiendo a la vez -- cree `error_log.txt` en el arbol de trabajo; en produccion la variable no existe."""
+    explicita = os.environ.get(VARIABLE_DE_RUTA)
+    if explicita:
+        return explicita
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
     else:

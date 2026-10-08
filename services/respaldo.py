@@ -48,6 +48,7 @@ from datetime import datetime, timedelta, timezone
 
 from data.ManejoDatos import conection as _conection
 from services import audit_minimo
+from services.registro_errores import avisar_consola, registrar_error
 
 PREFIJO_RESPALDO = "BaseDatosQA_"
 SUFIJO_RESPALDO = ".db"
@@ -150,6 +151,14 @@ def _nombre_nuevo(existentes, ahora):
     return f"{PREFIJO_RESPALDO}{segundo_siguiente.strftime(_FORMATO_MARCA)}{SUFIJO_RESPALDO}"
 
 
+def _avisar(texto, excepcion=None):
+    """RS.1 (DP-153): un respaldo que NO se pudo hacer se dice por consola (el `print` de siempre) Y queda escrito en `error_log.txt`, junto al ejecutable. El `.exe` se construye `--noconsole`
+    (`build_exe.py`): ahi un `print` no lo ve nadie, y un respaldo que falla en cada cierre dejaba al servicio sin red de seguridad sin que nada lo dijera. La ruta del archivo sale de UNA
+    sola funcion (`registro_errores.ruta_error_log`, la de `main.py`), que las pruebas redirigen. Nunca lanza: un aviso que falla no puede impedir cerrar la app."""
+    avisar_consola(texto)
+    registrar_error(texto, excepcion)
+
+
 def _rotar(carpeta, max_copias):
     """Elimina los respaldos más viejos hasta dejar `max_copias`."""
     nombres = _nombres_respaldo(carpeta)
@@ -157,7 +166,7 @@ def _rotar(carpeta, max_copias):
         try:
             os.remove(os.path.join(carpeta, nombre))
         except OSError as ex:
-            print(f"[respaldo] no se pudo rotar {nombre}: {ex}")
+            _avisar(f"[respaldo] no se pudo rotar {nombre} (en {carpeta}): {ex}", ex)      # RS.1 (revision): una rotacion rota deja crecer la carpeta sin limite y en el .exe nadie lo veria
 
 
 def _quitar(ruta):
@@ -291,7 +300,7 @@ def _conservar_para_revisar(ruta_origen, parcial, destino, copia_hecha):
         else:
             shutil.copy2(ruta_origen, revisar)
     except Exception as ex:
-        print(f"[respaldo] no se pudo conservar la copia para revisar: {ex}")
+        _avisar(f"[respaldo] no se pudo conservar la copia para revisar de {ruta_origen} ({revisar}): {ex}", ex)
         return None
     carpeta = os.path.dirname(revisar)
     nombres = _nombres_a_revisar(carpeta)
@@ -348,7 +357,7 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
         if ruta_origen is None:
             ruta_origen = _conection.ruta_base_datos()
         if not os.path.isfile(ruta_origen):
-            print(f"[respaldo] no existe la BD de origen, no se respalda: {ruta_origen}")
+            _avisar(f"[respaldo] no existe la BD de origen, no se respalda: {ruta_origen}")
             return None
         if carpeta_destino is None:
             carpeta_destino = carpeta_respaldos(ruta_origen)
@@ -377,7 +386,7 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
             _copiar_con_api(ruta_origen, parcial)
             copia_hecha = True
         except Exception as ex:
-            print(f"[respaldo] la copia no se pudo hacer: {ex}")
+            _avisar(f"[respaldo] la copia no se pudo hacer ({ruta_origen} -> {carpeta_destino}): {ex}", ex)
         if copia_hecha:
             estado, detalle = _integridad(parcial)
             if estado in (ESTADO_OK, ESTADO_OK_CON_AVISO):
@@ -400,7 +409,7 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
                         ruta_db=ruta_origen)
                 print(f"Respaldo de la base de datos creado en: {destino}")
                 return destino
-            print(f"[respaldo] la copia no pasa la comprobacion de integridad ({detalle}): se descarta")
+            _avisar(f"[respaldo] la copia de {ruta_origen} no pasa la comprobacion de integridad ({detalle}): se descarta")
 
         # No hay un respaldo valido. Si la base de origen esta sana, el problema era de la copia: se descarta y el
         # siguiente cierre reintenta. Si el origen NO pasa la comprobacion (o SQLite no puede ni leerlo), no se rota
@@ -420,10 +429,10 @@ def respaldar_bd(usuario=None, ruta_origen=None, carpeta_destino=None,
                      + (f"Copia aparte para revisar, fuera de la rotacion: {revisar}" if revisar
                         else "No se pudo conservar ninguna copia aparte.")),
             ruta_db=ruta_origen)
-        print(f"[respaldo] ATENCION: la base de datos de origen no pasa la comprobacion de integridad: {detalle_origen}")
+        _avisar(f"[respaldo] ATENCION: la base de datos de origen ({ruta_origen}) no pasa la comprobacion de integridad: {detalle_origen}")
         return None
     except Exception as ex:
-        print(f"[respaldo] no se pudo respaldar la base de datos: {ex}")
+        _avisar(f"[respaldo] no se pudo respaldar la base de datos: {ex}", ex)
         return None
     finally:
         if parcial is not None:
@@ -477,15 +486,15 @@ def _marca_de_franja(carpeta, franja, sufijo):
 def _crear_exclusivo(ruta, texto):
     """Crea `ruta` SOLO si no existe (creacion exclusiva: si varios equipos lo intentan a la vez, uno solo lo logra).
     `True` si la creo. Un `PermissionError` con el archivo YA presente (en Windows, uno con borrado pendiente) se toma como "ocupado"; si
-    el archivo no esta, es falta de permiso sobre la carpeta (E1 de la revision): no se obtiene y se avisa por consola. (La consola no existe en el .exe
-    `--noconsole`: ahi el aviso no se ve, como todos los `print` de este modulo desde E9; dejar un rastro visible en Registros es la deuda DP-153.)"""
+    el archivo no esta, es falta de permiso sobre la carpeta (E1 de la revision): no se obtiene y se avisa (por consola y en `error_log.txt`, RS.1/DP-153: el .exe
+    `--noconsole` no tiene consola)."""
     try:
         fd = os.open(ruta, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
         return False
     except PermissionError as ex:
         if not os.path.exists(ruta):
-            print(f"[respaldo] sin permiso para crear {os.path.basename(ruta)}: {ex}")
+            _avisar(f"[respaldo] sin permiso para crear {os.path.basename(ruta)}: {ex}", ex)
         return False
     try:
         os.write(fd, texto.encode("utf-8"))
@@ -635,7 +644,7 @@ def respaldar_al_cerrar(usuario=None, ruta_origen=None, carpeta_destino=None, ma
         if ruta_origen is None:
             ruta_origen = _conection.ruta_base_datos()
         if not os.path.isfile(ruta_origen):
-            print(f"[respaldo] no existe la BD de origen, no se respalda: {ruta_origen}")
+            _avisar(f"[respaldo] no existe la BD de origen, no se respalda: {ruta_origen}")
             return None
         if carpeta_destino is None:
             carpeta_destino = carpeta_respaldos(ruta_origen)
@@ -667,5 +676,5 @@ def respaldar_al_cerrar(usuario=None, ruta_origen=None, carpeta_destino=None, ma
             else:
                 _quitar(reclamo)
     except Exception as ex:
-        print(f"[respaldo] no se pudo respaldar al cerrar: {ex}")
+        _avisar(f"[respaldo] no se pudo respaldar al cerrar: {ex}", ex)
         return None

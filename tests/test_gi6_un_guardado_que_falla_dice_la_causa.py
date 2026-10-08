@@ -251,6 +251,7 @@ class TestRegistroDeErrores:
 
     def test_la_ruta_es_la_de_main_en_desarrollo_y_junto_al_ejecutable_congelado(self, monkeypatch, tmp_path):
         import services.registro_errores as registro
+        monkeypatch.delenv(registro.VARIABLE_DE_RUTA, raising=False)       # RS.1: la suite fija esta variable para toda la sesion; aqui se prueba la ruta POR OMISION
         monkeypatch.chdir(tmp_path)                       # la ruta NO depende de desde donde se arranque
         assert registro.ruta_error_log() == os.path.join(RAIZ, "error_log.txt")
         monkeypatch.setattr(sys, "frozen", True, raising=False)
