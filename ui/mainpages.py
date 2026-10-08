@@ -751,26 +751,40 @@ class MainWindow(QMainWindow):
         layout_barra.addWidget(self.btn_cerrar)
 
     def closeEvent(self, event):
-        # R2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): consolidar el WAL al
-        # .db principal antes de cerrar -- si alguien copia/mueve la BD justo
-        # después de cerrar la app, el .db por sí solo ya queda completo (sin
-        # depender de llevarse también "-wal"/"-shm"). Best-effort: nunca
-        # bloquea el cierre.
-        # RB.3 (PLAN_GUARDADO_SIN_ESPESOR_Y_RESPALDOS_05-10.md): el checkpoint espera como
-        # mucho `ESPERA_CHECKPOINT_AL_CERRAR_MS` a que otro termine lo que tiene abierto;
-        # con la espera general (30 s) retenia el turno de escritura y nadie mas podia
-        # guardar. El respaldo ya no depende de que el checkpoint termine (RB.1).
-        if Conexion._instance is not None:
-            checkpoint_wal(Conexion._instance.con, espera_ms=ESPERA_CHECKPOINT_AL_CERRAR_MS)
         # E9 (PLAN_E_INTEGRIDAD_Y_PERMISOS_28-07.md §17): respaldo fechado con
-        # rotación, DESPUÉS del checkpoint para que la copia salga completa.
-        # Best-effort igual que el checkpoint: un fallo avisa por consola y la
+        # rotación. Best-effort: un fallo avisa (consola y error_log.txt, RS.1) y la
         # app cierra de todas formas.
         # RB.2 (PLAN_GUARDADO_SIN_ESPESOR_Y_RESPALDOS_05-10.md, decisión D2 del
         # físico: "máximo dos por día"): a lo sumo UN respaldo por franja del día
         # (mañana / tarde), hecho en el primer cierre de la franja. Volver a
         # "Inicio" también es un cierre: antes cada uno hacía un respaldo.
-        respaldar_al_cerrar(usuario=_usuario_actual(self))
+        # RS.3 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md, C3 de la auditoría): el
+        # respaldo va PRIMERO y el checkpoint DESPUÉS. El respaldo no depende del
+        # orden (RB.1: la API de SQLite lee a través del "-wal"), pero la fila de
+        # auditoría del propio respaldo se escribe al terminar y, con el checkpoint
+        # antes, esa fila quedaba solo en el "-wal" (8 272 B tras el cierre real):
+        # copiar solo el .db la perdía. Ahora el .db trae todo y el "-wal" queda en
+        # 0 B (un "-wal" vacío es inocuo al restaurar, RS.2).
+        # RS.3 (revision): `try/finally` -- si el respaldo lanzara (casi inalcanzable:
+        # `respaldar_al_cerrar` atrapa todo), el checkpoint se haria igual; con el orden
+        # de antes lo hacia antes y esa garantia no se puede perder por invertir el orden.
+        # (Si el proceso muere DURANTE el respaldo el checkpoint no llega a hacerse: es el
+        # cierre forzado que RS.2 y el RUNBOOK ya describen y que el LEEME de la carpeta de
+        # respaldos resuelve.)
+        try:
+            respaldar_al_cerrar(usuario=_usuario_actual(self))
+        finally:
+            # R2 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): consolidar el WAL al
+            # .db principal antes de cerrar -- si alguien copia/mueve la BD justo
+            # después de cerrar la app, el .db por sí solo ya queda completo (sin
+            # depender de llevarse también "-wal"/"-shm"). Best-effort: nunca
+            # bloquea el cierre.
+            # RB.3 (PLAN_GUARDADO_SIN_ESPESOR_Y_RESPALDOS_05-10.md): el checkpoint espera como
+            # mucho `ESPERA_CHECKPOINT_AL_CERRAR_MS` a que otro termine lo que tiene abierto;
+            # con la espera general (30 s) retenia el turno de escritura y nadie mas podia
+            # guardar.
+            if Conexion._instance is not None:
+                checkpoint_wal(Conexion._instance.con, espera_ms=ESPERA_CHECKPOINT_AL_CERRAR_MS)
         event.accept()
 
 if __name__ == "__main__":

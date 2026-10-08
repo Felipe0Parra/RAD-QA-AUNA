@@ -30,11 +30,12 @@ Diseño de este módulo:
   de origen: constancia de cuándo se respaldó DE VERDAD, contra el mensaje
   engañoso que había antes.
 
-El orden correcto lo garantiza el llamador (`MainWindow.closeEvent`):
-`checkpoint_wal()` PRIMERO, respaldo después -- así el .db principal ya
-contiene todos los commits que vivían en el "-wal" (lección R2). Desde RB.1 la
-copia ya no depende de ese orden: se hace con la API de respaldo de SQLite, que
-da una foto consistente aunque el checkpoint haya quedado a medias.
+El orden lo fija el llamador (`MainWindow.closeEvent`). Desde RB.1 la copia no
+depende del orden: se hace con la API de respaldo de SQLite, que da una foto
+consistente (lee a través del "-wal") aunque el checkpoint no haya corrido o haya
+quedado a medias. Desde RS.3 el respaldo va PRIMERO y el `checkpoint_wal()`
+DESPUÉS: la fila de auditoría del propio respaldo se escribe al terminar, y el
+checkpoint posterior la lleva al .db principal (el "-wal" queda en 0 B).
 """
 
 import os

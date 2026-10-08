@@ -6,7 +6,8 @@ respaldo..." con la llamada comentada: la app ANUNCIABA un respaldo que no
 hacía. Esta suite fija el contrato nuevo:
 
 - la copia es una BD SQLite válida y COMPLETA (incluye lo que vivía solo en
-  el -wal, gracias al orden checkpoint -> respaldo);
+  el -wal: desde RB.1 la API de respaldo de SQLite lo lee a través del -wal,
+  haya o no un checkpoint antes);
 - nombre fechado con rotación (quedan las N más recientes);
 - un fallo de respaldo jamás impide cerrar la app;
 - el origen sale de `conection.ruta_base_datos()`, no de una constante;
@@ -50,10 +51,11 @@ class TestCopiaValidaYCompleta:
         """Una fila commiteada SOLO en el -wal (autocheckpoint apagado, técnica
         R2/M1) aparece en la copia con y sin checkpoint. Antes de RB.1 (05-10-2026)
         la copia era del archivo `.db` y sin checkpoint PERDÍA la fila (por eso
-        `closeEvent` hace el checkpoint primero); desde RB.1 la copia se hace con
-        la API de respaldo de SQLite, que da una foto consistente de lo confirmado
-        aunque el checkpoint no haya corrido -- el orden del cierre ya no es lo que
-        sostiene la integridad de la copia, solo un seguro más."""
+        entonces `closeEvent` hacía el checkpoint primero); desde RB.1 la copia se
+        hace con la API de respaldo de SQLite, que da una foto consistente de lo
+        confirmado aunque el checkpoint no haya corrido -- el orden del cierre no
+        sostiene la integridad de la copia (RS.3 lo invirtió: respaldo y después
+        checkpoint)."""
         origen = str(tmp_path / "BaseDatosQA.db")
         _crear_bd(origen, filas=2)
 
@@ -72,7 +74,7 @@ class TestCopiaValidaYCompleta:
             assert sin_checkpoint is not None
             assert _contar_filas(sin_checkpoint) == 3
 
-            # Con checkpoint primero (el orden de closeEvent): copia completa.
+            # Con checkpoint antes (el orden que tenía closeEvent hasta RS.3): copia completa también.
             checkpoint_wal(con)
             completa = respaldar_bd(ruta_origen=origen,
                                     carpeta_destino=str(tmp_path / "con_ckpt"))
@@ -199,8 +201,8 @@ class TestAuditoria:
 
 
 class TestCloseEventDeProduccion:
-    """El cableado real de `MainWindow.closeEvent`: checkpoint PRIMERO,
-    respaldo después, y `event.accept()` pase lo que pase."""
+    """El cableado real de `MainWindow.closeEvent`: respaldo PRIMERO,
+    checkpoint después (RS.3: antes era al revés), y `event.accept()` pase lo que pase."""
 
     class _Evento:
         def __init__(self):
@@ -226,10 +228,12 @@ class TestCloseEventDeProduccion:
         mainpages_mod.MainWindow.closeEvent(falso, evento)
         return evento
 
-    def test_checkpoint_antes_del_respaldo_y_accept(self, monkeypatch):
+    def test_respaldo_antes_del_checkpoint_y_accept(self, monkeypatch):
+        """RS.3 (06-10-2026): el orden se INVIRTIO a proposito. El respaldo no depende del checkpoint desde RB.1 (la API de SQLite lee a traves del -wal) y, con el checkpoint antes,
+        la fila de auditoria del propio respaldo quedaba solo en el -wal. Ver `tests/test_rs3_el_cierre_respalda_y_despues_integra_el_wal.py`."""
         llamadas = []
         evento = self._cerrar(monkeypatch, llamadas)
-        assert llamadas == ["checkpoint", "respaldo"]
+        assert llamadas == ["respaldo", "checkpoint"]
         assert evento.aceptado
 
     def test_el_mensaje_enganoso_ya_no_existe(self):
