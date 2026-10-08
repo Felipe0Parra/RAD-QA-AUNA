@@ -44,6 +44,7 @@ from PyQt5.QtWidgets import (QDialog, QGroupBox, QHBoxLayout, QLabel, QMessageBo
 from analisisImagenes.catphan.descripcion import (  # noqa: F401  (NO_PUBLICADO: se sigue importando desde aquí)
     NO_PUBLICADO, filas_adquisicion, filas_identidad, filas_medidas)
 from analisisImagenes.catphan.escala import CLAVE_EN_ADQUISICION, nota_escala
+from analisisImagenes.catphan.obligatorios import faltantes_de, redondear_espesor
 from analisisImagenes.catphan.protocolos import (
     COINCIDE, NO_IDENTIFICADO, OTRO_EQUIPO, ROTULO_FUERA_DE_PROTOCOLO, SIN_EQUIPO, SIN_PROTOCOLO,
     comparar_con_protocolo, texto_encontrado, texto_exigido)
@@ -91,9 +92,14 @@ class ModeloVentana:
     requiere_confirmacion: bool = False
     resumen_desviacion: Optional[str] = None
     identidad_estado: str = SIN_EQUIPO
+    aviso_guardado: Optional[str] = None                 # GI.4: kV, mA o espesor que la serie no publica (o publica en 0): no se podrá guardar
 
     def texto_confirmacion(self) -> str:
         cuerpo = (self.resumen_desviacion or "").rstrip(".")
+        if self.aviso_guardado:
+            # GI.4: «se puede analizar igual» sería cierto a medias -- analizar sí, guardar no.
+            desviacion = f"\n\n{cuerpo}." if cuerpo else ""
+            return f"{self.aviso_guardado}{desviacion}\n\n¿Desea continuar?"
         if self.identidad_estado == OTRO_EQUIPO:
             cola = (f"Si continúa, las pruebas se guardarán como de '{self.equipo_seleccionado}', "
                     f"con la marca de desviación.")
@@ -175,14 +181,22 @@ def construir_modelo_ventana(vol, equipo_seleccionado: Optional[str]) -> ModeloV
     elif c.advertencia_identidad:
         banner = (AVISO, f"Identidad: {c.advertencia_identidad}")
 
-    requiere = c.identidad in (OTRO_EQUIPO, NO_IDENTIFICADO) or any(f.cumple is False for f in c.filas)
+    # GI.4: kV, mA y espesor son obligatorios para guardar (D1): si la serie no los trae, el físico lo sabe ANTES de analizar.
+    faltantes = faltantes_de(adq.get("kv"), adq.get("ma"), redondear_espesor(adq.get("espesor_mm")), hay_serie=True)
+    aviso_guardado = None
+    if faltantes:
+        aviso_guardado = ("Con esta serie no se podrá guardar ninguna prueba. " + " ".join(f.texto("esta serie") for f in faltantes)
+                          + " Puede analizarla y ver los resultados, pero no guardarlos.")
+
+    requiere = (c.identidad in (OTRO_EQUIPO, NO_IDENTIFICADO) or any(f.cumple is False for f in c.filas)
+                or aviso_guardado is not None)
     titulo = (f"Protocolo exigido para {equipo_seleccionado}" if equipo_seleccionado else "Protocolo exigido")
 
     return ModeloVentana(
         equipo_seleccionado=equipo_seleccionado, identidad=identidad, adquisicion=adquisicion,
         banner=banner, protocolo_titulo=titulo, protocolo=filas, protocolo_nota=nota,
         carpeta=_carpeta(vol, adq), requiere_confirmacion=requiere,
-        resumen_desviacion=c.desviacion_texto(), identidad_estado=c.identidad)
+        resumen_desviacion=c.desviacion_texto(), identidad_estado=c.identidad, aviso_guardado=aviso_guardado)
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +250,14 @@ class VentanaMetadatos(QDialog):
             banner.setStyleSheet(
                 f"background:{_COLOR[nivel]};color:white;padding:8px;font-weight:bold;")
             raiz.addWidget(banner)
+
+        if modelo.aviso_guardado:
+            aviso = QLabel(modelo.aviso_guardado)
+            aviso.setTextFormat(Qt.PlainText)
+            aviso.setWordWrap(True)
+            aviso.setObjectName("aviso_guardado")
+            aviso.setStyleSheet(f"background:{_COLOR[ERROR]};color:white;padding:8px;font-weight:bold;")
+            raiz.addWidget(aviso)
 
         contenido = QWidget()
         cuerpo = QVBoxLayout(contenido)

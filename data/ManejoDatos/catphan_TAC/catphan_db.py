@@ -14,6 +14,9 @@ from .leer_dicom import DicomVolume
 from services.audit_minimo import registrar as _registrar_auditoria
 from services.audit_minimo import ACCION_GUARDAR
 from services.anulacion import filtro_activo, reemplazar_bloque, sql_anular_bloque
+from services.ventana_edicion import puede_editarse, mensaje_bloqueo_edicion
+from analisisImagenes.catphan.obligatorios import (evaluar_categoria, aviso_de_faltantes, etiqueta_de,
+                                                   ParametrosObligatoriosFaltantes)
 
 # ------------------------------------ FUNCIONES PARA MOSTRAR IMÁGENES ------------------------------------
 
@@ -520,6 +523,11 @@ def mapear_identidad_dicom(adquisicion):
     )
 
 
+class ControlNoEditable(Exception):
+    """GI.4 (A10): el control al que pertenece la sesion ya no admite escritura (anulado o inexistente: la puerta W1 de `services/ventana_edicion.py`).
+    El mensaje es el de `mensaje_bloqueo_edicion`, listo para decirselo al fisico."""
+
+
 def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_corte, resultados_por_categoria, 
                                     tam_px_teorico=None, id_sesion=None, info_dicom=None, output_blob=None,
                                     adquisicion_por_categoria=None, criterios_por_categoria=None):
@@ -550,6 +558,11 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
         conn.execute("PRAGMA busy_timeout = 30000")
         cursor = conn.cursor()
 
+        # GI.4 (A10): la puerta W1 tambien vive AQUI, no solo en la pantalla -- ningun llamador futuro la salta. Una sesion sin control (`id_sesion=None`,
+        # la ruta antigua que inventa `AAAAMMDD_marca`) no tiene a quien preguntarle.
+        if id_sesion is not None and not puede_editarse(id_sesion):
+            raise ControlNoEditable(mensaje_bloqueo_edicion(id_sesion))
+
         # Agregar columna equipo si no existe
         cursor.execute("PRAGMA table_info(pruebas)")
         columnas = [row[1] for row in cursor.fetchall()]
@@ -573,6 +586,15 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             "uniformidad": 7
         }
         
+        # GI.4: kV, mA y espesor son obligatorios (D1). La MISMA resolucion que usa la guarda de la pantalla (`evaluar_categoria`): la adquisicion de la
+        # categoria si la hay, y si no los argumentos de la llamada. Antes un dato ausente reventaba aqui con `IntegrityError` (pruebas.espesor_corte es NOT NULL),
+        # tragado por el `except` de abajo, y un 0 se guardaba tal cual. Se valida TODO antes de escribir nada: o se guardan todas o ninguna.
+        parametros_por_categoria = {c: evaluar_categoria(c, adquisicion_por_categoria, kv, ma, espesor_corte)
+                                    for c in resultados_por_categoria if mapeo_tipos.get(c)}
+        incompletas = [(c, p) for c, p in parametros_por_categoria.items() if not p.completo]
+        if incompletas:
+            raise ParametrosObligatoriosFaltantes("\n\n".join(aviso_de_faltantes(p, etiqueta_de(c)) for c, p in incompletas))
+
         imagen_blob = None
         if info_dicom and info_dicom.get('ruta_carpeta'):
             ruta_carpeta = info_dicom['ruta_carpeta']
@@ -619,12 +641,8 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
             # A.1: la adquisición de ESTA categoría (la del volumen con el que
             # se corrió), no una única para toda la llamada.
             adq_categoria = (adquisicion_por_categoria or {}).get(categoria)
-            if adq_categoria:
-                kv_categoria = adq_categoria.get("kv")
-                ma_categoria = adq_categoria.get("ma")
-                espesor_categoria = adq_categoria.get("espesor_corte")
-            else:
-                kv_categoria, ma_categoria, espesor_categoria = kv, ma, espesor_corte
+            parametros = parametros_por_categoria[categoria]
+            kv_categoria, ma_categoria, espesor_categoria = parametros.kv, parametros.ma, parametros.espesor_corte
             identidad = mapear_identidad_dicom(
                 adq_categoria.get("adquisicion") if adq_categoria else None)
             # A.2: por que esta adquisicion no es la del protocolo fijo del
@@ -688,6 +706,12 @@ def guardar_prueba_completa_catphan(user_id, fecha, equipo, kv, ma, espesor_cort
 
         return id_sesion
         
+    except (ControlNoEditable, ParametrosObligatoriosFaltantes):
+        # GI.4: son los dos rechazos con motivo que el fisico debe leer. Los demas errores siguen como siempre (rollback y `None`): GI.6 decide que hacer con ellos.
+        if conn:
+            conn.rollback()
+        raise
+
     except Exception as e:
         if conn:
             conn.rollback()
@@ -1733,6 +1757,10 @@ def reconstruir_uniformidad(cursor, id_prueba, imagen_resultado):
 
 # ------------------------------------ FUNCIONES DE INTERFAZ GRÁFICA ------------------------------------
 
+def _mm(valor):
+    return "N/A" if valor is None else f"{valor} mm"
+
+
 def tabla_resultados_espesor(resultados):
     if not resultados:
         return "No hay resultados de espesor disponibles."
@@ -1740,9 +1768,12 @@ def tabla_resultados_espesor(resultados):
     lines = []
     lines.append("🔍 RESULTADOS DE ESPESOR DE CORTE")
     lines.append("-" * 50)
-    lines.append(f"  Espesor promedio: {resultados.get('espesor_promedio_mm', 'N/A')} mm")
-    lines.append(f"  Espesor teórico: {resultados.get('espesor_teorico_mm', 'N/A')} mm") 
-    lines.append(f"  Diferencia: {resultados.get('diferencia_mm', 'N/A')} mm")
+    # GI.4: un valor que el análisis dejó en `None` no se escribe como «None mm». El espesor teórico es el que publica la serie (lo que el equipo no publica
+    # se dice «(no publicado)»); la diferencia sin él no existe y dice «N/A», como cuando el diccionario no trae la clave.
+    teorico = resultados.get('espesor_teorico_mm', 'N/A')
+    lines.append(f"  Espesor promedio: {_mm(resultados.get('espesor_promedio_mm', 'N/A'))}")
+    lines.append("  Espesor teórico: (no publicado)" if teorico is None else f"  Espesor teórico: {_mm(teorico)}")
+    lines.append(f"  Diferencia: {_mm(resultados.get('diferencia_mm', 'N/A'))}")
     # GI.2 (D4, «guardar y mostrar lo mismo»): estas tres líneas y los espesores por rampa solo se dicen si el diccionario los trae (el del
     # análisis); lo reabierto de la base no los guardó y no los inventa.
     if "factor_correccion" in resultados:

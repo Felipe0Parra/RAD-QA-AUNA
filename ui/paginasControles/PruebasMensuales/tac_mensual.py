@@ -10,7 +10,10 @@ from data.ManejoDatos.catphan_TAC.leer_dicom import VisualizadorDicom
 from analisisImagenes.catphan.protocolos import comparar_con_protocolo, texto_encabezado, texto_origen
 from analisisImagenes.catphan.atenuacion import energia_de_linealidad_mev, materiales_a_energia
 from analisisImagenes.catphan import criterios
+from analisisImagenes.catphan.obligatorios import evaluar_categoria, aviso_de_faltantes, etiqueta_de, redondear_espesor, ParametrosObligatoriosFaltantes
 from analisisImagenes.Analisis_Catphan_TAC import *
+from services.ventana_edicion import puede_editarse as _puede_editarse_control, mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
+from data.ManejoDatos.catphan_TAC.catphan_db import ControlNoEditable
 from data.ManejoDatos.catphan_TAC.catphan_db import (guardar_prueba_completa_catphan, validar_resultados_catphan, tabla_resultados_espesor, tabla_resultados_tamano_pixel, tabla_resultados_resolucion_contraste, tabla_resultados_resolucion_espacial, tabla_resultados_ct, tabla_resultados_uniformidad)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from datetime import datetime
@@ -383,7 +386,7 @@ def _parametros_de_volumen(vol):
     guarda con cada prueba), para que no puedan diferir en cómo se redondea."""
     espesor = getattr(vol, 'espesor_corte', None)
     return (getattr(vol, 'kv', None), getattr(vol, 'ma', None),
-            round(espesor, 1) if espesor is not None else None)
+            redondear_espesor(espesor))
 
 
 class PruebaMensualTAC(PruebaMensual600):
@@ -420,6 +423,7 @@ class PruebaMensualTAC(PruebaMensual600):
         self.resultados_uniformidad = None
         self.kv_actual = None
         self.ma_actual = None
+        self.espesor_corte_val = None      # GI.4: nacía solo al cargar una carpeta; la guarda lo lee antes de eso
         # A.1 (23-09): adquisicion del volumen CON EL QUE SE CORRIO cada prueba,
         # por categoria -- ver `_registrar_adquisicion`.
         self.adquisicion_por_categoria = {}
@@ -2072,8 +2076,8 @@ class PruebaMensualTAC(PruebaMensual600):
         try:
             #print(f"🔄 Iniciando guardado individual de {categoria}...")
             
-            # Verificar datos básicos
-            if not self._verificar_datos_basicos():
+            # Verificar datos básicos (GI.4: control vigente y kV/mA/espesor de ESTA prueba)
+            if not self._verificar_datos_basicos([categoria]):
                 return False
             
             # Crear diccionario con solo esta categoría
@@ -2104,6 +2108,13 @@ class PruebaMensualTAC(PruebaMensual600):
                     adquisicion_por_categoria = self.adquisicion_por_categoria,
                     criterios_por_categoria = self.criterios_por_categoria
                 )
+            except ControlNoEditable as cerrado:
+                # GI.4: el escritor también consulta la puerta W1 (la guarda de arriba pudo pasar y el control anularse en el intervalo, o un llamador futuro la salta)
+                QMessageBox.warning(self, "Control cerrado", str(cerrado))
+                return False
+            except ParametrosObligatoriosFaltantes as incompleto:
+                QMessageBox.warning(self, "Falta un dato obligatorio", str(incompleto))
+                return False
             except Exception as db_error:
                 print(f"❌ Error específico de base de datos: {db_error}")
                 if "database is locked" in str(db_error).lower():
@@ -2134,8 +2145,15 @@ class PruebaMensualTAC(PruebaMensual600):
             traceback.print_exc()
             return False
 
-    def _verificar_datos_basicos(self):
-        """Verifica que tenemos los datos básicos necesarios para guardar"""
+    def _parametros_de_guardado(self, categoria):
+        """GI.4: kV, mA y espesor con los que se guardaría la prueba `categoria` y cuáles no sirven. Es la MISMA resolución que aplica el escritor
+        (`guardar_prueba_completa_catphan`): la adquisición de la prueba si se registró al correrla (`_registrar_adquisicion`) y, si no, los globales del
+        último volumen cargado. Antes la guarda miraba solo los globales."""
+        return evaluar_categoria(categoria, self.adquisicion_por_categoria, self.kv_actual, self.ma_actual, self.espesor_corte_val)
+
+    def _verificar_datos_basicos(self, categorias=None):
+        """Verifica que se puede guardar: usuario, control vigente (puerta W1, A10) y kV/mA/espesor utilizables en CADA prueba de `categorias` (sin ellas,
+        los globales). El aviso dice cuál dato falta y por qué: kV, mA y espesor siguen siendo obligatorios (D1)."""
         if not self.user_id:
             QMessageBox.warning(self, "Error", "No se encontró el ID de usuario.")
             return False
@@ -2143,11 +2161,21 @@ class PruebaMensualTAC(PruebaMensual600):
         if not hasattr(self, 'ref') or not self.ref:
             QMessageBox.warning(self, "Error", "No se encontró el ID de sesión.\nAsegúrate de haber iniciado el control mensual correctamente.")
             return False
-            
-        if not (self.kv_actual and self.ma_actual and self.espesor_corte_val):
-            QMessageBox.warning(self, "Error", "Faltan parámetros de adquisición (kV, mA, espesor).\nAsegúrate de haber cargado una imagen DICOM.")
+
+        # GI.4 (A10): igual que "Subir" de dosimetría (`load.py`, `ix_mensual.py`): un control anulado o que ya no existe no admite escritura.
+        if not _puede_editarse_control(self.ref):
+            QMessageBox.warning(self, "Control cerrado", _mensaje_bloqueo_edicion(self.ref))
             return False
-            
+
+        avisos = []
+        for categoria in (categorias if categorias is not None else [None]):
+            parametros = self._parametros_de_guardado(categoria)
+            if parametros.faltantes:
+                avisos.append(aviso_de_faltantes(parametros, etiqueta_de(categoria)))
+        if avisos:
+            QMessageBox.warning(self, "Falta un dato obligatorio", "\n\n".join(avisos))
+            return False
+
         return True
 
     def _obtener_info_imagen_dicom(self):
@@ -2206,10 +2234,6 @@ class PruebaMensualTAC(PruebaMensual600):
         try:
             #print("🔄 Iniciando guardado de todos los resultados CatPhan disponibles...")
             
-            # Verificar datos básicos
-            if not self._verificar_datos_basicos():
-                return
-            
             # Recopilar todos los resultados disponibles
             resultados_por_categoria = {}
             
@@ -2249,6 +2273,10 @@ class PruebaMensualTAC(PruebaMensual600):
                 return
             
             #print(f"📊 Total de categorías con resultados: {len(resultados_por_categoria)}")
+
+            # Verificar datos básicos (GI.4: control vigente y kV/mA/espesor de CADA prueba que se va a guardar)
+            if not self._verificar_datos_basicos(list(resultados_por_categoria)):
+                return
             
             # Validar resultados antes de guardar EN MODO COMPLETO
             es_valido, errores = validar_resultados_catphan(resultados_por_categoria, modo="completo")
@@ -2289,6 +2317,12 @@ class PruebaMensualTAC(PruebaMensual600):
                     adquisicion_por_categoria=self.adquisicion_por_categoria,
                     criterios_por_categoria=self.criterios_por_categoria
                 )
+            except ControlNoEditable as cerrado:
+                QMessageBox.warning(self, "Control cerrado", str(cerrado))
+                return
+            except ParametrosObligatoriosFaltantes as incompleto:
+                QMessageBox.warning(self, "Falta un dato obligatorio", str(incompleto))
+                return
             except Exception as db_error:
                 print(f"❌ Error específico de base de datos: {db_error}")
                 if "database is locked" in str(db_error).lower():

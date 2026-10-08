@@ -255,10 +255,10 @@ SITIOS_OPACOS_PERMITIDOS = {
         "reemplazar_bloque (EB1) -- sql_anular_bloque(...) compone siempre "
         "'SET activo = 0' más el AND de vigencia. Mismo helper, mismo "
         "template verificado a mano.",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 729):  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 753):  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729; GI.4 (07-10): 729->753
         "anular_datos_especificos (EB2c) -- sql_anular_bloque(...), mismo "
         "template 'SET activo = 0' de EB1.",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 951):  # A.1 (23-09): 886->933; A.2 (23-09): 933->939; G.2 (24-09): 939->942; G.3 (24-09): 942->951
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 975):  # A.1 (23-09): 886->933; A.2 (23-09): 933->939; G.2 (24-09): 939->942; G.3 (24-09): 942->951; GI.4 (07-10): 951->975
         "INSERT (linealidad_ct) -- no aplica a EB5, un INSERT nunca muta el "
         "bloque vigente.",
     ("data/ManejoDatos/conection.py", 765):  # R.1 (11-09): 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682; G.2 (24-09): 682->683; G.3 (24-09): 683->684; PI.2 (01-10): 684->685; RB.3 (05-10): 685->712; GI.0: 712->765
