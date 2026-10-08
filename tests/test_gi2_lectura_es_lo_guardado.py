@@ -308,7 +308,8 @@ def test_los_valores_ct_reabiertos_traen_los_siete_materiales_con_y_sin_imagen(b
     assert len(materiales) == 7
     assert {m["material"] for m in materiales} == {"Aire", "PMP", "LDPE", "Poliestireno", "Acrilico", "Delrin", "Teflon"}
     for m in materiales:
-        assert set(m) == {"material", "promedio_hu", "error_abs", "error_rel", "rango_hu"}, "las cuatro claves que el escritor lee (GI.1) se conservan"
+        # las claves que el escritor lee (GI.1) se conservan; GI.8d anade de donde sale el rango (el catalogo, si el control no guardo el suyo) para que volver a guardar lo reabierto no lo selle
+        assert set(m) == {"material", "promedio_hu", "error_abs", "error_rel", "rango_hu", "rango_hu_de_catalogo"}
     # con imagen el ultimo elemento es el diccionario de metadatos; sin imagen NO hay elemento de metadatos
     assert len(r) == (8 if con_imagen else 7)
     assert ("_metadata" in r[-1]) is con_imagen

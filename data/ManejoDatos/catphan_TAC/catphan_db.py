@@ -341,11 +341,17 @@ def mapear_valores_ct(resultados_ct):
         material_original = resultado.get("material", "")  # ✅ CORREGIR: es "material", no "nombre_material"
         material_normalizado = mapeo_materiales.get(material_original, material_original)
         
+        # GI.8d: el rango [HU] con que el analisis juzgo este material (`rango_hu`, un par); un resultado que no lo trae o que lo trae roto guarda None, no un rango inventado. Un resultado
+        # RECONSTRUIDO de un control anterior si trae `rango_hu`, pero es el del catalogo (`rango_hu_de_catalogo`): volver a guardarlo no puede sellarlo como el rango del analisis.
+        rango = None if resultado.get("rango_hu_de_catalogo") else resultado.get("rango_hu")
+        rango_ok = isinstance(rango, (list, tuple)) and len(rango) == 2 and all(_limite_finito(x) for x in rango)
         valor_mapeado = {
             "material": material_normalizado,
             "promedio_hu": resultado.get("promedio_hu"),
             "error_absoluto": resultado.get("error_abs"),  # ✅ CORREGIR: es "error_abs"
-            "error_relativo": resultado.get("error_rel")   # ✅ CORREGIR: es "error_rel"
+            "error_relativo": resultado.get("error_rel"),  # ✅ CORREGIR: es "error_rel"
+            "rango_referencia_min": float(rango[0]) if rango_ok else None,
+            "rango_referencia_max": float(rango[1]) if rango_ok else None
         }
         valores_mapeados.append(valor_mapeado)
     
@@ -974,14 +980,16 @@ def guardar_valores_ct(cursor, id_prueba, resultados):
 
         cursor.execute("""
             INSERT INTO valores_ct (
-                id_prueba, id_material, promedio_hu, error_absoluto, error_relativo
-            ) VALUES (?, ?, ?, ?, ?)
+                id_prueba, id_material, promedio_hu, error_absoluto, error_relativo, rango_referencia_min, rango_referencia_max
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             id_prueba,
             id_material,
             material_data["promedio_hu"],
             material_data["error_absoluto"],
-            material_data["error_relativo"]
+            material_data["error_relativo"],
+            material_data["rango_referencia_min"],
+            material_data["rango_referencia_max"]
         ))
         insertadas += 1
 
@@ -1377,6 +1385,11 @@ def _es_numero(valor):
     return isinstance(valor, numbers.Real) and not isinstance(valor, bool)
 
 
+def _limite_finito(valor):
+    """GI.8d: un limite de rango de HU utilizable: un numero FINITO (ni NaN ni infinito, que SQLite si guarda como REAL)."""
+    return _es_numero(valor) and bool(np.isfinite(valor))
+
+
 def _numero_o_none(valor):
     """El valor guardado si es un número; None si el escritor guardó el texto centinela (o no hay valor)."""
     return valor if _es_numero(valor) else None
@@ -1698,7 +1711,7 @@ def reconstruir_valores_ct(cursor, id_prueba, imagen_resultado):
     filtro_vc = filtro_activo('valores_ct').replace("activo", "vc.activo")
     cursor.execute(f"""
         SELECT m.nombre_material, vc.promedio_hu, vc.error_absoluto, vc.error_relativo,
-                m.rango_referencia_min, m.rango_referencia_max
+                m.rango_referencia_min, m.rango_referencia_max, vc.rango_referencia_min, vc.rango_referencia_max
         FROM valores_ct vc
         JOIN materiales_ct m ON vc.id_material = m.id_material
         WHERE vc.id_prueba = ?{filtro_vc}
@@ -1710,13 +1723,20 @@ def reconstruir_valores_ct(cursor, id_prueba, imagen_resultado):
         return None
     
     valores_reconstruidos = []
-    for material, promedio_hu, error_abs, error_rel, rango_min, rango_max in resultados:
+    for material, promedio_hu, error_abs, error_rel, rango_min, rango_max, guardado_min, guardado_max in resultados:
+        # GI.8d: el rango que se muestra es el CONTRA EL QUE SE JUZGO (lo guardado con la prueba); solo un control anterior, que no lo guardo, cae al del catalogo, como hasta ahora.
+        # Con un solo limite guardado no hay rango: se usa el par del catalogo entero, nunca uno mezclado.
+        guardado = _limite_finito(guardado_min) and _limite_finito(guardado_max)
+        if guardado:
+            rango_min, rango_max = guardado_min, guardado_max
         valores_reconstruidos.append({
             "material": material,
             "promedio_hu": promedio_hu,
             "error_abs": error_abs,
             "error_rel": error_rel,
-            "rango_hu": [rango_min, rango_max]
+            "rango_hu": [rango_min, rango_max],
+            # GI.8d: de donde sale ese rango. Si el control no lo guardo es el del catalogo y NO es el contra el que se juzgo: el escritor no lo sella al volver a guardar este resultado
+            "rango_hu_de_catalogo": not guardado
         })
     
     # Agregar imagen

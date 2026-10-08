@@ -308,6 +308,7 @@ class Conexion():
             self._asegurar_criterio_veredicto()  # G.3 (PLAN_HANDOFF_IMAGENES_22-09.md)
             self._asegurar_error_pct_tamano_pixel()  # GI.0 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             self._asegurar_criterio_visibilidad_roi()  # GI.8c (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
+            self._asegurar_rango_referencia_valores_ct()  # GI.8d (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -1174,6 +1175,30 @@ class Conexion():
                 _asegurar_columna(cur, "resolucion_contraste_rois", "criterio_visibilidad", "TEXT")
         except sqlite3.Error as ex:
             print(f"Aviso: no se pudo asegurar 'resolucion_contraste_rois.criterio_visibilidad': {ex}")
+        self.con.commit()
+        cur.close()
+
+    def _asegurar_rango_referencia_valores_ct(self):
+        """GI.8d (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): `valores_ct` gana el rango contra el que el analisis juzgo cada material.
+
+        CAUSA: `Analisis_Catphan_TAC.valor_numero_ct` decide «Dentro del Rango» / «Fuera de Rango» con el rango de su propia tabla de insertos (`rango_hu`) y guarda ese
+        veredicto; al reabrir y en el informe PDF, el «Rango HU Ref.» salia de OTRO sitio, el catalogo `materiales_ct`. Los dos rangos no coinciden (Aire, PMP, Acrilico,
+        Teflon...): el documento firmado podia mostrar un rango y un veredicto que no corresponden entre si (4 contradicciones en 49 filas reales).
+
+          rango_referencia_min  REAL  limite inferior [HU] del rango del analisis; NULL en todo control anterior
+          rango_referencia_max  REAL  limite superior [HU]; NULL en todo control anterior
+
+        No se corrige el catalogo (seria escribir datos de referencia en las bases reales sin certificado) ni se recalcula ningun veredicto: lo guardado manda. Un control
+        anterior (NULL) sigue mostrando el rango del catalogo, como hoy. Aditiva e idempotente; sin relleno retroactivo (DA-13); va despues de `_asegurar_activo_bloque_qc`
+        (`DP-80`: ADD COLUMN anade al final fisico). Cada columna tiene su propio intento y un fallo se avisa sin cortar el resto del arranque (la cadena vive en UN try/except)."""
+        cur = self.con.cursor()
+        for columna in ("rango_referencia_min", "rango_referencia_max"):
+            try:
+                existentes = [c[1].lower() for c in cur.execute("PRAGMA table_info('valores_ct')").fetchall()]
+                if existentes and columna not in existentes:
+                    _asegurar_columna(cur, "valores_ct", columna, "REAL")
+            except sqlite3.Error as ex:
+                print(f"Aviso: no se pudo asegurar 'valores_ct.{columna}': {ex}")
         self.con.commit()
         cur.close()
 
@@ -2073,6 +2098,8 @@ class Conexion():
             promedio_hu REAL NOT NULL,                     -- Valor promedio medido en Hounsfield Units (HU)
             error_absoluto REAL NOT NULL,                  -- Error absoluto entre el valor medido y el rango de referencia
             error_relativo REAL NOT NULL,                  -- Error relativo en porcentaje
+            rango_referencia_min REAL,                     -- GI.8d: limite inferior [HU] del rango contra el que el analisis JUZGO este material (NULL en lo guardado antes)
+            rango_referencia_max REAL,                     -- GI.8d: limite superior [HU] de ese mismo rango (NULL en lo guardado antes)
 
             FOREIGN KEY (id_prueba) REFERENCES pruebas(id_prueba) ON DELETE RESTRICT,
             FOREIGN KEY (id_material) REFERENCES materiales_ct(id_material),

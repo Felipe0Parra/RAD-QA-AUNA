@@ -68,13 +68,16 @@ TABLAS_HIJAS = ("espesor_corte", "tamaño_pixel", "resolucion_contraste", "resol
                 "resolucion_espacial_regiones", "valores_ct", "linealidad_ct", "uniformidad_ruido", "uniformidad_global")
 ORDEN_MATERIALES = ("Aire", "PMP", "LDPE", "Poliestireno", "Acrilico", "Delrin", "Teflon")
 
-# Claves que un mapeador PIDE, que el analisis solo produce A VECES, y que ninguna de las tres series reales produce: lista revisada a mano,
-# con el motivo de cada entrada, que SOLO PUEDE ACHICARSE (`test_la_lista_revisada_solo_puede_achicarse`). Cada una es
+# Claves que un mapeador PIDE, que el analisis solo produce A VECES (o que no produce el analisis sino el LECTOR al reabrir lo guardado), y que ninguna de las tres series
+# reales produce: lista revisada a mano, con el motivo de cada entrada, que SOLO PUEDE ACHICARSE (`test_la_lista_revisada_solo_puede_achicarse`). Cada una es
 # (categoria, ruta del diccionario, clave).
 LECTURAS_CONDICIONALES_SIN_CASO_REAL = {
     ("resolucion_espacial", "resolucion_espacial.mtf_lp_cm", "10"):
         "el 10 % de la MTF solo se interpola si la MTF baja hasta ese valor (`for pct in (10, 20, 30, 40, 50)` de `resolucion_espacial`) y "
         "ninguna de las tres series baja tanto",
+    ("valores_ct", "valores_ct[]", "rango_hu_de_catalogo"):
+        "marca de PROCEDENCIA que pone el LECTOR (`reconstruir_valores_ct`) en un resultado reabierto de un control anterior a GI.8d, cuyo `rango_hu` es el del catalogo; "
+        "un analisis recien hecho no tiene catalogo que marcar. El mapeador la lee para no sellar ese rango como el del analisis al volver a guardar lo reabierto (GI.8d)",
 }
 
 # Las claves con las que el mapeador leia lo que el analisis NO produce (la causa de GI.1).
@@ -365,6 +368,16 @@ def test_el_censo_no_es_vacuo_y_detecta_una_clave_inexistente():
     assert len(real.pedidas) >= 40 and len(real.producidas) >= 100, (len(real.pedidas), len(real.producidas))
     categorias = {c for c, _, _ in real.pedidas}
     assert categorias == set(ID_TIPO), f"El censo no pidio claves de todas las categorias: {sorted(categorias)}"
+
+
+def test_el_motivo_de_la_marca_de_procedencia_sigue_siendo_cierto():
+    """La segunda entrada de la lista revisada se sostiene en un hecho de los productores: la marca `rango_hu_de_catalogo` la escribe el LECTOR (en el diccionario de cada
+    material de `reconstruir_valores_ct`) y el analisis (`Analisis_Catphan_TAC`) no la conoce. Si el analisis empezara a producirla, la entrada sobraria y se retira."""
+    lector = ast.parse((RAIZ / "data/ManejoDatos/catphan_TAC/catphan_db.py").read_text(encoding="utf-8"))
+    funcion = next(n for n in ast.walk(lector) if isinstance(n, ast.FunctionDef) and n.name == "reconstruir_valores_ct")
+    claves_del_lector = {k.value for d in ast.walk(funcion) if isinstance(d, ast.Dict) for k in d.keys if isinstance(k, ast.Constant)}
+    assert "rango_hu_de_catalogo" in claves_del_lector
+    assert "rango_hu_de_catalogo" not in ANALISIS.read_text(encoding="utf-8")
 
 
 def test_el_motivo_de_la_unica_excepcion_sigue_siendo_cierto():
