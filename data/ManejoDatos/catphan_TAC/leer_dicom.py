@@ -14,6 +14,7 @@ from analisisImagenes.catphan.orientacion import angulo_en_imagen
 from analisisImagenes.catphan import ventana as ventana_mod
 from analisisImagenes.catphan.serie import adquisicion_de_serie, leer_serie, ventana_de_serie
 from data.ManejoDatos.catphan_TAC.ventana_metadatos import mostrar_ventana_metadatos
+from html import escape as html_escape
 from services.registro_errores import registrar_error
 import pydicom
 import pydicom.data
@@ -1603,6 +1604,7 @@ class VisualizadorDicom(QWidget):
         layout.addWidget(sep)
 
         # Una fila por módulo
+        motivos = {}                                       # CD.2: motivo -> modulos que no se detectaron por ese motivo (el mismo motivo no se repite cuatro veces)
         for nombre, resultado in resultados.items():
             fila = QHBoxLayout()
 
@@ -1619,7 +1621,7 @@ class VisualizadorDicom(QWidget):
             else:
                 txt_corte = "<span style='color:#cc8800'>No detectado</span>"
                 if resultado.error:
-                    txt_corte += f"<br><small>{resultado.error[:50]}</small>"
+                    motivos.setdefault(resultado.error, []).append(nombre)
 
             lbl_corte = QLabel(txt_corte)
             lbl_corte.setTextFormat(Qt.RichText)
@@ -1628,6 +1630,13 @@ class VisualizadorDicom(QWidget):
             fila.addWidget(lbl_nombre, stretch=3)
             fila.addWidget(lbl_corte, stretch=1)
             layout.addLayout(fila)
+
+        # CD.2 (B3): el motivo se dice COMPLETO (antes: `error[:50]` dejaba «Ninguna orientación del fantoma en '/tmp/claude-10»), una vez por motivo, con los modulos a los que aplica
+        for motivo, modulos in motivos.items():
+            lbl_motivo = QLabel(f"<small><b>{', '.join(modulos)}:</b> {html_escape(motivo)}</small>")
+            lbl_motivo.setTextFormat(Qt.RichText)
+            lbl_motivo.setWordWrap(True)
+            layout.addWidget(lbl_motivo)
 
         # Separador
         sep2 = QFrame()
@@ -1645,6 +1654,15 @@ class VisualizadorDicom(QWidget):
 
         dialogo.setAttribute(Qt.WA_DeleteOnClose, False)
         dialogo.setModal(False)
+
+        # CD.2 (revision, R-02): «completo» tambien en pantalla. Un cuadro de nivel superior se abre con a lo sumo 2/3 de la altura de la pantalla y, con un motivo largo, el final de la etiqueta
+        # (con ajuste de linea; Qt parte por si solo una palabra larga) quedaba recortado sin aviso; se calcula la altura que el contenido necesita al ancho que el cuadro va a tener y se abre con
+        # ella (acotada a la pantalla).
+        dialogo.adjustSize()
+        alto_necesario = layout.totalHeightForWidth(dialogo.width())
+        if alto_necesario > dialogo.height():
+            pantalla = QApplication.primaryScreen()
+            dialogo.resize(dialogo.width(), min(alto_necesario, pantalla.availableGeometry().height()) if pantalla is not None else alto_necesario)
 
         dialogo.open()
 

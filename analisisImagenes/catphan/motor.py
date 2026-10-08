@@ -77,9 +77,13 @@ _MTF_PORCENTAJES = (10, 20, 30, 40, 50, 60, 70, 80, 90)
 
 
 class OrientacionIndeterminada(Exception):
-    """El fantoma no se pudo juzgar ni en orientación normal ni invertida
-    (ninguna de las dos correlaciona con los HU nominales). El motor NO
-    inventa una orientación -- la pantalla debe ofrecer el camino manual."""
+    """No se pudo determinar la orientación del fantoma: ni en orientación
+    normal ni invertida el análisis dio una serie que correlacione con los HU
+    nominales -- o porque ninguna correlaciona, o porque pylinac no pudo
+    analizar la serie (le falta un dato al DICOM, el barrido no cubre los
+    módulos...; CD.2: el texto de la excepción dice cuál de las dos cosas
+    fue). El motor NO inventa una orientación -- la pantalla debe ofrecer el
+    camino manual."""
 
 
 class CatPhan504Radqa(CatPhan504):
@@ -298,6 +302,65 @@ def _resultado_desde_ct(ct, equipo_detectado, orientacion, advertencias):
     )
 
 
+# CD.2 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md, B3): lo que pylinac dijo cuando no pudo analizar la serie, dicho para una persona. Antes la excepcion se tragaba y el aviso decia
+# «Ninguna orientacion del fantoma en '<ruta>' correlaciona...» (cortado a 50 caracteres en el cuadro de cortes): el fisico recolocaba un fantoma por un dato que faltaba en el DICOM.
+CAUSA_SIN_ESPESOR = "falta el espesor de corte (SliceThickness) en el DICOM"
+
+
+def descripcion_del_fallo(error, serie=None) -> str:
+    """La causa de una excepcion de pylinac en una frase: las conocidas, traducidas; el resto, su clase y su texto (nunca vacia, nunca multilinea).
+
+    `serie` (la `SerieCT` que se analizaba) permite reconocer por el DATO lo que el texto del error no dice: con la etiqueta SliceThickness AUSENTE pylinac lanza `AttributeError` (el texto la nombra),
+    pero con la etiqueta PRESENTE y VACIA la multiplica y lanza `TypeError: ... 'NoneType' and 'int'` (revision de CD.2): ahi la causa es la misma, y se reconoce porque el error es de ese tipo,
+    habla de `NoneType` y la serie, leida por `leer_serie`, no publica espesor."""
+    texto = " ".join(str(error).split())
+    if isinstance(error, AttributeError) and "SliceThickness" in texto:
+        return CAUSA_SIN_ESPESOR
+    if isinstance(error, TypeError) and "NoneType" in texto and serie is not None and getattr(serie, "espesor_mm", 0) is None:
+        return CAUSA_SIN_ESPESOR
+    if "No slices were found that resembled the HU linearity module" in texto:
+        return "pylinac no encontró ningún corte parecido al módulo de linealidad de HU (CTP404)"
+    if "The physical scan extent does not match the module configuration" in texto:
+        return ("el barrido no cubre todos los módulos del fantoma (la extensión física del barrido no coincide con la configuración de los módulos): "
+                "hay que volver a escanear el fantoma completo")
+    return f"{type(error).__name__}: {texto}" if texto else type(error).__name__
+
+
+def _sin_punto_final(texto) -> str:
+    return texto.rstrip(". ")
+
+
+def _mensaje_sin_orientacion(r_normal, r_volteado, error_normal, error_volteado, serie=None, centro_normal=None, centro_volteado=None) -> str:
+    """CD.2: el texto de `OrientacionIndeterminada`. Sin la ruta de la carpeta: el fisico sabe cual eligio.
+    * pylinac no pudo analizar la serie NI derecha NI volteada: la causa es del analisis y va primero (no se habla de orientacion).
+    * al menos un intento fallo, o su correlacion alcanzo el umbral pero el centro de CTP486 es aire (el corte localizado no es el modulo de uniformidad): «No se pudo determinar la orientacion»,
+      con la correlacion de cada intento y, del que fallo, su causa -- no se afirma que una orientacion que nunca se midio «no correlaciona».
+    * los dos analizaron y ninguno correlaciona: el texto de siempre, con los numeros legibles."""
+    if error_normal is not None and error_volteado is not None:
+        causa, otra = (_sin_punto_final(descripcion_del_fallo(e, serie)) for e in (error_normal, error_volteado))
+        return f"pylinac no pudo analizar la serie: {causa}" + (f" (al voltearla: {otra})" if otra != causa else "") + "."
+
+    def parte(r, error, centro):
+        if error is not None:
+            return f"no se pudo analizar: {_sin_punto_final(descripcion_del_fallo(error, serie))}"
+        if r >= UMBRAL_CORRELACION_ORIENTACION:       # llego al umbral: lo que fallo es el control del centro de CTP486
+            con_centro = f", pero el centro de CTP486 mide {centro:.0f} HU" if centro is not None else ", pero el centro de CTP486 es aire"
+            return f"r={r:.3f}{con_centro} (aire: ese corte no es el módulo de uniformidad)"
+        return f"r={r:.3f}"
+
+    ninguna_midio_bien = error_normal is None and error_volteado is None and r_normal < UMBRAL_CORRELACION_ORIENTACION and r_volteado < UMBRAL_CORRELACION_ORIENTACION
+    cabeza = "Ninguna orientación del fantoma correlaciona con los HU nominales" if ninguna_midio_bien else "No se pudo determinar la orientación del fantoma"
+    return (f"{cabeza} (normal: {parte(r_normal, error_normal, centro_normal)}; "
+            f"invertido: {parte(r_volteado, error_volteado, centro_volteado)}; umbral={UMBRAL_CORRELACION_ORIENTACION}).")
+
+
+def _correlacion_normal_en_advertencias(r_normal, error_normal, serie) -> str:
+    """La advertencia de la correlacion del intento normal cuando el invertido fue el que sirvio: si el normal FALLO no hay `r` (antes decia `r=None`): se dice su causa."""
+    if error_normal is not None:
+        return f"orientación normal: no se pudo analizar: {_sin_punto_final(descripcion_del_fallo(error_normal, serie))}"
+    return f"correlación orientación normal: r={r_normal}"
+
+
 def analizar(serie, perfil, ajustes=None, corte_origen=None) -> ResultadoCatphan:
     """Analiza `serie` (una `SerieCT` de `serie.py`) con pylinac, detecta la
     orientación del fantoma automáticamente (B.2) y devuelve un
@@ -328,11 +391,13 @@ def analizar(serie, perfil, ajustes=None, corte_origen=None) -> ResultadoCatphan
             f"para {serie.carpeta!r} -- no se puede confiar en los índices."
         )
 
+    error_normal = error_volteado = None
     try:
         _analizar_una_vez(ct, corte_origen, ajustes)
         r_normal, centro_normal = _correlacion_y_centro(ct)
-    except Exception:
+    except Exception as e:
         r_normal, centro_normal = None, None
+        error_normal = e                      # CD.2: la causa va al aviso si ninguna orientacion sirve
 
     if (
         r_normal is not None
@@ -348,8 +413,9 @@ def analizar(serie, perfil, ajustes=None, corte_origen=None) -> ResultadoCatphan
     try:
         _analizar_una_vez(ct_volteado, None, ajustes)
         r_volteado, centro_volteado = _correlacion_y_centro(ct_volteado)
-    except Exception:
+    except Exception as e:
         r_volteado, centro_volteado = None, None
+        error_volteado = e
 
     if (
         r_volteado is not None
@@ -357,15 +423,11 @@ def analizar(serie, perfil, ajustes=None, corte_origen=None) -> ResultadoCatphan
         and centro_volteado > CENTRO486_MINIMO_HU
     ):
         advertencias = [
-            f"correlación orientación normal: r={r_normal}",
+            _correlacion_normal_en_advertencias(r_normal, error_normal, serie),
             f"correlación orientación invertida: r={r_volteado:.3f}",
             "fantoma detectado INVERTIDO -- volumen volteado antes de medir",
         ]
         equipo = getattr(perfil, "nombre", None)
         return _resultado_desde_ct(ct_volteado, equipo, "invertido", advertencias)
 
-    raise OrientacionIndeterminada(
-        f"Ninguna orientación del fantoma en {serie.carpeta!r} correlaciona con los HU "
-        f"nominales (normal: r={r_normal}, invertido: r={r_volteado}, umbral="
-        f"{UMBRAL_CORRELACION_ORIENTACION})."
-    )
+    raise OrientacionIndeterminada(_mensaje_sin_orientacion(r_normal, r_volteado, error_normal, error_volteado, serie, centro_normal, centro_volteado))
