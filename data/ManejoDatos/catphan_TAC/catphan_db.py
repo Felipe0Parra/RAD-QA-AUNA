@@ -1492,6 +1492,58 @@ def en_lp_cm(valor, unidad):
     return round(valor * 10, 6) if unidad == "lp/mm" and _es_numero(valor) and valor > 0 else valor
 
 
+# GI.8e (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md): lo que la exportacion a Excel hace con las tablas de imagenes cuyo dato depende de CUANDO se guardo. Antes `SQLtoEXCEL.exportar`
+# volcaba `SELECT *` tal cual: la resolucion espacial de los controles de enero a abril (guardada en lp/mm) salia bajo un encabezado en lp/cm, y la bandera de la linealidad como 1 / 0, un
+# texto o un BLOB segun cuando se guardo. «Ver tabla» y el PDF ya convierten fila por fila con `unidad_de_la_fila_espacial` + `en_lp_cm`, `_lp_cm_de_la_region` y `_bandera_guardada`; esta funcion es el MISMO paso
+# para el Excel (las mismas primitivas, ninguna conversion propia). Las demas tablas pasan SIN tocarse.
+TABLAS_DE_IMAGENES_PARA_EXCEL = ("resolucion_espacial", "resolucion_espacial_regiones", "linealidad_ct")
+PALABRA_SI, PALABRA_NO = "Sí", "No"
+# El centinela -1 de `lp_cm_maximo` (ninguna región se pudo medir) no es una frecuencia: el informe PDF lo dice con estas palabras y el Excel también (en una columna numérica un -1 contamina cualquier promedio).
+TEXTO_SIN_REGION_MEDIBLE = "Sin región medible"
+
+
+def es_sin_region_medible(valor):
+    """El centinela de `lp_cm_maximo`: ninguna región se pudo medir (el análisis guarda -1; cualquier valor no positivo no es una frecuencia). El informe PDF y el Excel lo dicen con `TEXTO_SIN_REGION_MEDIBLE`."""
+    return _es_numero(valor) and valor <= 0
+
+
+def _vacio(valor):
+    return valor is None or valor != valor            # None o NaN (pandas lee NULL como NaN)
+
+
+def preparar_tabla_de_imagenes_para_excel(df, tabla):
+    """GI.8e: el DataFrame que se exporta a Excel con la resolucion espacial SIEMPRE en lp/cm y la bandera de la linealidad con palabras («Sí» / «No»).
+
+    * `resolucion_espacial`: la maxima y la MTF (10 / 20 / 50 %) de cada fila salen en lp/cm; la unidad en que se guardo la fila la deduce `unidad_de_la_fila_espacial` de su maxima
+      contra su ultima region exitosa (como «Ver tabla»). El centinela de la maxima («ninguna region medible», -1) sale con las palabras del informe PDF, no como un numero.
+    * `resolucion_espacial_regiones`: `lp_cm` de cada region es `_lp_cm_de_la_region(nombre, guardado)`, region por region -- la MISMA regla del lector («Ver tabla» y el PDF): lo guardado manda cuando es un lp/cm
+      utilizable y se deriva del nombre (la region N vale N lp/cm) cuando falta (los controles de 05/2026 a GI.1 lo guardaron NULL), no es positivo o es la frecuencia en lp/mm de enero a abril.
+    * `linealidad_ct`: `linealidad_aceptable` como «Sí» / «No» por su VALOR (`_bandera_guardada`: un BLOB de antes de GI.1 o un texto no son verdaderos por existir); un NULL queda
+      vacio y lo que no se entiende queda como se guardo (no se pierde el dato).
+
+    Devuelve una COPIA (no muta lo recibido); el resto de las tablas, y las columnas que una base vieja no tenga, se devuelven tal cual."""
+    if tabla not in TABLAS_DE_IMAGENES_PARA_EXCEL:
+        return df
+    df = df.copy()
+    columnas = set(df.columns)
+    n = len(df)
+    if tabla == "resolucion_espacial" and "lp_cm_maximo" in columnas:
+        ultimas = df["ultima_region_exitosa"].tolist() if "ultima_region_exitosa" in columnas else [None] * n
+        unidades = [unidad_de_la_fila_espacial([], maxima, None if _vacio(ultima) else ultima) for maxima, ultima in zip(df["lp_cm_maximo"].tolist(), ultimas)]
+        for columna in ("lp_cm_maximo", "mtf_10_pct", "mtf_20_pct", "mtf_50_pct"):
+            if columna in columnas:
+                df[columna] = [en_lp_cm(valor, unidad) for valor, unidad in zip(df[columna].tolist(), unidades)]
+        df["lp_cm_maximo"] = [TEXTO_SIN_REGION_MEDIBLE if es_sin_region_medible(valor) else valor for valor in df["lp_cm_maximo"].tolist()]
+    elif tabla == "resolucion_espacial_regiones" and {"lp_cm", "region_nombre"} <= columnas:
+        df["lp_cm"] = [_lp_cm_de_la_region(nombre, valor) for nombre, valor in zip(df["region_nombre"].tolist(), df["lp_cm"].tolist())]
+    elif tabla == "linealidad_ct" and "linealidad_aceptable" in columnas:
+        def en_palabras(valor):
+            bandera = None if _vacio(valor) else _bandera_guardada(valor)
+            return valor if bandera is None else (PALABRA_SI if bandera else PALABRA_NO)
+        df["linealidad_aceptable"] = [en_palabras(v) for v in df["linealidad_aceptable"].tolist()]
+    return df
+
+
 def _minimo_de_rois_visibles():
     """Cuántos ROI visibles exige el `pasa_test_*` heredado: la misma fuente que el análisis (`criterios.PARAMETROS_HEREDADOS`)."""
     from analisisImagenes.catphan.criterios import PARAMETROS_HEREDADOS

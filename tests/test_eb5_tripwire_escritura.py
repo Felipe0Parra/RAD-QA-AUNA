@@ -322,7 +322,7 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 4271):  # R.3 (11-09): 3911->3922; A.2 (21-09): 4065->4124; B.3 (21-09): 4124->4185; B.4 (21-09): 4185->4257; C.1 (25-09): 4257->4260; FS.2 (06-10): 4260->4271
         "SELECT (DO1, pruebatalas -- lectura genérica, ya filtra con "
         "filtro_activo) -- no aplica a EB5, no escribe.",
-    ("ui/paginasGuia/SQLtoEXCEL.py", 529):
+    ("ui/paginasGuia/SQLtoEXCEL.py", 540):  # GI.8e (08-10): 529->540
         "SELECT (LR3, exportación de imágenes de braqui) -- no aplica a "
         "EB5, no escribe.",
 }

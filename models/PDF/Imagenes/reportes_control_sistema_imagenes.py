@@ -51,7 +51,7 @@ from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
 from models.PDF.PDFWindow import PdfViewer
 
 # Importar funciones de reconstrucción desde catphan_db
-from data.ManejoDatos.catphan_TAC.catphan_db import _bandera_guardada, nota_visibilidad_a_mano, reconstruir_resultados_desde_bd
+from data.ManejoDatos.catphan_TAC.catphan_db import TEXTO_SIN_REGION_MEDIBLE, _bandera_guardada, es_sin_region_medible, nota_visibilidad_a_mano, reconstruir_resultados_desde_bd
 from services.anulacion import filtro_activo
 from analisisImagenes.catphan.descripcion import NO_PUBLICADO, filas_adquisicion, filas_identidad, filas_medidas
 from analisisImagenes.catphan.escala import CLAVE_EN_ADQUISICION as CLAVE_ESCALA, nota_escala
@@ -916,8 +916,8 @@ class ReporteControlSistemaImagenes:
         mtf_lp_cm = resultado.get('mtf_lp_cm', {})
         
         lp_cm_max = resolucion_limite.get('lp_cm_maximo')
-        if isinstance(lp_cm_max, numbers.Real) and not isinstance(lp_cm_max, bool) and lp_cm_max <= 0:
-            lp_cm_max_str = "Sin región medible"      # el centinela -1 del análisis: ninguna región se pudo medir (no es una frecuencia)
+        if es_sin_region_medible(lp_cm_max):
+            lp_cm_max_str = TEXTO_SIN_REGION_MEDIBLE      # el centinela -1 del análisis: ninguna región se pudo medir (no es una frecuencia); las mismas palabras que el Excel (GI.8e)
         else:
             lp_cm_max_str = _celda_numero(lp_cm_max, "{:.2f}")
         

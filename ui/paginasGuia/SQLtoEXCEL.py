@@ -190,6 +190,14 @@ class ExportarExcel(QWidget):
             df = pd.read_sql_query(
                 f'SELECT * FROM "{table_name}" WHERE 1=1{filtro_activo(table_name)} LIMIT 30',
                 connect)
+            # GI.8e: la vista previa dice lo mismo que el archivo (misma conversion, una sola definicion en catphan_db). Si la conversion fallara, la vista previa muestra las filas
+            # como estan en la base (y la causa queda en error_log.txt) en vez de vaciar la tabla de TODAS las pruebas; el archivo si avisa (`exportar`).
+            try:
+                from data.ManejoDatos.catphan_TAC.catphan_db import preparar_tabla_de_imagenes_para_excel
+                df = preparar_tabla_de_imagenes_para_excel(df, table_name)
+            except Exception as error:
+                from services.registro_errores import registrar_error
+                registrar_error(f'Vista previa de Exportar a Excel: no se pudo preparar la tabla {table_name}', error)
         except Exception:
             self.preview_table.clear()
             self.preview_table.setRowCount(0)
@@ -459,6 +467,9 @@ class ExportarExcel(QWidget):
                 df = pd.read_sql_query(query, connect)
                 # Cambiar nombres de columnas si es necesario
                 df= self.changeColumnNames(df, selected_table)
+                # GI.8e: la resolucion espacial siempre en lp/cm y la bandera de la linealidad con palabras: la MISMA conversion de «Ver tabla» y del PDF (una sola definicion, en catphan_db)
+                from data.ManejoDatos.catphan_TAC.catphan_db import preparar_tabla_de_imagenes_para_excel
+                df = preparar_tabla_de_imagenes_para_excel(df, table)
                 output_path = os.path.join(desktop_path, f"{nombre_archivo}")
                 df.to_excel(output_path, index=False)
                 # Editar el excel para agrandar las columnas y se vea lindo

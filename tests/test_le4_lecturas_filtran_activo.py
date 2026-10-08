@@ -210,10 +210,10 @@ EXCEPCIONES_LITERALES = {
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1170):  # A.1 (23-09): 1021->1068; A.2 (23-09): 1068->1074; G.2 (24-09): 1074->1077; G.3 (24-09): 1077->1086; GI.4 (07-10): 1086->1110; GI.5 (07-10): 1110->1132; GI.6 (07-10): 1132->1158; GI.8b (08-10): 1158->1159; GI.8c (08-10): 1159->1162; GI.8d (08-10): 1162->1170
         "pruebas -- filtro_activo('pruebas') se califica con el alias 'p.' "
         "del LEFT JOIN (variable `filtro_p`) en consultar_pruebas_disponibles",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1712):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437; G.2 (24-09): 1437->1440; G.3 (24-09): 1440->1449; GI.2 (06-10): 1449->1556; GI.3 (07-10): 1556->1606; GI.4 (07-10): 1606->1630; GI.5 (07-10): 1630->1652; GI.6 (07-10): 1652->1678; GI.8b (08-10): 1678->1679; GI.8c (08-10): 1679->1699; GI.8d (08-10): 1699->1712
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1764):  # A.1 (23-09): 1384->1431; A.2 (23-09): 1431->1437; G.2 (24-09): 1437->1440; G.3 (24-09): 1440->1449; GI.2 (06-10): 1449->1556; GI.3 (07-10): 1556->1606; GI.4 (07-10): 1606->1630; GI.5 (07-10): 1630->1652; GI.6 (07-10): 1652->1678; GI.8b (08-10): 1678->1679; GI.8c (08-10): 1679->1699; GI.8d (08-10): 1699->1712; GI.8e (08-10): 1712->1764
         "valores_ct -- filtro_activo('valores_ct') se califica con el alias "
         "'vc.' del JOIN (variable `filtro_vc`) en reconstruir_valores_ct",
-    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1811):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528; G.2 (24-09): 1528->1532; G.3 (24-09): 1532->1541; GI.2 (06-10): 1541->1648; GI.3 (07-10): 1648->1698; GI.4 (07-10): 1698->1722; GI.5 (07-10): 1722->1744; GI.6 (07-10): 1744->1770; GI.8b (08-10): 1770->1771; GI.8c (08-10): 1771->1791; GI.8d (08-10): 1791->1811
+    ("data/ManejoDatos/catphan_TAC/catphan_db.py", 1863):  # A.1 (23-09): 1475->1522; A.2 (23-09): 1522->1528; G.2 (24-09): 1528->1532; G.3 (24-09): 1532->1541; GI.2 (06-10): 1541->1648; GI.3 (07-10): 1648->1698; GI.4 (07-10): 1698->1722; GI.5 (07-10): 1722->1744; GI.6 (07-10): 1744->1770; GI.8b (08-10): 1770->1771; GI.8c (08-10): 1771->1791; GI.8d (08-10): 1791->1811; GI.8e (08-10): 1811->1863
         "uniformidad_ruido -- filtro_activo('uniformidad_ruido') se califica "
         "con el alias 'ur.' del JOIN (variable `filtro_ur`) en "
         "reconstruir_uniformidad",
@@ -477,7 +477,7 @@ SITIOS_OPACOS_PERMITIDOS = {
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 315): "INSERT (subirlineasmensuales_ix, rama fuera del bloque de QC -- ver comentario en el propio archivo)",
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py", 329): "UPDATE por (ref, energia) -- subirlineasmensuales_ix, rama fuera del bloque de QC (nombre_tabla no anulable en esta rama)",
     ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 4271): "DO1 (pruebatalas -- `sql += filtro_activo(nombre_tabla)` es una llamada real, no un literal; ya documentado en el propio archivo como filtrado a mano)",  # R.3 (11-09): 3911->3922; A.2 (21-09): 4065->4124; B.3 (21-09): 4124->4185; B.4 (21-09): 4185->4257; C.1 (25-09): 4257->4260; FS.2 (06-10): 4260->4271
-    ("ui/paginasGuia/SQLtoEXCEL.py", 529): "LR3 (DA-48): la consulta compañera de `pelicula` YA filtra con filtro_activo('braqui') -- sigue opaca al AST porque `query` se reasigna en varias ramas dentro del bucle de exportación, no por falta de filtro",
+    ("ui/paginasGuia/SQLtoEXCEL.py", 540): "LR3 (DA-48): la consulta compañera de `pelicula` YA filtra con filtro_activo('braqui') -- sigue opaca al AST porque `query` se reasigna en varias ramas dentro del bucle de exportación, no por falta de filtro",  # GI.8e (08-10): 529->540
 }
 
 
