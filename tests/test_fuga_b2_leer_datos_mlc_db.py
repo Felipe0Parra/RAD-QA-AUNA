@@ -36,7 +36,11 @@ def bd_temporal(monkeypatch, tmp_path):
 def _sin_conversion_dicom(monkeypatch):
     """La conversión DICOM->PNG real no es lo que este test verifica --
     se hace passthrough para no depender de un archivo DICOM sintético."""
-    monkeypatch.setattr(pdf_mod, "dicom_to_png_blob", lambda blob: blob)
+    # `raising=False`: `pdf.py` trae `dicom_to_png_blob` con `from data.ManejoDatos.load import *` (circular), asi que el atributo existe SOLO si `pdf` se importo con `load` ya
+    # completo. Si algo importa `load` primero (el orden depende de que otras pruebas corran antes en el mismo proceso: lo vio la suite repartida en procesos) `pdf` se queda sin el
+    # nombre y esta fixture reventaba en su preparacion. Con el nombre parcheado, `_leer_datos_mlc_db` lo resuelve igual (es un global de `pdf`). En la aplicacion real el orden
+    # de importacion es siempre el bueno (`main` -> `ui.mainpages`).
+    monkeypatch.setattr(pdf_mod, "dicom_to_png_blob", lambda blob: blob, raising=False)
 
 
 def _insertar_control(ruta_bd):
