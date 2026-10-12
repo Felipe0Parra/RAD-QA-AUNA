@@ -94,6 +94,62 @@ def serie_hospital(clave):
     return ruta if os.path.isdir(ruta) else None
 
 
+# PF.0 (12-10-2026, PLAN_ANALISIS_PELICULAS_08-10.md): las PELICULAS radiocromicas reales del físico. Viven FUERA del repo, en su propia raíz
+# (no bajo `RAIZ` ni bajo `CATPHAN_RAIZ`): `ImagenesDeReferencia/PlacasHistoricas` (SOLO LECTURA; paso 14 del protocolo del plan). El repo no guarda
+# imágenes grandes (el hook admite 1 MB solo en `tests/datos/`; ML0.JPG pesa 2.8 MB), así que las pruebas con películas reales leen este corpus
+# y las sintéticas (`_placa_mensual_sintetica.py`, `_placa_braqui_sintetica.py`) se generan en memoria con semilla fija.
+# La regla de PR.0 se aplica a esta raíz (`tests/test_pr0_corpus_completo.py::verificar_peliculas`): si la carpeta existe y falta una película
+# declarada, FALLA nombrándola; si la carpeta no existe, salta.
+PELICULAS_RAIZ = os.path.expanduser("~/Documents/CodigosPython/ImagenesDeReferencia/PlacasHistoricas")
+# clave -> archivo (relativo a PELICULAS_RAIZ). Control MENSUAL de aceleradores (campo luminoso de 10 x 10 cm sobre película radiocrómica).
+PELICULAS_MENSUALES = {
+    "ML0": "ML0.JPG",                          # la película del cuaderno del físico, recortada: 2690 x 2710 px a 600 dpi
+    "EPSON027": "EPSON027.JPG",                # la PÁGINA entera del escáner de la que sale ML0 (5100 x 6600)
+    "EPSON007": "EPSON007.JPG",
+    "EPSON008_TIF": "EPSON008.TIF",            # TIFF RGBA de 8 bits con alfa opaco (H9)
+    "EPSON030": "EPSON030.JPG",                # página entera
+    "EPSON001_JPG": "EPSON001.jpg",
+    "EPSON001_TIF": "EPSON001.TIF",            # la misma película que EPSON001.jpg, en TIFF RGBA de 8 bits
+    "PLACA_REF40": "placa_ref40.jpeg",         # la imagen que se subió en el control ref 40
+    "EPSON028": "EPSON028.JPG",                # página entera
+    "EPSON029": "EPSON029.JPG",                # página entera
+    "PLACA_REF6": "placa_ref6.jpeg",           # la imagen del control ref 6: es EXACTAMENTE EPSON001.jpg (mismo md5; ver MISMO_ARCHIVO)
+}
+# Posición inicial de la fuente de braquiterapia (película recortada o página entera). Son las que usan los tests de PI.*, que guardan
+# copias en `tests/datos/` (ver COPIAS_EN_EL_REPO) porque no pasan del límite de 1 MB de ese directorio.
+PELICULAS_BRAQUI = {
+    "BRAQUI_00_JPEG": "braqui_00.jpeg",        # 1328 x 467, escaneada a 600 dpi y retocada en gThumb
+    "BRAQUI_00_JPG": "braqui_00.JPG",          # otro recorte de la misma página: 1337 x 473
+    "EPSON009": "EPSON009.jpeg",               # la TÍPICA: un TIFF RGBA de Paint con la extensión .jpeg y 96.012 dpi declarados
+    "EPSON031": "EPSON031.JPG",                # el escaneo crudo (página entera) de la que sale braqui_00
+}
+# Lo que se midió de cada película (12-10-2026) y que las pruebas dan por sentado: (ancho, alto, formato real según Pillow). Si el físico
+# reemplaza un archivo por otro distinto, la prueba lo nombra y se corrige AQUÍ.
+FORMA_DE_LAS_PELICULAS = {
+    "ML0": (2690, 2710, "JPEG"), "EPSON027": (5100, 6600, "JPEG"), "EPSON007": (2736, 2704, "JPEG"), "EPSON008_TIF": (2728, 2720, "TIFF"),
+    "EPSON030": (5100, 6600, "JPEG"), "EPSON001_JPG": (2720, 2860, "JPEG"), "EPSON001_TIF": (2720, 2860, "TIFF"),
+    "PLACA_REF40": (2633, 2673, "JPEG"), "EPSON028": (5100, 6600, "JPEG"), "EPSON029": (5100, 6600, "JPEG"), "PLACA_REF6": (2720, 2860, "JPEG"),
+    "BRAQUI_00_JPEG": (1328, 467, "JPEG"), "BRAQUI_00_JPG": (1337, 473, "JPEG"), "EPSON009": (1156, 672, "TIFF"), "EPSON031": (5100, 6600, "JPEG"),
+}
+# Dos claves que son el MISMO archivo (mismo contenido byte a byte) bajo dos nombres.
+MISMO_ARCHIVO = {"PLACA_REF6": "EPSON001_JPG"}
+# Las películas de braqui que `tests/datos/` ya guarda (nombre del archivo en `tests/datos/`): deben ser idénticas a las del corpus.
+COPIAS_EN_EL_REPO = {"BRAQUI_00_JPEG": "braqui_00.jpeg", "EPSON009": "EPSON009.jpeg", "EPSON031": "EPSON031.JPG"}
+
+
+def todas_las_peliculas_declaradas():
+    """`{clave: archivo relativo a PELICULAS_RAIZ}` de TODAS las películas del corpus externo (mensuales y de braqui): la que mira la regla de
+    PR.0 aplicada a PELICULAS_RAIZ (`tests/test_pr0_corpus_completo.py::verificar_peliculas`). Aparte de `todas_las_series_declaradas()`: son
+    otra raíz y otro tipo de dato (archivos, no carpetas)."""
+    return {**PELICULAS_MENSUALES, **PELICULAS_BRAQUI}
+
+
+def pelicula(clave):
+    """Ruta a una película real del corpus, o None si no existe (skip honesto)."""
+    ruta = os.path.join(PELICULAS_RAIZ, todas_las_peliculas_declaradas()[clave])
+    return ruta if os.path.isfile(ruta) else None
+
+
 def mes_primeros(mes, maquina, sub=None):
     """Ruta a una carpeta de un mes de PrimerosMeses, tolerando la grafía IX/iX.
 
