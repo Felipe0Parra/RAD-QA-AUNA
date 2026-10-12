@@ -45,7 +45,6 @@ import numpy as np
 import pytest
 from matplotlib.backend_bases import FigureCanvasBase, MouseEvent, NavigationToolbar2
 from matplotlib.figure import Figure
-from PIL import Image
 from PyQt5 import sip
 from PyQt5.QtCore import QEvent, QPoint, QPointF, Qt
 from PyQt5.QtGui import QWheelEvent
@@ -1134,7 +1133,7 @@ class TestAbrirUnRegistro:
         p.boton_limpiar.click()
         dialogos.llamadas.clear()
         p.tabla_registros.cellDoubleClicked.emit(0, 0)
-        assert "versión del algoritmo: guardada PI-0, actual PI-1" in dialogos.de("warning")[0]["texto"]
+        assert "versión del algoritmo: guardada PI-0, actual PI-2" in dialogos.de("warning")[0]["texto"]
 
     def test_18c_abrir_con_el_lado_del_transito_cambiado_avisa(self, fabrica, dialogos, archivo_braqui, bd):
         """El signo que imprime el PDF sale del lado del tránsito: comparar solo `desfase_*_px` lo dejaría pasar."""
@@ -1219,7 +1218,7 @@ class TestDiferenciasConLoGuardado:
             corridos += 1
         assert corridos == 17
         diferencias = pagina_mod.diferencias_con_lo_guardado(dict(registro, version_algoritmo="PI-0"), resultado)
-        assert diferencias == ["versión del algoritmo: guardada PI-0, actual PI-1"]
+        assert diferencias == ["versión del algoritmo: guardada PI-0, actual PI-2"]
 
     def test_las_tolerancias_son_001_px_y_001_px_en_milimetros(self, base):
         resultado, registro = base
@@ -1284,22 +1283,17 @@ class TestLoQueFalla:
         assert p._resultado is None and not p.boton_guardar.isEnabled() and p.estado == "fallida"
         assert p.recuadro_gris.text() == "" and p.recuadro_rgb.text() == "" and len(p.lienzo_gris.figure.axes) == 0
 
+    # A.1 (12-10, P11 «medir»): el segundo caso («transparentes»: una imagen con la mitad transparente se rechazaba y la página quedaba igual) ya no existe: la
+    # imagen con zonas transparentes se LEE y se mide lo que no toca (la prueba nueva está en tests/test_a1_lector_de_peliculas.py::
+    # TestLaPaginaMuestraLos16BitsEnUint8::test_c_una_imagen_con_zonas_transparentes_se_carga_sin_avisos). Queda el de los bytes que no son una imagen.
     @pytest.mark.parametrize("contenido,fragmento", [
-        (b"esto no es una imagen", "No se reconoce el formato de la imagen"),
-        (None, "transparentes")])
-    def test_21_una_imagen_ilegible_o_con_transparencias_no_cambia_nada(self, pagina, dialogos, archivo_braqui, tmp_path,
-                                                                       contenido, fragmento):
+        (b"esto no es una imagen", "No se reconoce el formato de la imagen")])
+    def test_21_una_imagen_ilegible_no_cambia_nada(self, pagina, dialogos, archivo_braqui, tmp_path, contenido, fragmento):
         p = pagina
         _analizada(p, dialogos, archivo_braqui)
         antes = _huella(p)
         ruta = tmp_path / "mala.png"
-        if contenido is None:
-            rgba = np.zeros((40, 40, 4), np.uint8)
-            rgba[..., :3] = 128
-            rgba[:20, :, 3] = 255                 # la mitad transparente
-            Image.fromarray(rgba, "RGBA").save(ruta)
-        else:
-            ruta.write_bytes(contenido)
+        ruta.write_bytes(contenido)
         dialogos.llamadas.clear()
         _cargar(p, dialogos, str(ruta))
         assert len(dialogos.de("warning")) == 1 and fragmento in dialogos.de("warning")[0]["texto"]

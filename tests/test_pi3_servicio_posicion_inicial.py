@@ -282,7 +282,7 @@ class TestGuardar:
         assert r["estado_gris"] == "ok" and r["lado_transito"] == "derecha"
         assert r["estado_r"] == "no medible: la mancha esta cortada por el borde de la pelicula"
         assert r["estado_g"] == "ok" and r["estado_b"] == "ok" and r["filas_gris"] > 10
-        assert (r["tolerancia_mm"], r["version_algoritmo"]) == (1.0, "PI-1")
+        assert (r["tolerancia_mm"], r["version_algoritmo"]) == (1.0, "PI-2")        # A.1 (12-10): PI-2 (16 bits y alfa)
         assert json.loads(r["puntos"]) == [[191.0, 377.0], [190.0, 56.0]]
         assert json.loads(r["parametros"]) == motor.PARAMETROS
 
@@ -859,7 +859,11 @@ class TestUnaSolaDefinicion:
     def test_usa_las_dos_funciones_del_motor(self):
         llamadas = {n.func.attr for n in ast.walk(self.ARBOL) if isinstance(n, ast.Call)
                     and isinstance(n.func, ast.Attribute) and isinstance(n.func.value, ast.Name) and n.func.value.id == "motor"}
-        assert {"valores_medidos", "interpretar", "leer_imagen", "analizar"} <= llamadas, llamadas
+        # A.1 (12-10): el servicio ya no lee con `motor.leer_imagen` sino con `leer_pelicula` (necesita la máscara de píxeles con dato); `leer_imagen` queda para la
+        # página y delega en el mismo lector
+        assert {"valores_medidos", "interpretar", "analizar"} <= llamadas, llamadas
+        assert "leer_imagen" not in llamadas, "una sola lectura: el servicio lee con `leer_pelicula`"
+        assert "leer_pelicula" in {n.func.id for n in ast.walk(self.ARBOL) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
 
     def test_no_importa_qt(self):
         importados = {a.name.split(".")[0] for n in ast.walk(self.ARBOL) if isinstance(n, ast.Import) for a in n.names}

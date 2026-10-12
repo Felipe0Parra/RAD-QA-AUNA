@@ -22,23 +22,26 @@ del plan (los cuatro defectos del método sin corregir y la mejora subpíxel):
       la escribió un editor (72 o 96: se usa 600 y se avisa en pantalla) u otra (300, 200...: un escaneo a otra
       resolución, sin milímetros ni veredicto). La comprobación por el ancho de la meseta saturada (6.2-6.5 mm en
       las placas reales) queda como deuda (DP-143).
+  +   la lectura (A.1, 12-10): `analisisImagenes/pelicula.py::leer_pelicula` es el ÚNICO lector de películas (8 o 16 bits por canal, capas con nombre, el alfa como "sin
+      dato"); `leer_imagen` de aquí delega en él con la misma firma y, en 8 bits, los mismos arreglos de siempre. Una imagen con zonas transparentes ya no se rechaza:
+      `analizar(..., validos=)` recibe la máscara de píxeles con dato y la trata como el marco (lo transparente no es película). `clase_resolucion` y `escala_mm` se
+      mudaron a `pelicula.py` (una sola definición) y se re-exportan aquí con el mismo nombre. Versión PI-2.
+  +   (A.1, ronda 1 de la revisión) la transparencia dice lo que hace: si la zona analizada tiene píxeles sin dato, el motivo de "no quedan filas con la mancha a la vista" y el
+      de una línea que no se pudo ubicar lo anotan (`NOTA_DE_TRANSPARENCIA`) en vez de culpar a la línea; y `refinar_linea` ya no lanza cuando el recorte robusto rechaza todas
+      las filas (una tira transparente de 1 px junto a la línea las partía en dos grupos): devuelve None y el motor mide contra los clics, como siempre que no ubica la línea.
 
 Sin Qt y sin base de datos (lo comprueba un test por AST): lo usan la página, el recálculo de un
 registro guardado, la pestaña sintética y los tests, todos con la misma función `analizar`. Cualquier
 cambio de la lógica de este archivo obliga a subir `VERSION_ALGORITMO`: lo guardado se compara contra
 lo recalculado al abrirlo (DD3).
 """
-import io
-import re
-from datetime import date
-
 import numpy as np
 import cv2
 from scipy.ndimage import median_filter
 
-from analisisImagenes.resolucion_imagen import resolucion_declarada
+from analisisImagenes.pelicula import clase_resolucion, escala_mm, leer_pelicula   # clase_resolucion y escala_mm: re-exportadas (A.1), mismo nombre
 
-VERSION_ALGORITMO = "PI-1"
+VERSION_ALGORITMO = "PI-2"
 
 PARAMETROS = {
     "grosor_marco": 25,            # px que se ignoran junto a cada borde del escaneo
@@ -67,117 +70,24 @@ PARAMETROS = {
 
 DPI_SI_FALTA = 600.0               # solo para dimensionar la ventana cuando no hay escala (resolución "otra")
 
-
-def clase_resolucion(dpi, P):
-    """Qué es la resolución que el archivo declara frente a la del procedimiento (`resolucion_escaneo_dpi`):
-    "coincide" (600, 599.999, 599), "sin_dato" (no declara), "editor" (72 o 96: lo que un editor escribe al guardar un
-    recorte, no una resolución de escaneo) u "otra" (300, 200, 1200...: ningún editor escribe eso; es un escaneo a
-    otra resolución)."""
-    if not dpi:
-        return "sin_dato"
-    tolerancia = P["tolerancia_dpi_relativa"]
-    escaneo = P["resolucion_escaneo_dpi"]
-    if abs(dpi - escaneo) <= tolerancia * escaneo:
-        return "coincide"
-    if any(abs(dpi - v) <= tolerancia * v for v in P["resoluciones_de_editor_dpi"]):
-        return "editor"
-    return "otra"
-
-
-def escala_mm(dpi, P):
-    """Milímetros por píxel, o None si NO hay escala que dar. Es el ÚNICO lugar donde una resolución se vuelve
-    escala (nadie más calcula 25.4 / dpi), y la escala es SIEMPRE la del procedimiento de escaneo
-    (`resolucion_escaneo_dpi`, 600 dpi), nunca la que declara el archivo: Paint reescribe la resolución declarada
-    (96) al recortar, sin remuestrear. Solo con una resolución "otra" (declarada y que ningún editor escribe) no hay
-    escala: es un escaneo a otra resolución y los milímetros saldrían falsos."""
-    if clase_resolucion(dpi, P) == "otra":
-        return None
-    return 25.4 / P["resolucion_escaneo_dpi"]
+# Lo que el motor dice cuando la zona analizada tiene píxeles sin dato (lo transparente, A.1). Una sola definición de cada texto.
+NOTA_DE_TRANSPARENCIA = "; la zona analizada tiene zonas transparentes"
+ESTADO_SIN_FILAS_POR_TRANSPARENCIA = "no medible: no quedan filas con la mancha a la vista" + NOTA_DE_TRANSPARENCIA
 
 
 # ----------------------------------------------------------------------------- lectura
 
-_FECHA_EXIF = re.compile(r"^\s*(\d{4})[:\-/](\d{2})[:\-/](\d{2})")
-
-
-def _fecha_de_texto(valor):
-    """'2026:09:30 16:12:29' (formato EXIF) -> date(2026, 9, 30); None si no se puede leer."""
-    if isinstance(valor, bytes):
-        valor = valor.decode("ascii", "ignore")
-    if not isinstance(valor, str):
-        return None
-    coincidencia = _FECHA_EXIF.match(valor)
-    if coincidencia is None:
-        return None
-    try:
-        return date(int(coincidencia.group(1)), int(coincidencia.group(2)), int(coincidencia.group(3)))
-    except ValueError:
-        return None
-
-
-def _fecha_del_escaneo(imagen_pil):
-    """Fecha en que el escáner escribió la imagen (EXIF), o None si no la trae. Prefiere la fecha de
-    captura (DateTimeOriginal, luego DateTimeDigitized) a `DateTime`, que un editor puede reescribir;
-    el Epson WF-6590 solo escribe `DateTime`."""
-    exif = imagen_pil.getexif()
-    try:
-        interno = exif.get_ifd(0x8769)
-    except Exception:
-        interno = {}
-    for origen, etiqueta in ((interno, 36867), (interno, 36868), (exif, 306)):
-        fecha = _fecha_de_texto(origen.get(etiqueta))
-        if fecha is not None:
-            return fecha
-    return None
-
-
-def _hay_transparencia(imagen_pil):
-    """True si algún píxel no es opaco (canal alfa < 255). Una selección transparente deja en el RGB un color que
-    el análisis no sabe interpretar."""
-    try:
-        if imagen_pil.mode in ("RGBA", "LA", "PA"):
-            return imagen_pil.getchannel("A").getextrema()[0] < 255
-        if "transparency" in imagen_pil.info:
-            return imagen_pil.convert("RGBA").getchannel("A").getextrema()[0] < 255
-    except Exception:
-        return False
-    return False
-
-
 def leer_imagen(datos):
-    """Bytes del archivo tal como se subió -> (gris, color, dpi, fecha_escaneo): gris y color de 8 bits,
-    resolución en puntos por pulgada que el archivo DECLARA (o None si no la trae: no la que Pillow rellena,
-    ver `resolucion_imagen`; es solo informativa, la escala la fija `escala_mm`) y fecha del escaneo como
-    `datetime.date` (o None). Se decodifica desde bytes (no desde ruta): cv2.imread no abre rutas con tildes en
-    Windows, y la imagen se guarda en la BD como bytes. El formato se reconoce por el contenido, no por la
-    extensión (un `.jpeg` puede ser un TIFF). Se ignora la orientación EXIF: OpenCV la aplica por defecto, y así
-    lo recalculado al abrir un registro no depende de ese valor por defecto (DD3). Una imagen con zonas
-    transparentes se rechaza (`ValueError`)."""
-    arreglo = np.frombuffer(datos, np.uint8)
-    gris = cv2.imdecode(arreglo, cv2.IMREAD_GRAYSCALE | cv2.IMREAD_IGNORE_ORIENTATION)
-    color = cv2.imdecode(arreglo, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)
-    if gris is None or color is None:
-        raise ValueError("No se reconoce el formato de la imagen.")
-    dpi = None
-    fecha_escaneo = None
-    try:
-        from PIL import Image
-        imagen = Image.open(io.BytesIO(datos))
-    except Exception:
-        imagen = None
-    if imagen is not None:
-        if _hay_transparencia(imagen):
-            raise ValueError("La imagen tiene zonas transparentes: guardela sin transparencia "
-                             "(el analisis no sabe que color hay debajo).")
-        try:
-            dpi = resolucion_declarada(imagen)
-        except Exception:
-            dpi = None
-        try:
-            fecha_escaneo = _fecha_del_escaneo(imagen)
-        except Exception:
-            fecha_escaneo = None
-    return gris, color, dpi, fecha_escaneo
+    """Bytes del archivo tal como se subió -> (gris, color, dpi, fecha_escaneo): gris y color BGR, la resolución en puntos por pulgada que el archivo DECLARA
+    (o None si no la trae: no la que Pillow rellena; es solo informativa, la escala la fija `escala_mm`) y la fecha del escaneo como `datetime.date` (o None).
+    Delega en `analisisImagenes.pelicula.leer_pelicula`, el ÚNICO lector (A.1): en 8 bits los arreglos son uint8 y exactamente los de siempre (`IMREAD_GRAYSCALE`
+    e `IMREAD_COLOR`); en 16 bits, float32 en niveles de 8 bits (valor x 255 / 65535, con sus decimales). Se decodifica desde bytes (no desde ruta: `cv2.imread` no abre
+    rutas con tildes en Windows y la imagen se guarda en la BD como bytes); el formato se reconoce por el contenido, no por la extensión (un `.jpeg` puede ser un TIFF); y se
+    ignora la orientación EXIF (DD3). Una imagen con zonas transparentes YA NO se rechaza: la máscara de píxeles con dato la entrega `leer_pelicula` (`validos`) y
+    `analizar(..., validos=)` la aplica."""
+    pelicula = leer_pelicula(datos)
+    gris, color = pelicula.en_bgr()
+    return gris, color, pelicula.dpi, pelicula.fecha_escaneo
 
 
 # ----------------------------------------------------------------------------- geometria
@@ -195,11 +105,14 @@ def angulo_canonico(p0, p1):
     return angulo
 
 
-def ventana_rotada(gris, color, puntos, angulo, P, tam_mm, medio_ancho_mm=None, canales=("gris", "R", "G", "B")):
+def ventana_rotada(gris, color, puntos, angulo, P, tam_mm, medio_ancho_mm=None, canales=("gris", "R", "G", "B"), validos=None):
     """Recorta y rota SOLO la ventana alrededor de la linea: filas entre los clics +- margen,
     columnas +- ventana_mm. Devuelve las imagenes invertidas (mas dosis = mas alto) en float32,
-    los clics en coordenadas de la ventana y la matriz ventana <- original."""
+    los clics en coordenadas de la ventana y la matriz ventana <- original. `validos` (bool, la forma de la imagen; por omision
+    None = todo valido) marca los pixeles CON DATO: lo transparente (A.1) se trata igual que el marco, `inv = 0`: no es pelicula."""
     alto_img, ancho_img = gris.shape
+    if validos is not None and validos.shape != gris.shape:
+        raise ValueError("La mascara de pixeles validos no tiene la forma de la imagen.")
     c = ((puntos[0][0] + puntos[1][0]) / 2.0, (puntos[0][1] + puntos[1][1]) / 2.0)
     R = cv2.getRotationMatrix2D(c, angulo, 1.0)
     clics_r = cv2.transform(np.array(puntos, np.float64).reshape(-1, 1, 2), R).reshape(-1, 2)
@@ -229,6 +142,8 @@ def ventana_rotada(gris, color, puntos, angulo, P, tam_mm, medio_ancho_mm=None, 
     g = P["grosor_marco"]
     yy, xx = np.mgrid[by0:by1, bx0:bx1]
     marco = (xx < g) | (xx >= ancho_img - g) | (yy < g) | (yy >= alto_img - g)
+    if validos is not None:
+        marco |= ~validos[by0:by1, bx0:bx1]
 
     def preparar(canal):
         inv = (255.0 - canal[by0:by1, bx0:bx1].astype(np.float32))
@@ -286,6 +201,8 @@ def refinar_linea(imagen, clics):
         residuo = centros - (pendiente * filas + corte)
         mad = np.median(np.abs(residuo[usadas] - np.median(residuo[usadas])))
         nuevas = np.abs(residuo) <= max(3 * 1.4826 * mad, 0.5)
+        if not nuevas.any():                    # el recorte rechazaria TODAS las filas (centros en dos grupos que ninguna recta junta, p. ej. una tira transparente junto a la
+            return None                         # linea): no hay linea que ajustar. Antes `np.polyfit` recibia un vector vacio y lanzaba TypeError (A.1, ronda 1, G-03)
         if np.array_equal(nuevas, usadas):
             break
         usadas = nuevas
@@ -295,7 +212,9 @@ def refinar_linea(imagen, clics):
             "usadas": usadas, "dispersion": dispersion}
 
 
-def referencia_de_la_linea(imagen, clics, P, separacion_maxima=5, filas_minimas=10):
+def referencia_de_la_linea(imagen, clics, P, separacion_maxima=5, filas_minimas=10, nota=""):
+    """x de la línea en cada fila (la refinada por su perfil o, si no se puede, la de los clics), la línea, su incertidumbre en píxeles y el mensaje de cómo se ubicó.
+    `nota` (por omisión vacía: la conducta de siempre) se agrega a los dos mensajes de línea NO ubicada; el análisis la usa para decir que la zona tiene zonas transparentes."""
     alto = imagen.shape[0]
     clics = np.asarray(clics, float)
     x_clics = np.full(alto, float(np.mean(clics[:, 0])))
@@ -303,11 +222,11 @@ def referencia_de_la_linea(imagen, clics, P, separacion_maxima=5, filas_minimas=
         return x_clics, None, 1.0, "linea ubicada con los clics"
     linea = refinar_linea(imagen, clics)
     if linea is None or np.sum(linea["usadas"]) < filas_minimas:
-        return x_clics, linea, 1.0, "no se pudo refinar la linea: se usan los clics"
+        return x_clics, linea, 1.0, "no se pudo refinar la linea: se usan los clics" + nota
     x_ref = linea["pendiente"] * np.arange(alto) + linea["corte"]
     tramo = slice(max(0, int(clics[:, 1].min())), min(alto, int(clics[:, 1].max()) + 1))
     if np.max(np.abs(x_ref[tramo] - x_clics[tramo])) > separacion_maxima:
-        return x_clics, linea, 1.0, "la linea refinada se aleja mas de 5 px de los clics: se usan los clics"
+        return x_clics, linea, 1.0, "la linea refinada se aleja mas de 5 px de los clics: se usan los clics" + nota
     u = linea["dispersion"] / np.sqrt(max(np.sum(linea["usadas"]) / 8, 1))
     return x_ref, linea, float(u), "linea refinada por su perfil"
 
@@ -393,13 +312,15 @@ def filas_utiles(m, P):
     return filas, ancho
 
 
-def medir_perfil(imagen, x_ref, P):
+def medir_perfil(imagen, x_ref, P, con_transparencia=False):
+    """El perfil de una capa. `con_transparencia` (por omisión False: la conducta de siempre) dice que la zona analizada tiene píxeles sin dato: si no quedan filas con la
+    mancha a la vista, el motivo lo dice en vez de culpar a la línea (A.1, ronda 1, G-04)."""
     m = mesetas_por_fila(imagen, x_ref, P)
     filas, ancho = filas_utiles(m, P)
     r = {"m": m, "filas": filas, "ancho": ancho, "tope": m["tope"]}
     alto = imagen.shape[0]
     if len(filas) < P["minimo_filas"]:
-        r["estado"] = "no medible: la linea tapa el borde de la meseta"
+        r["estado"] = ESTADO_SIN_FILAS_POR_TRANSPARENCIA if con_transparencia else "no medible: la linea tapa el borde de la meseta"
         return r
     if np.any(m["toca"][filas]) or filas.min() == 0 or filas.max() == alto - 1:
         r["estado"] = "no medible: la mancha se sale de la zona marcada"
@@ -488,16 +409,28 @@ def lado_del_transito(imagen_larga, desplazamiento_x, clics_y, r, P, tam_mm):
 
 # ----------------------------------------------------------------------------- todo junto
 
-def analizar(gris, color, dpi, puntos, parametros=None):
-    """El analisis completo. `puntos` en pixeles de la imagen tal como se subio."""
+def pixeles_sin_dato_en_la_ventana(validos, M, forma):
+    """Cuántos píxeles de la ventana de análisis NO tienen dato (lo transparente, A.1). `validos`: la máscara de la imagen entera (o None: 0), `M`: la matriz ventana <- imagen
+    que devuelve `ventana_rotada`, `forma`: (alto, ancho) de la ventana. Lo que cae fuera de la imagen no cuenta (es el marco, no una transparencia)."""
+    if validos is None:
+        return 0
+    llevada = cv2.warpAffine(np.ascontiguousarray(validos, dtype=bool).view(np.uint8), M, (forma[1], forma[0]), flags=cv2.INTER_NEAREST,
+                             borderMode=cv2.BORDER_CONSTANT, borderValue=1)
+    return int(np.count_nonzero(llevada == 0))
+
+
+def analizar(gris, color, dpi, puntos, parametros=None, validos=None):
+    """El analisis completo. `puntos` en pixeles de la imagen tal como se subio. `validos`: la mascara de pixeles con dato que entrega `leer_pelicula` (A.1;
+    por omision None = todo valido, la conducta de siempre): lo transparente no es pelicula, y si toca la mancha o sus bordes el perfil dice "no medible"."""
     P = dict(PARAMETROS, **(parametros or {}))
     tam_mm = escala_mm(dpi, P)
     angulo = angulo_canonico(puntos[0], puntos[1])
-    imagenes, clics_v, M = ventana_rotada(gris, color, puntos, angulo, P, tam_mm)
-    x_ref, linea, u_linea, mensaje = referencia_de_la_linea(imagenes["gris"], clics_v, P)
-    perfiles = {nombre: medir_perfil(imagenes[nombre], x_ref, P) for nombre in ("gris", "R", "G", "B")}
+    imagenes, clics_v, M = ventana_rotada(gris, color, puntos, angulo, P, tam_mm, validos=validos)
+    con_transparencia = pixeles_sin_dato_en_la_ventana(validos, M, imagenes["gris"].shape) > 0
+    x_ref, linea, u_linea, mensaje = referencia_de_la_linea(imagenes["gris"], clics_v, P, nota=NOTA_DE_TRANSPARENCIA if con_transparencia else "")
+    perfiles = {nombre: medir_perfil(imagenes[nombre], x_ref, P, con_transparencia) for nombre in ("gris", "R", "G", "B")}
     larga, _, _ = ventana_rotada(gris, color, puntos, angulo, P, tam_mm,
-                                 medio_ancho_mm=P["transito_hasta_mm"] + 2.0, canales=("gris",))
+                                 medio_ancho_mm=P["transito_hasta_mm"] + 2.0, canales=("gris",), validos=validos)
     desplazamiento = (larga["gris"].shape[1] - imagenes["gris"].shape[1]) // 2
     lado, contrastes = lado_del_transito(larga["gris"], desplazamiento, clics_v[:, 1], perfiles["gris"], P, tam_mm)
     return {"version": VERSION_ALGORITMO, "parametros": P, "dpi": dpi, "clase_resolucion": clase_resolucion(dpi, P),

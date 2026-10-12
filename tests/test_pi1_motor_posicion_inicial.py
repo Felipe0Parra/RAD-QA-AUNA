@@ -275,14 +275,16 @@ class TestLecturaDeLaImagen:
         gris, color, _, _ = motor.leer_imagen(salida.getvalue())
         assert gris.shape == (40, 80) and color.shape == (40, 80, 3)
 
-    def test_una_imagen_con_zonas_transparentes_se_rechaza(self):
-        """Una selección transparente deja en el RGB un color que el análisis no sabe interpretar."""
+    def test_una_imagen_con_zonas_transparentes_se_lee_y_no_se_rechaza(self):
+        """A.1 (12-10, P11 «medir»): ANTES (`test_una_imagen_con_zonas_transparentes_se_rechaza`) una selección transparente se rechazaba con `ValueError`, porque deja en el
+        RGB un color que el análisis no sabe interpretar. Ahora se lee: la máscara de píxeles con dato la entrega `leer_pelicula` (`validos`) y `analizar(..., validos=)` la
+        trata como el marco (lo transparente no es película); si toca la mancha, el perfil dice «no medible». El detalle: tests/test_a1_lector_de_peliculas.py."""
         rgba = Image.new("RGBA", (64, 64), (128, 128, 128, 255))
         rgba.putpixel((3, 3), (0, 0, 0, 0))
         salida = io.BytesIO()
         rgba.save(salida, "PNG")
-        with pytest.raises(ValueError, match="transparentes"):
-            motor.leer_imagen(salida.getvalue())
+        gris, color, dpi, fecha = motor.leer_imagen(salida.getvalue())
+        assert gris.shape == (64, 64) and color.shape == (64, 64, 3) and gris.dtype == np.uint8
 
     def test_una_imagen_con_alfa_todo_opaco_se_lee(self):
         """Como EPSON009: RGBA con el alfa en 255 en todos los píxeles."""
@@ -1191,8 +1193,9 @@ class TestIdentidadDelAlgoritmoPI1:
         """Cambiar un parámetro cambia los números: obliga a subir la versión y a rehacer los valores de control.
         EXCEPCIÓN de PI.1b (01-10): la política de la escala cambió (600 dpi fijos) sin subir `PI-1`, porque ningún
         registro se ha guardado todavía (la tabla nace en PI.2); desde PI.2, todo cambio que altere un número guardado
-        obliga a subirla."""
-        assert motor.VERSION_ALGORITMO == "PI-1"
+        obliga a subirla. A.1 (12-10) la subió a PI-2: cambia la conducta con 16 bits (antes se reducían a 8) y con alfa (antes se rechazaba); en 8 bits y sin
+        transparencia los números son los mismos de PI-1 (los valores de control de arriba no cambian)."""
+        assert motor.VERSION_ALGORITMO == "PI-2"
         assert motor.PARAMETROS == {
             "grosor_marco": 25, "delta": 2.5, "ancho_linea": 7, "hueco_max": 10, "filtro": 5,
             "fraccion_central": 0.8, "fraccion_minima": 0.3, "minimo_filas": 10, "delta_cruces": 6,

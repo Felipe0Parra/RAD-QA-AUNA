@@ -47,6 +47,7 @@ import re
 from datetime import date, datetime
 
 from analisisImagenes import posicion_inicial_braqui as motor
+from analisisImagenes.pelicula import leer_pelicula
 from data.ManejoDatos.conection import Conexion
 from services.anulacion import filtro_activo, reemplazar_bloque
 from services.audit_minimo import (ACCION_ANULAR, ACCION_GUARDAR, ACCION_REEMPLAZO,
@@ -270,10 +271,12 @@ def _puntos_validos(puntos):
 
 
 def analizar_imagen(imagen_bytes, puntos, parametros=None):
-    """`leer_imagen` + `analizar` sobre los BYTES tal como se guardan: la misma función para guardar y para reabrir un
-    registro (PI.4, que pasa los `parametros` guardados), de modo que lo recalculado al abrir es lo que se firmó (DD3)."""
-    gris, color, dpi, _ = motor.leer_imagen(bytes(imagen_bytes))
-    return motor.analizar(gris, color, dpi, _puntos_validos(puntos), parametros)
+    """`leer_pelicula` + `analizar` sobre los BYTES tal como se guardan: la misma función para guardar y para reabrir un
+    registro (PI.4, que pasa los `parametros` guardados), de modo que lo recalculado al abrir es lo que se firmó (DD3). Es el ÚNICO camino de una imagen real
+    hacia `analizar`, así que aquí viaja la máscara de píxeles con dato (A.1): lo transparente no es película y, si toca la mancha, el análisis dice "no medible"."""
+    pelicula = leer_pelicula(bytes(imagen_bytes))
+    gris, color = pelicula.en_bgr()
+    return motor.analizar(gris, color, pelicula.dpi, _puntos_validos(puntos), parametros, validos=pelicula.validos)
 
 
 def _nombre_de_archivo(nombre):
@@ -289,7 +292,7 @@ def guardar(usuario, fecha, imagen_bytes, imagen_nombre, puntos, reemplazar=Fals
     docstring del módulo). Rechaza con `ValueError` y SIN escribir nada: `PosicionInicialError` (con sus hijas
     `FechaSinCambioDeFuente` y `PruebaYaGuardada`) cuando decide el servicio -- usuario, fecha, imagen vacía, puntos,
     cambio de fuente sin serie (DD8: el mensual no la imprimiría) o con dos series, prueba ya vigente sin
-    `reemplazar=True` --, y el `ValueError` simple del motor si la imagen no se reconoce o tiene transparencias.
+    `reemplazar=True` --, y el `ValueError` simple del lector si la imagen no se reconoce (una imagen con zonas transparentes ya no se rechaza: A.1).
 
     UNA transacción (`reemplazar_bloque`): anula la vigente de esa fecha, inserta la nueva y escribe UNA fila de
     auditoría (`guardar` si no había prueba, `reemplazo` si la había, con el `id` de la reemplazada en el detalle); si

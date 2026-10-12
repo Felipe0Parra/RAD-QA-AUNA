@@ -1021,8 +1021,9 @@ class PosicionInicialBraqui(QWidget):
 
     def _instalar_imagen(self, datos, nombre, gris, dpi, fecha, origen_fecha):
         """Descarta todo lo de la imagen anterior (resultado, puntos, marcas, registro abierto, herramientas) y muestra la
-        nueva como RGB uint8 con `nearest` (ver el docstring del módulo). `fecha` es la que propone el cambio de fuente
-        y solo se muestra: no se guarda."""
+        nueva como RGB uint8 con `nearest` (ver el docstring del módulo): la de 16 bits llega en float32 de 0 a 255 y se muestra con sus
+        niveles de 8 bits redondeados (A.1), como ya se muestra la de 8 (un RGB float32 de 0 a 255 sale casi todo blanco en `imshow`).
+        `fecha` es la que propone el cambio de fuente y solo se muestra: no se guarda."""
         self._descartar_resultado()
         self._descartar_puntos()
         self._registro_abierto = None
@@ -1032,7 +1033,8 @@ class PosicionInicialBraqui(QWidget):
         self._fecha_escaneo = fecha
         self._origen_fecha = origen_fecha
         self.eje_imagen.clear()
-        self.eje_imagen.imshow(np.dstack([gris, gris, gris]), interpolation="nearest")
+        gris8 = gris if gris.dtype == np.uint8 else np.clip(np.rint(gris), 0, 255).astype(np.uint8)
+        self.eje_imagen.imshow(np.dstack([gris8, gris8, gris8]), interpolation="nearest")
         self._rotular_eje_imagen()
         self.barra_imagen.update()
         self.nombre_archivo.setText(nombre)

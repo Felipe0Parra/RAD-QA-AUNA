@@ -7,8 +7,8 @@ del ÁRBOL de producción (AST), no una lista escrita a mano:
      `analizar`, `mesetas_por_fila` o `lado_del_transito` (los parámetros se leen del propio motor: los homónimos de otros módulos, como el `analizar`
      del motor de Catphan o el del censo de SQL, tienen otra firma y no cuentan); (b) solo la página y el servicio importan el motor; (c) UN solo lector
      de la resolución declarada de una imagen (`resolucion_declarada`; excepción declarada: `Analisis_PlacaRC.metadata`, zona ROJA, DP-141); (d) UNA sola
-     función vuelve una resolución en escala (`escala_mm`: nadie más divide 25.4 entre un dpi en el motor, el servicio, la página ni los PDF; las otras
-     tres divisiones del motor están declaradas, cada una con su motivo).
+     función vuelve una resolución en escala (`escala_mm`, que A.1 mudó de aquel motor a `analisisImagenes/pelicula.py`, el lector único de películas: nadie más
+     divide 25.4 entre un dpi en `pelicula.py`, el motor, el servicio, la página ni los PDF; las otras tres divisiones del motor están declaradas, cada una con su motivo).
   2. LA PÁGINA NO TIENE SQL: ni `execute`, ni `cursor`, ni `commit`, ni `Conexion`, ni `sqlite3`, ni `QtSql`.
   3. UNA SOLA REGLA DE VIGENCIA. Ninguna consulta a `braqui_posicion_inicial` por fecha fuera de `_vigente_por_fecha` (la regla de dos pasos del servicio);
      `posicion_inicial_para` y `existe_vigente` la llaman; y los dos PDF piden el texto con `texto_para_pdf` (que usa `posicion_inicial_para`).
@@ -32,13 +32,14 @@ EXCLUIDOS = {".venv", "build", "dist", "tests", "__pycache__", ".git", "node_mod
 
 MOTOR = "analisisImagenes/posicion_inicial_braqui.py"
 RESOLUCION = "analisisImagenes/resolucion_imagen.py"
+PELICULA = "analisisImagenes/pelicula.py"        # A.1 (12-10): el lector único de películas; `escala_mm` y `clase_resolucion` viven aquí (el motor las re-exporta)
 SERVICIO = "services/posicion_inicial_braqui.py"
 PAGINA = "ui/paginasControles/PruebasMensuales/posicion_inicial_braqui.py"
 PDF_DIARIO = "models/PDF/reportes.py"
 PDF_MENSUAL = "models/PDF/Mensuales/reportes_mensuales.py"
 CARGA_DE_LA_PRUEBA = "data/ManejoDatos/load.py"
 FUNCIONES_DEL_MOTOR = ("analizar", "mesetas_por_fila", "lado_del_transito")
-MODULOS_DE_LA_FUNCION = (MOTOR, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL, RESOLUCION)
+MODULOS_DE_LA_FUNCION = (PELICULA, MOTOR, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL, RESOLUCION)
 
 # --- las EXCEPCIONES declaradas, cada una con su motivo (una excepción sin motivo es una puerta abierta) ---------------------------------------------
 LECTORES_DE_DPI_PERMITIDOS = {
@@ -46,7 +47,8 @@ LECTORES_DE_DPI_PERMITIDOS = {
     ("analisisImagenes/Analisis_PlacaRC.py", "metadata"): "DP-141: el análisis de la placa del diario (zona ROJA, no se toca en este plan) lee la resolución con el defecto que PI.1 corrigió",
 }
 DIVISIONES_DE_25_4_PERMITIDAS = {
-    (MOTOR, "escala_mm"): "la ÚNICA función que vuelve una resolución en escala (siempre la del procedimiento de escaneo, nunca la declarada)",
+    (PELICULA, "escala_mm"): "la ÚNICA función que vuelve una resolución en escala (siempre la del procedimiento de escaneo, nunca la declarada); A.1 la mudó del motor a "
+                              "`pelicula.py`, que es ahora el sitio único (el motor la re-exporta con el mismo nombre)",
     (MOTOR, "ventana_rotada"): "dimensiona la ventana de análisis cuando NO hay escala (resolución «otra»): usa `DPI_SI_FALTA`, no una resolución declarada",
     (MOTOR, "lado_del_transito"): "ídem para el recorte de la banda de tránsito: solo dimensiona, no mide",
     (MOTOR, "placa_sintetica"): "genera una placa de un dpi dado (la inversa: construir una imagen con una escala, no leerla)",
@@ -82,8 +84,9 @@ def _cargar_produccion():
 # Trampa 8, POR ARCHIVO: cada archivo que una guarda vigila (o donde busca lo permitido) existe en el árbol y tiene cuerpo. {ruta: (motivo, mínimo de funciones)}.
 # El mínimo es la MITAD de lo que hay hoy (el archivo puede crecer o encogerse un poco; si se vacía o desaparece, la guarda estaría vigilando nada).
 ARCHIVOS_VIGILADOS = {
-    MOTOR: ("el motor: define las tres funciones que nadie más debe copiar y la única que vuelve una resolución en escala", 15),
+    MOTOR: ("el motor: define las tres funciones que nadie más debe copiar (y re-exporta `escala_mm`, que vive en `pelicula.py`)", 15),
     RESOLUCION: ("el único lector de la resolución declarada de una imagen", 3),
+    PELICULA: ("el lector único de películas (A.1): define la única función que vuelve una resolución en escala y es el único que llama a `resolucion_declarada`", 8),
     SERVICIO: ("la única puerta a la tabla: la regla de vigencia y el texto breve", 12),
     PAGINA: ("la página: no tiene SQL y pide el texto al servicio", 40),
     PDF_DIARIO: ("el PDF diario de braquiterapia: pide el texto con `texto_para_pdf`", 3),
@@ -265,7 +268,7 @@ class TestUnaSolaFormaDeMedir:
         hallados = {(r, f) for r, f, _ in divisiones_de_25_4(produccion)}
         assert hallados == set(DIVISIONES_DE_25_4_PERMITIDAS), f"las divisiones declaradas ya no son las que hay: {sorted(hallados)}"
 
-    @pytest.mark.parametrize("modulo", [SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL])
+    @pytest.mark.parametrize("modulo", [PELICULA, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL])
     @pytest.mark.parametrize("expresion", ["25.4 / dpi", "(25.4 * 2) / dpi", "dpi / 25.4"])
     def test_discrimina_una_division_nueva_en_cada_modulo_vigilado_y_en_cada_forma(self, produccion, modulo, expresion):
         texto = produccion[modulo][0] + f"\n\ndef _escala_a_mano(dpi):\n    return {expresion}\n"
