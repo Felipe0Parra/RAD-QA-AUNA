@@ -44,6 +44,16 @@ barrido de desfases: una docena de análisis), así que NO corre en cada paso si
 temporizador de un disparo). El barrido no depende del desfase elegido: se recuerda mientras no cambien los tres
 parámetros de forma.
 
+B.1 (PLAN_ANALISIS_PELICULAS_08-10.md, DP-157, PD1: nada escondido que cambie el número): los perfiles se ven COMPLETOS (el eje x cubre la ventana entera, ±`ventana_mm` alrededor de la
+línea, con un eje secundario arriba en mm desde la línea; el y va de 0 al tope + 5 %) y cada gráfica dibuja todo lo que se usó para medir: el tope con la regla del umbral y los dos bordes subpíxel
+de la meseta en el perfil, y las bandas del tránsito (con los límites que devuelve el motor) en la ventana. `TRAZO_DE_PARAMETRO` dice qué trazo o qué rótulo muestra cada parámetro de la medida y
+una prueba lo deriva por AST. Es DIBUJO: ningún número cambia. Las tres capas comparten el eje x (el eje en mm solo arriba y el rótulo en píxeles solo abajo): repetidos en cada una, cada perfil
+quedaba en 35 px de alto (se vio en la captura, no en una aserción). Es el mismo eje: comparten límites y la línea de referencia está en el mismo x de las tres, así que el 0 y los mm de arriba valen para
+las tres (repetirlo en cada capa es `eje_en_mm=True` en `_mostrar`, a cambio de unos 45 px por capa).
+Revisión (ronda 1, 12-10): sin escala (resolución 'otra') la banda del tránsito se rotula en píxeles y no en mm, como el recuadro; las resoluciones de editor y la tolerancia del dpi van en el pie con su
+valor; y el lienzo de las pestañas con dibujos tiene un alto mínimo (`ALTO_MINIMO_DEL_LIENZO`) y por debajo se desplaza dentro de un área en vez de aplastarse (a 750 px de página los ejes del gris medían 6 y
+4 px): lo fijo del dibujo (eje en mm, títulos, rótulos y pie, ~215 px) no depende de la altura de la página.
+
 Lo que deja preparado: `abrir_registro(id) -> bool` y `refrescar()` públicos (PI.6 y el visor), `pestanas` con la imagen
 sintética como cuarta (su reinicio vive dentro de `_restablecer_estado`), las propiedades `estado` y `puntos`; ninguna
 señal."""
@@ -51,6 +61,7 @@ import functools
 import io
 import json
 import os
+import textwrap
 import traceback
 from collections import namedtuple
 from datetime import date
@@ -59,8 +70,8 @@ import numpy as np
 from PIL import Image
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QFrame,
-                             QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QSlider, QTabWidget,
-                             QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+                             QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSlider,
+                             QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from analisisImagenes import posicion_inicial_braqui as motor
 from resources.utils.matplotlib_lazy import get_matplotlib_components
@@ -113,6 +124,49 @@ _EXTENSIONES_DEL_FORMATO = {"JPEG": (".jpg", ".jpeg"), "TIFF": (".tif", ".tiff")
 
 NOMBRE_DE_PERFIL = {"gris": "Perfil de grises", "R": "Capa roja", "G": "Capa verde", "B": "Capa azul"}
 NIVEL_DE_PERFIL = {"gris": "gris", "R": "rojo", "G": "verde", "B": "azul"}
+COLOR_TRANSITO = "#9a3fb0"
+
+# B.1 (PD1, nada escondido que cambie el número): qué trazo o qué rótulo muestra CADA parámetro de `motor.PARAMETROS` que entra en la medida. `{clave: (dónde, texto)}`. Una prueba
+# deriva por AST qué claves leen `analizar`, `medir_perfil`, `resumen` y todo lo que llaman, exige que cada una tenga su entrada (un parámetro nuevo sin trazo hace caer la prueba y lo nombra) y
+# comprueba que cada entrada está de verdad en la figura de la página. Dónde:
+#   "perfil"   un trazo de cada perfil (el gris y las tres capas) cuya etiqueta empieza por `texto`;
+#   "ventana"  un trazo de la ventana rotada cuya etiqueta empieza por `texto`;
+#   "eje"      el eje secundario de arriba de cada perfil, en mm desde la línea (su rótulo empieza por `texto`; la ventana de ±`ventana_mm` es su extensión);
+#   "recuadro" una frase del recuadro de resultado (`texto` + el valor + mm);
+#   "pagina"   la etiqueta de la página con ese nombre, que DICE el valor con que se midió (la resolución del escaneo); no basta con que tenga algún texto (R1-E);
+#   "pie"      una frase del pie de cada figura (los parámetros fijos que no tienen una geometría que dibujar); `texto` es su plantilla y se llena con el valor con que se midió
+#              (una lista, como las resoluciones de editor, se dice con comas).
+TRAZO_DE_PARAMETRO = {
+    "delta": ("perfil", "tope"),
+    "ventana_mm": ("eje", "distancia a la línea de referencia"),
+    "refinar_linea": ("ventana", "línea de referencia"),
+    "contraste_transito": ("ventana", "banda de tránsito"),
+    "transito_desde_mm": ("ventana", "banda de tránsito"),
+    "transito_hasta_mm": ("ventana", "banda de tránsito"),
+    "umbral_pelicula": ("ventana", "banda de tránsito"),
+    "tolerancia_mm": ("recuadro", "Tolerancia"),
+    "resolucion_escaneo_dpi": ("pagina", "etiqueta_escaneo"),
+    "resoluciones_de_editor_dpi": ("pie", "dpi de editor ({}): se usa la resolución del escaneo"),
+    "tolerancia_dpi_relativa": ("pie", "tolerancia del dpi declarado ±{:.0%}"),
+    "grosor_marco": ("pie", "marco del escaneo {} px"),
+    "ancho_linea": ("pie", "franja de la línea ±{} px"),
+    "hueco_max": ("pie", "huecos de hasta {} px se puentean"),
+    "filtro": ("pie", "filtro de mediana {0} × {0}"),
+    "fraccion_central": ("pie", "cuerdas útiles con al menos el {:.0%} del ancho máximo"),
+    "fraccion_minima": ("pie", "o el {:.0%} si faltan"),
+    "minimo_filas": ("pie", "mínimo {} cuerdas"),
+    "delta_cruces": ("pie", "comprobación independiente de los bordes a tope − {:g}"),
+    "caida_borde": ("pie", "borde de la película si cae más de {} niveles junto a la meseta"),
+    "fraccion_filas_cortadas": ("pie", "mancha cortada si lo están más del {:.0%} de las cuerdas"),
+    "margen_filas_mm": ("pie", "margen de {:g} mm sobre y bajo los puntos"),
+}
+LARGO_DEL_PIE = 200                    # caracteres por línea del pie de parámetros fijos
+ALTOS_DE_LA_PESTANA_DEL_GRIS = (1.4, 1)   # la ventana (la imagen es lo que se mira) algo mas alta que el perfil, que vive cerca del tope y deja vacia la mitad de abajo
+ANCHO_DE_LA_LEYENDA = 64               # caracteres por línea de las etiquetas de la leyenda de la ventana (la banda lleva una etiqueta larga)
+# R1-B: el alto MÍNIMO del lienzo de cada pestaña con dibujos, en px. Lo fijo de cada figura (el eje en mm de arriba, los títulos, los rótulos de x y el pie de parámetros) mide ~215 px y los ejes se
+# reparten lo que sobra: con una página de 750 px de alto el lienzo medía 218 px y los dos ejes del gris 6 y 4. Por debajo de este alto el lienzo se DESPLAZA (un área de desplazamiento) en vez de
+# aplastar los ejes; con cada mínimo, las ventanas (la imagen) quedan en al menos 70 px y cada perfil o capa en al menos 50.
+ALTO_MINIMO_DEL_LIENZO = {"gris": 350, "rgb": 390, "sintetica": 390}
 
 # Cómo se llama, para el físico, cada cosa que se compara al abrir un registro (las 17 claves de `valores_medidos`): una
 # prueba exige que no falte ninguna y que no sobre ninguna.
@@ -346,9 +400,51 @@ def fila_representativa(resultado, perfil="gris"):
     return int(min(max(round(float(np.mean(resultado["clics_ventana"][:, 1]))), 0), alto - 1))
 
 
-def dibujar_ventana(ax, resultado, perfil, fila):
+def _poligono(ax, x0, x1, y0, y1, **estilo):
+    """Un rectángulo en las coordenadas de datos de la imagen (la columna c ocupa [c - 0.5, c + 0.5]). Es un polígono y no cuatro líneas: así no suma líneas de más de dos puntos."""
+    return ax.fill([x0, x1, x1, x0], [y0, y0, y1, y1], **estilo)[0]
+
+
+def _dibujar_bandas(ax, resultado):
+    """B.1: las bandas donde se decide el lado del tránsito, con los LÍMITES que devuelve el motor (la página no repite la regla): la banda (las filas de la mancha, solo las columnas de la
+    ventana que caen dentro: la banda va de ~12 a 50 mm del centro y la ventana solo ve ±`ventana_mm`) y, con trazo discontinuo, las dos zonas de película con que se compara (arriba y abajo
+    de la mancha). Cada banda se rotula con su extensión completa, su contraste y el mínimo que se exige; el lado sin banda medible se rotula «no medible» y no se dibuja (el motor no devolvió
+    ninguna geometría para él)."""
+    detalles = resultado.get("contrastes_transito") or {}
+    P = resultado["parametros"]
+    ancho = resultado["imagenes"]["gris"].shape[1]
+    sin_etiquetar = True
+    for lado in ("izquierda", "derecha"):
+        if lado not in detalles:
+            continue
+        d = detalles[lado]
+        if d is None:
+            ax.plot([], [], ls=":", color=COLOR_TRANSITO, label=f"banda de tránsito a la {lado}: no medible (no hay película suficiente donde se mide)")
+            continue
+        if d["desde_mm"] is not None:
+            extension = f"de {d['desde_mm']:.1f} a {d['hasta_mm']:.1f} mm del centro"
+        else:           # sin escala (resolución 'otra') no hay milímetros que dar: como el recuadro, la banda se rotula en píxeles desde el centro de la mancha
+            extension = f"de {d['desde_px']} a {d['hasta_px']} px del centro (sin escala: sin milímetros)"
+        etiqueta = (f"banda de tránsito a la {lado}: {extension}; contraste {d['contraste']:.1f} niveles "
+                    f"(mínimo {P['contraste_transito']:g}); solo película (nivel > {P['umbral_pelicula']:g})")
+        x0, x1 = max(d["columnas"][0], 0) - 0.5, min(d["columnas"][1], ancho) - 0.5
+        if x1 <= x0:
+            ax.plot([], [], ls="-", color=COLOR_TRANSITO, label=etiqueta + " (fuera de la ventana)")
+            continue
+        f0, f1 = d["filas_banda"]
+        _poligono(ax, x0, x1, f0 - 0.5, f1 - 0.5, facecolor=COLOR_TRANSITO, alpha=0.30, edgecolor=COLOR_TRANSITO, lw=1.0, label=etiqueta)
+        for clave in ("filas_arriba", "filas_abajo"):
+            if d[clave] is not None:
+                g0, g1 = d[clave]
+                _poligono(ax, x0, x1, g0 - 0.5, g1 - 0.5, fill=False, edgecolor=COLOR_TRANSITO, ls="--", lw=0.9,
+                          label="película de comparación (arriba y abajo de la mancha)" if sin_etiquetar else "_película de comparación")
+                sin_etiquetar = False
+
+
+def dibujar_ventana(ax, resultado, perfil, fila, leyenda=False):
     """La ventana rotada alrededor de la línea: la línea de referencia (naranja discontinua), los bordes de la meseta por
-    cuerda y el centro de cada cuerda (azul, solo si el perfil se mide)."""
+    cuerda y el centro de cada cuerda (azul, solo si el perfil se mide) y, desde B.1, las bandas del tránsito. `leyenda`
+    (por omisión False: la conducta de siempre) dice qué es cada trazo, fuera del dibujo y a su derecha."""
     r = resultado["perfiles"][perfil]
     m = r["m"]
     ax.imshow(m["suave"], cmap="gray", vmin=m["tope"] - 60, vmax=m["tope"], interpolation="nearest")
@@ -365,30 +461,50 @@ def dibujar_ventana(ax, resultado, perfil, fila):
         ax.plot(m["x_izq"][filas], filas, "o", ms=2, mfc="white", mec=TINTA, mew=0.3, label="bordes de la meseta")
         ax.plot(m["x_der"][filas], filas, "o", ms=2, mfc="white", mec=TINTA, mew=0.3)
         ax.plot(r["centros"], filas, "-", color=COLOR_MEDIDO, lw=1.5, label="centro de cada cuerda")
+    _dibujar_bandas(ax, resultado)
     ax.axhline(fila, color=TINTA_SUAVE, ls=":", lw=1)
     ax.set_xlabel("columna de la ventana [px]")
     ax.set_ylabel("fila de la ventana [px]")
+    if leyenda:
+        manejadores, etiquetas = ax.get_legend_handles_labels()
+        caja = ax.legend(manejadores, [textwrap.fill(e, ANCHO_DE_LA_LEYENDA) for e in etiquetas], loc="upper left", bbox_to_anchor=(1.02, 1.0),
+                         fontsize=7, borderaxespad=0.0)
+        caja.set_in_layout(False)      # la leyenda va en el hueco de al lado; si la ventana es baja se recorta, pero no hace colapsar los ejes (constrained_layout)
 
 
-def dibujar_perfil(ax, resultado, perfil, fila, color=TINTA, leyenda=False):
-    """El perfil de una cuerda: el crudo y el filtrado, el umbral de la meseta, la meseta sombreada entre sus bordes
-    subpíxel, la línea de referencia y el centro de la meseta de ESA cuerda (azul; no se dibuja en un perfil que no se
-    mide). Los dos centros que se comparan son la línea y la meseta: los cruces solo entran en la incertidumbre."""
+def dibujar_perfil(ax, resultado, perfil, fila, color=TINTA, leyenda=False, columnas_de_la_leyenda=3, eje_en_mm=True, rotulo_en_px=True):
+    """El perfil de una cuerda, COMPLETO (B.1): el eje x cubre la ventana entera (±`ventana_mm` alrededor de la línea) y el y va de 0 al tope + 5 %. Dibuja el crudo y el filtrado, el TOPE
+    (con la regla del umbral, con el delta con que se midió), el umbral de la meseta, la meseta sombreada entre sus bordes subpíxel con los dos bordes marcados donde cruzan el umbral, la línea
+    de referencia y el centro de la meseta de ESA cuerda (azul; no se dibuja en un perfil que no se mide). Arriba, un eje secundario en mm desde la línea (0 = línea) con la escala del resultado
+    (sin escala, sin eje). Los dos centros que se comparan son la línea y la meseta: los cruces solo entran en la incertidumbre. `leyenda` (por omisión False: la conducta de siempre) dibuja la
+    leyenda dentro, abajo, en `columnas_de_la_leyenda` columnas (la zona de abajo está vacía: el perfil vive cerca del tope). `eje_en_mm` y `rotulo_en_px` (por omisión True: el perfil completo) dejan a la
+    página quitar, en una pila de perfiles que comparten el eje x, lo que se repetiría en cada uno."""
     r = resultado["perfiles"][perfil]
     m = r["m"]
-    x = np.arange(m["suave"].shape[1])
-    ax.plot(x, resultado["imagenes"][perfil][fila], color=TINTA_SUAVE, lw=0.7, label="perfil crudo")
-    ax.plot(x, m["suave"][fila], color=color, lw=1.2, label="perfil con filtro de mediana")
+    ancho = m["suave"].shape[1]
+    x = np.arange(ancho)
+    crudo, filtrado = resultado["imagenes"][perfil][fila], m["suave"][fila]
+    ax.plot(x, crudo, color=TINTA_SUAVE, lw=0.7, label="perfil crudo")
+    ax.plot(x, filtrado, color=color, lw=1.2, label="perfil con filtro de mediana")
+    ax.axhline(m["tope"], color=TINTA, ls=":", lw=1, label=f"tope (umbral = tope − {resultado['parametros']['delta']:g} niveles)")
     ax.axhline(m["umbral"], color=TINTA_SUAVE, ls="--", lw=1, label="umbral de la meseta")
     if m["inicio"][fila] >= 0:
         ax.axvspan(m["x_izq"][fila], m["x_der"][fila], color=COLOR_MEDIDO, alpha=0.15, label="meseta")
-        ax.set_xlim(m["x_izq"][fila] - 120, m["x_der"][fila] + 120)
-        ax.set_ylim(m["tope"] - 40, m["tope"] + 3)
+        ax.plot([m["x_izq"][fila], m["x_der"][fila]], [m["umbral"]] * 2, ls="none", marker="|", ms=14, mew=1.6, color=COLOR_MEDIDO,
+                label="bordes de la meseta (subpíxel)")
     if r["estado"] == "ok":
         ax.axvline((m["x_izq"][fila] + m["x_der"][fila]) / 2, color=COLOR_MEDIDO, lw=1.5, label="centro de la meseta")
     ax.axvline(resultado["x_ref"][fila], color=COLOR_REFERENCIA, ls="--", lw=1.5, label="línea de referencia")
-    ax.set_xlabel("columna de la ventana [px]")
+    ax.set_xlim(-0.5, ancho - 0.5)
+    ax.set_ylim(min(0.0, float(crudo.min()), float(filtrado.min())), max(m["tope"] * 1.05, 1.0))   # el 1.0: una ventana sin nada de pelicula (tope 0) no da limites identicos
+    if rotulo_en_px:
+        ax.set_xlabel("columna de la ventana [px]")
     ax.set_ylabel(f"{NIVEL_DE_PERFIL[perfil]} invertido")
+    tam = resultado["tamano_pixel_mm"]
+    if tam is not None and eje_en_mm:
+        x_linea = float(resultado["x_ref"][fila])
+        arriba = ax.secondary_xaxis("top", functions=(lambda v: (v - x_linea) * tam, lambda mm: mm / tam + x_linea))
+        arriba.set_xlabel("distancia a la línea de referencia [mm]")
     nombre = NOMBRE_DE_PERFIL[perfil]
     if motivo_para_no_guardar(resultado):
         ax.set_title(f"{nombre}: medido contra los puntos, no contra la línea", fontsize=8)
@@ -399,7 +515,35 @@ def dibujar_perfil(ax, resultado, perfil, fila, color=TINTA, leyenda=False):
     else:
         ax.set_title(f"{nombre}: no medible", fontsize=8)
     if leyenda:
-        ax.legend(loc="lower center", fontsize=7, ncol=3)
+        ax.legend(loc="lower center", fontsize=7, ncol=columnas_de_la_leyenda)
+
+
+def texto_de_parametros(resultado):
+    """El pie de cada figura (B.1, PD1): los parámetros fijos de la medida que no tienen una geometría que dibujar (las entradas "pie" de `TRAZO_DE_PARAMETRO`), con el valor con que se midió
+    (`resultado["parametros"]`, que se guarda con el análisis; una lista, como las resoluciones de editor, se dice con comas), en líneas de `LARGO_DEL_PIE` caracteres sin partir una frase."""
+    P = resultado["parametros"]
+    titulo = "Parámetros fijos del método (se guardan con cada análisis; no se ajustan en pantalla):"
+    lineas, linea = [], titulo
+    for clave, (donde, plantilla) in TRAZO_DE_PARAMETRO.items():
+        if donde != "pie":
+            continue
+        valor = P[clave]
+        if isinstance(valor, (list, tuple)):               # las resoluciones de editor: «72, 96»
+            valor = ", ".join(f"{v:g}" for v in valor)
+        frase = plantilla.format(valor)
+        union = " " if linea == titulo else " · "
+        if linea != titulo and len(linea) + len(union) + len(frase) > LARGO_DEL_PIE:
+            lineas.append(linea)
+            linea = frase
+        else:
+            linea += union + frase
+    lineas.append(linea)
+    return "\n".join(lineas)
+
+
+def rotular_parametros(figura, resultado):
+    """Escribe el pie de parámetros fijos al pie de la figura (para la distribución `constrained`, que le deja su sitio)."""
+    figura.supxlabel(texto_de_parametros(resultado), fontsize=7, color=TINTA_SUAVE, wrap=True)
 
 
 # ------------------------------------------------------------------------------------- la imagen sintética (puros)
@@ -495,9 +639,12 @@ def _protegido(titulo, por_defecto=None):
 
 # ---------------------------------------------------------------------------------- piezas de pantalla compartidas
 
-def _nuevo_lienzo(mpl):
+def _nuevo_lienzo(mpl, alto_minimo=None):
     """(contenedor, figura, lienzo, barra): la figura NO se registra en pyplot (nunca `plt.*`), así que se libera al soltar
-    la referencia. Lo usan las pestañas de la página y la imagen sintética."""
+    la referencia. Lo usan las pestañas de la página y la imagen sintética. `alto_minimo` (px; por omisión None: la conducta de
+    siempre, el lienzo ocupa lo que le dé la página) le da al lienzo ese alto como mínimo y, si la página no se lo da, el lienzo se
+    DESPLAZA dentro de un área (R1-B: los ejes se reparten lo que sobra de lo fijo del dibujo y a 218 px medían 6 y 4); la barra
+    de herramientas queda fuera del área y el alto mínimo de la página no crece."""
     contenedor = QWidget()
     capa = QVBoxLayout(contenedor)
     capa.setContentsMargins(0, 0, 0, 0)
@@ -505,7 +652,15 @@ def _nuevo_lienzo(mpl):
     lienzo = mpl["FigureCanvas"](figura)
     barra = mpl["NavigationToolbar"](lienzo, contenedor)
     capa.addWidget(barra)
-    capa.addWidget(lienzo, 1)
+    if alto_minimo:
+        lienzo.setMinimumHeight(alto_minimo)
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.NoFrame)
+        area.setWidget(lienzo)
+        capa.addWidget(area, 1)
+    else:
+        capa.addWidget(lienzo, 1)
     return contenedor, figura, lienzo, barra
 
 
@@ -604,7 +759,7 @@ class PestanaSintetica(QWidget):
         panel.setFixedWidth(ANCHO_DE_LOS_CONTROLES)
         capa.addWidget(panel)
         dibujos = QVBoxLayout()
-        contenedor, self.figura, self.lienzo, self.barra = _nuevo_lienzo(mpl)
+        contenedor, self.figura, self.lienzo, self.barra = _nuevo_lienzo(mpl, ALTO_MINIMO_DEL_LIENZO["sintetica"])
         dibujos.addWidget(contenedor, 1)
         self.recuadro = _recuadro()
         dibujos.addWidget(self.recuadro)
@@ -711,11 +866,12 @@ class PestanaSintetica(QWidget):
         ventana = self.figura.add_subplot(rejilla[0, 0])
         dibujar_ventana(ventana, resultado, "gris", fila)
         ventana.set_ylabel("fila [px]")             # el rótulo largo de la pestaña del gris no cabe en este eje bajo
-        dibujar_perfil(self.figura.add_subplot(rejilla[1, 0]), resultado, "gris", fila, leyenda=True)
+        dibujar_perfil(self.figura.add_subplot(rejilla[1, 0]), resultado, "gris", fila, leyenda=True, columnas_de_la_leyenda=2)
         s = motor.resumen(resultado)
         medido = s["desfase_mm"] if s["estado"] == "ok" else None
         dibujar_barrido(self.figura.add_subplot(rejilla[:, 1]), barrido, (p["desfase_mm"], medido),
                         resultado["parametros"]["tolerancia_mm"])
+        rotular_parametros(self.figura, resultado)
         self.recuadro.setText(texto_sintetica(p["desfase_mm"], resultado))
         self.lienzo.draw_idle()
 
@@ -790,13 +946,13 @@ class PosicionInicialBraqui(QWidget):
         self.pestanas = QTabWidget()
         tab_imagen, self._fig_imagen, self.lienzo_imagen, self.barra_imagen = _nuevo_lienzo(mpl)
         self.eje_imagen = self._fig_imagen.add_subplot(111)
-        contenedor_gris, self._fig_gris, self.lienzo_gris, self.barra_gris = _nuevo_lienzo(mpl)
+        contenedor_gris, self._fig_gris, self.lienzo_gris, self.barra_gris = _nuevo_lienzo(mpl, ALTO_MINIMO_DEL_LIENZO["gris"])
         tab_gris = QWidget()
         capa_gris = QVBoxLayout(tab_gris)
         capa_gris.addWidget(contenedor_gris, 1)
         self.recuadro_gris = _recuadro()
         capa_gris.addWidget(self.recuadro_gris)
-        contenedor_rgb, self._fig_rgb, self.lienzo_rgb, self.barra_rgb = _nuevo_lienzo(mpl)
+        contenedor_rgb, self._fig_rgb, self.lienzo_rgb, self.barra_rgb = _nuevo_lienzo(mpl, ALTO_MINIMO_DEL_LIENZO["rgb"])
         tab_rgb = QWidget()
         capa_rgb = QVBoxLayout(tab_rgb)
         capa_rgb.addWidget(contenedor_rgb, 1)
@@ -1111,13 +1267,16 @@ class PosicionInicialBraqui(QWidget):
     def _mostrar(self, resultado):
         fila = fila_representativa(resultado, "gris")
         self._fig_gris.clear()
-        arriba, abajo = self._fig_gris.subplots(2, 1)
-        dibujar_ventana(arriba, resultado, "gris", fila)
+        arriba, abajo = self._fig_gris.subplots(2, 1, height_ratios=ALTOS_DE_LA_PESTANA_DEL_GRIS)
+        dibujar_ventana(arriba, resultado, "gris", fila, leyenda=True)
         dibujar_perfil(abajo, resultado, "gris", fila, leyenda=True)
+        rotular_parametros(self._fig_gris, resultado)
         self.recuadro_gris.setText(texto_recuadro(resultado, "gris"))
         self._fig_rgb.clear()
-        for eje, capa in zip(self._fig_rgb.subplots(3, 1), ("R", "G", "B")):
-            dibujar_perfil(eje, resultado, capa, fila, COLOR_CAPA[capa], leyenda=(capa == "R"))
+        # Las tres capas comparten el eje x (las mismas columnas de la ventana): el eje en mm va solo arriba y el rotulo en px solo abajo; repetidos en cada una, cada perfil quedaba en 35 px de alto.
+        for eje, capa in zip(self._fig_rgb.subplots(3, 1, sharex=True), ("R", "G", "B")):
+            dibujar_perfil(eje, resultado, capa, fila, COLOR_CAPA[capa], leyenda=(capa == "R"), columnas_de_la_leyenda=4, eje_en_mm=(capa == "R"), rotulo_en_px=(capa == "B"))
+        rotular_parametros(self._fig_rgb, resultado)
         self.recuadro_rgb.setText(texto_recuadro_capas(resultado))
         self.barra_gris.update()                 # X5: sin esto, Home vuelve a la vista de la figura anterior
         self.barra_rgb.update()

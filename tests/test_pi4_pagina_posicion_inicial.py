@@ -49,7 +49,7 @@ from PyQt5 import sip
 from PyQt5.QtCore import QEvent, QPoint, QPointF, Qt
 from PyQt5.QtGui import QWheelEvent
 from PyQt5.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QAbstractSlider, QApplication, QComboBox, QDialog,
-                             QFileDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTabBar, QTabWidget,
+                             QFileDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QTableWidget, QTabBar, QTabWidget,
                              QToolBar, QWidget)
 
 import ui.paginasControles.PruebasMensuales.posicion_inicial_braqui as pagina_mod
@@ -278,6 +278,14 @@ def _recorrer(raiz):
                         pagina = hijo.widget(i)
                         yield pagina
                         yield from _recorrer(pagina)
+                elif isinstance(hijo, QScrollArea):
+                    # B.1 (R1-B): el lienzo de cada pestaña con dibujos cuelga de un área de desplazamiento, que es una HOJA (un compuesto de
+                    # Qt); sin esto la huella dejaba de ver esos lienzos y test_35b de PI.5 (que estropea la figura de la sintética y exige que
+                    # la huella cambie) caía. Se entra por `widget()` (el lienzo, creado por Python), nunca por los hijos de Qt del área.
+                    interior = hijo.widget()
+                    if interior is not None and sip.ispycreated(interior):
+                        yield interior
+                        yield from _recorrer(interior)
                 elif not isinstance(hijo, _HOJAS):
                     yield from _recorrer(hijo)
         elif hijo.isWidgetType():

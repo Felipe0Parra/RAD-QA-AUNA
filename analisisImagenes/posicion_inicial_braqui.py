@@ -30,6 +30,10 @@ del plan (los cuatro defectos del método sin corregir y la mejora subpíxel):
       de una línea que no se pudo ubicar lo anotan (`NOTA_DE_TRANSPARENCIA`) en vez de culpar a la línea; y `refinar_linea` ya no lanza cuando el recorte robusto rechaza todas
       las filas (una tira transparente de 1 px junto a la línea las partía en dos grupos): devuelve None y el motor mide contra los clics, como siempre que no ubica la línea.
 
+  +   (B.1, 12-10) el detalle del transito de cada lado medible trae ademas los LIMITES de la region que midio (`columnas`, `filas_banda`, `filas_arriba`, `filas_abajo`, `desde_px`, `hasta_px`,
+      `desde_mm`, `hasta_mm`), para que la pagina dibuje las bandas sin repetir la regla; sin escala (resolucion 'otra') los milimetros son None y quedan las distancias en pixeles al centro de
+      la mancha. Es DIBUJO: ningun numero cambia (el lado y los contrastes son los de siempre; un lado sin pelicula suficiente sigue siendo None) y por eso la version sigue siendo PI-2.
+
 Sin Qt y sin base de datos (lo comprueba un test por AST): lo usan la página, el recálculo de un
 registro guardado, la pestaña sintética y los tests, todos con la misma función `analizar`. Cualquier
 cambio de la lógica de este archivo obliga a subir `VERSION_ALGORITMO`: lo guardado se compara contra
@@ -363,7 +367,11 @@ def lado_del_transito(imagen_larga, desplazamiento_x, clics_y, r, P, tam_mm):
     (a mas de un radio), cada grupo por separado. Hay banda de un lado si sobresale al menos
     `contraste_transito` niveles sobre los DOS grupos; el lado se decide solo si del otro lado no hay
     banda (o no hay pelicula para mirar). Solo pixeles de pelicula (fuera: marco, fondo del escaner).
-    Devuelve ('derecha' | 'izquierda' | None, detalle por lado)."""
+    Devuelve ('derecha' | 'izquierda' | None, detalle por lado). El detalle de un lado medible trae, ademas de los
+    niveles y el contraste, los LIMITES de la region medida (`columnas`, `filas_banda`, `filas_arriba`, `filas_abajo`,
+    `desde_px`, `hasta_px`, `desde_mm`, `hasta_mm`: B.1); un lado sin pelicula suficiente sigue siendo None. Los milimetros son None
+    sin escala (`tam_mm` None, resolucion 'otra'): la escala de reserva solo dimensiona la banda en columnas y no da milimetros que
+    nadie pueda interpretar; las distancias en pixeles al centro de la mancha se dan siempre."""
     if r.get("estado") != "ok":
         return None, {}
     escala = tam_mm if tam_mm else 25.4 / DPI_SI_FALTA
@@ -390,7 +398,18 @@ def lado_del_transito(imagen_larga, desplazamiento_x, clics_y, r, P, tam_mm):
             detalle[lado] = None
             continue
         contrastes = [banda - v for v in (sup, inf) if v is not None]
-        detalle[lado] = {"banda": banda, "arriba": sup, "abajo": inf, "contraste": float(min(contrastes))}
+        c0, c1 = int(cols[0]), int(cols[-1]) + 1            # [c0, c1): las columnas de la banda en la ventana larga (las que de verdad se midieron)
+        cerca, lejos = (int(centro) - c1, int(centro) - c0) if lado == "izquierda" else (c0 - int(centro), c1 - int(centro))
+        detalle[lado] = {"banda": banda, "arriba": sup, "abajo": inf, "contraste": float(min(contrastes)),
+                         # B.1: los LIMITES de la banda, para dibujarla sin repetir la regla en la pagina. Columnas en las coordenadas de la ventana de analisis (la que se dibuja: la
+                         # larga lleva `desplazamiento_x` columnas de mas a la izquierda); filas de cada grupo (las dos ventanas comparten filas), None si ese grupo no dio mediana; y la
+                         # extension desde el centro de la mancha, en px y (solo con escala) en mm. Ningun numero anterior cambia.
+                         "columnas": (c0 - desplazamiento_x, c1 - desplazamiento_x),
+                         "filas_banda": (int(filas.min()), int(filas.max()) + 1),
+                         "filas_arriba": (int(arriba[0]), int(arriba[-1]) + 1) if sup is not None else None,
+                         "filas_abajo": (int(abajo[0]), int(abajo[-1]) + 1) if inf is not None else None,
+                         "desde_px": int(cerca), "hasta_px": int(lejos),
+                         "desde_mm": float(cerca * tam_mm) if tam_mm else None, "hasta_mm": float(lejos * tam_mm) if tam_mm else None}
     umbral = P["contraste_transito"]
 
     def hay_banda(lado):
