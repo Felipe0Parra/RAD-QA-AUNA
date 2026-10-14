@@ -60,6 +60,7 @@ import pytest
 import tifffile
 
 import _corpus
+import _oraculo_piso
 import _placa_mensual_sintetica as gen
 from analisisImagenes import posicion_inicial_braqui as motor
 
@@ -70,8 +71,14 @@ NOMBRES = {"R": "rojo", "G": "verde", "B": "azul", "gris": "gris"}
 # Los parametros del plan (A.2, OBJETIVO), escritos AQUI a proposito: la prueba fija los valores, no los importa. `lado_punto_manual_mm` es el "3 x 3 mm" de la regla (6); `umbral_como_fondo` y
 # `fraccion_como_fondo` son los de la regla (7) (A2-R1-02, decision D' de Opus): 170 niveles es la mitad de la brecha entre la capa mas oscura del piso de las diez reales (73 a 86) y el fondo (255),
 # y el 10 % es 17 veces lo peor que miden las reales (0.6 %) y menos de lo que mueve la mediana (desde el 19 % la sube 1 a 3 niveles).
-PLAN = {"umbral_fondo": 235.0, "margen_borde_mm": 0.5, "margen_campo_mm": 5.0, "fraccion_lejana": 0.20, "delta_tinta": 25.0, "pixeles_minimos": 2000,
-        "contraste_minimo": 10.0, "lado_punto_manual_mm": 3.0, "umbral_como_fondo": 170.0, "fraccion_como_fondo": 0.10}
+# A.3 (clase 1 del diseño §9.2): `margen_borde_mm` pasa de 0.5 a 1.0 (el fleco del corte llega a 1 mm) y se suman los parametros nuevos (el borde de la imagen, el rango esperado, el IQR, las esquinas, el
+# respaldo y los umbrales de la comparacion con la virgen); los valores son los del diseño de A.3 §7.
+PLAN = {"umbral_fondo": 235.0, "margen_borde_mm": 1.0, "apartar_borde_de_la_imagen": True, "margen_campo_mm": 5.0, "fraccion_lejana": 0.20, "delta_tinta": 25.0, "pixeles_minimos": 2000,
+        "contraste_minimo": 10.0, "lado_punto_manual_mm": 3.0, "umbral_como_fondo": 170.0, "fraccion_como_fondo": 0.10,
+        "piso_esperado": {"R": [60.0, 140.0], "G": [145.0, 200.0], "B": [65.0, 100.0], "gris": [110.0, 170.0]},
+        "piso_esperado_sin_irradiar": {"R": [60.0, 170.0], "G": [145.0, 230.0], "B": [65.0, 130.0], "gris": [110.0, 200.0]},
+        "iqr_maximo": 15.0, "esquinas_minimas": 3, "giro_respaldo_grados": 5.0, "s_respaldo": [0.05, 0.10], "distancia_respaldo_maxima_mm": 11.0, "paso_respaldo_mm": 0.5,
+        "tolerancia_virgen_mas_oscura": 3.0, "aviso_azul_virgen": 5.0, "aviso_verde_virgen": 25.0}
 # El texto de la regla (7), escrito AQUI tal cual (la prueba fija el texto, no lo importa): el motivo es una constante del modulo y el estado completo lleva, entre parentesis, el porcentaje de pixeles
 # del piso que parecen fondo y el umbral, y dice que revisar.
 MOTIVO_COMO_EL_FONDO = "no medible: el piso es tan claro como el fondo del escáner, no como película"
@@ -179,7 +186,7 @@ def _a_pelicula(imagen, dpi=600):
     return _pel().leer_pelicula(gen.codificar(imagen, "tiff", dpi))
 
 
-_SE_GUARDAN_CON_FONDO = {("B", 0.4, 200.0), ("L", 0.4, 200.0)}      # las dos que varias pruebas de la regla (7) usan; el resto se genera y se suelta (una pagina pesa 250 MB con sus planos)
+_SE_GUARDAN_CON_FONDO = {("B", 0.4, 200.0), ("L", 0.4, 200.0), ("L", 0.9, 200.0)}      # las dos que varias pruebas de la regla (7) usan; el resto se genera y se suelta (una pagina pesa 250 MB con sus planos)
 
 
 def _con_fondo(variante, theta, fondo):
@@ -191,10 +198,21 @@ def _con_fondo(variante, theta, fondo):
     return _cacheado(("con_fondo",) + clave, fabrica) if clave in _SE_GUARDAN_CON_FONDO else fabrica()
 
 
+# A.3: el rango esperado (los dos) y el IQR ABIERTOS: lo que los controles de la regla (7), del rango y de las capas «no medibles» necesitan para ver solo lo que cada uno cambia, y los motivos nuevos
+# (los textos de A.3, escritos aqui tal cual: la prueba fija el texto y no lo importa).
+ABIERTO = {"piso_esperado": {c: [0.0, 255.0] for c in CAPAS_DEL_PISO}, "piso_esperado_sin_irradiar": {c: [0.0, 255.0] for c in CAPAS_DEL_PISO}, "iqr_maximo": 255.0}
+MOTIVO_ESQUINAS_SIN_PELICULA = "no medible: la película no sobresale lo bastante del campo luminoso en sus esquinas"
+MOTIVO_ESQUINAS_SIN_PISO = "no medible: dos o más esquinas de la película no dan un piso válido"
+MOTIVO_PUNTO_FUERA_DEL_RANGO = "no medible: el punto marcado no tiene el nivel de una película sin irradiar"
+
+
 def _sin_la_regla(pelicula, campo, punto=None):
     """El piso con la regla (7) APAGADA (`umbral_como_fondo` = 1000: ningun pixel lo alcanza): lo que la funcion daba antes de A2-R1-02. Es el CONTROL de cada prueba de la regla: demuestra que, sin
-    ella, el piso de un fondo gris es «ok» con el vacio."""
-    return piso(pelicula, campo, _P(umbral_como_fondo=1000.0), punto)
+    ella, el piso de un fondo gris es «ok» con el vacio.
+
+    A.3 (clase 4 del diseño §9.2): el control tambien ABRE el rango esperado (los dos: el de la pelicula de fuera del campo y el del sexto clic) y el IQR (`iqr_maximo` = 255). Sin eso el vacio
+    (un gris neutro de 200) lo frenarian el rango o el IQR de cada esquina y el control ya no demostraria lo que la regla (7) cambia."""
+    return piso(pelicula, campo, _P(umbral_como_fondo=1000.0, **ABIERTO), punto)
 
 
 def _fraccion_como_fondo(p, pelicula, umbral=170.0):
@@ -207,58 +225,12 @@ def _fraccion_como_fondo(p, pelicula, umbral=170.0):
 
 # ====================================================================================================================== el oraculo (otros algoritmos)
 
-def _poligono(forma, puntos):
-    m = np.zeros(forma, np.uint8)
-    cv2.fillConvexPoly(m, np.rint(np.asarray(puntos, np.float64)).astype(np.int32), 1)
-    return m.astype(bool)
-
-
-def _distancia_al_campo_mm(forma, campo):
-    """Distancia (mm) de cada pixel al campo luminoso, por rasterizacion + transformada de distancia (NO las distancias analiticas de la funcion)."""
-    dentro = _poligono(forma, campo)
-    return cv2.distanceTransform((~dentro).astype(np.uint8), cv2.DIST_L2, cv2.DIST_MASK_PRECISE) * np.float32(ESC)
-
-
-def _crudo_sin_ruido(D, capa):
-    """La respuesta de la pelicula en esa capa SIN ruido: `virgen - (virgen - meseta) * g(D)` (el generador de PF.0; `_g` es privada y se usa a proposito)."""
-    c = gen.CALIB
-    i = gen.INDICE_CAPA[capa]
-    virgen, meseta, k = c["virgen_bgr"][i], c["meseta_bgr"][i], c["k_bgr"][i]
-    return virgen - (virgen - meseta) * gen._g(D, k)
-
-
-class Oraculo:
-    """La verdad de una sintetica: la pelicula (poligono conocido; lo de fuera de la imagen cuenta como pelicula, porque sigue), su erosion de 0.5 mm, la distancia al campo
-    luminoso, la region del piso (el 20 % mas lejano de lo que esta a mas de 5 mm) y, por capa, la mediana de la respuesta sin ruido en esa region."""
-
-    def __init__(self, s):
-        v = s.verdad
-        alto, ancho = s.forma
-        D, _ = gen.mapa_dosis(v.variante, v.giro_deg, 600, s.kw.get("desplazamiento_px"), s.kw.get("beta", 0.0), s.kw.get("cupula_pct_40mm", 0.0))
-        self.D = D.astype(np.float32)
-        del D
-        pad = 200
-        esq = v.esquinas_pelicula_px
-        lienzo = np.zeros((alto + 2 * pad, ancho + 2 * pad), np.uint8)
-        cv2.fillConvexPoly(lienzo, np.rint(np.array([esq["UL"], esq["UR"], esq["DR"], esq["DL"]]) + pad).astype(np.int32), 1)
-        lienzo[:pad] = 1
-        lienzo[-pad:] = 1
-        lienzo[:, :pad] = 1
-        lienzo[:, -pad:] = 1                                     # fuera de la imagen la pelicula sigue: el borde de la imagen no es un borde de pelicula
-        self.borde_mm = cv2.distanceTransform(lienzo, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)[pad:pad + alto, pad:pad + ancho] * np.float32(ESC)
-        self.pelicula = self.borde_mm > 0
-        self.dcam = _distancia_al_campo_mm(s.forma, s.campo)
-        self.elegibles = (self.borde_mm > 0.5) & (self.dcam > 5.0)
-        self.umbral_distancia = float(np.quantile(self.dcam[self.elegibles], 0.8))
-        self.region = self.elegibles & (self.dcam >= self.umbral_distancia)
-
-    def crudo(self, capa, mascara):
-        """La respuesta sin ruido de esa capa en los pixeles de `mascara` (las del tamano de la imagen)."""
-        return _crudo_sin_ruido(self.D[mascara].astype(np.float64), capa)
-
-    def piso(self, excluir=None):
-        region = self.region if excluir is None else self.region & ~excluir
-        return {c: float(np.median(self.crudo(c, region))) for c in "BGR"}
+# A.3 (clase 3 del diseño §9.2): el oraculo vive en `tests/_oraculo_piso.py` (lo usan esta prueba y la de A.3). Con A.3 la region del piso son las CUÑAS de las esquinas (lo mas lejano de cada una), la
+# pelicula tiene el borde de la imagen por borde (deja de valer «lo de fuera de la imagen cuenta como pelicula») y la erosion es la del plan (1.0 mm); la verdad por capa se calcula en esa region.
+_poligono = _oraculo_piso.poligono
+_distancia_al_campo_mm = _oraculo_piso.distancia_al_campo_mm
+_crudo_sin_ruido = _oraculo_piso.crudo_sin_ruido
+Oraculo = _oraculo_piso.Oraculo
 
 
 def _region_completa(p, forma):
@@ -283,9 +255,24 @@ def _dict_esperado(p):
     r = p.region
     region = None if r is None else {"origen": r.origen, "caja": [int(v) for v in r.caja], "n": int(r.n), "distancia_media_mm": float(r.distancia_media_mm),
                                      "distancia_minima_mm": float(r.distancia_minima_mm), "distancia_maxima_mm": float(r.distancia_maxima_mm)}
+    # A.3 (clase 2 del diseño §9.2): las seis claves nuevas, escritas tambien campo por campo desde los atributos publicos (`modo`, `punto`, `esquinas` con sus respaldos, `referencia_virgen`,
+    # `comparacion` y `avisos`)
+    def respaldo(i):
+        return {"nombre": i.nombre, "estado": i.estado, "motivo": i.motivo, "d_mm": i.d_mm, "centro": None if i.centro is None else [float(i.centro[0]), float(i.centro[1])],
+                "n": int(i.n), "medianas": None if i.medianas is None else dict(i.medianas)}
+
+    def esquina(e):
+        return {"esquina": e.esquina, "estado": e.estado, "motivo": e.motivo, "origen": e.origen, "n": int(e.n), "medianas": None if e.medianas is None else dict(e.medianas),
+                "iqr": None if e.iqr is None else dict(e.iqr), "distancia_media_mm": e.distancia_media_mm, "caja": None if e.caja is None else [int(v) for v in e.caja],
+                "respaldos": [respaldo(i) for i in e.respaldos]}
+
     return {"estado": p.estado, "origen": p.origen, "escala_mm": p.escala_mm, "campo_luz": [[float(x), float(y)] for x, y in p.campo_luz], "parametros": dict(p.parametros),
             "capas": {c: {"estado": k.estado, "mediana": k.mediana, "n": int(k.n), "iqr": k.iqr, "meseta": k.meseta, "contraste": k.contraste} for c, k in p.capas.items()},
-            "region": region}
+            "region": region,
+            "modo": p.modo, "punto": None if p.punto is None else [float(p.punto[0]), float(p.punto[1])], "esquinas": [esquina(e) for e in p.esquinas],
+            "referencia_virgen": None if p.referencia is None else p.referencia.como_dict(),
+            "comparacion": None if p.comparacion is None else {"piso_automatico": p.comparacion.como_dict(), "diferencia": p.diferencia_con_el_automatico()},
+            "avisos": list(p.avisos)}
 
 
 def _pintar_texto_y_diagonales(imagen, region, color):
@@ -342,33 +329,42 @@ class TestLosParametrosVivenConNombreUnidadYMotivo:
             assert cambiado.region.n > 3 * base.region.n and cambiado.region.distancia_media_mm < base.region.distancia_media_mm - 1.0
 
     def test_k_fraccion_como_fondo_se_usa(self):
-        """El recorte suelto con el fondo en 200 y 0.4 grados: el 24.9 % de los pixeles del piso es vacio (las cunas de las esquinas). Con `fraccion_como_fondo` = 0.24 la regla (7) lo rechaza y con
-        0.25 lo mide (con el sesgo de +1 nivel que la regla de fabrica, 0.10, no deja pasar): el parametro decide, no un 0.10 escrito en la funcion."""
-        s = _con_fondo("L", 0.4, 200)
+        """A.3 (clase 5): el recorte suelto con el fondo en 200 pasa de 0.4 a 0.9 grados (con las cuñas el de 0.4 grados ya no lleva vacio al piso). En L 0.9 el 40.7 % de los pixeles del piso es vacio
+        (las cuñas de las esquinas): con `fraccion_como_fondo` = 0.40 la regla (7) lo rechaza; con 0.41 la regla de la UNION ya no lo rechaza (la esquina superior izquierda, con 74 % de vacio, y la
+        inferior izquierda, con 46 %, se rechazan por si mismas) y con 0.80 mide (con el sesgo de +2 niveles que la regla de fabrica, 0.10, no deja pasar): el parametro decide, no un 0.10 escrito
+        en la funcion. El IQR y el rango se abren (clase 4): el vacio mezclado en cada esquina las pararia antes."""
+        s = _con_fondo("L", 0.9, 200)
         f = _fraccion_como_fondo(_sin_la_regla(s.pelicula, s.campo), s.pelicula)
-        assert 0.24 < f < 0.25, f"{f:.4f} del piso es vacio: los dos valores de la prueba ya no quedan a cada lado"
-        rechaza = piso(s.pelicula, s.campo, _P(fraccion_como_fondo=0.24))
-        mide = piso(s.pelicula, s.campo, _P(fraccion_como_fondo=0.25))
-        assert rechaza.estado.startswith(MOTIVO_COMO_EL_FONDO) and rechaza.region is None and rechaza.parametros["fraccion_como_fondo"] == 0.24
-        assert mide.estado == "ok" and mide.region is not None and mide.parametros["fraccion_como_fondo"] == 0.25
+        assert 0.40 < f < 0.41, f"{f:.4f} del piso es vacio: los valores de la prueba ya no quedan a cada lado"
+        rechaza = piso(s.pelicula, s.campo, _P(fraccion_como_fondo=0.40, **ABIERTO))
+        union_pasa = piso(s.pelicula, s.campo, _P(fraccion_como_fondo=0.41, **ABIERTO))
+        mide = piso(s.pelicula, s.campo, _P(fraccion_como_fondo=0.80, **ABIERTO))
+        assert rechaza.estado.startswith(MOTIVO_COMO_EL_FONDO) and rechaza.region is None and rechaza.parametros["fraccion_como_fondo"] == 0.40
+        assert not union_pasa.estado.startswith(MOTIVO_COMO_EL_FONDO) and union_pasa.parametros["fraccion_como_fondo"] == 0.41
+        assert mide.estado == "ok" and mide.region is not None and mide.parametros["fraccion_como_fondo"] == 0.80
 
     def test_k_delta_tinta_se_usa(self):
         s = _sint("B", 0.4)
-        pintada, mascara = _pintar_texto_y_diagonales(s.img, s.oraculo.region, (30, 35, 25))
+        cuna = s.oraculo.region_de["DR"]               # A.3 (clase 12): la region son cuatro cuñas separadas; el texto y las diagonales se pintan EN la de mas pixeles (la inferior derecha)
+        pintada, mascara = _pintar_texto_y_diagonales(s.img, cuna, (30, 35, 25))
         pel = _a_pelicula(pintada)
         con_regla = piso(pel, s.campo)
-        sin_regla = piso(pel, s.campo, _P(delta_tinta=1000.0))
+        # sin apartar la tinta (24 % de la esquina) el IQR de la esquina la pararia: el control abre el IQR y el rango para ver solo lo que cambia delta_tinta
+        sin_regla = piso(pel, s.campo, _P(delta_tinta=1000.0, **ABIERTO))
         assert not (_region_completa(con_regla, s.forma) & mascara).any()
-        assert (_region_completa(sin_regla, s.forma) & mascara).sum() > 2000, "con delta_tinta enorme la tinta tendria que quedarse"
+        assert (_region_completa(sin_regla, s.forma) & mascara).sum() > 1000, "con delta_tinta enorme la tinta tendria que quedarse"
         assert sin_regla.parametros["delta_tinta"] == 1000.0 and con_regla.parametros["delta_tinta"] == 25.0
 
     def test_k_el_margen_del_borde_y_el_umbral_del_fondo_se_usan(self):
         s = _sint("B", 0.4)
         base = piso(s.pelicula, s.campo)
         sin_erosion = piso(s.pelicula, s.campo, _P(margen_borde_mm=0.0))
-        mas_erosion = piso(s.pelicula, s.campo, _P(margen_borde_mm=3.0))
+        # A.3 (clase 13): la cifra se recalcula con el margen de fabrica nuevo (1.0 mm): con 2.0 mm la region se acorta (12.0 -> 10.6 mm de distancia maxima); con 3.0 mm las esquinas ya no
+        # tienen pelicula a mas de 5 mm del campo y el piso es «no medible» (la cuña de A.3 es lo mas lejano de cada vertice, que es lo que el margen se come)
+        mas_erosion = piso(s.pelicula, s.campo, _P(margen_borde_mm=2.0))
         assert sin_erosion.region.distancia_maxima_mm > base.region.distancia_maxima_mm + 0.3
         assert base.region.distancia_maxima_mm > mas_erosion.region.distancia_maxima_mm + 0.3
+        assert piso(s.pelicula, s.campo, _P(margen_borde_mm=3.0)).estado.startswith(MOTIVO_ESQUINAS_SIN_PELICULA)
         # un umbral de fondo bajo (60) deja todo como fondo: no hay pelicula; uno alto (256) deja el fondo como pelicula
         sin_pelicula = piso(s.pelicula, s.campo, _P(umbral_fondo=60.0))
         assert sin_pelicula.estado.startswith("no medible") and sin_pelicula.region is None
@@ -376,14 +372,15 @@ class TestLosParametrosVivenConNombreUnidadYMotivo:
         assert con_fondo.region is None or con_fondo.region.n != base.region.n
 
     def test_k_el_margen_del_campo_mueve_la_region(self):
-        """Con 7.5 mm en lugar de 5, solo cuenta la pelicula a mas de 7.5 mm del campo: la region se achica (medido: 124 160 -> 40 281 pixeles) y se aleja (la distancia minima
-        pasa de 8.2 a 9.4 mm). La meseta de referencia no lo nota: por eso el margen se prueba aqui, en la region."""
+        """A.3 (clase 3): con 6.0 mm en lugar de 5, solo cuenta la pelicula a mas de 6.0 mm del campo: la region se achica (medido: 13 764 -> 9 840 pixeles, tomados por cuña) y se aleja (la
+        distancia minima pasa de 5.9 a 7.4 mm); con 7.5 mm las esquinas ya no tienen pelicula y el piso es «no medible». La meseta de referencia no lo nota: por eso el margen se prueba aqui."""
         s = _sint("B", 0.4)
         base = piso(s.pelicula, s.campo)
-        lejos = piso(s.pelicula, s.campo, _P(margen_campo_mm=7.5))
-        assert lejos.estado == "ok" and lejos.parametros["margen_campo_mm"] == 7.5
-        assert lejos.region.n < 0.5 * base.region.n and lejos.region.distancia_minima_mm > base.region.distancia_minima_mm + 0.8, (base.region, lejos.region)
-        assert lejos.region.distancia_minima_mm > 9.0
+        lejos = piso(s.pelicula, s.campo, _P(margen_campo_mm=6.0))
+        assert lejos.estado == "ok" and lejos.parametros["margen_campo_mm"] == 6.0
+        assert lejos.region.n < 0.8 * base.region.n and lejos.region.distancia_minima_mm > base.region.distancia_minima_mm + 0.8, (base.region, lejos.region)
+        assert lejos.region.distancia_minima_mm > 7.0
+        assert piso(s.pelicula, s.campo, _P(margen_campo_mm=7.5)).estado.startswith(MOTIVO_ESQUINAS_SIN_PELICULA)
 
     def test_k_el_margen_del_borde_se_usa_tambien_en_el_sexto_clic(self):
         s = TestElSextoClic._con_un_trozo_sin_irradiar()
@@ -439,7 +436,7 @@ class TestNuncaElVacio:
         x0, y0, x1, y1 = p.region.caja
         m = p.region.mascara
         minimo = np.minimum(np.minimum(pel.R[y0:y1, x0:x1], pel.G[y0:y1, x0:x1]), pel.B[y0:y1, x0:x1])
-        assert int(m.sum()) == p.region.n > 50000
+        assert int(m.sum()) == p.region.n >= 3 * p.parametros["pixeles_minimos"]          # A.3 (clase 10): la region son cuatro cuñas de 2000 pixeles o mas
         assert float(minimo[m].max()) < 235.0, "la region incluye fondo del escaner"
         assert bool(pel.validos[y0:y1, x0:x1][m].all())
 
@@ -470,10 +467,10 @@ class TestNuncaElPisoComoElFondoDelEscaner:
         assert p.region is None and all(c.mediana is None and c.iqr is None and c.estado == p.estado for c in p.capas.values()), "dio un numero que es el vacio"
         assert p.valor("G") is None and p.todas_medibles is False and p.descripcion() == p.estado
 
-    @pytest.mark.parametrize("theta,vacio,sesgo_minimo", [(0.9, 0.47, 2.5), (0.4, 0.25, 0.7)])
+    @pytest.mark.parametrize("theta,vacio,sesgo_minimo", [(0.9, 0.407, 1.5)])         # A.3 (clase 5): el de 0.4 grados ya no lleva vacio al piso (ver la prueba siguiente)
     def test_a_el_recorte_suelto_con_fondo_gris_no_deja_pasar_el_vacio_aunque_sea_minoria(self, theta, vacio, sesgo_minimo):
-        """El recorte suelto (la caja que envuelve la pelicula girada) solo trae fondo en las cunas de las esquinas: el vacio es el 25 % (0.4 grados) o el 47 % (0.9) del piso, MINORIA o casi.
-        Una guarda por MEDIANA (la opcion D que Opus descarto) lo deja pasar: la mediana si se corre (+1 y +3 niveles contra la verdad del generador) y el estado sigue «ok». El fisico pidio «nunca
+        """El recorte suelto (la caja que envuelve la pelicula girada) solo trae fondo en las cunas de las esquinas: con A.3 (clase 5) el vacio es el 40.7 % del piso a 0.9 grados, MINORIA.
+        Una guarda por MEDIANA (la opcion D que Opus descarto) lo deja pasar: la mediana si se corre (+2 niveles contra la verdad del generador) y el estado sigue «ok». El fisico pidio «nunca
         el vacio», no «nunca una mayoria de vacio»."""
         s = _con_fondo("L", theta, 200)
         sin_regla = _sin_la_regla(s.pelicula, s.campo)
@@ -487,24 +484,41 @@ class TestNuncaElPisoComoElFondoDelEscaner:
         assert p.estado.startswith(MOTIVO_COMO_EL_FONDO), f"con {100 * f:.0f} % de vacio en el piso la funcion dijo: {p.estado}"
         assert p.region is None and all(c.mediana is None for c in p.capas.values())
 
-    def test_a_el_limite_declarado_el_fondo_en_170_se_rechaza_y_en_169_pasa_con_el_vacio(self):
-        """El umbral es inclusivo (`>=`) y es el LIMITE que el plan declara: un fondo neutro por debajo de 170 se toma por pelicula (se ve en la region que dibuja E.1). Con el fondo del escaner en 170 la capa
-        mas oscura de un pixel de fondo llega a 170 en el 25 % de los pixeles (ruido de 1.5 niveles) y se rechaza; en 169, en el 5 %, y pasa con el vacio como piso."""
+    def test_a_el_recorte_suelto_girado_04_con_el_fondo_gris_ya_no_lleva_vacio_al_piso(self):
+        """A.3 (clase 5): con las cuñas el recorte suelto de 0.4 grados con el fondo en 200 ya NO lleva vacio al piso (0.0 %: las cuñas se toman a mas de 1 mm del borde de la imagen y los triangulos de
+        vacio del recorte miden 0.77 mm): da «ok» con el piso verdadero (+-1)."""
+        s = _con_fondo("L", 0.4, 200)
+        p = piso(s.pelicula, s.campo)
+        assert p.estado == "ok", p.estado
+        assert _fraccion_como_fondo(p, s.pelicula) < 0.01
+        verdad = s.oraculo.piso()
+        for c in "BGR":
+            assert abs(p.capas[c].mediana - verdad[c]) <= 1.0, f"{c}: {p.capas[c].mediana} contra la verdad {verdad[c]:.2f}"
+
+    def test_a_el_limite_declarado_el_fondo_en_170_se_rechaza_y_en_169_lo_frena_el_rango(self):
+        """A.3 (clase 6): el limite declarado de A.2 queda cerrado. El umbral es inclusivo (`>=`): con el fondo del escaner en 170 la capa mas oscura de un pixel de fondo llega a 170 en el 25 % de los
+        pixeles (ruido de 1.5 niveles) y la regla (7) lo rechaza; en 169, en el 5 %, la regla (7) lo deja pasar (con el rango abierto el vacio es el piso, como en A.2) pero el rango esperado lo
+        frena: el verde de 169 esta dentro de [145, 200] y el rojo, que no puede pasar de 140, no."""
         en_170, en_169 = _con_fondo("B", 0.4, 170), _con_fondo("B", 0.4, 169)
         f170 = _fraccion_como_fondo(_sin_la_regla(en_170.pelicula, en_170.campo), en_170.pelicula)
         f169 = _fraccion_como_fondo(_sin_la_regla(en_169.pelicula, en_169.campo), en_169.pelicula)
         assert f170 >= 0.10 > f169, f"fraccion de vacio: {f170:.4f} con el fondo en 170 y {f169:.4f} en 169; la prueba espera 0.25 y 0.05"
         rechazado = piso(en_170.pelicula, en_170.campo)
         assert rechazado.estado.startswith(MOTIVO_COMO_EL_FONDO) and rechazado.region is None, "el fondo en 170 tiene que rechazarse (el umbral es inclusivo)"
-        pasa = piso(en_169.pelicula, en_169.campo)
-        assert pasa.estado == "ok" and all(abs(pasa.capas[c].mediana - 169) <= 1.0 for c in CAPAS_DEL_PISO), "el limite declarado: con el fondo en 169 pasa con el vacio como piso"
+        pasa = piso(en_169.pelicula, en_169.campo, _P(**ABIERTO))
+        assert pasa.estado == "ok" and all(abs(pasa.capas[c].mediana - 169) <= 1.0 for c in CAPAS_DEL_PISO), "con el fondo en 169 la regla (7) lo deja pasar: con el rango abierto el vacio es el piso"
+        frenado = piso(en_169.pelicula, en_169.campo)
+        assert frenado.estado.startswith(MOTIVO_ESQUINAS_SIN_PISO) and "fuera del rango esperado" in frenado.estado and frenado.region is None, frenado.estado
 
     def test_a_una_pelicula_en_grises_no_se_rechaza_y_su_piso_es_el_de_siempre(self):
         s = _sint("B", 0.4)
         gris = np.rint(0.114 * s.img[:, :, 0] + 0.587 * s.img[:, :, 1] + 0.299 * s.img[:, :, 2]).astype(np.uint8)
         gris = np.where(gris >= 235, 250, gris).astype(np.uint8)                       # el fondo sigue siendo blanco
         pel = _a_pelicula(np.ascontiguousarray(np.repeat(gris[:, :, None], 3, axis=2)))
-        sin_regla, con_regla = _sin_la_regla(pel, s.campo), piso(pel, s.campo)
+        # A.3 (clase 7): de fabrica una pelicula en grises (138/138/138) es «no medible» por el rango (el verde 138 < 145 y el azul 138 > 100: la regla (7) no la rechaza, el rango si); lo que la prueba
+        # afirma (la regla (7) no mueve ni rechaza una pelicula en grises) se conserva pasando el rango abierto
+        assert piso(pel, s.campo).estado.startswith(MOTIVO_ESQUINAS_SIN_PISO)
+        sin_regla, con_regla = _sin_la_regla(pel, s.campo), piso(pel, s.campo, _P(**ABIERTO))
         assert con_regla.estado == "ok" and _medianas(con_regla) == _medianas(sin_regla), "la regla (7) movio o rechazo el piso de una pelicula en grises"
         assert all(abs(con_regla.capas[c].mediana - 138.0) <= 1.5 for c in CAPAS_DEL_PISO), _medianas(con_regla)
         assert _fraccion_como_fondo(con_regla, pel) < 0.01
@@ -518,7 +532,7 @@ class TestNuncaElPisoComoElFondoDelEscaner:
         en_pelicula = s.img.min(axis=2) < 235
         clara[en_pelicula] = np.minimum(clara[en_pelicula] + subir, 234)
         pel = _a_pelicula(clara.astype(np.uint8))
-        sin_regla, con_regla = _sin_la_regla(pel, s.campo), piso(pel, s.campo)
+        sin_regla, con_regla = _sin_la_regla(pel, s.campo), piso(pel, s.campo, _P(**ABIERTO))              # A.3 (clase 7): el rango abierto (de fabrica el rojo 180 queda fuera del rango)
         assert sin_regla.estado == "ok"
         f = _fraccion_como_fondo(sin_regla, pel)
         if se_rechaza:
@@ -527,6 +541,7 @@ class TestNuncaElPisoComoElFondoDelEscaner:
         else:
             assert f < 0.01 and sorted(sin_regla.capas[c].mediana for c in "RGB")[1] > 170, "la capa media tiene que pasar de 170 y la mas oscura no: la prueba no discrimina"
             assert con_regla.estado == "ok" and _medianas(con_regla) == _medianas(sin_regla), "se rechazo (o se movio) una pelicula clara cuya capa mas oscura no parece fondo"
+            assert piso(pel, s.campo).estado.startswith(MOTIVO_ESQUINAS_SIN_PISO), "de fabrica el rango frena esta pelicula clara (el rojo pasa de 140): la regla (7) no la rechaza, el rango si"
 
     def test_a_la_regla_va_antes_de_la_meseta(self):
         """El plan fija el orden: primero que el piso no parezca el fondo, despues la comprobacion contra la meseta. Con el campo fuera de la imagen no hay meseta (sin la regla: «la pelicula no cubre el
@@ -547,6 +562,12 @@ class TestNuncaElGiro:
         s = _sint(variante, theta, **kw)
         o = s.oraculo
         p = piso(s.pelicula, s.campo)
+        if (variante, theta) == ("A", -3.0):
+            # A.3 (clase 11): el recorte a ras girado -3 grados deja tres esquinas sin pelicula a mas de 5 mm del campo (0, 0 y 1345 pixeles): con el lateral que A.2 tomaba el piso saldria 11 a 38 niveles
+            # mas oscuro en el rojo, asi que ahora dice «no medible» y pide la pelicula entera
+            assert p.estado.startswith(MOTIVO_ESQUINAS_SIN_PELICULA) and p.region is None and all(c.mediana is None for c in p.capas.values()), p.estado
+            assert "superior izquierda: 0 píxeles; superior derecha: 0 píxeles; inferior izquierda: 1345 píxeles" in p.estado, p.estado
+            return
         assert p.estado == "ok"
         verdad = o.piso()
         for capa in "BGR":
@@ -594,6 +615,10 @@ class TestNuncaElGiro:
         """La frase del plan: «la sintetica girada 1 grado y recortada a ras da el mismo piso»."""
         sin_giro, con_giro = _sint("A", 0.0), _sint("A", theta)
         a, b = piso(sin_giro.pelicula, sin_giro.campo), piso(con_giro.pelicula, con_giro.campo)
+        if theta == -3.0:
+            # A.3 (clase 11): girado -3 grados el recorte a ras no sobresale lo bastante del campo en tres esquinas: «no medible» y no un piso del lateral
+            assert a.estado == "ok" and b.estado.startswith(MOTIVO_ESQUINAS_SIN_PELICULA) and b.region is None
+            return
         assert a.estado == b.estado == "ok"
         for c in CAPAS_DEL_PISO:
             assert abs(a.capas[c].mediana - b.capas[c].mediana) <= 1.0, f"{c} con giro {theta}: {b.capas[c].mediana} contra {a.capas[c].mediana}"
@@ -639,9 +664,10 @@ class TestNuncaLaTinta:
     def test_c_texto_y_diagonales_pintados_en_la_region_del_piso_no_lo_mueven(self):
         s = _sint("B", 0.4)
         o = s.oraculo
-        pintada, mascara = _pintar_texto_y_diagonales(s.img, o.region, (30, 35, 25))
-        dentro = int((mascara & o.region).sum())
-        assert dentro > 4000, f"solo {dentro} pixeles de tinta caen en la region: la prueba no discrimina"
+        cuna = o.region_de["DR"]                 # A.3 (clase 12): la region son cuatro cuñas separadas; el texto y las diagonales se pintan EN la de mas pixeles (la inferior derecha)
+        pintada, mascara = _pintar_texto_y_diagonales(s.img, cuna, (30, 35, 25))
+        dentro = int((mascara & cuna).sum())
+        assert dentro > 0.2 * int(cuna.sum()), f"solo {dentro} pixeles de tinta caen en la cuña ({int(cuna.sum())}): la prueba no discrimina"
         p = piso(_a_pelicula(pintada), s.campo)
         limpia = piso(s.pelicula, s.campo)
         verdad = o.piso(excluir=mascara)
@@ -655,24 +681,26 @@ class TestNuncaLaTinta:
     def test_c_una_tinta_oscura_solo_en_una_capa_tambien_se_rechaza(self, canal_bgr, capa):
         """«En alguna capa» (regla 3): una tinta que oscurece UNA sola capa en casi la mitad de la region, y se prueba con cada una de las tres (un rotulador azul oscurece el rojo;
         uno amarillo, el azul; uno magenta, el verde). La primera version de esta prueba solo oscurecia el rojo: tres variantes del barrido que dejaban fuera el azul o el verde (RV1 a
-        RV3 de a2_mutaciones.py) pasaban las 124 pruebas, aunque una tinta que solo oscurece el azul SI mueve el piso (2.1 niveles; revision de la ronda 1, A2-R1-01)."""
+        RV3 de a2_mutaciones.py) pasaban las 124 pruebas, aunque una tinta que solo oscurece el azul SI mueve el piso (2.1 niveles; revision de la ronda 1, A2-R1-01).
+        A.3 (clase 12): la tinta cubre el 45 % de UNA cuña (la inferior derecha, la de mas pixeles) y se mide en la cuña: en la union de las cuatro la dilucion la deja bajo 1 nivel."""
         s = _sint("B", 0.4)
         o = s.oraculo
-        ys, xs = np.nonzero(o.region)
+        cuna = o.region_de["DR"]
+        ys, xs = np.nonzero(cuna)
         manchada = s.img.copy()
-        ymed = int(np.median(ys))
-        franja = np.zeros(s.forma, bool)
-        franja[ymed - 20:ymed + 20, int(np.percentile(xs, 25)):int(np.percentile(xs, 75))] = True
-        franja &= o.region
-        assert 0.15 < franja.sum() / o.region.sum() < 0.6, f"la tinta cubre {franja.sum() / o.region.sum():.2f} de la region: la prueba no discrimina"
+        franja = cuna & (np.arange(s.forma[0])[:, None] <= np.percentile(ys, 45))          # el 45 % de arriba de la cuña
+        assert 0.35 < franja.sum() / cuna.sum() < 0.6, f"la tinta cubre {franja.sum() / cuna.sum():.2f} de la cuña: la prueba no discrimina"
         manchada[:, :, canal_bgr][franja] = 5                         # solo esa capa (BGR: 0 azul, 1 verde, 2 rojo)
         verdad = o.piso(excluir=franja)
-        sin_apartar = float(np.median(manchada[:, :, canal_bgr][o.region]))
-        assert abs(sin_apartar - verdad[capa]) > 1.5, f"sin apartar la tinta la mediana {NOMBRES[capa]} solo se corre {sin_apartar - verdad[capa]:+.2f}: la tolerancia de 1 nivel no la veria"
+        verdad_cuna = float(np.median(o.crudo(capa, cuna & ~franja)))
+        sin_apartar = float(np.median(manchada[:, :, canal_bgr][cuna]))
+        assert abs(sin_apartar - verdad_cuna) > 1.5, f"sin apartar la tinta la mediana {NOMBRES[capa]} de la cuña solo se corre {sin_apartar - verdad_cuna:+.2f}: la tolerancia de 1 nivel no la veria"
         p = piso(_a_pelicula(manchada), s.campo)
         assert p.estado == "ok"
         for c in "BGR":
             assert abs(p.capas[c].mediana - verdad[c]) <= 1.0, f"{c}: {p.capas[c].mediana} contra el piso verdadero {verdad[c]:.2f} (la tinta solo oscurecia el {NOMBRES[capa]})"
+        dr = next(e for e in p.esquinas if e.esquina == "DR")
+        assert abs(dr.medianas[capa] - verdad_cuna) <= 1.0, f"la esquina inferior derecha dice {dr.medianas[capa]} y la verdad de su cuña es {verdad_cuna:.2f}: conserva la tinta"
         assert not (_region_completa(p, s.forma) & franja).any(), f"la region conserva pixeles de la tinta que solo oscurece el {NOMBRES[capa]}"
 
     def test_c_el_polvo_claro_no_mueve_la_mediana(self):
@@ -705,15 +733,16 @@ class TestNuncaLaTinta:
 
     def test_c_un_pixel_con_una_sola_capa_brillante_no_es_fondo(self):
         """El fondo es blanco en las TRES capas: es fondo el pixel cuya capa mas oscura llega al umbral. Una mota verde (solo el verde alto) es pelicula: sigue en la region (no es tinta,
-        que es lo oscuro) y la mediana la absorbe."""
+        que es lo oscuro) y la mediana la absorbe. A.3 (clase 12): la mota va EN la cuña inferior derecha (504 pixeles, el 9 % de la cuña: bajo el IQR maximo)."""
         s = _sint("B", 0.4)
         o = s.oraculo
-        ys, xs = np.nonzero(o.region)
+        cuna = o.region_de["DR"]
+        ys, xs = np.nonzero(cuna)
         ymed = int(np.median(ys))
         mota = np.zeros(s.forma, bool)
         mota[ymed - 12:ymed + 12, int(np.percentile(xs, 40)):int(np.percentile(xs, 60))] = True
-        mota &= o.region
-        assert mota.sum() > 3000, "la mota no cae en la region: la prueba no discrimina"
+        mota &= cuna
+        assert mota.sum() > 300, "la mota no cae en la cuña: la prueba no discrimina"
         sucia = s.img.copy()
         sucia[:, :, 1][mota] = 250                                    # BGR: solo el verde; el azul y el rojo siguen siendo los de la pelicula (min < 235)
         p = piso(_a_pelicula(sucia), s.campo)
@@ -779,9 +808,9 @@ class TestSinMargenNuncaUnNumero:
         `estado != "ok"` o `startswith("no medible")`, nunca compara con una lista cerrada de motivos."""
         pagina = _con_fondo("B", 0.4, 200)
         assert piso(pagina.pelicula, pagina.campo).estado == motivo_completo(100)
-        recorte = _con_fondo("L", 0.4, 200)
+        recorte = _con_fondo("L", 0.9, 200)
         f = _fraccion_como_fondo(_sin_la_regla(recorte.pelicula, recorte.campo), recorte.pelicula)
-        assert piso(recorte.pelicula, recorte.campo).estado == motivo_completo(round(100 * f)) == motivo_completo(25)
+        assert piso(recorte.pelicula, recorte.campo).estado == motivo_completo(round(100 * f)) == motivo_completo(41)           # A.3 (clase 5): L 0.9, 40.7 % de vacio
         s = _sint("B", 0.4)
         assert piso(s.pelicula, s.campo, _P(umbral_como_fondo=60.0)).estado == motivo_completo(100, umbral=60), "el umbral que dice el texto es el del parametro"
 
@@ -828,7 +857,10 @@ class TestCoherenciaConLaMeseta:
     @pytest.mark.parametrize("capa_bgr,capa,valor", [(2, "R", 3), (1, "G", 20), (0, "B", 30)])
     def test_e_una_capa_con_el_piso_igual_o_mas_oscuro_que_la_meseta_es_no_medible_y_las_demas_siguen(self, capa_bgr, capa, valor):
         s = _sint("B", 0.4)
-        p = piso(self._con_el_marco_en(s, capa_bgr, valor), s.campo)
+        # A.3 (clase 8): con el rango de fabrica la capa igual o mas oscura que la meseta (rojo 3, verde 20, azul 30) queda fuera del rango de las cuatro esquinas y el piso entero es «no medible»;
+        # lo que la prueba afirma (esa capa es «no medible» y las demas siguen) se conserva con el rango abierto
+        assert piso(self._con_el_marco_en(s, capa_bgr, valor), s.campo).estado.startswith(MOTIVO_ESQUINAS_SIN_PISO)
+        p = piso(self._con_el_marco_en(s, capa_bgr, valor), s.campo, _P(**ABIERTO))
         assert p.estado == "ok"
         mala = p.capas[capa]
         assert mala.estado.startswith("no medible") and mala.mediana is None and mala.iqr is None, f"{capa}: dio {mala.mediana}"
@@ -841,8 +873,8 @@ class TestCoherenciaConLaMeseta:
     def test_e_el_umbral_son_10_niveles_justos(self):
         s = _sint("B", 0.4)
         meseta = piso(s.pelicula, s.campo).capas["R"].meseta
-        justo_debajo = piso(self._con_el_marco_en(s, 2, int(round(meseta + 7))), s.campo)
-        justo_encima = piso(self._con_el_marco_en(s, 2, int(round(meseta + 13))), s.campo)
+        justo_debajo = piso(self._con_el_marco_en(s, 2, int(round(meseta + 7))), s.campo, _P(**ABIERTO))             # A.3 (clase 8): el rango abierto (de fabrica el rojo de 8 a 14 queda fuera)
+        justo_encima = piso(self._con_el_marco_en(s, 2, int(round(meseta + 13))), s.campo, _P(**ABIERTO))
         assert justo_debajo.capas["R"].estado.startswith("no medible"), f"contraste {justo_debajo.capas['R'].contraste}"
         assert justo_encima.capas["R"].estado == "ok", f"contraste {justo_encima.capas['R'].contraste}"
 
@@ -979,7 +1011,10 @@ class TestElSextoClic:
 
     def test_f_la_tinta_no_es_un_piso(self):
         s, pel = self._con_un_trozo_sin_irradiar(tinta=(15, 20, 3))         # BGR: una mancha de tinta negra de 5 mm en el centro del trozo
-        p = piso(pel, s.campo, punto=PUNTO_DEL_PARCHE)
+        # A.3 (clase 8): con el rango de fabrica de una pelicula sin irradiar la tinta negra (rojo 3) es «no medible» por el rango; lo que la prueba afirma (la tinta no se toma por piso: todas las capas
+        # «no medible» con el estado «ok») se conserva con el rango abierto
+        assert piso(pel, s.campo, punto=PUNTO_DEL_PARCHE).estado.startswith(MOTIVO_PUNTO_FUERA_DEL_RANGO)
+        p = piso(pel, s.campo, _P(**ABIERTO), punto=PUNTO_DEL_PARCHE)
         assert p.estado == "ok" and all(c.estado.startswith("no medible") and c.mediana is None for c in p.capas.values()), "la tinta se tomo por piso"
 
     def test_f_la_tinta_a_medias_en_el_cuadrado_no_mueve_el_piso(self):
@@ -1044,7 +1079,9 @@ class TestElSextoClic:
         mismo piso que con el fondo blanco."""
         base = _sint("B", 0.4)
         o = base.oraculo
-        cand = o.pelicula & (o.borde_mm >= 2.1) & (o.dcam > 5.5)
+        # A.3 (clase 13): a 2.6 mm del borde y no a 2.1: el cuadrado de 3 mm llega a 1.1 mm del corte, mas alla del margen de 1.0 mm (a 2.1 mm el margen nuevo le quita un anillo al fondo blanco
+        # y no al gris, donde el corte no es un borde, y los pisos difieren 1 nivel)
+        cand = o.pelicula & (o.borde_mm >= 2.6) & (o.dcam > 5.5)
         k = int(np.argmax(np.where(cand, o.dcam, -1.0)))
         punto = (float(k % base.forma[1]), float(k // base.forma[1]))
         gris = _con_fondo("B", 0.4, 200)
@@ -1070,26 +1107,37 @@ class TestDiceDeDondeSalio:
         assert p.region.distancia_minima_mm > 5.0 - 0.1, "la region toca el margen del campo"
 
     def test_g_la_region_es_lo_mas_lejano_y_nunca_lo_cercano(self):
+        """A.3 (clase 9): la region es lo mas lejano de CADA cuña (no el 20 % de toda la pelicula elegible): se compara cuña por cuña contra lo elegible de esa cuña, con la distancia al vertice
+        calculada aqui con numpy."""
         s = _sint("B", 0.4)
         o = s.oraculo
         p = piso(s.pelicula, s.campo)
         r = _region_completa(p, s.forma)
-        assert p.region.distancia_media_mm > float(np.median(o.dcam[o.elegibles])) + 0.2, "no es la parte mas lejana de lo elegible"
-        assert float(o.dcam[r].min()) >= o.umbral_distancia - 0.1
-        assert 0.15 < r.sum() / o.elegibles.sum() < 0.25, "no es el 20 % de lo elegible"
-        assert not (r & ~o.pelicula).any() and not (r & (o.borde_mm <= 0.4)).any(), "la region toca fuera de la pelicula o el borde"
+        columnas, filas = np.arange(s.forma[1], dtype=np.float32)[None, :], np.arange(s.forma[0], dtype=np.float32)[:, None]
+        for e in p.esquinas:
+            cx, cy = s.campo[("UL", "UR", "DR", "DL").index(e.esquina)]
+            al_vertice = np.hypot(columnas - np.float32(cx), filas - np.float32(cy)) * np.float32(ESC)
+            elegible = o.elegibles & o.cunas[e.esquina]
+            suya = r & o.cunas[e.esquina]
+            assert float(al_vertice[suya].mean()) > float(np.median(al_vertice[elegible])) + 0.2, f"{e.esquina}: no es la parte mas lejana de lo elegible de su cuña"
+            assert float(al_vertice[suya].min()) >= float(al_vertice[o.region_de[e.esquina]].min()) - 0.1, f"{e.esquina}: la region llega mas cerca del vertice que la del oraculo"
+            esperada = max(0.20 * int(elegible.sum()), 2000)
+            assert abs(int(suya.sum()) - esperada) <= 0.03 * esperada + 5, f"{e.esquina}: {int(suya.sum())} pixeles y se esperaban {esperada:.0f} (el 20 % de su cuña, 2000 como minimo)"
+        assert not (r & ~o.pelicula).any() and not (r & (o.borde_mm <= 0.9)).any(), "la region toca fuera de la pelicula o el borde (1 mm)"
 
     def test_g_en_ml0_el_piso_coincide_con_la_franja_mas_lejana_que_midio_la_revision(self):
+        """A.3 (clase 9): el piso por esquinas es MAS CLARO que la franja de 8-9 mm del lado de abajo que midio la revision en el rojo (110 contra 97: la dosis lateral oscurece esa franja) y en
+        el verde (177 contra 172), y su distancia media sigue en 7.5-9.0 mm (7.90); en el azul, que casi no responde a la dosis periferica, coincide."""
         p = piso(_real("ML0"), CLICS_REALES["ML0"])
         assert p.estado == "ok"
         assert 7.5 <= p.region.distancia_media_mm <= 9.0, f"distancia media {p.region.distancia_media_mm:.2f} mm"
         b, g, r = FRANJA_MAS_LEJANA_ML0_BGR
-        assert abs(p.capas["B"].mediana - b) <= 5 and abs(p.capas["G"].mediana - g) <= 5 and abs(p.capas["R"].mediana - r) <= 6, (
+        assert abs(p.capas["B"].mediana - b) <= 5 and p.capas["G"].mediana - g >= 3 and p.capas["R"].mediana - r >= 9, (
             f"piso B/G/R {p.capas['B'].mediana}/{p.capas['G'].mediana}/{p.capas['R'].mediana} contra la franja de 8-9 mm de la revision {FRANJA_MAS_LEJANA_ML0_BGR}")
 
     def test_g_la_franja_de_la_revision_se_reproduce_con_codigo_independiente_y_el_piso_cae_entre_las_dos_mas_lejanas(self):
-        """Ancla del ancla: la tabla de la revision se reproduce con otro codigo (distancia por rasterizacion, lado de abajo, +-30 mm), y el piso queda entre las franjas de
-        7-8 y 8-9 mm (el 20 % mas lejano incluye las esquinas, algo mas claras)."""
+        """Ancla del ancla: la tabla de la revision se reproduce con otro codigo (distancia por rasterizacion, lado de abajo, +-30 mm), y el piso por esquinas queda por encima de las franjas de
+        7-8 y 8-9 mm en el rojo y el verde (A.3, clase 9: las esquinas son mas claras que el centro del lado)."""
         ruta = _corpus.pelicula("ML0")
         if ruta is None:
             pytest.skip("HI-0")
@@ -1105,9 +1153,11 @@ class TestDiceDeDondeSalio:
             sel[:max(DL[1], DR[1]), :] = False
             franjas[lo] = [float(np.median(img[:, :, c][sel])) for c in range(3)]       # B, G, R
         p = piso(_real("ML0"), CLICS_REALES["ML0"])
-        for i, capa in enumerate(("B", "G", "R")):
-            bajo, alto = sorted((franjas[7][i], franjas[8][i]))
-            assert bajo - 4 <= p.capas[capa].mediana <= alto + 4, f"{capa}: piso {p.capas[capa].mediana}, franjas 7-8 y 8-9 mm: {franjas[7][i]:.0f} y {franjas[8][i]:.0f}"
+        # A.3 (clase 9): el piso por esquinas queda por ENCIMA de las dos franjas del lateral en el rojo y el verde (la dosis lateral las oscurece) y entre ellas (+-4) en el azul
+        bajo, alto = sorted((franjas[7][0], franjas[8][0]))
+        assert bajo - 4 <= p.capas["B"].mediana <= alto + 4, f"B: piso {p.capas['B'].mediana}, franjas 7-8 y 8-9 mm: {franjas[7][0]:.0f} y {franjas[8][0]:.0f}"
+        for i, capa in ((1, "G"), (2, "R")):
+            assert p.capas[capa].mediana > max(franjas[7][i], franjas[8][i]), f"{capa}: piso {p.capas[capa].mediana}, franjas 7-8 y 8-9 mm: {franjas[7][i]:.0f} y {franjas[8][i]:.0f}"
         assert abs(franjas[8][1] - FRANJA_MAS_LEJANA_ML0_BGR[1]) <= 4 and abs(franjas[8][0] - FRANJA_MAS_LEJANA_ML0_BGR[0]) <= 6, "la tabla de la revision ya no se reproduce"
 
 
@@ -1174,7 +1224,7 @@ class TestElContratoDeLaSalida:
         marco = o.pelicula & (o.dcam > 4.0)
         sucia = s.img.copy()
         sucia[:, :, 2][marco] = 3                                 # el rojo del marco igual a la meseta: esa capa no se puede medir y las otras si
-        q = piso(_a_pelicula(sucia), s.campo)
+        q = piso(_a_pelicula(sucia), s.campo, _P(**ABIERTO))                  # A.3 (clase 8): el rojo en 3 queda fuera del rango de fabrica; el rango abierto deja ver la capa «no medible»
         assert q.estado == "ok" and q.todas_medibles is False and q.valor("R") is None and q.valor("G") is not None
         assert "rojo: no medible" in q.descripcion() and "verde: no medible" not in q.descripcion()
         assert piso(s.pelicula, [(0, 0), (1, 1), (2, 2), (3, 3)]).todas_medibles is False
@@ -1236,7 +1286,7 @@ class TestElContratoDeLaSalida:
             sucia = s.img.copy()
             sucia[:, :, 2][o.pelicula & (o.dcam > 4.0)] = 3                          # el rojo del marco igual a la meseta: esa capa no se puede medir y las otras si
             pelicula = _a_pelicula(sucia)
-            return piso(pelicula, campo), s, pelicula, campo
+            return piso(pelicula, campo, _P(**ABIERTO)), s, pelicula, campo          # A.3 (clase 8): con el rango abierto (de fabrica el rojo en 3 deja todo el piso «no medible»)
         if caso == "sin_escala":
             pelicula = _a_pelicula(s.img, dpi=300)                                     # otra resolucion: sin escala no hay milimetros
             return piso(pelicula, campo), s, pelicula, campo
@@ -1260,7 +1310,8 @@ class TestElContratoDeLaSalida:
             assert d["campo_luz"] == [[float(x), float(y)] for x, y in campo], "un campo invalido se devuelve tal como llego, en el orden dado"
         else:
             assert sorted(map(tuple, d["campo_luz"])) == sorted((float(x), float(y)) for x, y in campo)
-        assert set(d["parametros"]) == set(PLAN) and {k: d["parametros"][k] for k in PLAN} == PLAN
+        esperados = {**PLAN, **(ABIERTO if caso == "una_capa_sin_medir" else {})}                 # A.3 (clase 8): ese caso se mide con el rango y el IQR abiertos
+        assert set(d["parametros"]) == set(PLAN) and {k: d["parametros"][k] for k in PLAN} == esperados
         assert d["origen"] == ("manual" if caso in ("manual", "sin_region") else "automatico")             # el punto fuera de la pelicula tambien es un sexto clic
         assert d["escala_mm"] == (None if caso == "sin_escala" else pytest.approx(ESC))
         assert set(d["capas"]) == set(CAPAS_DEL_PISO)
@@ -1378,7 +1429,7 @@ class TestLasPeliculasReales:
         assert all(c.estado == "ok" for c in p.capas.values()), {k: c.estado for k, c in p.capas.items()}
         m = {c: p.capas[c].mediana for c in CAPAS_DEL_PISO}
         assert 60 <= m["R"] <= 130 and 140 <= m["G"] <= 195 and 70 <= m["B"] <= 100, m          # la pelicula de fuera del campo (medida: R 73-111, G 154-180, B 81-86)
-        assert 6.0 <= p.region.distancia_media_mm <= 14.0 and p.region.n >= 50000
+        assert 6.0 <= p.region.distancia_media_mm <= 14.0 and p.region.n >= 3 * p.parametros["pixeles_minimos"]          # A.3 (clase 10): 8000 a 16861 pixeles, no 50000
         for c in "RGB":
             assert p.capas[c].contraste > 30, f"{clave} {c}: contraste con la meseta {p.capas[c].contraste}"
             assert p.capas[c].iqr < 30
