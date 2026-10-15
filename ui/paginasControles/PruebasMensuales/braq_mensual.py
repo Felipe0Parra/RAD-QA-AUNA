@@ -26,6 +26,13 @@ from services.lecturas_del_maximo import (
     validar_roles, lecturas_por_voltaje, texto_espejo)
 import traceback
 
+# BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md): las 10 posiciones fijas de la tabla "MEDIDAS MÁXIMO DE LA CÁMARA" en UN solo
+# sitio. Las usan `generar_tabla_medidas` (al construir la pantalla) y `_tablas_de_medida_en_blanco` (al limpiar y al pasar a una
+# fecha sin calibración): así «la tabla en blanco» y «la tabla recién construida» no pueden divergir. Los voltajes por defecto
+# viven en `services/lecturas_del_maximo.py` (VOLTAJES_POR_DEFECTO, V.5).
+POSICIONES_POR_DEFECTO = ("127.5", "127", "126.5", "126", "125.5", "125", "124.5", "124", "123.5", "123")
+
+
 class PruebaMensualBraq(PruebaBasico):
     def __init__(self, user_id):
         #print("PruebaMensualBraq      __init__ called")
@@ -71,70 +78,103 @@ class PruebaMensualBraq(PruebaBasico):
             conn.close()
 
     def actualizar_ref_bd(self, fecha=None):
-        """Actualiza self.ref_bd cuando cambia la fecha"""
+        """BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md, cierra `DP-44`/`DP-158`): ÚNICO manejador de `date_box.dateChanged`.
+
+        Resuelve el `ref` de la calibración UNA vez -- con la regla del guardado: vigente, `tipo` = el de la casilla elegida, fecha
+        en los dos formatos de `DP-32` -- y trae TODO lo guardado de ESA calibración por ese `ref`. Antes había siete manejadores:
+        el de `TipoCalibracion` elegía por (fecha, tipo), pero los otros cinco leían las tablas hijas SOLO por la fecha, así que con
+        dos calibraciones el mismo día (cambio de fuente y redundante) la pantalla mezclaba las dos y el guardado se rechazaba con
+        `UNIQUE constraint failed: MaximosCamaras.ref, MaximosCamaras.posicion`.
+
+          - Hay calibración: `self.ref_bd = ref` y se muestran sus seis tablas.
+          - No la hay y la pantalla mostraba una calibración guardada (`self.ref_bd` no era `None`): `self.ref_bd = None`, los campos
+            de línea se limpian (`limpiar_todos_los_campos`, como siempre) y TAMBIÉN las dos tablas de medida y la actividad del
+            monitor: antes se quedaban con las medidas del otro día, y guardarlas las habría archivado bajo la fecha nueva.
+          - No la hay y tampoco se mostraba ninguna (`None -> None`: el físico escribe un control nuevo y ajusta la fecha):
+            no se toca nada de lo escrito.
+
+        En los tres casos el DÍA de la «Fecha del control» (`fecha_cal`) sigue a la fecha de arriba (ver el comentario de abajo).
+        """
         fecha = self.date_box.date()
+        db = self.opeenDatabase()
+        if not db:
+            return
 
-        def consulta_db(fecha_consulta):
-            # Pasar de el formato guardado "yyyy/MM/dd HH:mm:ss" a "yyyy/MM/dd"
-            fecha_consulta = fecha_consulta.toString("yyyy-MM-dd")
-            conn = Conexion().conectar()
-            cursor = conn.cursor()
+        leyo, ref = self._ref_de_la_calibracion(db, fecha)
+        if not leyo:
+            return
 
-            # C1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): antes
-            # resolvía por fecha a secas y desempataba con `ORDER BY id
-            # DESC` -- con dos calibraciones el mismo día (una "Cambio de
-            # fuente" y una "Calibración Redundante", estado que EB6 volvió
-            # soportado), siempre ganaba la de `id` más alto sin importar
-            # cuál seleccionó el físico. El guardado ya discrimina por
-            # (DATE(fecha), tipo) -- esta lectura ahora pregunta lo mismo.
-            tipo = self._tipo_calibracion_seleccionado()
-            cursor.execute(
-                "SELECT id FROM TipoCalibracion WHERE DATE(fecha) = ? AND tipo = ?"
-                f"{filtro_activo('TipoCalibracion')} ORDER BY id DESC",
-                (fecha_consulta, tipo))
-            result = cursor.fetchone()
-            print(f"Consulta para fecha {fecha_consulta}: {result}")
+        # BM.1, DECISION VETABLE POR EL FISICO (diagnosticada por Opus el 15-10, opcion (c)): `guardar_DB` guarda la calibración con la
+        # «Fecha del control» (`fecha_cal`), NO con la de arriba (`date_box`). Sin esto, abrir una calibración y pasar a otro día para
+        # escribir un control NUEVO lo guardaba, en silencio, con la fecha de la calibración abierta -- y la anulaba (antes de BM.1 el
+        # UNIQUE lo frenaba por accidente). El DÍA de `fecha_cal` sigue a la fecha de arriba; la HORA no se toca. Si hay calibración,
+        # su fecha guardada se pone a continuación (`_cargar_tipo_calibracion`) y manda.
+        if hasattr(self, 'fecha_cal'):
+            self.fecha_cal.setDate(fecha)
 
-            if result:
-                ref_bd = result[0]
-            else:
-                ref_bd = None
-
-            conn.close()
-            return ref_bd
-
-        nuevo_ref_bd = consulta_db(fecha)
-
-        if nuevo_ref_bd != self.ref_bd:
-            self.ref_bd = nuevo_ref_bd
+        if ref is not None:
+            self.ref_bd = ref
             print(f"ref_bd actualizado a: {self.ref_bd}")
+            self._mostrar_calibracion(db, ref)
+        elif self.ref_bd is not None:
+            print("No se encontró ref_bd para la fecha seleccionada")
+            self.ref_bd = None
+            self.limpiar_todos_los_campos()
+            self._tablas_de_medida_en_blanco()
+            self.ref.setText("")
 
-            # Recargar los datos si hay un nuevo ref_bd
-            if self.ref_bd is not None:
-                print("Nuevo ref_bd encontrado, recargando datos...")
-                # Recargar los datos en los widgets
-                # Buscar el DataFrame correcto para esta clase
-                df_para_recargar = None
-                if hasattr(self, 'df_tac'):  # Para PruebaMensualTAC
-                    df_para_recargar = self.df_tac
-                elif hasattr(self, 'datos_tabla') and hasattr(self, 'diccionario_invertido'):  # Para PruebaMensualBraq
-                    # Necesitamos el df original, vamos a buscarlo
-                    archivo = 'widgets.xlsx'
+    def _ref_de_la_calibracion(self, db, fecha):
+        """BM.1: `(leyó, ref)` -- el `id` de la calibración VIGENTE de (fecha, tipo elegido), o `None` si no hay. `leyó` es
+        `False` si la consulta falló (entonces no se debe tocar el formulario). La fecha se compara en los DOS formatos de `DP-32`
+        (`YYYY-MM-DD ...` y `DD-MM-YYYY`): sin el segundo, la redundante del 27-09-2025 (ref 15, fecha `27-09-2025`) no se abre.
+        C1: el tipo lo decide la casilla marcada (`_tipo_calibracion_seleccionado`), la MISMA regla del guardado."""
+        fecha_str = fecha.toString("yyyy-MM-dd")
+        query = QSqlQuery(db)
+        query.prepare(f"""
+            SELECT id FROM TipoCalibracion
+            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?)
+            AND tipo = ?{filtro_activo('TipoCalibracion')} ORDER BY id DESC
+        """)
+        query.addBindValue(fecha_str)
+        query.addBindValue(fecha_str)
+        query.addBindValue(self._tipo_calibracion_seleccionado())
+        if not query.exec():
+            print(f"Error en consulta de la calibración: {query.lastError().text()}")
+            return False, None
+        ref = query.value(0) if query.next() else None
+        query.finish()
+        return True, ref
 
+    def _tablas_de_medida_en_blanco(self):
+        """BM.1: UNA definición de «las dos tablas de medida en blanco» -- posiciones estándar (`POSICIONES_POR_DEFECTO`), voltajes
+        por defecto (`VOLTAJES_POR_DEFECTO`), medidas vacías y promedios en «-». La usan «Limpiar» (`clean_info`), el paso a una
+        fecha sin calibración y la carga de una calibración (que las deja en blanco ANTES de llenarlas, para que una con menos
+        filas no conserve restos de la anterior)."""
+        for fila, posicion in zip(getattr(self, "campos_maximos", []), POSICIONES_POR_DEFECTO):
+            # [posición, medida1, medida2, promedio(RO)]
+            fila[0].setText(posicion)
+            fila[1].clear()
+            fila[2].clear()
+            fila[3].setText("-")
+        for fila, voltaje in zip(getattr(self, "campos_lecturas", []), VOLTAJES_POR_DEFECTO):
+            # [voltaje, medida1, medida2, medida3, promedio(RO)]
+            fila[0].setText(voltaje)
+            fila[1].clear()
+            fila[2].clear()
+            fila[3].clear()
+            fila[4].setText("-")
 
-                if df_para_recargar is not None:
-                    # Cargar cada tabla en su categoría correcta
-                    self.addsomething(self.category1, df_para_recargar, "tipo", "TipoCalibracion", "id", self.ref_bd)
-                    self.addsomething(self.category2, df_para_recargar, "sistema", "SistemaMedicion", "ref", self.ref_bd)
-                    self.addsomething(self.category3, df_para_recargar, "condiciones", "CondicionesMedicion", "ref", self.ref_bd)
-                    self.addsomething(self.category6, df_para_recargar, "observaciones", "CondicionesMedicion", "ref", self.ref_bd)
-                    print("Datos recargados exitosamente")
-                else:
-                    print("No se pudo encontrar el DataFrame para recargar")
-            else:
-                print("No se encontró ref_bd para la fecha seleccionada")
-                # Limpiar los campos si no hay datos
-                self.limpiar_todos_los_campos()
+    def _mostrar_calibracion(self, db, ref):
+        """BM.1: pone en el formulario todo lo guardado de la calibración `ref`, leído SIEMPRE por `ref` (el id con que el guardado
+        escribe las seis tablas). Mismo orden que tenían los siete manejadores: el orden de lo que se pone es parte del
+        comportamiento (p. ej. `serie` dispara el cálculo de `fecha_cer`, que después se sobrescribe con la guardada)."""
+        self._tablas_de_medida_en_blanco()
+        self._cargar_tipo_calibracion(db, ref)
+        self._cargar_sistema_medicion(db, ref)
+        self._cargar_medidas_maximo(db, ref)
+        self._cargar_condiciones_medicion(db, ref)
+        self._cargar_lecturas_maximo(db, ref)
+        self._cargar_actividad_monitor(db, ref)
 
     def limpiar_todos_los_campos(self):
         """Limpia los campos de todas las categorías cuando no hay datos para la fecha seleccionada"""
@@ -491,7 +531,7 @@ class PruebaMensualBraq(PruebaBasico):
         grid = QGridLayout()
 
         titulos = ["Posiciones (mm)", "Medida 1 (nA)", "Medida 2 (nA)", "Promedio (nA)"]
-        posiciones = ["127.5", "127", "126.5", "126", "125.5", "125", "124.5", "124", "123.5", "123"]
+        posiciones = list(POSICIONES_POR_DEFECTO)    # BM.1: una sola definición de las 10 posiciones
 
         self.campos_maximos = []
 
@@ -719,22 +759,16 @@ class PruebaMensualBraq(PruebaBasico):
         tocaba. Se limpian solo las celdas EDITABLES (las medidas); las
         columnas de posición/voltaje son etiquetas de referencia fijas
         (estado de fábrica desde la construcción de la tabla, no dato del
-        físico) y el promedio vuelve a "-", su valor de fábrica."""
+        físico) y el promedio vuelve a "-", su valor de fábrica.
+
+        BM.1: «las dos tablas en blanco» tiene UNA definición
+        (`_tablas_de_medida_en_blanco`), la misma que usa el paso a una
+        fecha sin calibración. V.5: el voltaje YA NO es de solo lectura --
+        «Limpiar» lo devuelve a su valor por defecto en vez de dejarlo como
+        estaba; y ahora repone también las posiciones (antes no lo hacía:
+        una posición alterada o heredada de otro día se quedaba)."""
         super().clean_info(imagenes)
-        for fila in getattr(self, "campos_maximos", []):
-            # [posición(RO), medida1, medida2, promedio(RO)]
-            fila[1].clear()
-            fila[2].clear()
-            fila[3].setText("-")
-        # V.5: el voltaje YA NO es de solo lectura (RO) -- "Limpiar" lo
-        # devuelve a su valor por defecto en vez de dejarlo como estaba.
-        for fila, voltaje_predeterminado in zip(getattr(self, "campos_lecturas", []), VOLTAJES_POR_DEFECTO):
-            # [voltaje, medida1, medida2, medida3, promedio(RO)]
-            fila[0].setText(voltaje_predeterminado)
-            fila[1].clear()
-            fila[2].clear()
-            fila[3].clear()
-            fila[4].setText("-")
+        self._tablas_de_medida_en_blanco()
 
     """Extrae la info ingresada en la tabla de los máximos de la cámara                                                                                                                                                 """
     def extraer_datos_medidas(self):
@@ -1323,73 +1357,31 @@ class PruebaMensualBraq(PruebaBasico):
 
         self.search_bar.textChanged.connect(self.filtrarTabla)
         if hasattr(self, 'date_box'):
-            self.date_box.dateChanged.connect(self.cargar_monthtest_desde_db)
-            self.date_box.dateChanged.connect(self.cargar_monthtest_desde_db_condiciones)
-            self.date_box.dateChanged.connect(self.mapear_tabla_medidas)
-            self.date_box.dateChanged.connect(self.cargar_monthtest_desde_db_parametros)
-            self.date_box.dateChanged.connect(self.mapear_tabla_maximos)
+            # BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md): UNA sola conexión a la fecha. Antes eran siete manejadores, y los cinco
+            # de las tablas hijas leían por la FECHA, no por el `ref` de la calibración que el de `TipoCalibracion` había elegido
+            # por (fecha, tipo): con dos calibraciones el mismo día se mezclaban (`DP-44`/`DP-158`). Ahora `actualizar_ref_bd`
+            # resuelve el `ref` una vez y trae las seis tablas por ese `ref`.
             self.date_box.dateChanged.connect(self.actualizar_ref_bd)
-            self.date_box.dateChanged.connect(self.cargar_monthtest_desde_db_act)
 
 
-    def cargar_monthtest_desde_db(self, fecha=None):
-        """
-
-        Esta función accesa a las bases de datos asociadas con la prueba mensual, busca las lineas en las que está
-        cada uno de los widgets, compara si hay un valor en la base de datos y finalmente mapea este valor.
-        Esto se hace con el fin de tener mayor control de los QA que se hacen mensualmente y si se requiere algún
-        tipo de edición o validación.
-
-        """
-
-        if fecha is None:
-            fecha = self.date_box.date()
-
-
-        # Convertir QDate a string en formato compatible con la BD
-        fecha_str = fecha.toString("yyyy-MM-dd")
-
-
-        db = self.opeenDatabase()
-        if not db:
-            return
-
+    def _cargar_tipo_calibracion(self, db, ref):
+        """BM.1: `TipoCalibracion` de la calibración `ref`. Es una lectura de IDENTIDAD (`WHERE id = ?`, DA-47): no filtra
+        vigencia, porque el `ref` ya viene resuelto por (fecha, tipo) entre las vigentes y filtrar solo podría vaciar el formulario.
+        Pone lo mismo que ponía el manejador por fecha, en el mismo orden: fecha del control, serie (que dispara
+        `obtener_fecha_desde_serial`), certificado, conversión, intensidad y, al final, la fecha del certificado GUARDADA -- la
+        última manda sobre la que dedujo el serial."""
+        query = QSqlQuery(db)
+        query.prepare("""
+            SELECT fecha, serie, certificado, conversion, intensidad, fecha_cer
+            FROM TipoCalibracion WHERE id = ?
+        """)
+        query.addBindValue(ref)
         try:
-            query = QSqlQuery(db)
-            print("consultando db")
-            # Preparar la consulta
-            # LR3 (DA-47/DA-48): lectura de BLOQUE por fecha (DP-32: la
-            # fecha viene en dos formatos). El OR va entre paréntesis para
-            # que el AND del filtro no se lo coma.
-            # C1 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase C, R5): esta
-            # carga del formulario completo tenía el mismo hueco que
-            # actualizar_ref_bd -- sin discriminar tipo, dos calibraciones
-            # el mismo día hacían ganar la de `id` más alto. Cuarto sitio,
-            # no nombrado en el plan original: misma clase de defecto,
-            # descubierto al calibrar el tripwire C2.
-            tipo = self._tipo_calibracion_seleccionado()
-            query.prepare(f"""
-                SELECT * FROM TipoCalibracion
-                WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?)
-                AND tipo = ?
-                {filtro_activo('TipoCalibracion')} ORDER BY id DESC
-            """)
-            query.addBindValue((fecha_str))
-            query.addBindValue((fecha_str))
-            query.addBindValue((tipo))
-            #query.addBindValue(str(self.user_id))
-            print(fecha_str)
             if not query.exec():
                 print(f"Error en consulta: {query.lastError().text()}")
-                db.close()
                 return
-
-
             if query.next():
                 record = query.record()
-                print(str(query.value(record.indexOf('fecha'))))
-                columnas_numericas = ['serie', 'certificado', 'conversion', 'calibracion', 'electrometro', 't0', 'p0', 'h0', 'ref']
-                print("Usted está está debugeando aquí: Prueba mensual braq, cargar monthtest")
                 try:
                     if hasattr(self, 'fecha_cal'):
                         fecha_cal = QDateTime.fromString(str(query.value(record.indexOf('fecha'))), "yyyy-MM-dd HH:mm:ss")
@@ -1407,83 +1399,29 @@ class PruebaMensualBraq(PruebaBasico):
                         self.fecha_cer.setDateTime(qdatetime)
                 except Exception as e:
                     print("Error garrafal: ", e)
+        finally:
+            query.finish()
 
-
-            print("consultando db")
-            # Preparar la consulta
-
-
-
-        except Exception as e:
-            print(e)
-            QMessageBox.warning(self, "Atencion", "No hay controles para la fecha especificada")
-
-
-    def cargar_monthtest_desde_db_condiciones(self, fecha=None):
-        """
-        Esta función accesa a las bases de datos asociadas con la prueba mensual, busca las lineas en las que está
-        cada uno de los widgets, compara si hay un valor en la base de datos y finalmente mapea este valor.
-        Esto se hace con el fin de tener mayor control de los QA que se hacen mensualmente y si se requiere algún
-        tipo de edición o validación.
-
-        """
-        if fecha is None:
-            fecha = self.date_box.date()
-
-        # Convertir QDate a string en formato compatible con la BD
-        fecha_str = fecha.toString("yyyy-MM-dd")
-
-
-        db = self.opeenDatabase()
-        if not db:
-            return
-
+    def _cargar_sistema_medicion(self, db, ref):
+        """BM.1: `SistemaMedicion` de la calibración `ref` (equipos y valores históricos). Se piden también los valores HISTÓRICOS
+        y los dos ids de identidad (`T.0`/`T.1`): los ids solo POSICIONAN el combo; lo que se muestra sale de esta misma copia."""
+        query = QSqlQuery(db)
+        query.prepare(f"""
+            SELECT modelo, serie_cp, modelo_elec, serie_ele,
+                   calibracion, electrometro, t0, p0, h0,
+                   equipo_id_cp, equipo_id_ele FROM SistemaMedicion
+            WHERE ref = ?{filtro_activo('SistemaMedicion')}
+        """)
+        query.addBindValue(ref)
         try:
-            query = QSqlQuery(db)
-            print("consultando db")
-            # Preparar la consulta
-            # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas explícitas
-            # -- son las 4 que se leen más abajo (modelo, serie_cp,
-            # modelo_elec, serie_ele), por nombre en los 4 casos.
-            # T.1 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §2): se piden
-            # también los valores HISTÓRICOS y los dos ids de identidad
-            # (`T.0`). Los ids solo POSICIONAN el combo; los valores que se
-            # muestran salen de esta misma copia, nunca del catálogo.
-            query.prepare(f"""
-                SELECT modelo, serie_cp, modelo_elec, serie_ele,
-                       calibracion, electrometro, t0, p0, h0,
-                       equipo_id_cp, equipo_id_ele FROM SistemaMedicion
-                WHERE (DATE(fecha) = ?
-                OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('SistemaMedicion')}
-
-            """)
-            query.addBindValue((fecha_str))
-            # T.1 (§0.9): el segundo `?` es la MISMA fecha reconstruida desde
-            # el formato `DD/MM/YYYY`; enlazaba `str(self.user_id)`, así que
-            # esa segunda condición no casaba nunca. Hoy no tenía efecto --
-            # [medido] las 15 filas de SistemaMedicion están en ISO -- pero
-            # cualquier fila guardada como DD/MM/YYYY era invisible.
-            query.addBindValue((fecha_str))
-            print(fecha_str)
             if not query.exec():
                 print(f"Error en consulta: {query.lastError().text()}")
-
                 return
-
-
             if query.next():
-                record = query.record()
-
-                columnas_numericas = []
                 try:
-                    self._restaurar_equipos_guardados(query, record)
+                    self._restaurar_equipos_guardados(query, query.record())
                 except Exception as e:
                     print("Error en equipos: ", e)
-
-            else:
-                raise ValueError("Error")
-        except Exception as e:
-            print(e)
         finally:
             query.finish()
 
@@ -1548,207 +1486,104 @@ class PruebaMensualBraq(PruebaBasico):
 
 
 
-    def cargar_monthtest_desde_db_parametros(self, fecha=None):
-        if fecha is None:
-            fecha = self.date_box.date()
-
-        # Convertir QDate a string en formato compatible con la BD
-        fecha_str = fecha.toString("yyyy-MM-dd")
-
-
-        db = self.opeenDatabase()
-        if not db:
-            return
-
+    def _cargar_condiciones_medicion(self, db, ref):
+        """BM.1: `CondicionesMedicion` (t, p, h) de la calibración `ref`."""
         query = QSqlQuery(db)
         query.prepare(f"""
             SELECT t,p,h FROM CondicionesMedicion
-            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('CondicionesMedicion')}
-
+            WHERE ref = ?{filtro_activo('CondicionesMedicion')}
         """)
-        query.addBindValue((fecha_str))
-        query.addBindValue((fecha_str))
-        if not query.exec():
-            print(f"Error en consulta parametros: {query.lastError().text()}")
+        query.addBindValue(ref)
+        try:
+            if not query.exec():
+                print(f"Error en consulta parametros: {query.lastError().text()}")
+                return
+            if query.next():
+                record = query.record()
+                self.t.setText(str(query.value(record.indexOf('t'))))
+                self.p.setText(str(query.value(record.indexOf('p'))))
+                self.h.setText(str(query.value(record.indexOf('h'))))
+        finally:
+            query.finish()
 
-            return
-
-        if query.next():
-            record = query.record()
-            print("temperatura para tin")
-            print(query.value(record.indexOf('t')))
-            print(f"widget t: {self.t}, visible: {self.t.isVisible()}, parent: {self.t.parent()}")
-            self.t.setText(str(query.value(record.indexOf('t'))))
-            print(f"texto después de set: {self.t.text()}")
-
-
-            self.p.setText(str(query.value(record.indexOf('p'))))
-
-
-            self.h.setText(str(query.value(record.indexOf('h'))))
-
-
-    def cargar_monthtest_desde_db_act(self, fecha=None):
-        if fecha is None:
-            fecha = self.date_box.date()
-
-        # Convertir QDate a string en formato compatible con la BD
-        fecha_str = fecha.toString("yyyy-MM-dd")
-
-
-        db = self.opeenDatabase()
-        if not db:
-            return
-
+    def _cargar_actividad_monitor(self, db, ref):
+        """BM.1: `ResultadosActividad.actividad_monitor` de la calibración `ref` (la actividad de la fuente en el monitor)."""
         query = QSqlQuery(db)
         query.prepare(f"""
             SELECT actividad_monitor FROM ResultadosActividad
-            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('ResultadosActividad')}
-
+            WHERE ref = ?{filtro_activo('ResultadosActividad')}
         """)
-        query.addBindValue((fecha_str))
-        query.addBindValue((fecha_str))
-        if not query.exec():
+        query.addBindValue(ref)
+        try:
+            if not query.exec():
+                print(f"Error en consulta parametros: {query.lastError().text()}")
+                return
+            if query.next():
+                record = query.record()
+                self.ref.setText(str(query.value(record.indexOf('actividad_monitor'))))
+        finally:
+            query.finish()
 
-            print(f"Error en consulta parametros: {query.lastError().text()}")
-
-            return
-
-        if query.next():
-            record = query.record()
-
-            self.ref.setText(str(query.value(record.indexOf('actividad_monitor'))))
-
-
-
-
-
-
-    def cargar_medidas_desde_db(self, fecha_str):
-
-        db = self.opeenDatabase()
-        if not db:
-            return []
-
+    def _cargar_medidas_maximo(self, db, ref):
+        """BM.1: «MEDIDAS MÁXIMO DE LA CÁMARA» de la calibración `ref` -- sus 10 filas (posición, medida 1, medida 2, promedio),
+        de mayor a menor posición. La tabla ya se dejó en blanco antes (`_mostrar_calibracion`)."""
         query = QSqlQuery(db)
         query.prepare(f"""
             SELECT posicion, medida1, medida2, promedio
             FROM MaximosCamaras
-            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('MaximosCamaras')}
+            WHERE ref = ?{filtro_activo('MaximosCamaras')}
             ORDER BY posicion DESC
         """)
-        query.addBindValue((fecha_str))
-        query.addBindValue((fecha_str))
+        query.addBindValue(ref)
+        try:
+            if not query.exec():
+                print(f"Error en consulta mapeo: {query.lastError().text()}")
+                return
+            fila = 0
+            while query.next() and fila < len(self.campos_maximos):
+                for columna in range(4):
+                    self.campos_maximos[fila][columna].setText(str(query.value(columna)))
+                fila += 1
+        finally:
+            query.finish()
 
+    def _cargar_lecturas_maximo(self, db, ref):
+        """BM.1: «LECTURAS DEL MÁXIMO» de la calibración `ref`. Sin `ORDER BY ... LIMIT 3` por fecha: con `ref` hay exactamente
+        las 3 filas vigentes del bloque, y `lecturas_por_voltaje` no depende del orden en que lleguen (V.3).
 
-
-        if not query.exec():
-            print(f"Error en consulta mapeo: {query.lastError().text()}")
-            db.close()
-            return
-
-        registros = []
-        while query.next():
-            registros.append((
-                query.value(0),
-                query.value(1),
-                query.value(2),
-                query.value(3)
-            ))
-
-
-        return registros
-
-    def mapear_tabla_medidas(self, fecha=None):
-        if fecha is None:
-            fecha = self.date_box.date()
-
-        fecha_str = fecha.toString("yyyy-MM-dd")
-
-        registros = self.cargar_medidas_desde_db(fecha_str)
-
-        for fila, datos in enumerate(registros):
-            if fila >= len(self.campos_maximos):
-                break
-
-            posicion, m1, m2, prom = datos
-
-            self.campos_maximos[fila][0].setText(str(posicion))
-            self.campos_maximos[fila][1].setText(str(m1))
-            self.campos_maximos[fila][2].setText(str(m2))
-            self.campos_maximos[fila][3].setText(str(prom))
-
-
-    def cargar_maximos_desde_db(self, fecha_str):
-
-        db = self.opeenDatabase()
-        if not db:
-            return []
-
+        V.3 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): las columnas V_300/V_150/Vn_300 guardan el PAPEL alto/bajo/negativo -- no
+        «medida 1/2/3» de la fila que la BD entregó (el contrato completo vive en services/lecturas_del_maximo.py)."""
         query = QSqlQuery(db)
         query.prepare(f"""
             SELECT voltaje, V_300, V_150, Vn_300, promediosV
             FROM LecturasMaximos
-            WHERE (DATE(fecha) = ? OR DATE(SUBSTR(fecha, 7, 4) || '-' || SUBSTR(fecha, 4, 2) || '-' || SUBSTR(fecha, 1, 2)) = ?){filtro_activo('LecturasMaximos')}
-            ORDER BY DATE(fecha) DESC
-            LIMIT 3
+            WHERE ref = ?{filtro_activo('LecturasMaximos')}
         """)
-        query.addBindValue((fecha_str))
-        query.addBindValue((fecha_str))
-
-
-        if not query.exec():
-            print(f"Error en consulta mapeo maximos: {query.lastError().text()}")
-            db.close()
-            return
-
-        registros = []
-        while query.next():
-
-
-            registros.append((
-                query.value(0),
-                query.value(1),
-                query.value(2),
-                query.value(3),
-                query.value(4)
-            ))
-
-        # V.3 (PLAN_VOLTAJES_EDITABLES_BRAQUI_28-09.md): las columnas
-        # V_300/V_150/Vn_300 guardan el PAPEL alto/bajo/negativo -- no
-        # "medida 1/2/3" de la fila que la BD entregó (el contrato completo
-        # vive en services/lecturas_del_maximo.py). Antes se devolvían tal
-        # cual, leídas por fila: en el ref 24 (Calibración Redundante del
-        # 29-12-2025) esto mostraba un promedio que no correspondía a las
-        # medidas de su propia fila.
-        if not registros:
-            return registros
+        query.addBindValue(ref)
         try:
-            return [(v, m[0], m[1], m[2], p) for v, m, p in lecturas_por_voltaje(registros)]
+            if not query.exec():
+                print(f"Error en consulta mapeo maximos: {query.lastError().text()}")
+                return
+            registros = []
+            while query.next():
+                registros.append(tuple(query.value(columna) for columna in range(5)))
+        finally:
+            query.finish()
+
+        if not registros:
+            return
+        try:
+            filas = [(v, m[0], m[1], m[2], p) for v, m, p in lecturas_por_voltaje(registros)]
         except VoltajesInvalidos as e:
             print(f"Bloque de lecturas del máximo inválido para recargar: {e}")
-            return []
-
-    def mapear_tabla_maximos(self, fecha=None):
-        if fecha is None:
-            fecha = self.date_box.date()
-
-        fecha_str = fecha.toString("yyyy-MM-dd")
-
-        registros = self.cargar_maximos_desde_db(fecha_str)
-
-        # V.3: filas en orden alto, bajo, negativo (i=0,1,2) -- el
-        # `if fila >= len(self.campos_maximos)` de antes comparaba contra
-        # la tabla de POSICIONES ("MEDIDAS MÁXIMO DE LA CÁMARA"), no la de
-        # voltajes; con lecturas_por_voltaje llegan como mucho 3 filas,
-        # tantas como self.campos_lecturas.
-        for fila, (voltaje, v300, v150, vn300, prom) in enumerate(registros):
+            return
+        # filas en orden alto, bajo, negativo (0, 1, 2): tantas como self.campos_lecturas
+        for fila, (voltaje, v300, v150, vn300, prom) in enumerate(filas):
             self.campos_lecturas[fila][0].setText(str(voltaje))
             self.campos_lecturas[fila][1].setText(str(v300))
             self.campos_lecturas[fila][2].setText(str(v150))
             self.campos_lecturas[fila][3].setText(str(vn300))
             self.campos_lecturas[fila][4].setText(str(prom))
-
 
     def plotter_mensual_desde_menu(self, selected_chart):
         """Método para graficar cuando se selecciona desde el menú"""
@@ -1771,14 +1606,18 @@ class PruebaMensualBraq(PruebaBasico):
             # LR3 (DA-47/DA-48): ver el gemelo de braquiterapia.py --
             # `tc` entra por fecha, necesita su propio filtro.
             filtro_tc = filtro_activo('TipoCalibracion').replace("activo", "tc.activo")
+            # BM.1: se une por `ref` a la calibración del TIPO elegido (`_tipo_calibracion_seleccionado`, la misma regla del
+            # guardado y de la recarga). Sin el tipo, un día con dos calibraciones (cambio de fuente y redundante) dibujaba como
+            # UNA sola curva los 20 puntos de las dos.
             query.prepare(f"""
                 SELECT mc.posicion, mc.promedio
                 FROM MaximosCamaras mc
                 JOIN TipoCalibracion tc ON mc.ref = tc.id
-                WHERE DATE(tc.fecha) = ?{filtro_tc}{filtro_mc}
+                WHERE DATE(tc.fecha) = ? AND tc.tipo = ?{filtro_tc}{filtro_mc}
                 ORDER BY mc.posicion ASC
             """)
             query.bindValue(0, fecha)
+            query.bindValue(1, self._tipo_calibracion_seleccionado())
             query.exec_()
 
             posiciones = []

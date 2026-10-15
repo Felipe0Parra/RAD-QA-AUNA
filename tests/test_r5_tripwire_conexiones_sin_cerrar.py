@@ -321,10 +321,9 @@ SITIOS_LECTURA_REVISADOS = {
     # `actualizar_ref_bd` y `consulta_db`: la lista encoge 43 -> 41 (la regla de drenaje de DP-77, aplicada por una tarea que ya tenia sus pruebas).
     ("ui/paginasControles/PruebasDiarias/braquiterapia.py", "construir_tablas_reporte_linealidad"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", "actualizar_ref_bd"):
-        "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", "consulta_db"):
-        "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
+    # BM.1 (15-10): retiradas las entradas de `braq_mensual.py::actualizar_ref_bd` (y su funcion anidada `consulta_db`): la funcion se reescribio y ya no
+    # abre una conexion `sqlite3` propia -- resuelve el ref y lee las seis tablas por QtSql, como los cargadores que reemplaza (la regla de drenaje de
+    # DP-77, aplicada por una tarea que ya tenia sus pruebas): la lista encoge 41 -> 39.
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", "mostrar_tabla_lecturas"):
         "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", "mostrar_tabla_maximos"):

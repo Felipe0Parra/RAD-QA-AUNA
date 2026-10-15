@@ -319,17 +319,22 @@ CENSO_RAICES = {
         (LISTA, "reporte diario del Clinac 600 por fecha"),
 
     # -- ui/PruebasMensuales ---------------------------------------------
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 91, "TipoCalibracion"):  # PI.9 (05-10): 149->91
-        (LISTA, "actualizar_ref_bd: id de la calibración registrada esa fecha"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1135, "TipoCalibracion"):  # V.5 (28-09): 1109->1184; P.1 (28-09): 1184->1194; RC.1 (30-09): 1194->1193; PI.9 (05-10): 1193->1135
+    # BM.1 (15-10): retirada la entrada de `actualizar_ref_bd` (antes en la linea 91): ya no resuelve el id con una consulta propia por
+    # `sqlite3`; la resolucion vive en `_ref_de_la_calibracion` (entrada nueva mas abajo, misma categoria LISTA).
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 133, "TipoCalibracion"):  # BM.1 (15-10): sitio nuevo (`_ref_de_la_calibracion`); BM.1 (15-10, fecha_cal): 123->133
+        (LISTA, "_ref_de_la_calibracion: id de la calibración vigente de (fecha, tipo elegido), admitiendo los dos formatos de fecha (DP-32)"),
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1169, "TipoCalibracion"):  # V.5 (28-09): 1109->1184; P.1 (28-09): 1184->1194; RC.1 (30-09): 1194->1193; PI.9 (05-10): 1193->1135; BM.1 (15-10): 1135->1159; BM.1 (15-10, fecha_cal): 1159->1169
         (LISTA, "última calibración registrada con tipo 'Cambio de fuente'"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1149, "TipoCalibracion"):  # V.5 (28-09): 1123->1198; P.1 (28-09): 1198->1208; RC.1 (30-09): 1208->1207; PI.9 (05-10): 1207->1149
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1183, "TipoCalibracion"):  # V.5 (28-09): 1123->1198; P.1 (28-09): 1198->1208; RC.1 (30-09): 1208->1207; PI.9 (05-10): 1207->1149; BM.1 (15-10): 1149->1173; BM.1 (15-10, fecha_cal): 1173->1183
         (IDENTIDAD, "datos de la calibración ya localizada, WHERE id = ?"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1371, "TipoCalibracion"):  # V.5 (28-09): 1344->1419; P.1 (28-09): 1419->1430; RC.1 (30-09): 1430->1429; PI.9 (05-10): 1429->1371
-        (LISTA, "calibración por fecha, admitiendo los dos formatos (DP-32)"),
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1774, "TipoCalibracion"):  # V.5 (28-09): 1747->1822; P.1 (28-09): 1822->1833; RC.1 (30-09): 1833->1832; PI.9 (05-10): 1832->1774
+    # BM.1 (15-10): retirada la entrada de `cargar_monthtest_desde_db` (antes en la linea 1371, calibracion por fecha en los dos formatos):
+    # el manejador ya no existe; su lectura de `TipoCalibracion` pasa a ser `_cargar_tipo_calibracion` (IDENTIDAD, `WHERE id = ?`) y la
+    # resolucion por fecha y tipo es `_ref_de_la_calibracion` (LISTA). Ambas entradas nuevas estan mas abajo.
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1374, "TipoCalibracion"):  # BM.1 (15-10): sitio nuevo (`_cargar_tipo_calibracion`); BM.1 (15-10, fecha_cal): 1364->1374
+        (IDENTIDAD, "_cargar_tipo_calibracion: datos de la calibración YA resuelta por (fecha, tipo), WHERE id = ?"),
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1612, "TipoCalibracion"):  # V.5 (28-09): 1747->1822; P.1 (28-09): 1822->1833; RC.1 (30-09): 1833->1832; PI.9 (05-10): 1832->1774; BM.1 (15-10): 1774->1602; BM.1 (15-10, fecha_cal): 1602->1612
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3038"),  # V.4 (28-09): 3033->3038
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1803, "LinealidadBraquiterapia"):  # V.5 (28-09): 1776->1851; P.1 (28-09): 1851->1862; RC.1 (30-09): 1862->1861; PI.9 (05-10): 1861->1803
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 1642, "LinealidadBraquiterapia"):  # V.5 (28-09): 1776->1851; P.1 (28-09): 1851->1862; RC.1 (30-09): 1862->1861; PI.9 (05-10): 1861->1803; BM.1 (15-10): 1803->1632; BM.1 (15-10, fecha_cal): 1632->1642
         (LISTA, "gemelo mensual exacto de braquiterapia.py:3067"),  # V.4 (28-09): 3062->3067
     # FS.2 (06-10): se retira la entrada de `actualizar_fisicos` (antes en la linea 273): ya no lee `controles` por su cuenta,
     # pide el control vigente a `services/identidad_control.py::buscar_control_vigente`, que es la UNICA lectura (censada arriba).

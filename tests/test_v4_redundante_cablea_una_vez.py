@@ -134,7 +134,11 @@ class TestElMensualNoCambia:
         mensual = PruebaMensualBraq(_UsuarioFalso())
         assert _receptores(mensual, "btn_add", "clicked") == 2
         assert _receptores(mensual, "aceptar", "clicked") == 3
-        assert _receptores(mensual, "date_box", "dateChanged") == 8
+        # BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md): 8 -> 2. Un `QDateEdit` solo ya trae 1 receptor (interno de Qt); la clase
+        # conectaba SIETE manejadores a `dateChanged` (el de `TipoCalibracion` y los cinco de las tablas hijas leían por la fecha,
+        # DP-44) y ahora conecta UNO (`actualizar_ref_bd`, que resuelve el `ref` y trae las seis tablas por él). Es justo el cambio
+        # que BM.1 hace; el tripwire propio vive en `test_bm1_braqui_reabre_por_ref.py`. Los otros dos números no cambian.
+        assert _receptores(mensual, "date_box", "dateChanged") == 2
 
 
 # ---------------------------------------------------------------------------

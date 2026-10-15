@@ -45,3 +45,9 @@ BD_REBUILD_14_09 = CARPETA_BD / "BaseDatosQA(Rebuild_14-09-2026).db"
 # (Tomógrafo) que el físico analizó ese día, y la 42 (Tomógrafo, 07/2026). La usa
 # el informe PDF de CatPhan (E.1/E.3/E.2 de PLAN_HANDOFF_IMAGENES_22-09.md).
 BD_REBUILD_21_09 = CARPETA_BD / "BaseDatosQA(Rebuild_21-09-2026).db"
+
+# Rebuild del 08-10-2026 (copia del físico, md5 a56c1f81d9ad80ef8958f106470e139a): la que trae los
+# dos controles del 27-09-2026 (refs 37 y 39) con los que el físico vio fallar el guardado del mensual
+# de braquiterapia ("UNIQUE constraint failed: MaximosCamaras.ref, MaximosCamaras.posicion").
+# La usa BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md). SIEMPRE se copia a un temporal antes de abrirla.
+BD_REBUILD_08_10 = CARPETA_BD / "BaseDatosQA(Rebuild_08-10-2026).db"

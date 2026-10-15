@@ -24,6 +24,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import QDate
+from PyQt5.QtSql import QSqlDatabase
 from PyQt5.QtWidgets import QApplication, QDateEdit, QPushButton, QWidget
 
 import data.ManejoDatos.conection as conection_mod
@@ -39,11 +40,22 @@ def app():
     return QApplication.instance() or QApplication([])
 
 
+def _reset_qtsql_default_connection():
+    """Trampa 4: la conexión por omisión de QtSql se cachea por PROCESO."""
+    if QSqlDatabase.contains("qt_sql_default_connection"):
+        QSqlDatabase.database("qt_sql_default_connection").close()
+        QSqlDatabase.removeDatabase("qt_sql_default_connection")
+
+
 @pytest.fixture
 def bd_temporal(monkeypatch, tmp_path):
     ruta = str(tmp_path / "test.db")
     monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: ruta)
     Conexion._instance = None
+    # BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md): `actualizar_ref_bd` ya no resuelve el ref con `sqlite3` sino por QtSql, que cachea
+    # su conexión por omisión por proceso: se suelta aquí para que no apunte a la BD temporal de otro test (Trampa 4). Lo que esta
+    # prueba afirma (el tipo decide el ref) no cambia.
+    _reset_qtsql_default_connection()
     conexion = Conexion()
     con = conexion.con
     # Reproduce el escenario real: dos calibraciones, misma fecha al segundo.
@@ -61,6 +73,7 @@ def bd_temporal(monkeypatch, tmp_path):
     yield con
     conexion.con.close()
     Conexion._instance = None
+    _reset_qtsql_default_connection()
 
 
 def _fecha_qdate():

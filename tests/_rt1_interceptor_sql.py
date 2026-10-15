@@ -183,7 +183,7 @@ SITIOS_CENSALES_PERMITIDOS = {
         "migración (el UPDATE que normaliza ese centinela a NULL): misma "
         "razón que la cuenta de la línea 121, y la otra mitad de la misma "
         "operación -- filtrar una de las dos deja la migración a medias.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 52):  # PI.9 (05-10): 61->52
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 59):  # PI.9 (05-10): 61->52; BM.1 (15-10): 52->59
         "censo/migración (normalizar_fechas_db): reescribe el FORMATO de "
         "`fecha` (DD-MM-YYYY -> YYYY-MM-DD) en las 6 tablas de "
         "braquiterapia, TipoCalibracion incluida. Tiene que alcanzar también "

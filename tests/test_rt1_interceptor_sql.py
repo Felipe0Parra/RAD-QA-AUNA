@@ -356,13 +356,20 @@ class TestDenominadorDeCobertura:
         #             (`PruebaMensual600.actualizar_fisicos`) tambien pide el control vigente a `buscar_control_vigente` en vez de
         #             leer `controles` por su cuenta: SALE esa funcion lectora, no entra ninguna (el ayudante nuevo
         #             `_seleccionar_fisico` solo lee `users`, que no es del bloque de QC).
+        #   106 -> 105 BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md, 15-10): el mensual de braquiterapia deja de tener ocho funciones
+        #             lectoras -- `actualizar_ref_bd`, su anidada `consulta_db` y los seis cargadores por fecha (`cargar_monthtest_desde_db`,
+        #             `_condiciones`, `_parametros`, `_act`, `cargar_medidas_desde_db` y `cargar_maximos_desde_db`) -- y gana siete que leen
+        #             por `ref`: `_ref_de_la_calibracion`, `_cargar_tipo_calibracion`, `_cargar_sistema_medicion`, `_cargar_medidas_maximo`,
+        #             `_cargar_condiciones_medicion`, `_cargar_lecturas_maximo` y `_cargar_actividad_monitor` (medido con
+        #             `bm1_lectoras_rt1.py` sobre HEAD y sobre el arbol: sale lo dicho y entra lo dicho, nada mas). Baja por consolidacion.
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 106, (
+        assert len(lectoras) == 105, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
             f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
             f"inicial, FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) y "
-            f"FS.2 retiró la lectura propia de `actualizar_fisicos` "
-            f"-- 106 funciones esperadas; ahora salen "
+            f"FS.2 retiró la lectura propia de `actualizar_fisicos`, y BM.1 consolidó los ocho lectores por fecha del mensual de "
+            f"braquiterapia en siete que leen por `ref` "
+            f"-- 105 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"

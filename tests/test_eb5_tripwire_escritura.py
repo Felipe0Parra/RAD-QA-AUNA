@@ -181,7 +181,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
         "(QtSql, DA-08) -- gemelo Qt del mecanismo genérico de "
         "guardarEdicion (load.py:4201, más abajo en OPACOS). Tabla y "
         "columna dinámicas (elegidas en la UI), WHERE siempre 'id = ?'.",
-    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 52):  # PI.9 (05-10): 61->52
+    ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 59):  # PI.9 (05-10): 61->52; BM.1 (15-10): 52->59
         "normalizar_fechas_db -- migración de FORMATO de fecha "
         "(DD-MM-YYYY -> YYYY-MM-DD) sobre las 6 tablas de braquiterapia. "
         "Tiene que alcanzar TAMBIÉN las filas anuladas (una anulada con la "

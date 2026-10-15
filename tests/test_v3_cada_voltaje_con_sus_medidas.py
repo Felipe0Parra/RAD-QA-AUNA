@@ -74,7 +74,7 @@ def bd_copia_real(monkeypatch, tmp_path):
 @pytest.fixture
 def qtsql_copia_real(bd_copia_real):
     """La misma copia, abierta por QtSql (lo que usan las funciones del
-    PDF y `mostrar_tabla_lecturas`/`cargar_maximos_desde_db`)."""
+    PDF y `mostrar_tabla_lecturas`/`_cargar_lecturas_maximo`)."""
     if QSqlDatabase.contains("qt_sql_default_connection"):
         QSqlDatabase.database("qt_sql_default_connection").close()
         QSqlDatabase.removeDatabase("qt_sql_default_connection")
@@ -182,6 +182,11 @@ class _UsuarioFalso:
 
 def test_recarga_del_formulario_muestra_cada_voltaje_con_sus_medidas(app, bd_copia_real):
     d = PruebaMensualBraq(_UsuarioFalso())
+    # BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md): la recarga trae la calibración del TIPO elegido, por su `ref`. El 31-08 es un
+    # «Control Mensual», así que la casilla se marca ANTES de mover la fecha, como lo hace el físico. Antes la recarga leía las
+    # tablas hijas por la fecha a secas y esto "funcionaba" con la casilla por defecto («Cambio de fuente») aunque el único control
+    # del día fuera de otro tipo: lo que se afirma abajo (cada voltaje con SUS medidas) no cambia, solo la forma de entrar.
+    d.pri_cal.setChecked(True)
     d.date_box.setDate(QDate(2026, 8, 31))  # emite dateChanged, como el calendario
 
     filas = [[c.text() for c in fila] for fila in d.campos_lecturas]
