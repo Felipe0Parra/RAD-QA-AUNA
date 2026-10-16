@@ -20,6 +20,7 @@ Qué garantiza cada prueba:
 """
 import ast
 import functools
+import gc
 import os
 import types
 import warnings
@@ -71,6 +72,19 @@ def _ct(clave):
             motor._voltear_volumen(ct)
         motor._analizar_una_vez(ct, None, {})
     return ct
+
+
+def liberar_los_ct():
+    """Suelta los objetos de pylinac que `_ct` guarda entre pruebas (B.4, corrector, R1-06): cada uno es un CatPhan ya analizado con su volumen (las cinco series retenian 1587 MB medidos con el contador profundo de
+    `b4_medir_caches3.py`; solo el tomografo, 379 MB de VmRSS). Un `lru_cache` de modulo vive lo que vive el proceso, asi que se suelta al terminar el modulo: la fixture de abajo la llama despues de su yield."""
+    _ct.cache_clear()
+    gc.collect()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _suelta_los_ct_al_terminar_el_modulo():
+    yield
+    liberar_los_ct()
 
 
 def _corte(ct, desplazamiento=0):

@@ -161,12 +161,21 @@ TRAZO_DE_PARAMETRO = {
     "margen_filas_mm": ("pie", "margen de {:g} mm sobre y bajo los puntos"),
 }
 LARGO_DEL_PIE = 200                    # caracteres por línea del pie de parámetros fijos
-ALTOS_DE_LA_PESTANA_DEL_GRIS = (1.4, 1)   # la ventana (la imagen es lo que se mira) algo mas alta que el perfil, que vive cerca del tope y deja vacia la mitad de abajo
+ALTOS_DE_LA_PESTANA_DEL_GRIS = (1.4, 1, 1)   # la ventana (la imagen es lo que se mira) algo mas alta que el perfil, que vive cerca del tope y deja vacia la mitad de abajo; el barrido (B.4) tan alto como el perfil
+# B.4: el NUMERO y el ORDEN de los ejes de las dos figuras con dibujos reales (`_fig_gris.axes`, `_fig_rgb.axes`), declarados una sola vez: el barrido por fila va ULTIMO en las dos. La figura del gris pasa de
+# dos ejes a tres y la de las capas de tres a cuatro (las tres capas comparten el eje x de las columnas de la ventana; el barrido tiene el suyo, la posicion de la fila).
+EJES_DE_LA_PESTANA_DEL_GRIS = ("ventana", "perfil", "barrido")
+EJES_DE_LA_PESTANA_DE_LAS_CAPAS = ("R", "G", "B", "barrido")
+ALTOS_DE_LA_PESTANA_DE_LAS_CAPAS = (1, 1, 1, 1.2)
+COLOR_FILA_QUE_NO_ENTRA = "#c4c2ba"    # B.4: las filas con meseta que el barrido no usa (gris claro)
 ANCHO_DE_LA_LEYENDA = 64               # caracteres por línea de las etiquetas de la leyenda de la ventana (la banda lleva una etiqueta larga)
 # R1-B: el alto MÍNIMO del lienzo de cada pestaña con dibujos, en px. Lo fijo de cada figura (el eje en mm de arriba, los títulos, los rótulos de x y el pie de parámetros) mide ~215 px y los ejes se
 # reparten lo que sobra: con una página de 750 px de alto el lienzo medía 218 px y los dos ejes del gris 6 y 4. Por debajo de este alto el lienzo se DESPLAZA (un área de desplazamiento) en vez de
 # aplastar los ejes; con cada mínimo, las ventanas (la imagen) quedan en al menos 70 px y cada perfil o capa en al menos 50.
-ALTO_MINIMO_DEL_LIENZO = {"gris": 350, "rgb": 390, "sintetica": 390}
+# B.4: con la grafica del barrido (un eje mas, con su titulo, su rotulo y, a veces, dos lineas de texto de la regla) cada figura crece lo que ese eje necesita: gris 350 -> 600 y capas 390 -> 630. Asi, a una pagina
+# de 1000 px, la ventana y el perfil conservan los altos que ya tenian en B.1 (120 y 90 px: test_9e), cada capa queda en ~76 px (eran 80; el piso de R1-B es 50) y el barrido debajo (en al menos 75 px), a cambio de desplazar
+# el lienzo ~130 px en esa pagina (el area de desplazamiento de B.1); con una pagina alta (1300 px) llena el area sin barra (test_9g). Lo mira la CAPTURA, no las aserciones sobre los limites: lo ensenó B.1.
+ALTO_MINIMO_DEL_LIENZO = {"gris": 600, "rgb": 630, "sintetica": 390}
 
 # Cómo se llama, para el físico, cada cosa que se compara al abrir un registro (las 17 claves de `valores_medidos`): una
 # prueba exige que no falte ninguna y que no sobre ninguna.
@@ -582,6 +591,105 @@ def texto_sintetica(real_mm, resultado):
     if motivo_para_no_guardar(resultado):
         texto += " (la línea no se refinó: se midió contra los puntos)"
     return texto
+
+
+def datos_del_barrido(resultado, perfil, fila_de_referencia=None):
+    """B.4: lo que dibuja la grafica «Barrido» de un perfil, SIN dibujar: el desfase de cada fila con meseta (usada o no) contra su posicion respecto de la fila de la cuerda mas ancha. Todo sale de
+    `motor.motivos_de_las_filas` (la regla es del motor: la pagina no la copia) y la mediana es la que se reporta (`desfase_px` del perfil). En milimetros si el resultado tiene escala; sin escala
+    (resolucion «otra») los milimetros no existen y todo va en pixeles. `media` es la de las filas usadas (la que NO se reporta). La referencia de la posicion es la fila de la cuerda mas ancha DEL PERFIL
+    (`np.argmax(ancho)`, la misma con que el motor elige su bloque central); `fila_de_referencia` (por omision None: la del perfil) deja que las cuatro capas juntas usen UNA sola, la del gris, para que las
+    filas de una capa y otra sean las mismas filas de la pelicula."""
+    r = resultado["perfiles"][perfil]
+    d = motor.motivos_de_las_filas(r["m"], resultado["parametros"], resultado["x_ref"])
+    tam = resultado["tamano_pixel_mm"]
+    escala = tam if tam is not None else 1.0
+    referencia = d["fila_de_referencia"] if fila_de_referencia is None else int(fila_de_referencia)
+    filas = np.where(d["con_meseta"])[0]
+    usada = d["usada"][filas]
+    desfase = d["desfase"][filas] * escala
+    datos = {"unidad": "mm" if tam is not None else "px", "estado": r["estado"], "filas": filas, "posicion": (filas - referencia) * escala, "desfase": desfase,
+             "usada": usada, "motivos": [d["motivos"][y] for y in filas], "fila_de_referencia": referencia, "repliegue": d["repliegue"]}
+    if r["estado"] == "ok":
+        datos["mediana"] = float(r["desfase_px"]) * escala
+        datos["media"] = float(np.mean(desfase[usada]))
+    return datos
+
+
+def _cuantas(n, uno, varias):
+    return f"{n} {uno if n == 1 else varias}"
+
+
+def texto_de_la_regla(resultado, perfil="gris"):
+    """B.4: la frase que dice cuando la regla del barrido se RELAJO en un perfil; vacia si no se relajo. Tres casos, ninguno con simbolos de correcto o incorrecto: quedaban menos de `minimo_filas` filas y
+    la fraccion bajo (se cuentan las filas usadas con menos de la fraccion central); quedaban menos de `minimo_filas` y el repliegue sumo SOLO filas de otro bloque con cuerdas de la fraccion central o mas
+    (R1-05, B4-D7: el conjunto candidato paso del bloque central a toda la imagen; se cuentan las filas usadas de fuera del bloque central; sale solo si la frase de arriba no sale: esa ya dice que la
+    regla se relajo); y filas que entraron por un hueco puenteado (con cualquier cuerda). Los numeros salen de los motivos y de las filas del motor y de los parametros con que se midio."""
+    r = resultado["perfiles"][perfil]
+    P = resultado["parametros"]
+    d = motor.motivos_de_las_filas(r["m"], P)
+    motivos = d["motivos"]
+    frases = []
+    por_repliegue = motivos.count(motor.MOTIVO_USADA_POR_REPLIEGUE)
+    por_hueco = motivos.count(motor.MOTIVO_USADA_POR_HUECO)
+    de_otro_bloque = int(np.sum(d["usada"] & ~d["en_bloque"]))
+    if por_repliegue:
+        frases.append(f"se {'usó' if por_repliegue == 1 else 'usaron'} {_cuantas(por_repliegue, 'fila', 'filas')} con menos del {round(100 * P['fraccion_central'])} % "
+                      f"porque quedaban menos de {P['minimo_filas']}")
+    elif d["repliegue"] and de_otro_bloque:
+        frases.append(f"el barrido tomó {_cuantas(de_otro_bloque, 'fila', 'filas')} de fuera del bloque central porque en él quedaban menos de {P['minimo_filas']}")
+    if por_hueco:
+        frases.append(f"{_cuantas(por_hueco, 'fila entró', 'filas entraron')} por un hueco puenteado")
+    return "; ".join(frases)
+
+
+def dibujar_barrido_de_filas(ax, resultado, perfiles=("gris",)):
+    """B.4: la grafica «Barrido». Con UN perfil: el desfase de cada fila usada contra su posicion respecto de la fila de la cuerda mas ancha, la MEDIANA (la que se reporta, punteada), la media
+    (discontinua) y, en gris claro, las filas con meseta que no entran. Con VARIOS perfiles (las cuatro capas juntas): solo las filas usadas de cada uno y su mediana, cada uno con su color. La frase
+    de `texto_de_la_regla` va en el titulo cuando la regla se relajo. La leyenda va FUERA de los ejes, a su derecha (R1-08: dentro, los datos llenan el eje y tapaba filas usadas): con un perfil
+    dice lo que dibuja; con varios, una entrada por capa dibujada (su color dice cual es) y una para la mediana punteada. Funcion pura sobre un eje: la regla es del motor, aqui solo se dibuja."""
+    unidad = "mm" if resultado["tamano_pixel_mm"] is not None else "px"
+    solo = len(perfiles) == 1
+    referencia = None
+    if not solo:                                   # las cuatro capas juntas comparten UNA referencia (la del gris): una misma fila de la pelicula cae en la misma posicion en todas
+        referencia = motor.motivos_de_las_filas(resultado["perfiles"][perfiles[0]]["m"], resultado["parametros"])["fila_de_referencia"]
+        referencia = None if referencia < 0 else referencia
+    frases = []
+    en_la_leyenda = []                             # las capas dibujadas: (la linea de sus filas usadas, su nombre), para la leyenda de las cuatro capas
+    for perfil in perfiles:
+        d = datos_del_barrido(resultado, perfil, referencia)
+        color = TINTA if perfil == "gris" else COLOR_CAPA[perfil]
+        nombre = NOMBRE_DE_PERFIL[perfil]
+        if d["estado"] != "ok":
+            if solo:
+                ax.plot(d["posicion"], d["desfase"], "o", ms=3, color=COLOR_FILA_QUE_NO_ENTRA, label="filas con meseta (no se mide)")
+            else:
+                frases.append(f"{nombre}: no medible, no se dibuja")
+            continue
+        if solo and (~d["usada"]).any():
+            ax.plot(d["posicion"][~d["usada"]], d["desfase"][~d["usada"]], "o", ms=3, color=COLOR_FILA_QUE_NO_ENTRA, label="filas con meseta que no entran")
+        usadas, = ax.plot(d["posicion"][d["usada"]], d["desfase"][d["usada"]], "o-" if not solo else "o", ms=3, lw=0.8, color=color, label=f"{nombre}: filas usadas" if not solo else "filas usadas")
+        en_la_leyenda.append((usadas, nombre))
+        ax.axhline(d["mediana"], ls=":", lw=1.5, color=color, label=f"{nombre}: mediana (la que se reporta)" if not solo else "mediana (la que se reporta)")
+        if solo:
+            ax.axhline(d["media"], ls="--", lw=1.2, color=COLOR_REFERENCIA, label="media")
+        frase = texto_de_la_regla(resultado, perfil)
+        if frase:
+            frases.append(frase if solo else f"{nombre}: {frase}")
+    ax.set_xlabel(f"posición de la fila respecto de la cuerda más ancha{'' if solo else ' del gris'} [{unidad}]")
+    ax.set_ylabel(f"desfase [{unidad}]")
+    titulo = "Barrido: el desfase de cada fila" if solo else "Barrido de las cuatro capas"
+    ax.set_title("\n".join([titulo] + [textwrap.fill(f, 110) for f in frases]), fontsize=8)
+    ax.grid(color=COLOR_REJILLA)
+    if solo:
+        manejadores, etiquetas = ax.get_legend_handles_labels()
+    else:                                          # una entrada por capa dibujada (su color dice cual es) y una para la linea punteada: la leyenda completa (ocho entradas) llenaba medio eje
+        # la entrada de la mediana es una linea punteada sin datos, de la clase de las que ya hay en el eje (la pagina no importa matplotlib: tripwire 26e de PI.4, solo la carga diferida)
+        manejadores = [linea for linea, _ in en_la_leyenda] + ([type(en_la_leyenda[0][0])([], [], color=TINTA, ls=":", lw=1.5)] if en_la_leyenda else [])
+        etiquetas = [nombre for _, nombre in en_la_leyenda] + (["mediana (la que se reporta)"] if en_la_leyenda else [])
+    if manejadores:
+        # R1-08: FUERA de los ejes, a su derecha (la disposicion le deja el sitio y no le quita alto a ningun eje): los datos llenan el eje y ningun rincon de adentro esta libre (16 de 215 puntos usados
+        # tapados en braqui_00 y 28 de 161 en EPSON009 con la leyenda arriba a la izquierda).
+        ax.legend(manejadores, etiquetas, fontsize=6, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0, framealpha=0.75)
 
 
 def dibujar_barrido(ax, puntos, actual, tolerancia):
@@ -1267,15 +1375,21 @@ class PosicionInicialBraqui(QWidget):
     def _mostrar(self, resultado):
         fila = fila_representativa(resultado, "gris")
         self._fig_gris.clear()
-        arriba, abajo = self._fig_gris.subplots(2, 1, height_ratios=ALTOS_DE_LA_PESTANA_DEL_GRIS)
+        arriba, medio, abajo = self._fig_gris.subplots(len(EJES_DE_LA_PESTANA_DEL_GRIS), 1, height_ratios=ALTOS_DE_LA_PESTANA_DEL_GRIS)
         dibujar_ventana(arriba, resultado, "gris", fila, leyenda=True)
-        dibujar_perfil(abajo, resultado, "gris", fila, leyenda=True)
+        dibujar_perfil(medio, resultado, "gris", fila, leyenda=True)
+        dibujar_barrido_de_filas(abajo, resultado, ("gris",))
         rotular_parametros(self._fig_gris, resultado)
         self.recuadro_gris.setText(texto_recuadro(resultado, "gris"))
         self._fig_rgb.clear()
         # Las tres capas comparten el eje x (las mismas columnas de la ventana): el eje en mm va solo arriba y el rotulo en px solo abajo; repetidos en cada una, cada perfil quedaba en 35 px de alto.
-        for eje, capa in zip(self._fig_rgb.subplots(3, 1, sharex=True), ("R", "G", "B")):
+        ejes_rgb = self._fig_rgb.subplots(len(EJES_DE_LA_PESTANA_DE_LAS_CAPAS), 1, height_ratios=ALTOS_DE_LA_PESTANA_DE_LAS_CAPAS)
+        for eje, capa in zip(ejes_rgb[:3], ("R", "G", "B")):
+            if capa != "R":
+                eje.sharex(ejes_rgb[0])
+            eje.tick_params(labelbottom=(capa == "B"))
             dibujar_perfil(eje, resultado, capa, fila, COLOR_CAPA[capa], leyenda=(capa == "R"), columnas_de_la_leyenda=4, eje_en_mm=(capa == "R"), rotulo_en_px=(capa == "B"))
+        dibujar_barrido_de_filas(ejes_rgb[3], resultado, ("gris", "R", "G", "B"))
         rotular_parametros(self._fig_rgb, resultado)
         self.recuadro_rgb.setText(texto_recuadro_capas(resultado))
         self.barra_gris.update()                 # X5: sin esto, Home vuelve a la vista de la figura anterior

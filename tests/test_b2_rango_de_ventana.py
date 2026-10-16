@@ -17,6 +17,7 @@ Lo que este archivo garantiza:
      rangos de los deslizadores del visor.
 """
 import ast
+import gc
 import os
 import pathlib
 import types
@@ -72,6 +73,19 @@ def _datos(clave):
             ventana=ventana, rango=rango_de_ventana(v, ventana),
             p_bajo=float(bajo), p_alto=float(alto), minimo=float(v.min()), maximo=float(v.max()))
     return _CACHE[clave]
+
+
+def liberar_los_datos():
+    """Suelta lo que este modulo guarda entre pruebas: `_CACHE` (B.4, deuda heredada de B.3, R1-LD-02). Hoy son escalares (la ventana del DICOM, el rango y cuatro estadisticos; el volumen NO se conserva:
+    ~0.01 MB), pero un cache de modulo vive lo que vive el proceso y el contrato es soltarlo al terminar el modulo, pese lo que pese lo que guarde: la fixture de abajo la llama despues de su yield."""
+    _CACHE.clear()
+    gc.collect()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _suelta_los_datos_al_terminar_el_modulo():
+    yield
+    liberar_los_datos()
 
 
 CLAVES = sorted(CATPHAN)

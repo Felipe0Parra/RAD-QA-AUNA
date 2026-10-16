@@ -20,6 +20,7 @@ CRITERIOS (OBJETIVO de B.2; cada uno es una funcion `fallos_de_...(casos)` que d
   * veredicto: fuera de la zona de duda de la tolerancia de 1 mm (|d| de 0.75 y de 1.25 mm) la tasa de falsos «Cumple» y de falsos «No cumple» de cada capa es cero;
   * y los de cada caso dificil (`fallos_de_la_variante`).
 """
+import gc
 import math
 from dataclasses import dataclass
 
@@ -158,6 +159,14 @@ def placa_de_la_rejilla(modelo, inclinada, formato, desfase, indice):
 
 
 _REJILLAS = {}
+
+
+def liberar_las_rejillas():
+    """Suelta las rejillas que `rejilla` guarda por proceso (B.4, deuda heredada de B.3, R1-LD-02). Cada modulo de pruebas que llena el cache la llama desde una fixture de modulo autouse, DESPUES de su yield:
+    un cache de modulo vive lo que vive el proceso, y lo que guarda lo heredan los archivos siguientes de su reparto. Vaciar es siempre seguro: `rejilla` las recalcula (no dependen de nada que una prueba
+    cambie). Hoy cada `Caso` guarda la verdad y la medicion de su placa (no la placa: ~0.7 MB las ocho combinaciones), pero el contrato no mira cuanto pesa lo que se guarda."""
+    _REJILLAS.clear()
+    gc.collect()
 
 
 def rejilla(modelo, inclinada, formato):

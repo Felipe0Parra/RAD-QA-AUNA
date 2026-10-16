@@ -404,7 +404,7 @@ class TestLaVentanaDibujaLasBandasDelTransito:
         ruta.write_bytes(_a_300_dpi())
         _analizada(pagina, dialogos, str(ruta), CLICS_PLACA_REAL)
         assert "sin milímetros" in pagina.recuadro_gris.text(), "compuerta: la página dice que no hay milímetros"
-        ventana, perfil = pagina._fig_gris.axes
+        ventana, perfil, _barrido = pagina._fig_gris.axes          # B.4: el eje del barrido por fila va ultimo
         leyenda = [" ".join(t.get_text().split()) for t in ventana.get_legend().get_texts()]
         assert any(t.startswith("banda de tránsito a la derecha") for t in leyenda), "compuerta: la leyenda rotula la banda"
         assert not [t for t in leyenda if re.search(r"\d\s*mm", t)], f"la leyenda dice milímetros que el recuadro niega: {leyenda}"
@@ -584,7 +584,7 @@ def parametros_sin_su_trazo_en_la_pagina(pagina, trazo):
     pie con el valor con que se midió, el recuadro o la etiqueta de la página con ese valor (R1-E: no basta con que la etiqueta tenga algún texto)."""
     resultado = pagina._resultado
     P = resultado["parametros"]
-    gris_ventana, gris_perfil = pagina._fig_gris.axes
+    gris_ventana, gris_perfil, _barrido = pagina._fig_gris.axes          # B.4: el eje del barrido por fila va ultimo (en las capas tambien: zip corta en las tres capas)
     perfiles = {"gris": gris_perfil, **dict(zip("RGB", pagina._fig_rgb.axes))}
     pies = [t.get_text() for fig in (pagina._fig_gris, pagina._fig_rgb) for t in fig.texts]
     assert len(pies) == 2, "cada figura (gris y capas) lleva su pie de parámetros fijos"
@@ -691,7 +691,8 @@ class TestEnLaPaginaReal:
         r = pagina._resultado
         ancho = r["imagenes"]["gris"].shape[1]
         ejes = {"gris": pagina._fig_gris.axes[1], **dict(zip("RGB", pagina._fig_rgb.axes))}
-        assert len(pagina._fig_gris.axes) == 2 and len(pagina._fig_rgb.axes) == 3, "el eje secundario no es un eje de la figura"
+        assert len(pagina._fig_gris.axes) == len(pagina_mod.EJES_DE_LA_PESTANA_DEL_GRIS) == 3 and len(pagina._fig_rgb.axes) == len(pagina_mod.EJES_DE_LA_PESTANA_DE_LAS_CAPAS) == 4, \
+            "el eje secundario no es un eje de la figura (B.4: gris = ventana, perfil, barrido; capas = R, G, B, barrido)"
         for perfil, eje in ejes.items():
             x0, x1 = eje.get_xlim()
             y0, y1 = eje.get_ylim()
@@ -704,12 +705,12 @@ class TestEnLaPaginaReal:
         («el eje en mm igual en las tres capas y el gris»): esta prueba fija la estructura ([1, 0, 0]) y `test_9d2` fija que el eje de arriba es el de las tres (obstaculos.md, R1-D; vetable por el físico)."""
         ruta, clics = {"braqui_00": (str(DATOS / "braqui_00.jpeg"), CLICS_PLACA_REAL), "EPSON009": (str(DATOS / "EPSON009.jpeg"), CLICS_EPSON009)}[nombre]
         _analizada(pagina, dialogos, ruta, clics)
-        r_, g_, b_ = pagina._fig_rgb.axes
+        r_, g_, b_, _barrido = pagina._fig_rgb.axes          # B.4: el cuarto eje es el barrido (su x es la posicion de la fila, no las columnas)
         assert r_.get_shared_x_axes().joined(r_, g_) and r_.get_shared_x_axes().joined(g_, b_), "las tres capas comparten el eje x"
         assert [len(_secundario(e)) for e in (r_, g_, b_)] == [1, 0, 0], "el eje en mm solo arriba"
         assert [e.get_xlabel() for e in (r_, g_, b_)] == ["", "", "columna de la ventana [px]"], "el rótulo en píxeles solo abajo"
         assert [bool(e.get_legend()) for e in (r_, g_, b_)] == [True, False, False], "la leyenda, como siempre, solo en la roja"
-        ventana, perfil = pagina._fig_gris.axes
+        ventana, perfil, _barrido = pagina._fig_gris.axes
         assert ventana.get_legend() is not None and perfil.get_legend() is not None, "la pestaña del gris lleva la leyenda de la ventana y la del perfil"
         assert [len(_secundario(perfil))] == [1] and perfil.get_xlabel() == "columna de la ventana [px]"
 
@@ -740,10 +741,10 @@ class TestEnLaPaginaReal:
             "la leyenda de la ventana va fuera de la disposición (no le quita sitio a los ejes; con el alto mínimo del lienzo su efecto ya no se ve en la altura, y a 1000 px de ancho todavía quita 5 px)"
         if not con_minimos:
             return
-        ventana, perfil = pagina._fig_gris.axes
+        ventana, perfil, _barrido = pagina._fig_gris.axes          # B.4: sus alturas las mide el guardia de la disposicion (test_9g)
         alturas = {"ventana": ventana.get_window_extent().height, "perfil del gris": perfil.get_window_extent().height,
                    **{f"capa {c}": e.get_window_extent().height for c, e in zip("RGB", pagina._fig_rgb.axes)}}
-        minimas = {"ventana": 120, "perfil del gris": 90, "capa R": 80, "capa G": 80, "capa B": 80}
+        minimas = {"ventana": 120, "perfil del gris": 90, "capa R": 75, "capa G": 75, "capa B": 75}          # B.4: la pila de las capas gana el eje del barrido (cada capa 80 -> 75; medido 76)
         aplastados = {k: round(v) for k, v in alturas.items() if v < minimas[k]}
         assert not aplastados, f"dibujos aplastados (alto en px, mínimo): {aplastados} de {({k: round(v) for k, v in alturas.items()})}"
         # la ventana (la imagen es lo que se mira) es más alta que el perfil, que vive cerca del tope y deja vacía la mitad de abajo: 1.4 : 1 (con 1 : 1 serían iguales)
@@ -784,16 +785,16 @@ class TestEnLaPaginaReal:
         alturas = {}
         with warnings.catch_warnings(record=True) as avisos:
             warnings.simplefilter("always")
-            for indice, lienzo, figura, nombres in ((pagina_mod.PESTANA_GRIS, pagina.lienzo_gris, pagina._fig_gris, ("ventana", "perfil del gris")),
-                                                    (pagina_mod.PESTANA_RGB, pagina.lienzo_rgb, pagina._fig_rgb, ("capa R", "capa G", "capa B"))):
+            for indice, lienzo, figura, nombres in ((pagina_mod.PESTANA_GRIS, pagina.lienzo_gris, pagina._fig_gris, ("ventana", "perfil del gris", "barrido del gris")),
+                                                    (pagina_mod.PESTANA_RGB, pagina.lienzo_rgb, pagina._fig_rgb, ("capa R", "capa G", "capa B", "barrido de las capas"))):
                 pagina.pestanas.setCurrentIndex(indice)
                 QApplication.processEvents()
                 lienzo.draw()
                 pagina.grab()
                 alturas.update({n: e.get_window_extent().height for n, e in zip(nombres, figura.axes)})
         assert [str(a.message) for a in avisos if "constrained_layout" in str(a.message)] == [], "la disposición de la figura colapsó"
-        pisos = {"ventana": 70, "perfil del gris": 50, "capa R": 50, "capa G": 50, "capa B": 50}
-        assert set(alturas) == set(pisos), "compuerta: se midieron los cinco ejes"
+        pisos = {"ventana": 70, "perfil del gris": 50, "capa R": 50, "capa G": 50, "capa B": 50, "barrido del gris": 50, "barrido de las capas": 50}      # B.4: los dos ejes del barrido tambien
+        assert set(alturas) == set(pisos), "compuerta: se midieron los siete ejes"
         aplastados = {k: round(v) for k, v in alturas.items() if v < pisos[k]}
         assert not aplastados, f"a {alto} px de alto de página, dibujos aplastados (alto en px, piso {pisos}): {aplastados} de {({k: round(v) for k, v in alturas.items()})}"
 

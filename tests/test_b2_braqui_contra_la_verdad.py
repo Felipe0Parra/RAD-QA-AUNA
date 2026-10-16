@@ -26,6 +26,14 @@ import pytest
 import _placa_braqui_sintetica as pb
 import _verdad_braqui as vb
 
+
+@pytest.fixture(scope="module", autouse=True)
+def _suelta_las_rejillas_al_terminar_el_modulo():
+    """B.4 (deuda heredada de B.3, R1-LD-02): las rejillas que `vb.rejilla` guarda por proceso se sueltan al terminar el modulo; las heredarian los archivos siguientes de su reparto."""
+    yield
+    vb.liberar_las_rejillas()
+
+
 COMBINACIONES = [(m, i, f) for m in ("independiente", "fisico") for i in (False, True) for f in vb.FORMATOS]
 IDENTIFICADORES = [f"{m}-{'inclinada' if i else 'vertical'}-{f}" for m, i, f in COMBINACIONES]
 

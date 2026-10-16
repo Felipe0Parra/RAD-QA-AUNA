@@ -298,22 +298,90 @@ def mesetas_por_fila(imagen, x_ref, P):
             "x_izq": x_izq, "x_der": x_der, "toca": toca, "cortada": cortada, "oculto": oculto}
 
 
-def filas_utiles(m, P):
-    """Cuerdas centrales (bloque continuo alrededor de la mas ancha) con los dos bordes visibles;
-    si quedan pocas, cuerdas mas cortas (sus bordes se alejan de la linea)."""
+def _seleccion_de_filas(m, P):
+    """UNA definicion de la regla del barrido (B.4): `filas_utiles` y `motivos_de_las_filas` salen de aqui, asi que lo que la pagina dice de cada fila no puede discrepar de lo
+    que el motor midio. Devuelve (filas, ancho, en_bloque, repliegue): las filas que entran, el ancho de la meseta de cada fila, las filas del bloque central (la corrida de cuerdas
+    anchas, con los huecos de hasta 3 filas puenteados, que contiene la mas ancha) y si hubo que volver a elegir sobre toda la imagen (repliegue: quedaban menos de `minimo_filas`)."""
     inicio, fin, oculto = m["inicio"], m["fin"], m["oculto"]
     ancho = np.where(inicio >= 0, fin - inicio + 1, 0)
+    en_bloque = np.zeros(len(ancho), bool)
     if np.max(ancho) == 0:
-        return np.array([], int), ancho
+        return np.array([], int), ancho, en_bloque, False
     candidatas = np.where(ancho >= P["fraccion_central"] * np.max(ancho))[0]
     inis, fins = corridas(np.isin(np.arange(len(ancho)), candidatas), 3)
     mas_ancha = int(np.argmax(ancho))
     k = int(np.where((inis <= mas_ancha) & (fins >= mas_ancha))[0][0])
     bloque = np.arange(inis[k], fins[k] + 1)
+    en_bloque[bloque] = True
     filas = bloque[(ancho[bloque] > 0) & ~oculto[bloque]]
-    if len(filas) < P["minimo_filas"]:
+    repliegue = len(filas) < P["minimo_filas"]
+    if repliegue:
         filas = np.where((inicio >= 0) & ~oculto & (ancho >= P["fraccion_minima"] * np.max(ancho)))[0]
+    return filas, ancho, en_bloque, repliegue
+
+
+def filas_utiles(m, P):
+    """Cuerdas centrales (bloque continuo alrededor de la mas ancha) con los dos bordes visibles;
+    si quedan pocas, cuerdas mas cortas (sus bordes se alejan de la linea)."""
+    filas, ancho, _, _ = _seleccion_de_filas(m, P)
     return filas, ancho
+
+
+# B.4: el vocabulario CERRADO de los motivos por los que una fila entra o no al barrido, declarado una sola vez. Las fracciones de la regla son las de `PARAMETROS` (`fraccion_central`, `fraccion_minima`) y los
+# textos NO llevan ninguna cifra (R1-07): un texto con «80 %» fijo seria falso en cuanto la regla se midiera con otra fraccion (se midio: «no entra: cuerda menor del 80 %» para una cuerda al 60 % con el 70 %).
+# Las cifras se dicen donde se muestran, leidas de los parametros con que se midio (`texto_de_la_regla` de la pagina); una prueba exige que ningun motivo lleve una cifra.
+MOTIVO_USADA = "usada"
+MOTIVO_USADA_POR_HUECO = "usada por un hueco puenteado"
+MOTIVO_USADA_POR_REPLIEGUE = "usada por el repliegue"
+MOTIVO_SIN_MESETA = "no entra: sin meseta"
+MOTIVO_BORDE_TAPADO = "no entra: borde tapado por la linea"
+MOTIVO_CUERDA_CORTA = "no entra: cuerda corta"
+MOTIVO_CUERDA_CORTA_EN_REPLIEGUE = "no entra: cuerda corta aun en el repliegue"
+MOTIVO_FUERA_DEL_BLOQUE = "no entra: fuera del bloque central"
+MOTIVOS_DE_FILAS_USADAS = (MOTIVO_USADA, MOTIVO_USADA_POR_HUECO, MOTIVO_USADA_POR_REPLIEGUE)
+MOTIVOS_DE_FILAS = MOTIVOS_DE_FILAS_USADAS + (MOTIVO_SIN_MESETA, MOTIVO_BORDE_TAPADO, MOTIVO_CUERDA_CORTA, MOTIVO_CUERDA_CORTA_EN_REPLIEGUE, MOTIVO_FUERA_DEL_BLOQUE)
+
+
+def motivos_de_las_filas(m, P, x_ref=None):
+    """B.4: por que entra o no cada fila al barrido, SIN cambiar cuales entran (sale de la misma `_seleccion_de_filas` que `filas_utiles`). Devuelve un dict de arreglos por fila:
+    `motivos` (uno de `MOTIVOS_DE_FILAS`), `usada` (bool; EXACTAMENTE las filas de `filas_utiles`), `con_meseta` (bool; hay meseta en la fila, entre o no), `ancho` (px de la
+    meseta), y `repliegue` (bool: se volvio a elegir sobre toda la imagen), `en_bloque` (bool; las filas del bloque central, el que `filas_utiles` elige alrededor de la cuerda mas ancha: sin repliegue
+    toda fila usada esta en el; con repliegue las usadas de fuera del bloque son las que el repliegue sumo de otro bloque, R1-05) y `fila_de_referencia` (la de la cuerda mas ancha,
+    `np.argmax(ancho)`, la misma con la que `filas_utiles` elige el bloque central; -1 sin meseta en ninguna fila). Con `x_ref` (por omision None) agrega `desfase`: el desfase de CADA fila con meseta, usada o no, con la cuenta de
+    `medir_perfil` (`x_ref[y]` menos el centro entre los dos bordes), y NaN donde no hay meseta. Orden de las razones de «no entra»: sin meseta, borde tapado por la linea, cuerda corta
+    (menor que la fraccion que corresponde: la central, o la minima si hubo repliegue) y, si la cuerda era ancha pero quedo en otro bloque, fuera del bloque central."""
+    filas, ancho, en_bloque, repliegue = _seleccion_de_filas(m, P)
+    n = len(ancho)
+    usada = np.zeros(n, bool)
+    usada[filas] = True
+    con_meseta = ancho > 0
+    tope_ancho = float(np.max(ancho)) if n else 0.0
+    ancha = ancho >= P["fraccion_central"] * tope_ancho            # pasa el 80 % de la cuerda mas ancha
+    motivos = np.empty(n, object)
+    for y in range(n):
+        if usada[y]:
+            if repliegue and not ancha[y]:
+                motivos[y] = MOTIVO_USADA_POR_REPLIEGUE
+            elif not repliegue and not ancha[y]:
+                motivos[y] = MOTIVO_USADA_POR_HUECO
+            else:
+                motivos[y] = MOTIVO_USADA
+        elif not con_meseta[y]:
+            motivos[y] = MOTIVO_SIN_MESETA
+        elif m["oculto"][y]:
+            motivos[y] = MOTIVO_BORDE_TAPADO
+        elif repliegue:                                            # con meseta, a la vista y sin entrar: solo puede ser que no llegue a la fraccion minima
+            motivos[y] = MOTIVO_CUERDA_CORTA_EN_REPLIEGUE
+        elif not ancha[y]:
+            motivos[y] = MOTIVO_CUERDA_CORTA
+        else:
+            motivos[y] = MOTIVO_FUERA_DEL_BLOQUE
+    salida = {"motivos": [str(t) for t in motivos], "usada": usada, "con_meseta": con_meseta, "ancho": ancho, "repliegue": bool(repliegue), "en_bloque": en_bloque,
+              "fila_de_referencia": int(np.argmax(ancho)) if n and tope_ancho > 0 else -1}
+    if x_ref is not None:
+        centros = (m["x_izq"] + m["x_der"]) / 2.0                  # la cuenta de `medir_perfil`, fila por fila
+        salida["desfase"] = np.where(con_meseta, np.asarray(x_ref, float) - centros, np.nan)
+    return salida
 
 
 def medir_perfil(imagen, x_ref, P, con_transparencia=False):

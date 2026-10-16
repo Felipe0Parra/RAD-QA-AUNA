@@ -1620,7 +1620,7 @@ class TestElCambioDeFuenteElegido:
 class TestLoQueSeDibujaDatoPorDato:
     def test_8f_la_pestana_de_grises_dibuja_los_datos_del_gris(self, pagina, dialogos, archivo_braqui, resultado):
         _analizada(pagina, dialogos, archivo_braqui)
-        arriba, abajo = pagina._fig_gris.axes
+        arriba, abajo, _barrido = pagina._fig_gris.axes          # B.4: la figura del gris gana el eje del barrido por fila, que va ULTIMO
         r, m = resultado["perfiles"]["gris"], resultado["perfiles"]["gris"]["m"]
         assert np.array_equal(np.asarray(arriba.images[0].get_array()), m["suave"]), "la ventana es la del GRIS"
         centros = [l for l in arriba.lines if l.get_label() == "centro de cada cuerda"]
@@ -1635,8 +1635,8 @@ class TestLoQueSeDibujaDatoPorDato:
     def test_8g_cada_capa_se_dibuja_con_sus_datos_sobre_la_cuerda_del_gris(self, pagina, dialogos, archivo_braqui,
                                                                           resultado):
         _analizada(pagina, dialogos, archivo_braqui)
-        ejes = pagina._fig_rgb.axes
-        assert len(ejes) == 3
+        assert len(pagina._fig_rgb.axes) == len(pagina_mod.EJES_DE_LA_PESTANA_DE_LAS_CAPAS) == 4      # B.4: las tres capas y, al final, el barrido de las cuatro juntas
+        ejes = pagina._fig_rgb.axes[:3]
         fila = pagina_mod.fila_representativa(resultado, "gris")
         filas_propias = {c: pagina_mod.fila_representativa(resultado, c) for c in "RGB"}
         assert any(f != fila for f in filas_propias.values()), \
@@ -1657,7 +1657,7 @@ class TestLoQueSeDibujaDatoPorDato:
         esperado = pagina_mod._numero(resultado["x_ref"][238] - (m["x_izq"][238] + m["x_der"][238]) / 2, 2)
         assert pagina._fig_gris.axes[1].get_title() == \
             f"Perfil de grises: en esta cuerda {esperado} px; mediana de 72 cuerdas -8.55 px"
-        titulos = [eje.get_title() for eje in pagina._fig_rgb.axes]
+        titulos = [eje.get_title() for eje in pagina._fig_rgb.axes[:3]]       # B.4: el cuarto eje es el barrido de las cuatro capas
         assert titulos[0] == "Capa roja: no medible"
         assert titulos[1].startswith("Capa verde: en esta cuerda ") and titulos[2].startswith("Capa azul: en esta cuerda ")
 
@@ -1666,13 +1666,13 @@ class TestLoQueSeDibujaDatoPorDato:
         assert resultado["linea"] is not None and resultado["mensaje_linea"] != pagina_mod.LINEA_REFINADA, \
             "compuerta: la línea existe y se descartó"
         _analizada(pagina, dialogos, archivo_braqui, CLICS_LINEA_ALEJADA)
-        arriba, abajo = pagina._fig_gris.axes
+        arriba, abajo, _barrido = pagina._fig_gris.axes          # B.4: el eje del barrido va ultimo
         descartada = [l for l in arriba.lines if l.get_label() == "línea que se encontró (no se usa)"]
         filas = np.arange(len(resultado["x_ref"]))
         assert len(descartada) == 1
         assert np.allclose(descartada[0].get_xdata(), resultado["linea"]["pendiente"] * filas + resultado["linea"]["corte"])
         assert abajo.get_title() == "Perfil de grises: medido contra los puntos, no contra la línea"
-        assert all(eje.get_title().endswith("medido contra los puntos, no contra la línea") for eje in pagina._fig_rgb.axes[1:])
+        assert all(eje.get_title().endswith("medido contra los puntos, no contra la línea") for eje in pagina._fig_rgb.axes[1:3])         # B.4: G y B; el cuarto eje es el barrido
         # con la línea refinada no hay línea descartada que dibujar
         pagina.boton_recalcular.click()
         _marcar(pagina)

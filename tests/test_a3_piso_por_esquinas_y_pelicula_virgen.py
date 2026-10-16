@@ -35,6 +35,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import ast
 import copy
+import gc
 import hashlib
 import importlib
 import io
@@ -1031,6 +1032,27 @@ def _no_valida():
     if "no_valida" not in _CACHE_VIRGEN:
         _CACHE_VIRGEN["no_valida"] = _medir_virgen(gen.codificar(_virgen_arreglo("A"), "tiff", 300))
     return _CACHE_VIRGEN["no_valida"]
+
+
+def liberar_las_virgenes():
+    """Suelta lo que este modulo guarda entre pruebas: `_CACHE_VIRGEN` (B.4, deuda heredada de B.3, R1-LD-02): la virgen sintetica en TIFF y su referencia medida (3 elementos y 64 MB medidos al terminar el
+    archivo). Una fixture de modulo autouse la llama DESPUES de su yield. Vaciar es siempre seguro: se recalcula la primera vez que una prueba la pide."""
+    _CACHE_VIRGEN.clear()
+    gc.collect()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _suelta_las_virgenes_al_terminar_el_modulo():
+    yield
+    liberar_las_virgenes()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _suelta_los_objetos_caros_de_a2_al_terminar_el_modulo():
+    """A.3 llena tambien el cache de A.2 (`A2._sint`, `A2._real`, `A2._con_fondo`: 11 objetos y 2677 MB medidos al terminar este archivo) y el modulo de A.2 solo lo suelta al terminar el SUYO: en la suite repartida
+    en procesos el cache de A.2 quedaba vivo en el proceso que corriera A.3 aunque A.2 estuviera en otro."""
+    yield
+    A2.liberar_los_objetos_caros()
 
 
 def _valores(ref):

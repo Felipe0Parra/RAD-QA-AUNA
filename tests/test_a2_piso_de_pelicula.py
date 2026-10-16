@@ -48,6 +48,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import ast
+import gc
 import importlib
 import io
 import json
@@ -131,6 +132,20 @@ def _cacheado(clave, fabrica):
     if clave not in _CACHE:
         _CACHE[clave] = fabrica()
     return _CACHE[clave]
+
+
+def liberar_los_objetos_caros():
+    """Suelta lo que este modulo guarda entre pruebas: `_CACHE` (B.4, deuda heredada de B.3, R1-LD-02). Retenia 11 objetos y 2604 MB al terminar el archivo (las peliculas sinteticas y reales, de ~250 MB cada
+    pagina con sus planos) y A.3 lo llena tambien (`A2._sint`, `A2._real`, `A2._con_fondo`: 2677 MB medidos al terminar A.3): cada modulo de pruebas que lo llena llama a esta funcion desde una fixture de modulo
+    autouse, DESPUES de su yield. Vaciar es siempre seguro: lo que se guarda se recalcula y ninguna prueba lo modifica."""
+    _CACHE.clear()
+    gc.collect()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _suelta_los_objetos_caros_al_terminar_el_modulo():
+    yield
+    liberar_los_objetos_caros()
 
 
 # ====================================================================================================================== las peliculas
