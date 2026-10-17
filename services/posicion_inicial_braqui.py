@@ -479,7 +479,7 @@ def texto_para_pdf(fecha, serie=SIN_FILTRO_DE_SERIE):
 # La tolerancia con que volver a medir tiene que dar lo guardado (DD3: 0.01 px, lo que la página compara al abrir un registro): px a 0.01, mm a 0.01 x la escala, estado y número de filas exactos.
 TOLERANCIA_AL_RECONSTRUIR_PX = 0.01
 
-# El perfil de un registro sin capa (anterior a B.5, o guardado por una página que todavía no pasa la capa, B6-F4): el de grises, como se imprimía antes de B.6.
+# El perfil de un registro sin capa (anterior a B.5, o guardado por la página de antes de B.7, que no pasaba la capa, B6-F4): el de grises, como se imprimía antes de B.6.
 PERFIL_SIN_CAPA = "gris"
 
 # Por qué un bloque NO lleva el perfil (la fila «Perfil» del PDF lo dice con estas frases; el detalle técnico va a `error_log.txt`). Lo impreso -la línea y las medidas- es SIEMPRE lo guardado.

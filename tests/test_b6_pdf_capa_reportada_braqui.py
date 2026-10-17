@@ -6,7 +6,7 @@ Lo que se garantiza, cada cosa con su prueba (el rojo contra HEAD esta en el ane
   - DE PUNTA A PUNTA (la prueba que PARAMETRIZA sobre la capa guardada, R, G y B sobre EPSON009, donde las tres se miden): el PDF del diario y el del mensual,
     generados por `reportes.reporte()` y `reporte_mensual()` reales sobre una prueba sembrada con el ESCRITOR REAL del servicio, dicen el nombre y los numeros de ESA
     capa y ninguno de otra (ni el gris ni las otras dos), y llevan UNA figura de 420 x 400 pt que es la de esa capa;
-  - un registro sin capa (anterior a B.5, o guardado por la pagina de hoy, B6-F4) se imprime como hoy, con el gris, y el bloque lo dice; cambiar `CAPA_POR_OMISION` no
+  - un registro sin capa (anterior a B.5, o guardado por la pagina de antes de B.7, B6-F4) se imprime como hoy, con el gris, y el bloque lo dice; cambiar `CAPA_POR_OMISION` no
     cambia ningun PDF (ningun PDF la lee);
   - la figura se dibuja SOLO si la version del algoritmo guardada es la de hoy (si no, ni se reconstruye: cero llamadas a `analizar`) y si volver a medir da las medidas
     guardadas de esa capa (px a 0.01, mm a 0.01 x escala, estado y filas exactos); lo impreso es SIEMPRE lo guardado; un fallo al reconstruir o dibujar no tumba el PDF: sale
@@ -1100,7 +1100,7 @@ def _figuras_de(pdf):
 
 
 class TestUnRegistroSinCapaSeImprimeComoHoyConElGris:
-    """B6-F4: un registro sin capa (anterior a B.5, o guardado por la pagina de hoy, que todavia no la pasa: B.7) se imprime como bloque del gris con su figura, y el bloque lo dice."""
+    """B6-F4: un registro sin capa (anterior a B.5, o guardado por la pagina de antes de B.7, que no la pasaba) se imprime como bloque del gris con su figura, y el bloque lo dice."""
 
     def test_el_diario(self, app, bd_temporal, monkeypatch):
         _sembrar_diario(bd_temporal, None)
