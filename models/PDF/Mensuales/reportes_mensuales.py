@@ -140,7 +140,7 @@ def reporte_mensual(self, fecha, maquina="", id_maquina="",
             return
 
         # Recopilar datos de todas las tablas
-        datos_completos = _recopilar_datos_completos(db, ref_id, config_tablas, maquina)
+        datos_completos = _recopilar_datos_completos(db, ref_id, config_tablas, maquina, tipo_reporte)
 
         # Obtener información del usuario (usuario 1 y usuario 2 si existe)
         usuario_info = _obtener_info_usuario(db, datos_completos.get('user_id', ''), datos_completos.get('user_id_f2'))
@@ -176,7 +176,7 @@ def _obtener_referencia_principal(db, fecha, maquina):
 def _obtener_referencia_braquiterapia(db, fecha, tipo_reporte):
     query = QSqlQuery(db)
 
-    if tipo_reporte == 'Linealidad Braquiterapia' or 'Linealidad' in tipo_reporte:
+    if _es_reporte_de_linealidad(tipo_reporte):
         query.prepare(f"""
             SELECT id FROM LinealidadBraquiterapia
             WHERE DATE(fecha) = ?{filtro_activo('LinealidadBraquiterapia')}
@@ -209,20 +209,20 @@ def _obtener_referencia_braquiterapia(db, fecha, tipo_reporte):
 
     return None
 
-def _recopilar_datos_completos(db, ref_id, config_tablas, maquina):
+def _recopilar_datos_completos(db, ref_id, config_tablas, maquina, tipo_reporte):
     """Recopila datos de todas las tablas relacionadas"""
     datos_completos = {'ref_id': ref_id, 'maquina': maquina, "control": "Mensual"}
 
     # Obtener datos de tabla principal (varía según máquina)
     if maquina == 'Braquiterapia':
-        # Verificar si es Linealidad intentando obtener de LinealidadBraquiterapia
-        datos_linealidad = _obtener_datos_linealidad_braquiterapia(db, ref_id)
-        if datos_linealidad:
+        # DP-147: la tabla la decide el tipo PEDIDO (la regla que eligió `ref_id`), nunca el id: las dos tablas tienen contadores independientes
+        if _es_reporte_de_linealidad(tipo_reporte):
+            datos_linealidad = _obtener_datos_linealidad_braquiterapia(db, ref_id)
             # Es un registro de Linealidad
             datos_completos.update(datos_linealidad)
             return datos_completos  # Linealidad no tiene tablas relacionadas
         else:
-            # Es Control Mensual/Cambio de Fuente
+            # Es Control Mensual/Cambio de Fuente/Calibración Redundante (TipoCalibracion)
             datos_principal = _obtener_datos_tabla_principal_braquiterapia(db, ref_id)
     else:
         datos_principal = _obtener_datos_tabla_principal(db, ref_id)
@@ -433,7 +433,7 @@ def _obtener_info_usuario(db, user_id, user_id_f2=None):
 
     return info
 
-def _procesar_datos_para_reporte(datos_completos, diccionario, umbrales, maquina, tipo_reporte='Control Mensual'):
+def _procesar_datos_para_reporte(datos_completos, diccionario, umbrales, maquina, tipo_reporte=None):
     """Procesa y estructura los datos para múltiples tablas del reporte"""
 
     # Crear estructura de tablas
@@ -442,7 +442,7 @@ def _procesar_datos_para_reporte(datos_completos, diccionario, umbrales, maquina
     # Para braquiterapia, usar estructura diferente
     if maquina == 'Braquiterapia':
         # Determinar si es Linealidad o Control Mensual/Cambio de Fuente
-        if tipo_reporte == 'Linealidad Braquiterapia' or datos_completos.get('tipo') == 'Linealidad':
+        if _es_reporte_de_linealidad(tipo_reporte):
             # Reporte de Linealidad
             tablas_reporte['sistema_medicion_linealidad'] = _crear_tabla_sistema_medicion_linealidad(datos_completos)
             tablas_reporte['carga_colectada'] = _crear_tabla_carga_colectada(datos_completos)
@@ -1682,3 +1682,17 @@ def _con_posicion_inicial(tablas_reporte, datos_completos):
     from models.PDF.bloque_posicion_inicial import tablas_del_mensual
     tablas_reporte.update(tablas_del_mensual(datos_completos.get('fecha'), datos_completos.get('serie')))
     return tablas_reporte
+
+
+def _es_reporte_de_linealidad(tipo_reporte):
+    """DP-147: UNA definición de «el reporte pedido es el de linealidad», la que usan las TRES decisiones del mensual de braquiterapia: de qué
+    tabla sale el `ref` (`_obtener_referencia_braquiterapia`), de qué tabla se leen sus datos (`_recopilar_datos_completos`) y qué tablas se
+    imprimen (`_procesar_datos_para_reporte`). Los `id` de `LinealidadBraquiterapia` y de `TipoCalibracion` son contadores independientes: lo
+    que dice de cuál tabla es un `ref` es el tipo pedido, nunca el id. Es la regla que ya usaba la resolución del `ref` (la primera mitad de su
+    `or`, `== 'Linealidad Braquiterapia'`, estaba contenida en la segunda). Sin tipo pedido (`None`) no hay respuesta: falla en voz alta en
+    vez de contestar «no» y dejar que se imprima calibración (`_procesar_datos_para_reporte` lleva `tipo_reporte=None` por omisión porque
+    sirve a todas las máquinas y solo braquiterapia mira el tipo; H1 de la revisión de DP147.1). Va al final del archivo para no desplazar
+    las citas por línea de los censores (Trampa 5)."""
+    if tipo_reporte is None:
+        raise ValueError("DP-147: falta tipo_reporte, el reporte pedido: sin él no se sabe de qué tabla de braquiterapia salen los datos y no se adivina por el dato")
+    return 'Linealidad' in tipo_reporte
