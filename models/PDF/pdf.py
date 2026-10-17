@@ -478,34 +478,46 @@ def generar_reporte_pdf(df, fecha, user, tipo_reporte=" " , maquina=" ",
                     "Imagen no disponible (formato no reconocido)")
             y_cursor = y_recuadro
 
-    # PI.8 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, DA-82 D2): la posición inicial de la fuente en uso, en una línea, DEBAJO de R6
-    # (el análisis y su placa son una unidad; esta es otra prueba): tabla aparte de una columna, con la cabecera de la de R6 y el
-    # texto en un `Paragraph` (un string pelado en una Table se desborda de la celda, DP-97). Solo si el llamador la pasa:
-    # `reportes.py::reporte()` lo hace en braquiterapia cuando la fuente en uso de ese día tiene prueba; con `None` (el valor por
-    # omisión, y el de la calculadora de dosis) este generador es EXACTAMENTE el de antes. Mismo salto de página que R6.
+    # PI.8 / B.6 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, DA-82 D2; PLAN_ANALISIS_PELICULAS_08-10.md): la posición inicial de la fuente en uso, DEBAJO de R6 (el análisis y su placa son una unidad; esta es otra
+    # prueba): una tabla de dos columnas con la cabecera de la de R6 (el título exacto, la línea -desfase ± U, sentido y veredicto de la capa que guardó el registro- en una fila de ancho completo y las medidas
+    # estadísticas guardadas) y, debajo, la figura de ese perfil (420 x 400 pt, centrada bajo los 450 pt de la tabla). Los textos van en `Paragraph` (un string pelado en una Table se desborda de la celda, DP-97). El
+    # bloque es UNA unidad: se llama UNA vez a la regla de salto con la altura de la tabla y la figura juntas (la figura no queda lejos de su tabla) y cabe siempre en una página vacía. Solo si el llamador pasa el
+    # contenido (`models/PDF/bloque_posicion_inicial.py::bloque_del_diario`, en braquiterapia, cuando la fuente en uso de ese día tiene prueba); con `None` (el valor por omisión, y el de la calculadora de dosis)
+    # este generador es EXACTAMENTE el de antes. Mismo salto de página que R6.
     if posicion_inicial is not None:
         from reportlab.lib.styles import ParagraphStyle
+        from xml.sax.saxutils import escape
         estilo_posicion = ParagraphStyle(
             'PosicionInicialDiario', parent=styles['Normal'],
             fontSize=CUERPO_TABLA_PT, leading=CUERPO_TABLA_PT + 2)
-        tabla_posicion = Table([['Posición inicial de la fuente'], [Paragraph(str(posicion_inicial), estilo_posicion)]],
-                               colWidths=[ANCHO_RECUADRO_IMAGEN_BRAQUI])
+        filas_posicion = [[posicion_inicial['titulo'], ''], [Paragraph(escape(posicion_inicial['linea']), estilo_posicion), '']]
+        filas_posicion += [[Paragraph(escape(rotulo), estilo_posicion), Paragraph(escape(valor), estilo_posicion)] for rotulo, valor in posicion_inicial['filas']]
+        tabla_posicion = Table(filas_posicion, colWidths=[225, 225])
         tabla_posicion.setStyle(TableStyle([
+            ('SPAN', (0, 0), (-1, 0)),
+            ('SPAN', (0, 1), (-1, 1)),
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#01b0ca")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), CABECERA_TABLA_PT),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+            ('ALIGN', (1, 2), (1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('GRID', (0, 0), (-1, -1), 1, colors.black),
         ]))
         tabla_posicion.wrapOn(c, width, height)
         alto_posicion = tabla_posicion._height
-        y_cursor = _salto_si_no_cabe(y_cursor, 10 + alto_posicion)
+        alto_figura = posicion_inicial['alto_pt'] if posicion_inicial['png'] else 0
+        y_cursor = _salto_si_no_cabe(y_cursor, 10 + alto_posicion + (10 + alto_figura if posicion_inicial['png'] else 0))
         y_cursor -= 10
         tabla_posicion.drawOn(c, x_start, y_cursor - alto_posicion)
         y_cursor -= alto_posicion
+        if posicion_inicial['png']:
+            y_cursor -= 10
+            c.drawImage(ImageReader(io.BytesIO(posicion_inicial['png'])), x_start + (ANCHO_RECUADRO_IMAGEN_BRAQUI - posicion_inicial['ancho_pt']) / 2, y_cursor - alto_figura,
+                        width=posicion_inicial['ancho_pt'], height=alto_figura)
+            y_cursor -= alto_figura
 
     # Firma de la última página (siempre, en las dos ramas -- comportamiento
     # original sin cambios para la calculadora; C.3 añadió las llamadas de
@@ -678,7 +690,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
             # explícito del físico. La TABLA 'lecturas_maximos' con esos
             # mismos valores se conserva: el dato no se pierde, se deja
             # de graficar.
-            orden_tablas = ['tipo_calibracion', 'sistema_medicion', 'condiciones_medicion',
+            orden_tablas = ['tipo_calibracion', 'sistema_medicion', 'condiciones_medicion', 'posicion_inicial', 'grafico_posicion_inicial',
                           'maximos_camaras', 'grafico_maximos', 'lecturas_maximos',
                           'resultados_actividad']
 
@@ -765,7 +777,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                     tabla = Table(data, colWidths=ANCHOS_CRITERIOS_VEREDICTOS_PT)
 
                 # Tablas de Braquiterapia
-                elif nombre_tabla in ['tipo_calibracion', 'sistema_medicion', 'condiciones_medicion',
+                elif nombre_tabla in ['tipo_calibracion', 'sistema_medicion', 'condiciones_medicion', 'posicion_inicial',
                                     'sistema_medicion_linealidad', 'carga_colectada', 'resultados_linealidad',
                                     'resultados_actividad']:
                     # Tablas de 2 columnas: Campo | Valor
@@ -782,7 +794,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                     col_widths = [1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch]
                     tabla = Table(data, colWidths=col_widths)
 
-                elif nombre_tabla in ['grafico_maximos', 'grafico_linealidad']:  # R8: 'grafico_lecturas' retirado
+                elif nombre_tabla in ['grafico_maximos', 'grafico_linealidad', 'grafico_posicion_inicial']:  # R8: 'grafico_lecturas' retirado
                     # Tablas de gráficos (una sola columna con imagen)
                     tabla = Table(data, colWidths=[6*inch])
 
@@ -838,7 +850,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                     ])
 
                 # Estilos para tablas de Braquiterapia
-                elif nombre_tabla in ['tipo_calibracion', 'sistema_medicion', 'condiciones_medicion',
+                elif nombre_tabla in ['tipo_calibracion', 'sistema_medicion', 'condiciones_medicion', 'posicion_inicial',
                                     'sistema_medicion_linealidad', 'carga_colectada', 'resultados_linealidad',
                                     'resultados_actividad']:
                     # Tablas de 2 columnas con encabezado
@@ -858,7 +870,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                         ('FONTNAME', (0, 1), (-1, 1), 'Helvetica-Bold'),
                     ])
 
-                elif nombre_tabla in ['grafico_maximos', 'grafico_linealidad']:  # R8: 'grafico_lecturas' retirado
+                elif nombre_tabla in ['grafico_maximos', 'grafico_linealidad', 'grafico_posicion_inicial']:  # R8: 'grafico_lecturas' retirado
                     # Tablas de gráficos - solo título y imagen
                     style.extend([
                         ('SPAN', (0, 0), (-1, 0)),

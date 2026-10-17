@@ -84,6 +84,8 @@ CACHES = (
     # los dos de B.3 (R1-LD-02), cerrados desde B.3 con su propio liberador: entran a la tabla para que el censo y las pruebas genericas los vean tambien
     Cache("test_b3_braqui_no_depende_del_piso", "_CACHE", "liberar_las_escenas", conocidos=("test_b3_braqui_no_depende_del_piso",)),
     Cache("test_b3_braqui_no_depende_del_piso", "_PLACAS_DEL_FONDO", "liberar_las_escenas", conocidos=("test_b3_braqui_no_depende_del_piso",)),
+    # B.6 (17-10): el analisis de EPSON009 (las imagenes de la ventana de las cuatro capas y sus perfiles) que usa la prueba de los dos PDF: se suelta al terminar el archivo
+    Cache("test_b6_pdf_capa_reportada_braqui", "_CACHE", "liberar_el_analisis", conocidos=("test_b6_pdf_capa_reportada_braqui",)),
 )
 IDENTIFICADORES = [c.ident for c in CACHES]
 

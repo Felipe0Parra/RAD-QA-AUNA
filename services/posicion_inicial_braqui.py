@@ -48,7 +48,7 @@ import re
 from datetime import date, datetime
 
 from analisisImagenes import posicion_inicial_braqui as motor
-from analisisImagenes.pelicula import CAPAS, leer_pelicula
+from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, CAPAS, leer_pelicula
 from data.ManejoDatos.conection import Conexion
 from services.anulacion import filtro_activo, reemplazar_bloque
 from services.audit_minimo import (ACCION_ANULAR, ACCION_GUARDAR, ACCION_REEMPLAZO,
@@ -421,10 +421,13 @@ def texto_breve(registro, con_cambio_de_fuente=True):
       resolucion; escanee la pelicula a 600 dpi. Sin milimetros ni veredicto. Cambio de fuente del 2026-06-26
     Con el lado del tránsito conocido el desfase es el FÍSICO (negativo = antes de la marca); sin él, el de la imagen. Sin
     símbolos de correcto o incorrecto (DA-18) y sin `<`, `>` ni `&` (el PDF mensual mete la celda en un `Paragraph`).
-    `con_cambio_de_fuente=False` omite el final (la tabla de la página ya tiene su columna de cambio de fuente)."""
+    `con_cambio_de_fuente=False` omite el final (la tabla de la página ya tiene su columna de cambio de fuente).
+    B.6: lee la capa que el registro reportó (`capa_del_registro`: `R`, `G` o `B`; sin capa, el gris de siempre) y de ELLA el estado, el desfase y la incertidumbre; un registro con capa empieza con su
+    nombre («Capa verde: -0.36 ± ...»), uno sin capa dice lo de siempre. Es la línea que imprimen los dos PDF (`bloque_pdf_posicion_inicial`)."""
     parametros = _parametros_del_registro(registro)
-    estado = registro.get("estado_gris")
-    px, u_px = registro.get("desfase_gris_px"), registro.get("incertidumbre_gris_px")
+    capa = capa_del_registro(registro)                      # B.6: la capa que el registro reportó (sin capa, el gris de siempre)
+    estado = registro.get(f"estado_{capa.lower()}")
+    px, u_px = registro.get(f"desfase_{capa.lower()}_px"), registro.get(f"incertidumbre_{capa.lower()}_px")
     tam, dpi = registro.get("tamano_pixel_mm"), registro.get("dpi")
     if not estado:
         estado = "no medible: sin dato"
@@ -447,7 +450,7 @@ def texto_breve(registro, con_cambio_de_fuente=True):
                       f"(tolerancia {_tolerancia(parametros['tolerancia_mm'])} mm)")
     if con_cambio_de_fuente and registro.get("fecha"):
         cuerpo += f". Cambio de fuente del {registro['fecha']}"
-    return cuerpo
+    return f"Capa {ADJETIVO_DE_LA_CAPA[capa]}: {cuerpo}" if capa in CAPAS else cuerpo       # un registro con capa dice cuál («Capa roja»: concuerda con el sustantivo); sin capa, el texto de siempre
 
 
 _CIFRA_Y_UNIDAD = re.compile(r"(?<=\d) (?=(?:mm|px|dpi)\b)")
@@ -469,3 +472,107 @@ def texto_para_pdf(fecha, serie=SIN_FILTRO_DE_SERIE):
     la fuente en uso. Quien llama decide qué imprime cuando devuelve None (el mensual, el valor que ya traía; el diario, nada)."""
     registro = posicion_inicial_para(fecha, serie)
     return unir_numero_y_unidad(texto_breve(registro)) if registro else None
+
+
+# ----------------------------------------------------------------------------- B.6: el bloque que imprimen los dos PDF (la capa que guardó el registro)
+
+# La tolerancia con que volver a medir tiene que dar lo guardado (DD3: 0.01 px, lo que la página compara al abrir un registro): px a 0.01, mm a 0.01 x la escala, estado y número de filas exactos.
+TOLERANCIA_AL_RECONSTRUIR_PX = 0.01
+
+# El perfil de un registro sin capa (anterior a B.5, o guardado por una página que todavía no pasa la capa, B6-F4): el de grises, como se imprimía antes de B.6.
+PERFIL_SIN_CAPA = "gris"
+
+# Por qué un bloque NO lleva el perfil (la fila «Perfil» del PDF lo dice con estas frases; el detalle técnico va a `error_log.txt`). Lo impreso -la línea y las medidas- es SIEMPRE lo guardado.
+FRASE_OTRA_VERSION = ("no se dibuja: el registro se midió con la versión {guardada} del algoritmo y la actual es {actual}; "
+                      "las medidas impresas son las guardadas")
+FRASE_NO_COINCIDE = "no se dibuja: al volver a medir la película no salen las medidas guardadas; las medidas impresas son las guardadas"
+FRASE_NO_SE_PUDO_MEDIR = "no se pudo dibujar: no se pudo volver a medir la película guardada; las medidas impresas son las guardadas"
+FRASE_NO_SE_PUDO_DIBUJAR = "no se pudo dibujar: falló al dibujarlo; las medidas impresas son las guardadas"
+
+
+def capa_del_registro(registro):
+    """La capa que reportó el registro: `R`, `G` o `B` (`pelicula.CAPAS`) o `PERFIL_SIN_CAPA` (el gris) si no guardó ninguna (vacía o ausente). Un valor que no es ninguna de las tres es un dato
+    dañado: `PosicionInicialError` (un PDF firmado no debe imprimir otra capa en silencio). Es la ÚNICA definición de «qué capa imprime un PDF»: `texto_breve`, el bloque y la figura la usan, y
+    ningún PDF lee `CAPA_POR_OMISION` (esa constante es solo el valor con que arranca el menú de la página)."""
+    capa = registro.get("capa_reportada")
+    if capa is None or capa == "":
+        return PERFIL_SIN_CAPA
+    if capa not in CAPAS:
+        raise PosicionInicialError(f"la capa reportada guardada no es válida: {capa!r}")
+    return capa
+
+
+def _claves_de_la_capa(valores, capa):
+    """Las claves de `valores_medidos` que son de esa capa (`estado_g`, `desfase_g_px`, ... o las del gris): las que da el motor, sin repetir su lista (añadir una medida es una línea del motor)."""
+    sufijo = capa.lower()
+    return [clave for clave in valores if clave.endswith(f"_{sufijo}") or f"_{sufijo}_" in clave]
+
+
+def _diferencias_de_la_capa(registro, resultado, capa):
+    """Lo recalculado contra lo guardado en la capa reportada, solo de ESA capa: las siete medidas de `valores_medidos` (px a `TOLERANCIA_AL_RECONSTRUIR_PX`, mm a esa tolerancia por la escala, estado y filas exactos).
+    Una columna guardada vacía no cuenta (un registro anterior a B.5 no tiene las medidas nuevas; una capa que no se midió no guarda ningún número); una guardada con valor que ahora no sale, sí."""
+    nuevos = motor.valores_medidos(resultado)
+    escala = resultado["tamano_pixel_mm"]
+    diferencias = []
+    for clave in _claves_de_la_capa(nuevos, capa):
+        viejo, nuevo = registro.get(clave), nuevos[clave]
+        if viejo is None:
+            continue
+        if isinstance(viejo, (int, float)) and isinstance(nuevo, (int, float)) and not clave.startswith("filas_"):
+            tolerancia = TOLERANCIA_AL_RECONSTRUIR_PX * (escala if (clave.endswith("_mm") and escala is not None) else 1.0)
+            if abs(nuevo - viejo) <= tolerancia:
+                continue
+        elif nuevo == viejo:
+            continue
+        diferencias.append(f"{clave}: guardado {viejo!r}, recalculado {nuevo!r}")
+    return diferencias
+
+
+def _reconstruir_el_analisis(registro, capa):
+    """(resultado, sin_perfil): el análisis de la imagen guardada para dibujar el perfil, o (None, por qué no). Solo se reconstruye si la versión guardada es la de hoy (si no, ni se mide) y se da por
+    bueno si da, para la capa reportada, lo guardado. Un registro que ya no está, una imagen o unos puntos que no se leen, o un error al medir: el PDF sale con lo guardado y la frase lo dice (el detalle
+    técnico, a `error_log.txt`). Un fallo de la base de datos al leer la fila SUBE (regla de PI.8: un PDF firmado no sale con un dato dudoso)."""
+    from services.registro_errores import registrar_error
+    version = registro.get("version_algoritmo")
+    if version != motor.VERSION_ALGORITMO:                  # nula = distinta
+        return None, FRASE_OTRA_VERSION.format(guardada=version or "sin dato", actual=motor.VERSION_ALGORITMO)
+    fila = registro if registro.get("imagen") is not None else leer(registro.get("id"))
+    if fila is None:
+        registrar_error(f"B.6: la posición inicial id={registro.get('id')} ya no está al leerla para dibujar su perfil")
+        return None, FRASE_NO_SE_PUDO_MEDIR
+    try:
+        parametros = json.loads(fila["parametros"])
+        if not isinstance(parametros, dict):                # unos parámetros que no son un diccionario no son los guardados: `analizar` los tomaría por omisión y mediría con otros
+            raise ValueError(f"los parámetros guardados no son un diccionario: {type(parametros).__name__}")
+        resultado = analizar_imagen(fila["imagen"], json.loads(fila["puntos"]), parametros)
+    except Exception as error:
+        registrar_error(f"B.6: no se pudo volver a medir la posición inicial id={registro.get('id')} para dibujar su perfil", error)
+        return None, FRASE_NO_SE_PUDO_MEDIR
+    diferencias = _diferencias_de_la_capa(registro, resultado, capa)
+    if diferencias:
+        registrar_error(f"B.6: al volver a medir la posición inicial id={registro.get('id')} no salen las medidas guardadas de la capa {capa}", detalle="; ".join(diferencias))
+        return None, FRASE_NO_COINCIDE
+    return resultado, None
+
+
+def bloque_pdf_posicion_inicial(registro):
+    """El contenido que imprimen los DOS PDF de la posición inicial de un registro (una fila de `posicion_inicial_para`, `listar` o `leer`), como datos y sin dibujar: la capa que el registro reportó, la
+    línea (`texto_breve` con la cifra unida a su unidad: desfase ± U, sentido y veredicto de ESA capa), sus medidas estadísticas GUARDADAS y, si se puede, el análisis reconstruido para dibujar su perfil.
+    Claves: `capa` (R, G, B o el gris), `capa_guardada` (False: el registro no guardó capa), `linea`, `estado`, `medidas` (`desfase_px`, `desfase_mm`, `media_px`, `dispersion_px`, `filas`,
+    `incertidumbre_px`, las guardadas de esa capa), `tamano_pixel_mm`, `parametros`, `dpi`, `fecha`, `version_guardada`, `resultado` (el análisis, o None) y `sin_perfil` (la frase de por qué no se dibuja, o
+    None). Lo impreso es lo GUARDADO, se dibuje o no. Es la ÚNICA definición de ese contenido: el diario y el mensual la piden por `bloque_para_pdf`; ninguno arma el suyo."""
+    capa = capa_del_registro(registro)
+    s = capa.lower()
+    resultado, sin_perfil = _reconstruir_el_analisis(registro, capa)
+    return {"capa": capa, "capa_guardada": capa in CAPAS, "linea": unir_numero_y_unidad(texto_breve(registro)), "estado": registro.get(f"estado_{s}"),
+            "medidas": {"desfase_px": registro.get(f"desfase_{s}_px"), "desfase_mm": registro.get(f"desfase_{s}_mm"), "media_px": registro.get(f"media_{s}_px"),
+                        "dispersion_px": registro.get(f"dispersion_{s}_px"), "filas": registro.get(f"filas_{s}"), "incertidumbre_px": registro.get(f"incertidumbre_{s}_px")},
+            "tamano_pixel_mm": registro.get("tamano_pixel_mm"), "parametros": _parametros_del_registro(registro), "dpi": registro.get("dpi"), "fecha": registro.get("fecha"),
+            "version_guardada": registro.get("version_algoritmo"), "resultado": resultado, "sin_perfil": sin_perfil}
+
+
+def bloque_para_pdf(fecha, serie=SIN_FILTRO_DE_SERIE):
+    """B.6: lo que un PDF imprime como posición inicial en `fecha` (gemela de `texto_para_pdf`): el bloque de la prueba que vale ese día (la regla es `posicion_inicial_para`, con `serie` en el mensual,
+    DD8) o None si no hay ninguna. Quien llama decide qué hace sin bloque (el diario, nada; el mensual, la fila con su valor de antes). Si la base falla, la excepción sube."""
+    registro = posicion_inicial_para(fecha, serie)
+    return bloque_pdf_posicion_inicial(registro) if registro else None

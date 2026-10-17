@@ -69,6 +69,9 @@ RAIZ = Path(__file__).resolve().parent.parent
 ESC = 25.4 / 600.0                                    # mm por pixel: la escala del procedimiento (600 dpi)
 CAPAS_DEL_PISO = ("R", "G", "B", "gris")
 NOMBRES = {"R": "rojo", "G": "verde", "B": "azul", "gris": "gris"}
+# B.6, R1-PROD-01 (corrector, 17-10; clase b: esta prueba fijaba la redaccion anterior): el motivo de una capa sin contraste dice «el piso de la capa <color>» y el color concuerda con el sustantivo
+# femenino: «capa roja», no «capa rojo». Escrito aqui, tal cual; `NOMBRES` es el color a secas (sirve a «el rojo»).
+LA_CAPA = {"R": "capa roja", "G": "capa verde", "B": "capa azul", "gris": "capa gris"}
 # Los parametros del plan (A.2, OBJETIVO), escritos AQUI a proposito: la prueba fija los valores, no los importa. `lado_punto_manual_mm` es el "3 x 3 mm" de la regla (6); `umbral_como_fondo` y
 # `fraccion_como_fondo` son los de la regla (7) (A2-R1-02, decision D' de Opus): 170 niveles es la mitad de la brecha entre la capa mas oscura del piso de las diez reales (73 a 86) y el fondo (255),
 # y el 10 % es 17 veces lo peor que miden las reales (0.6 %) y menos de lo que mueve la mediana (desde el 19 % la sube 1 a 3 niveles).
@@ -879,7 +882,7 @@ class TestCoherenciaConLaMeseta:
         assert p.estado == "ok"
         mala = p.capas[capa]
         assert mala.estado.startswith("no medible") and mala.mediana is None and mala.iqr is None, f"{capa}: dio {mala.mediana}"
-        assert NOMBRES[capa] in mala.estado and "meseta" in mala.estado
+        assert LA_CAPA[capa] in mala.estado and "meseta" in mala.estado          # B.6, R1-PROD-01: «capa roja» (antes `NOMBRES[capa] in ...`, que esperaba «rojo» y fijaba «capa rojo»)
         assert mala.contraste is not None and mala.contraste < 10.0
         for otra in "RGB":
             if otra != capa:

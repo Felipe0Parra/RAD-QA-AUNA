@@ -19,7 +19,13 @@ del ÁRBOL de producción (AST), no una lista escrita a mano:
 
 Cada guarda tiene (i) su COMPUERTA DE NO VACUIDAD por archivo, con su motivo (Trampa 8: sin ella pasaría en vacío si el árbol cambiara de forma) y
 (ii) su CASO SINTÉTICO que la hace caer y que nombra el sitio (discriminación). Las guardas son funciones puras sobre `{ruta: (texto, árbol)}`: la misma
-función se corre sobre el árbol real (debe salir limpia) y sobre fuentes fabricadas (debe señalar)."""
+función se corre sobre el árbol real (debe salir limpia) y sobre fuentes fabricadas (debe señalar).
+
+B.6 (17-10, PLAN_ANALISIS_PELICULAS_08-10.md, decisión de Opus `borradores/B6/decision_figura_pdf_Opus.md`) ACTUALIZA A PROPÓSITO, cada una con su motivo, las reglas que el bloque cambia (el plan lo
+anticipa: «la regla que el bloque cambie se actualiza a propósito»): el módulo de dibujo `analisisImagenes/dibujo_posicion_inicial.py` (las 13 funciones y 15 constantes mudadas de la página) entra
+al conjunto de los que importan el motor (dibuja su resultado, no lo corre: una guarda NUEVA fija por AST que solo usa `motivos_de_las_filas` y los dos `MOTIVO_*`), y el módulo del PDF
+`models/PDF/bloque_posicion_inicial.py` NO importa el motor; los dos PDF piden la posición inicial por caminos distintos (la regla 3: el diario con `bloque_del_diario`, el mensual con `texto_para_pdf` para la
+fila y `tablas_del_mensual` para la sección, que llaman a `bloque_para_pdf`) y el texto breve de la regla 5 lo pide también `bloque_pdf_posicion_inicial`."""
 import ast
 import os
 import re
@@ -37,9 +43,11 @@ SERVICIO = "services/posicion_inicial_braqui.py"
 PAGINA = "ui/paginasControles/PruebasMensuales/posicion_inicial_braqui.py"
 PDF_DIARIO = "models/PDF/reportes.py"
 PDF_MENSUAL = "models/PDF/Mensuales/reportes_mensuales.py"
+DIBUJO = "analisisImagenes/dibujo_posicion_inicial.py"      # B.6: las funciones de dibujo mudadas de la página (sin Qt ni matplotlib)
+BLOQUE_PDF = "models/PDF/bloque_posicion_inicial.py"        # B.6: la figura y las tablas del bloque de los dos PDF (sin motor, sin Qt, sin pyplot)
 CARGA_DE_LA_PRUEBA = "data/ManejoDatos/load.py"
 FUNCIONES_DEL_MOTOR = ("analizar", "mesetas_por_fila", "lado_del_transito")
-MODULOS_DE_LA_FUNCION = (PELICULA, MOTOR, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL, RESOLUCION)
+MODULOS_DE_LA_FUNCION = (PELICULA, MOTOR, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL, RESOLUCION, DIBUJO, BLOQUE_PDF)
 
 # --- las EXCEPCIONES declaradas, cada una con su motivo (una excepción sin motivo es una puerta abierta) ---------------------------------------------
 LECTORES_DE_DPI_PERMITIDOS = {
@@ -89,8 +97,10 @@ ARCHIVOS_VIGILADOS = {
     PELICULA: ("el lector único de películas (A.1): define la única función que vuelve una resolución en escala y es el único que llama a `resolucion_declarada`", 8),
     SERVICIO: ("la única puerta a la tabla: la regla de vigencia y el texto breve", 12),
     PAGINA: ("la página: no tiene SQL y pide el texto al servicio", 40),
-    PDF_DIARIO: ("el PDF diario de braquiterapia: pide el texto con `texto_para_pdf`", 3),
-    PDF_MENSUAL: ("el PDF mensual de braquiterapia: ídem", 30),
+    PDF_DIARIO: ("el PDF diario de braquiterapia: pide el bloque con `bloque_del_diario` (B.6)", 3),
+    PDF_MENSUAL: ("el PDF mensual de braquiterapia: pide el texto de la fila con `texto_para_pdf` y la sección con `tablas_del_mensual` (B.6)", 30),
+    DIBUJO: ("los dibujos mudados de la página (B.6): 13 funciones que dibujan el resultado del motor sin correrlo", 6),
+    BLOQUE_PDF: ("el bloque de los dos PDF (B.6): compone la figura y arma las filas y las tablas", 4),
     CARGA_DE_LA_PRUEBA: ("el guardado del mensual: el único `INSERT INTO CondicionesMedicion` que nombra `desplazamiento_ini`", 60),
     "data/ManejoDatos/conection.py": ("la definición de la tabla (nombra la columna y trae `ON UPDATE`: no es una escritura)", 30),
     "analisisImagenes/Analisis_PlacaRC.py": ("la excepción declarada de DP-141 (lee `info['dpi']`)", 20),
@@ -216,6 +226,41 @@ def divisiones_de_25_4(fuentes, modulos=MODULOS_DE_LA_FUNCION):
     return [s for ruta in modulos if ruta in fuentes for s in _sitios(fuentes, ruta, _es_25_4_entre_algo)]
 
 
+USOS_DEL_MOTOR_EN_EL_DIBUJO = {"motivos_de_las_filas", "MOTIVO_USADA_POR_HUECO", "MOTIVO_USADA_POR_REPLIEGUE"}
+
+
+def usos_del_motor(fuentes, ruta):
+    """Los nombres que `ruta` usa del motor (`motor.X`): {X}. Se lee el árbol, no el texto: el dibujo importa el motor con el alias `motor`."""
+    _, arbol = fuentes[ruta]
+    return {n.attr for n in ast.walk(arbol) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "motor"}
+
+
+def prohibidos_en_el_modulo_del_pdf(fuentes):
+    """[qué] de lo que el módulo del PDF NO puede importar ni llamar: el motor, Qt, `pyplot` y `matplotlib.use` (el backend global del proceso)."""
+    _, arbol = fuentes[BLOQUE_PDF]
+    hallados = []
+    for n in ast.walk(arbol):
+        if isinstance(n, ast.ImportFrom) and n.module:
+            modulo = n.module
+            if modulo == "analisisImagenes.posicion_inicial_braqui" or (modulo == "analisisImagenes" and any(a.name == "posicion_inicial_braqui" for a in n.names)):
+                hallados.append("importa el motor")
+            if modulo.startswith(("PyQt5", "PySide")):
+                hallados.append(f"importa Qt ({modulo})")
+            if modulo == "matplotlib.pyplot" or (modulo == "matplotlib" and any(a.name == "pyplot" for a in n.names)):
+                hallados.append("importa pyplot")
+        elif isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name == "analisisImagenes.posicion_inicial_braqui":
+                    hallados.append("importa el motor")
+                if a.name.startswith(("PyQt5", "PySide")):
+                    hallados.append(f"importa Qt ({a.name})")
+                if a.name == "matplotlib.pyplot":
+                    hallados.append("importa pyplot")
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "use" and isinstance(n.func.value, ast.Name) and n.func.value.id == "matplotlib":
+            hallados.append("llama matplotlib.use")
+    return hallados
+
+
 class TestUnaSolaFormaDeMedir:
     def test_nadie_mas_define_una_copia_del_motor(self, produccion):
         copias = segundas_copias_del_motor(produccion)
@@ -237,14 +282,43 @@ class TestUnaSolaFormaDeMedir:
         homonimo = {**produccion, **_fuente("def analizar(sql, tablas):\n    return None\n", "services/otra_cosa.py")}
         assert segundas_copias_del_motor(homonimo) == []
 
-    def test_solo_la_pagina_y_el_servicio_importan_el_motor(self, produccion):
-        assert importadores_del_motor(produccion) == {PAGINA, SERVICIO}
+    def test_solo_la_pagina_el_servicio_y_el_dibujo_importan_el_motor(self, produccion):
+        """B.6: `analisisImagenes/dibujo_posicion_inicial.py` (las funciones de dibujo mudadas de la página) importa el motor porque DIBUJA su resultado (`motivos_de_las_filas` y los dos `MOTIVO_*`),
+        no lo corre: lo fija `test_el_dibujo_solo_usa_del_motor_lo_que_dibuja`. El módulo del PDF NO lo importa (el análisis ya llega reconstruido por el servicio)."""
+        assert importadores_del_motor(produccion) == {PAGINA, SERVICIO, DIBUJO}
+        assert BLOQUE_PDF not in importadores_del_motor(produccion)
 
     def test_discrimina_un_tercer_importador_de_cualquier_forma(self, produccion):
         for linea in ("from analisisImagenes import posicion_inicial_braqui as m", "from analisisImagenes.posicion_inicial_braqui import analizar",
                       "import analisisImagenes.posicion_inicial_braqui", "import importlib\nm = importlib.import_module('analisisImagenes.posicion_inicial_braqui')"):
             fuentes = {**produccion, **_fuente(linea + "\n", "models/PDF/un_pdf_que_mide.py")}
-            assert importadores_del_motor(fuentes) == {PAGINA, SERVICIO, "models/PDF/un_pdf_que_mide.py"}, linea
+            assert importadores_del_motor(fuentes) == {PAGINA, SERVICIO, DIBUJO, "models/PDF/un_pdf_que_mide.py"}, linea
+
+    def test_el_dibujo_solo_usa_del_motor_lo_que_dibuja(self, produccion):
+        """B.6: el módulo de dibujo usa del motor SOLO `motivos_de_las_filas` y los dos `MOTIVO_*` de las filas puenteadas (derivado por AST): un `motor.analizar` o un `motor.valores_medidos` en él sería
+        una segunda forma de medir dentro de un módulo de dibujo."""
+        assert usos_del_motor(produccion, DIBUJO) == USOS_DEL_MOTOR_EN_EL_DIBUJO, usos_del_motor(produccion, DIBUJO)
+
+    def test_no_vacuidad_el_dibujo_usa_de_verdad_esas_tres_cosas_del_motor(self, produccion):
+        assert len(usos_del_motor(produccion, DIBUJO)) == 3 and sum(isinstance(n, ast.FunctionDef) for n in ast.walk(produccion[DIBUJO][1])) >= 12
+
+    @pytest.mark.parametrize("uso", ["motor.analizar(g, c, d, p)", "motor.valores_medidos(r)", "motor.resumen(r)", "motor.PARAMETROS"])
+    def test_discrimina_un_uso_del_motor_que_no_es_dibujar(self, produccion, uso):
+        texto = produccion[DIBUJO][0] + f"\n\ndef _mide_en_un_modulo_de_dibujo(motor, g, c, d, p, r):\n    return {uso}\n"
+        fuentes = {**produccion, DIBUJO: (texto, ast.parse(texto))}
+        assert usos_del_motor(fuentes, DIBUJO) != USOS_DEL_MOTOR_EN_EL_DIBUJO
+
+    def test_el_modulo_del_pdf_no_importa_el_motor_ni_qt_ni_pyplot(self, produccion):
+        """B.6: la composición de la figura no corre el análisis (el servicio lo reconstruye), no abre ventanas y NUNCA toca el backend global de matplotlib (`pyplot`, `matplotlib.use`):
+        el cargador diferido de la aplicación ya lo importa y los dos gráficos del mensual lo cambian (anterior a B.6, no se agrava)."""
+        assert prohibidos_en_el_modulo_del_pdf(produccion) == []
+
+    @pytest.mark.parametrize("linea", ["from analisisImagenes import posicion_inicial_braqui as motor", "import matplotlib.pyplot as plt", "from matplotlib import pyplot",
+                                       "import matplotlib\nmatplotlib.use('Agg')", "from PyQt5.QtWidgets import QWidget", "import PyQt5.QtGui"])
+    def test_discrimina_cada_cosa_prohibida_en_el_modulo_del_pdf(self, produccion, linea):
+        texto = linea + "\n" + produccion[BLOQUE_PDF][0]
+        fuentes = {**produccion, BLOQUE_PDF: (texto, ast.parse(texto))}
+        assert prohibidos_en_el_modulo_del_pdf(fuentes), f"el guardia no ve: {linea}"
 
     def test_un_solo_lector_de_la_resolucion_declarada(self, produccion):
         fuera = _fuera_de_lo_permitido(lectores_de_dpi(produccion), LECTORES_DE_DPI_PERMITIDOS)
@@ -354,17 +428,26 @@ def _llama_en_cualquier_sitio(fuentes, ruta, destino):
                for c in ast.walk(arbol))
 
 
+# B.6: por dónde pide cada PDF la posición inicial: el diario el bloque entero (`bloque_del_diario`) y el mensual dos cosas (el texto de la fila con `texto_para_pdf` y la sección con `tablas_del_mensual`).
+# Las dos funciones del módulo del PDF piden el contenido al servicio con `bloque_para_pdf`; éste y `texto_para_pdf` usan la regla (`posicion_inicial_para`).
+PEDIDOS_DE_LOS_PDF = ((PDF_DIARIO, "bloque_del_diario"), (PDF_MENSUAL, "texto_para_pdf"), (PDF_MENSUAL, "tablas_del_mensual"))
+
+
 def reglas_incumplidas(fuentes):
     """Lo que debe cumplirse sobre QUIÉN llama a la regla: [texto que nombra el sitio]."""
     falta = []
     for funcion in ("posicion_inicial_para", "existe_vigente"):
         if not _llama_a(fuentes, SERVICIO, funcion, "_vigente_por_fecha"):
             falta.append(f"{SERVICIO}::{funcion} no llama a `_vigente_por_fecha` (¿tiene su propia regla?)")
-    for pdf in (PDF_DIARIO, PDF_MENSUAL):
-        if not _llama_en_cualquier_sitio(fuentes, pdf, "texto_para_pdf"):
-            falta.append(f"{pdf} no pide el texto con `texto_para_pdf` (¿busca la prueba por su cuenta?)")
-    if not _llama_a(fuentes, SERVICIO, "texto_para_pdf", "posicion_inicial_para"):
-        falta.append(f"{SERVICIO}::texto_para_pdf no usa `posicion_inicial_para`")
+    for pdf, pedido in PEDIDOS_DE_LOS_PDF:
+        if not _llama_en_cualquier_sitio(fuentes, pdf, pedido):
+            falta.append(f"{pdf} no pide la posición inicial con `{pedido}` (¿busca la prueba por su cuenta?)")
+    for funcion in ("bloque_del_diario", "tablas_del_mensual"):
+        if not _llama_a(fuentes, BLOQUE_PDF, funcion, "bloque_para_pdf"):
+            falta.append(f"{BLOQUE_PDF}::{funcion} no pide el contenido con `bloque_para_pdf` (¿busca la prueba por su cuenta?)")
+    for funcion in ("texto_para_pdf", "bloque_para_pdf"):
+        if not _llama_a(fuentes, SERVICIO, funcion, "posicion_inicial_para"):
+            falta.append(f"{SERVICIO}::{funcion} no usa `posicion_inicial_para`")
     return falta
 
 
@@ -398,9 +481,11 @@ class TestUnaSolaReglaDeVigencia:
         fuentes = {**produccion, SERVICIO: (servicio, ast.parse(servicio))}
         assert any("posicion_inicial_para" in f or "existe_vigente" in f for f in reglas_incumplidas(fuentes)), reglas_incumplidas(fuentes)
 
-    @pytest.mark.parametrize("pdf", [PDF_DIARIO, PDF_MENSUAL])
-    def test_discrimina_un_pdf_que_busca_la_prueba_por_su_cuenta(self, produccion, pdf):
-        texto = produccion[pdf][0].replace("texto_para_pdf", "posicion_inicial_para")
+    @pytest.mark.parametrize("pdf,pedido", [*PEDIDOS_DE_LOS_PDF, (BLOQUE_PDF, "bloque_para_pdf")])
+    def test_discrimina_un_pdf_que_busca_la_prueba_por_su_cuenta(self, produccion, pdf, pedido):
+        """B.6: cada PDF por su camino (el diario `bloque_del_diario`; el mensual `texto_para_pdf` y `tablas_del_mensual`) y las dos funciones del módulo del PDF por `bloque_para_pdf`: quitar
+        cualquiera de los pedidos (aquí, cambiarlo por la regla) lo señala."""
+        texto = produccion[pdf][0].replace(pedido, "posicion_inicial_para")
         assert texto != produccion[pdf][0]
         fuentes = {**produccion, pdf: (texto, ast.parse(texto))}
         assert any(f.startswith(pdf) for f in reglas_incumplidas(fuentes)), reglas_incumplidas(fuentes)
@@ -466,12 +551,16 @@ def constructores_del_texto(fuentes):
 
 
 def consumidores_incumplidos(fuentes):
+    """B.6: la página pide el texto con `texto_breve`; los dos PDF por los pedidos de `PEDIDOS_DE_LOS_PDF` (el diario ya no llama `texto_para_pdf`: pide el bloque entero) y el servicio arma la línea del bloque
+    con `texto_breve` (`bloque_pdf_posicion_inicial`), no con un texto propio."""
     falta = []
     if not _llama_en_cualquier_sitio(fuentes, PAGINA, "texto_breve"):
         falta.append(f"{PAGINA} no pide el texto con `texto_breve`")
-    for pdf in (PDF_DIARIO, PDF_MENSUAL):
-        if not _llama_en_cualquier_sitio(fuentes, pdf, "texto_para_pdf"):
-            falta.append(f"{pdf} no pide el texto con `texto_para_pdf`")
+    for pdf, pedido in PEDIDOS_DE_LOS_PDF:
+        if not _llama_en_cualquier_sitio(fuentes, pdf, pedido):
+            falta.append(f"{pdf} no pide el texto con `{pedido}`")
+    if not _llama_a(fuentes, SERVICIO, "bloque_pdf_posicion_inicial", "texto_breve"):
+        falta.append(f"{SERVICIO}::bloque_pdf_posicion_inicial no arma la línea con `texto_breve`")
     return falta
 
 
@@ -485,7 +574,7 @@ class TestElTextoBreveSeConstruyeEnUnSoloSitio:
         assert {(r, f) for r, f, _ in hallados} == set(CONSTRUCTORES_DEL_TEXTO_PERMITIDOS)
         assert len(hallados) >= 3, f"`texto_breve` tiene {len(hallados)} ramas con «±» y «(k = 2)» (eran 3): ¿se partió?"
 
-    def test_los_tres_consumidores_piden_el_texto_a_su_unico_dueno(self, produccion):
+    def test_los_consumidores_piden_el_texto_a_su_unico_dueno(self, produccion):
         assert consumidores_incumplidos(produccion) == []
 
     @pytest.mark.parametrize("ruta", [PDF_DIARIO, PDF_MENSUAL, PAGINA])
@@ -494,7 +583,8 @@ class TestElTextoBreveSeConstruyeEnUnSoloSitio:
         fuentes = {**produccion, ruta: (texto, ast.parse(texto))}
         assert [(r, f) for r, f, _ in _fuera_de_lo_permitido(constructores_del_texto(fuentes), CONSTRUCTORES_DEL_TEXTO_PERMITIDOS)] == [(ruta, "_mi_texto")]
 
-    @pytest.mark.parametrize("ruta,destino", [(PAGINA, "texto_breve"), (PDF_DIARIO, "texto_para_pdf"), (PDF_MENSUAL, "texto_para_pdf")])
+    @pytest.mark.parametrize("ruta,destino", [(PAGINA, "texto_breve"), (PDF_DIARIO, "bloque_del_diario"), (PDF_MENSUAL, "texto_para_pdf"), (PDF_MENSUAL, "tablas_del_mensual"),
+                                              (SERVICIO, "texto_breve")])
     def test_discrimina_un_consumidor_que_deja_de_pedirlo(self, produccion, ruta, destino):
         texto = produccion[ruta][0].replace(destino, "otra_cosa")
         assert texto != produccion[ruta][0]

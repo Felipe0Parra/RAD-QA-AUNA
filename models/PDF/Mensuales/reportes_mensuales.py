@@ -463,7 +463,7 @@ def _procesar_datos_para_reporte(datos_completos, diccionario, umbrales, maquina
             # retirado -- pedido explícito del físico (3 puntos,
             # voltaje->corriente). La tabla 'lecturas_maximos' de arriba
             # conserva los mismos valores.
-        return tablas_reporte
+        return _con_posicion_inicial(tablas_reporte, datos_completos)
 
     # Tabla 1: Equipos de medición
     tablas_reporte['equipos'] = _crear_tabla_equipos(datos_completos.get('equipos_medicion', []), maquina)
@@ -1670,3 +1670,15 @@ def _desplazamiento_inicial_para_pdf(datos_completos, valor_guardado):
     from services.posicion_inicial_braqui import texto_para_pdf
     texto = texto_para_pdf(datos_completos.get('fecha'), serie=datos_completos.get('serie'))
     return valor_guardado if texto is None else texto
+
+
+def _con_posicion_inicial(tablas_reporte, datos_completos):
+    """B.6 (DP-157): al reporte de Control Mensual / Cambio de Fuente de braquiterapia le suma la sección «Posición inicial de la fuente» (la tabla de las medidas de la capa que guardó el registro y la de su
+    perfil) cuando hay una prueba aplicable a la fecha y a la serie de ESTA calibración (DD8; el mismo `fecha` y `serie` de la fila «Desplazamiento inicial»). Sin prueba aplicable no suma nada: el PDF
+    queda igual que sin esta sección. El `return` que la llama sirve también al reporte de linealidad (que no trae `condiciones_medicion`): ahí devuelve las tablas tal cual. Va al final del archivo, con su
+    import local (el módulo del PDF importa el servicio), para no desplazar las citas por línea de los censores (Trampa 5); las claves se imprimen donde `pdf.py` las pone en `orden_tablas`."""
+    if 'condiciones_medicion' not in tablas_reporte:
+        return tablas_reporte
+    from models.PDF.bloque_posicion_inicial import tablas_del_mensual
+    tablas_reporte.update(tablas_del_mensual(datos_completos.get('fecha'), datos_completos.get('serie')))
+    return tablas_reporte

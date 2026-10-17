@@ -101,8 +101,8 @@ from PIL import Image
 
 from analisisImagenes.resolucion_imagen import resolucion_declarada
 
-# Las tres capas de color de la película. `NOMBRE_DE_CAPA` es la ÚNICA definición de cómo se nombra la capa reportada (en los menús «Capa reportada» de
-# las dos ventanas, en la tabla de registros y en los PDF).
+# Las tres capas de color de la película. `NOMBRE_DE_CAPA` es el COLOR a secas (masculino: rojo, verde, azul), para los menús «Capa reportada» de las dos ventanas y la columna «Capa» de la tabla de registros;
+# una frase que dice «capa <color>» (el sustantivo es femenino) saca el color de `ADJETIVO_DE_LA_CAPA`: «capa roja», no «capa rojo» (B.6, R1-PROD-01).
 CAPAS = ("R", "G", "B")
 NOMBRE_DE_CAPA = {"R": "rojo", "G": "verde", "B": "azul"}
 # La capa con que ARRANCAN los menús «Capa reportada» de las dos ventanas (la posición inicial, B.7, y el mensual, E.1). Es solo el valor inicial del menú: la
@@ -923,7 +923,7 @@ def texto_de_la_comparacion(piso):
     return inicio + "la película virgen está " + " y ".join(partes) + "."
 
 
-_ADJETIVO_DE_LA_CAPA = {"R": "roja", "G": "verde", "B": "azul", "gris": "gris"}
+ADJETIVO_DE_LA_CAPA = {"R": "roja", "G": "verde", "B": "azul", "gris": "gris"}      # el color que CONCUERDA con «capa» (femenino): la ÚNICA tabla para toda frase con «capa»; un tripwire vigila que ninguna use `NOMBRE_DE_CAPA` (B.6, R1-PROD-01)
 
 
 def texto_breve_del_piso(piso, capa=None):
@@ -934,7 +934,7 @@ def texto_breve_del_piso(piso, capa=None):
     if d["estado"] != "ok":
         return "Piso: " + d["estado"]
     c = d["capas"][capa]
-    cabeza = f"Piso (capa {_ADJETIVO_DE_LA_CAPA[capa]}): "
+    cabeza = f"Piso (capa {ADJETIVO_DE_LA_CAPA[capa]}): "
     if c["estado"] != "ok":
         return cabeza + c["estado"]
     cabeza += f"{_cifra(c['mediana'])} niveles; "
@@ -1431,7 +1431,7 @@ def _piso_capas(pelicula, campo, escala, p, medidas):
         mediana, n, iqr = medidas[c]
         contraste = mediana - meseta[c]
         if contraste < p["contraste_minimo"]:
-            motivo = (f"no medible: el piso de la capa {_NOMBRE_DE_LA_CAPA_DEL_PISO[c]} no es más claro que la meseta en al menos {p['contraste_minimo']:g} niveles "
+            motivo = (f"no medible: el piso de la capa {ADJETIVO_DE_LA_CAPA[c]} no es más claro que la meseta en al menos {p['contraste_minimo']:g} niveles "
                       f"(piso {mediana:.1f}, meseta {meseta[c]:.1f})")
             capas[c] = CapaDelPiso(c, motivo, None, n, None, meseta[c], contraste)
             continue

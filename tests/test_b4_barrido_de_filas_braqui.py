@@ -342,6 +342,7 @@ import ui.paginasControles.PruebasMensuales.posicion_inicial_braqui as pagina_mo
 from test_pi4_pagina_posicion_inicial import _analizada, _cursor_limpio, app, archivo_braqui, dialogos, fabrica, pagina  # noqa: F401  (fixtures de PI.4)
 
 PAGINA_PY = Path(__file__).resolve().parents[1] / "ui" / "paginasControles" / "PruebasMensuales" / "posicion_inicial_braqui.py"
+DIBUJO_PY = Path(__file__).resolve().parents[1] / "analisisImagenes" / "dibujo_posicion_inicial.py"     # B.6: los dibujos (y `TRAZO_DE_PARAMETRO`, `texto_de_la_regla`) se mudaron aquí desde la página
 TAM = 25.4 / 600.0
 PELICULAS_REALES = {"braqui_00": (BRAQUI_00, CLICS_PLACA_REAL), "EPSON009": (EPSON009, CLICS_EPSON009)}       # la de la capa roja que no se mide y la que mide sus cuatro capas
 COLORES_DE_LA_PAGINA = (pagina_mod.TINTA, *pagina_mod.COLOR_CAPA.values())       # con lo que se dibuja lo demas: el «gris claro» de las filas que no entran tiene que superarlos en claridad
@@ -929,8 +930,9 @@ class TestNingunControlCambiaLaRegla:
     PARAMETROS_DE_LA_REGLA = ("fraccion_central", "fraccion_minima", "minimo_filas", "hueco_max")
 
     def _ambitos(self):
-        """{nombre del parametro de la regla: ambitos (funcion o clase mas interna, o el nombre de la asignacion de modulo) donde la pagina lo nombra como texto}."""
-        arbol = ast.parse(PAGINA_PY.read_text(encoding="utf-8"))
+        """{nombre del parametro de la regla: ambitos (funcion o clase mas interna, o el nombre de la asignacion de modulo) donde la pagina lo nombra como texto}. B.6 (clase b: lo que se vigila se mudo):
+        lee la pagina Y el modulo de dibujo (`analisisImagenes/dibujo_posicion_inicial.py`), donde viven ahora `TRAZO_DE_PARAMETRO` y `texto_de_la_regla`: leyendo solo la pagina el censo pasaria en vacio
+        para todo lo mudado (un control de la regla escrito en una funcion de dibujo no se veria)."""
         encontrados = {}
 
         def visitar(nodo, ambito):
@@ -942,7 +944,8 @@ class TestNingunControlCambiaLaRegla:
                 encontrados.setdefault(nodo.value, set()).add(ambito)
             for hijo in ast.iter_child_nodes(nodo):
                 visitar(hijo, ambito)
-        visitar(arbol, "<modulo>")
+        for ruta in (PAGINA_PY, DIBUJO_PY):
+            visitar(ast.parse(ruta.read_text(encoding="utf-8")), "<modulo>")
         return encontrados
 
     def test_los_parametros_de_la_regla_solo_se_nombran_para_censarlos_o_para_leerlos(self):
@@ -963,4 +966,14 @@ class TestNingunControlCambiaLaRegla:
         falso = tmp_path / "pagina_falsa.py"
         falso.write_text(PAGINA_PY.read_text(encoding="utf-8") + "\n\nclass Falsa:\n    def construir(self):\n        return 'fraccion_central'\n", encoding="utf-8")
         monkeypatch.setattr(sys.modules[__name__], "PAGINA_PY", falso)
+        assert any(v - {"TRAZO_DE_PARAMETRO", "texto_de_la_regla"} for v in self._ambitos().values())
+
+    def test_el_censo_lee_tambien_el_modulo_de_dibujo(self, tmp_path, monkeypatch):
+        """B.6: lo mudado se sigue vigilando: un control de la regla escrito en el modulo de dibujo cae, y lo permitido (el censo y la frase) existe ahi y no en la pagina."""
+        encontrados = self._ambitos()
+        assert {"TRAZO_DE_PARAMETRO", "texto_de_la_regla"} <= set().union(*encontrados.values()), "el censo ya no ve donde se nombran los parametros: leyo el archivo equivocado"
+        assert not any(isinstance(n, ast.FunctionDef) and n.name == "texto_de_la_regla" for n in ast.parse(PAGINA_PY.read_text(encoding="utf-8")).body)
+        falso = tmp_path / "dibujo_falso.py"
+        falso.write_text(DIBUJO_PY.read_text(encoding="utf-8") + "\n\ndef construir_un_control():\n    return 'minimo_filas'\n", encoding="utf-8")
+        monkeypatch.setattr(sys.modules[__name__], "DIBUJO_PY", falso)
         assert any(v - {"TRAZO_DE_PARAMETRO", "texto_de_la_regla"} for v in self._ambitos().values())

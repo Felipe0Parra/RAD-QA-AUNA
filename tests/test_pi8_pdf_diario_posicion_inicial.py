@@ -1,7 +1,14 @@
 """PI.8 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, DA-82 D2): el PDF DIARIO de braquiterapia lleva un bloque breve con la posición inicial
-de la fuente en uso, debajo del bloque R6 ("Análisis de la placa" y su película): una tabla aparte de una columna, con el texto en un
-`Paragraph` (si no, se desborda de la celda, DP-97), solo si la fuente en uso tiene prueba. No es una columna de la tabla diaria (no
-toca el censo `R2`). 600, iX, Halcyon y la calculadora de dosis no lo tienen ni consultan el servicio.
+de la fuente en uso, debajo del bloque R6 ("Análisis de la placa" y su película), solo si la fuente en uso tiene prueba. No es una columna
+de la tabla diaria (no toca el censo `R2`). 600, iX, Halcyon y la calculadora de dosis no lo tienen ni consultan el servicio.
+
+B.6 (PLAN_ANALISIS_PELICULAS_08-10.md, clase b): la FORMA del bloque cambió. Era una tabla de una columna con el texto de la prueba en un
+`Paragraph` (si no, se desborda de la celda, DP-97); ahora el generador recibe el CONTENIDO del bloque (`models/PDF/bloque_posicion_inicial.py`:
+título, línea de la capa que guardó el registro, filas de medidas y, si se dibuja, la figura) y lo imprime como una tabla de dos columnas con la
+cabecera de R6, la línea en una fila de ancho completo (siempre en un `Paragraph`) y, debajo y centrada, la figura de 420 x 400 pt, todo como UNA
+unidad que salta entera (una sola llamada a la regla de salto de página). Estas pruebas siguen midiendo el generador con una línea de texto (la
+típica o la más larga) dentro de ese contenido y con las filas típicas (`_bloque`); lo que dice el bloque (la capa, sus números, la figura) lo
+prueba `test_b6_pdf_capa_reportada_braqui.py`.
 
 Lo que se garantiza, cada cosa con su prueba:
   - el generador (`generar_reporte_pdf(..., posicion_inicial=None)`): con `None` es el de siempre (mismos bytes que sin el argumento);
@@ -25,7 +32,7 @@ Lo que se garantiza, cada cosa con su prueba:
     sin ninguna prueba y con la prueba anulada, ninguno; un fallo del servicio, de CUALQUIER tipo, avisa con su causa y no genera el
     PDF (un diario firmado no sale sin el dato); 600, iX y Halcyon no consultan el servicio (se CUENTA la consulta: un `raise` lo
     traga el `except` de `reporte()` y la prueba pasaría igual).
-La compuerta de bytes contra HEAD (la calculadora y el diario sin prueba, byte a byte) es un script del anexo (`pi8_compuerta_diario.py`).
+La compuerta de bytes contra HEAD (la calculadora y el diario sin prueba, byte a byte) es un script del anexo (`pi8_compuerta_diario.py` y, desde B.6, `b6_diferencial.py`).
 Se siembra TODO antes de abrir ninguna conexión de Qt (una escritura por sqlite3 entre aperturas de Qt rompe el reporte)."""
 import ast
 import base64
@@ -52,7 +59,7 @@ from test_pi3_servicio_posicion_inicial import USUARIO, _sintetica
 from test_r1_r6_reportes_diarios_legibles import (DICC_600, DICC_BRAQUI, DICC_HALCYON, _AutoDB, _capturar_pdf,  # noqa: F401
                                                   _sin_dialogos_modales, app, bd_temporal)
 
-TITULO = "Posición inicial de la fuente"
+TITULO = "Posición inicial de la fuente"       # B.6: el título vive en `models/PDF/bloque_posicion_inicial.py` (una sola definición; el generador lo recibe dentro del contenido): la prueba de abajo lo ata
 TEXTO_TIPICO = "-0.36 ± 0.09 mm (k = 2), antes de la marca. Cumple (tolerancia 1.0 mm). Cambio de fuente del 2026-01-10"
 TEXTO_LARGO = ("-8.55 ± 2.12 px (k = 2); la imagen declara 300 dpi y el procedimiento es de 600 dpi: parece escaneada a otra resolucion; "
                "escanee la pelicula a 600 dpi. Sin milimetros ni veredicto. Cambio de fuente del 2026-06-26")
@@ -102,8 +109,20 @@ def _df_rapido(n_filas, r6):
     return _df(n_filas, r6, pelicula=PELICULA_MINIMA)
 
 
+FILAS_TIPICAS = [("Capa reportada", "capa verde"), ("Mediana de las filas (el desfase en la imagen) [mm]", "-0.097 = -2.30 px"), ("Media de las filas [mm]", "-0.151 = -3.58 px"),
+                 ("Desviación estándar de las filas [mm]", "0.141 = 3.34 px"), ("Número de filas", "38"), ("Resolución del escaneo [dpi]", "600")]
+
+
+def _bloque(texto, png=None, filas=None):
+    """B.6: lo que el generador recibe como posición inicial: ya no es un texto sino el CONTENIDO del bloque (`bloque_del_diario`): el título, la línea, las filas de la tabla y la figura (o None). Estas pruebas
+    siguen midiendo el generador con una línea de texto (la típica o la más larga), ahora dentro de ese contenido y con las filas típicas."""
+    return {"titulo": TITULO, "linea": texto, "filas": FILAS_TIPICAS if filas is None else filas, "png": png, "ancho_pt": 420, "alto_pt": 400}
+
+
 def _pdf(df, posicion=SIN_ARGUMENTO, diario=True):
     # `generar_reporte_pdf` modifica el df que recibe (drop in situ): cada PDF trabaja sobre su copia.
+    if isinstance(posicion, str):
+        posicion = _bloque(posicion)
     argumentos = dict(df=df.copy(), fecha="2026-03-01", user=FIRMANTE, tipo_reporte="Diario", maquina="Gammamed Plus i X", id_maquina="",
                       logo_path=None, firma=None, role=CARGO, temp=True, es_diario_qc=diario)
     if posicion is not SIN_ARGUMENTO:
@@ -222,7 +241,8 @@ class TestElGenerador:
     @pytest.mark.parametrize("r6,n", [("sin_pelicula", 5), ("sin_pelicula", 30), ("con_pelicula", 10), ("con_pelicula", 25)])
     def test_el_bloque_no_pisa_lo_que_tiene_encima_y_deja_su_hueco(self, app, r6, n):
         """Nada de lo que empieza ARRIBA de la cabecera del bloque (la tabla principal, R6, el marco de la película) llega hasta ella."""
-        doc = fitz.open(stream=_pdf(_df_rapido(n, r6), TEXTO_LARGO), filetype="pdf")
+        # B.6 (clase b): un bloque de una fila, para que siga cayendo en la misma página que lo de arriba en las cuatro colocaciones (con las seis filas, en tres de ellas salta a la página siguiente)
+        doc = fitz.open(stream=_pdf(_df_rapido(n, r6), _bloque(TEXTO_LARGO, filas=FILAS_TIPICAS[:1])), filetype="pdf")
         pagina, rect = _cabecera(doc, TITULO)
         arriba = [d["rect"] for d in doc[pagina].get_drawings() if d["rect"].y0 < rect.y0 - 1 and d["rect"].width > 5 and d["rect"].height > 5]
         assert arriba, "no se encontró nada encima del bloque"
@@ -249,10 +269,12 @@ class TestElGenerador:
     def test_el_titulo_que_se_prueba_es_el_de_produccion_y_no_lleva_unidad(self):
         """El título se lee del código que genera el PDF (por AST), no de una constante de este archivo: una unidad entre paréntesis
         o corchetes en una etiqueta nueva dispararía el tripwire de D.1 (y el título es un nombre, no una magnitud)."""
+        # B.6 (clase b: la forma del bloque cambió por decisión): el título es `TITULO` del módulo del bloque (que lo lleva dentro del contenido) y el generador YA NO tiene el literal: una sola definición
         arbol = ast.parse(inspect.getsource(generar_reporte_pdf))
-        titulos = [n.value for n in ast.walk(arbol) if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value.startswith("Posición inicial")]
-        assert titulos == [TITULO], titulos
-        assert "(" not in titulos[0] and "[" not in titulos[0]
+        literales = [n.value for n in ast.walk(arbol) if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value.startswith("Posición inicial")]
+        assert literales == [], f"el generador escribe el título a mano: {literales}"
+        from models.PDF.bloque_posicion_inicial import TITULO as TITULO_DEL_MODULO
+        assert TITULO == TITULO_DEL_MODULO == "Posición inicial de la fuente" and "(" not in TITULO and "[" not in TITULO
 
     def test_la_calculadora_no_cambia_con_el_argumento_por_omision(self, monkeypatch):
         from reportlab import rl_config
@@ -271,7 +293,7 @@ class TestElGenerador:
         orden. La firma se repite en cada página, así que se compara sin ella. Un cambio que altere TODOS los PDF (un ancho de línea,
         una fila perdida) lo ve esta prueba y no la de «mismos bytes con None», que compara el código consigo mismo."""
         firma = {FIRMANTE, CARGO}
-        texto_del_bloque = _normal(TEXTO_TIPICO).split()
+        texto_del_bloque = _normal(TEXTO_TIPICO).split() + [w for rotulo, valor in FILAS_TIPICAS for w in _normal(f"{rotulo} {valor}").split()]       # B.6: la línea y las filas de la tabla
 
         def lineas(pdf):
             doc = fitz.open(stream=pdf, filetype="pdf")
@@ -508,7 +530,9 @@ class TestElBloqueEsVisualmenteComoR6:
 
     @pytest.mark.parametrize("r6", ["sin", "sin_pelicula", "con_pelicula"])
     def test_diez_puntos_de_separacion_con_lo_de_arriba(self, r6):
-        doc = fitz.open(stream=_pdf(_df(2, r6), TEXTO_TIPICO), filetype="pdf")
+        # B.6 (clase b): con las seis filas de la tabla el bloque ya no cabe debajo de la película y salta a la página siguiente (el salto lo prueban las otras clases); esta prueba mide el HUECO de 10 pt
+        # con lo de arriba en la MISMA página, así que usa un bloque de una fila
+        doc = fitz.open(stream=_pdf(_df(2, r6), _bloque(TEXTO_TIPICO, filas=FILAS_TIPICAS[:1])), filetype="pdf")
         pagina, caja, _, _ = _cabecera_con_span(doc, TITULO)
         previos = [d["rect"].y1 for d in pagina.get_drawings() if d["rect"].y1 < caja.y0 - 3 and d["rect"].width > 20]
         previos += [i["bbox"][3] for i in pagina.get_image_info() if i["bbox"][3] < caja.y0 - 3]
@@ -671,7 +695,7 @@ class TestElCableadoDeReporte:
             def show(self):
                 visores.append(1)
 
-        monkeypatch.setattr(svc, "texto_para_pdf", revienta)
+        monkeypatch.setattr(svc, "bloque_para_pdf", revienta)       # B.6: el diario pide el bloque entero (`bloque_del_diario` -> `bloque_para_pdf`)
         monkeypatch.setattr(reportes_mod, "PdfViewer", _Visor)
         monkeypatch.setattr(QMessageBox, "critical", staticmethod(lambda *a, **k: avisos.append(a)))
         reportes_mod.reporte(_AutoDB(), fecha="2026-03-01", maquina="Gammamed Plus i X", id_maquina="", tipo_reporte="diario",
@@ -690,7 +714,7 @@ class TestElCableadoDeReporte:
         _sembrar_fuentes(bd_temporal)
         consultas = []
         # CUENTA la consulta: lanzar una excepción la traga el `except` de `reporte()` y el PDF saldría igual sin el bloque
-        monkeypatch.setattr(svc, "texto_para_pdf", lambda *a, **k: consultas.append(a))
+        monkeypatch.setattr(svc, "bloque_para_pdf", lambda *a, **k: consultas.append(a))
         texto, _ = _capturar_pdf(monkeypatch, "2026-03-01", maquina, dicc, "si")
         assert consultas == [], f"el diario de {maquina} consultó la posición inicial {len(consultas)} vez/veces"
         assert TITULO not in texto

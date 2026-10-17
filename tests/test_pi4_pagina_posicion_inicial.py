@@ -66,6 +66,8 @@ from test_pi3_servicio_posicion_inicial import (BRAQUI_00, DATOS, EPSON009, SERI
 
 RAIZ = Path(__file__).resolve().parent.parent
 PAGINA_PY = RAIZ / "ui" / "paginasControles" / "PruebasMensuales" / "posicion_inicial_braqui.py"
+DIBUJO_PY = Path(__file__).resolve().parents[1] / "analisisImagenes" / "dibujo_posicion_inicial.py"      # B.6: lo mudado de la pagina
+BLOQUE_PDF_PY = Path(__file__).resolve().parents[1] / "models" / "PDF" / "bloque_posicion_inicial.py"      # B.6: el bloque de los dos PDF
 TABLA = "braqui_posicion_inicial"
 CAMBIO = "2026-09-27"            # tres días antes de la fecha del escaneo de braqui_00 (EXIF 2026-09-30): DD7 lo propone
 SERIE_C = "24-05-0004-D"
@@ -1868,6 +1870,15 @@ class TestLaPaginaNoHaceLoQueNoDebe:
     def test_26c_ningun_literal_ni_docstring_lleva_simbolos_de_correcto_o_incorrecto(self, arbol):
         literales = [n.value for n in ast.walk(arbol) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
         assert len(literales) > 60, "compuerta: el censo encuentra los textos de la página"
+        assert [t for t in literales if not _texto_sin_simbolos(t)] == []
+
+    @pytest.mark.parametrize("ruta", [DIBUJO_PY, BLOQUE_PDF_PY], ids=["dibujo_mudado_de_la_pagina", "bloque_del_pdf"])
+    def test_26c_bis_lo_mudado_y_lo_nuevo_de_B6_tambien_esta_cubierto_por_DA_18(self, ruta):
+        """B.6 (clase b: la guarda se quedaba corta): la mudanza de las 13 funciones y 15 constantes de dibujo a `analisisImagenes/dibujo_posicion_inicial.py` sacó de la página unos 276 literales
+        (títulos, leyendas, frases de la regla): sin esta prueba perderían la guarda de DA-18 (sin marcas de correcto o incorrecto en lo que ve el físico) justo donde viven; y el módulo nuevo del PDF
+        (`models/PDF/bloque_posicion_inicial.py`) escribe lo que se imprime en un documento firmado."""
+        literales = [n.value for n in ast.walk(ast.parse(ruta.read_text(encoding="utf-8"))) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+        assert len(literales) > (150 if ruta == DIBUJO_PY else 30), f"compuerta: el censo encuentra los textos de {ruta.name} ({len(literales)})"
         assert [t for t in literales if not _texto_sin_simbolos(t)] == []
 
     def test_26d_ninguna_conexion_de_senal_cuelga_de_un_hasattr(self, arbol):
