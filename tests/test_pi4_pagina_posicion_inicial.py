@@ -498,12 +498,16 @@ class TestLosDosClics:
         assert p.indicador.isHidden()
         assert p.estado == "analizada" and p.pestanas.currentIndex() == 1
         assert p.puntos == ((191.0, 377.0), (190.0, 56.0)), "los clics se guardan redondeados a 3 decimales (X1)"
-        assert p.recuadro_gris.text() == (
+        resultado_del_gris, linea_de_la_capa = p.recuadro_gris.text().split("\n\n")          # B.7: el resultado del gris de siempre y, en otro parrafo, la capa que se reporta (la verde, por omision)
+        assert resultado_del_gris == (
             "Desfase en la imagen: -8.55 px = -0.362 mm\n"
             "Incertidumbre (k = 2): 0.09 mm = 2.12 px (72 cuerdas)\n"
             "La fuente quedó 0.36 mm antes de la marca (banda de tránsito a la derecha de la imagen, 13 niveles)\n"
             "Tolerancia 1.0 mm: Cumple")
-        capas = p.recuadro_rgb.text().split("\n")
+        assert linea_de_la_capa.startswith("Se reporta la capa verde ")
+        cabeza_de_las_capas, tres_lineas = p.recuadro_rgb.text().split("\n\n")                 # B.7: la capa elegida primero (la verde) y debajo las tres lineas de siempre
+        assert cabeza_de_las_capas.startswith("Capa reportada: verde\nDesfase en la imagen: -8.4")
+        capas = tres_lineas.split("\n")
         assert len(capas) == 3 and capas[0].startswith("Capa R: No medible: ")
         assert re.fullmatch(r"Capa G: desfase en la imagen -8\.\d\d px = -0\.35\d mm", capas[1]), capas[1]
         assert re.fullmatch(r"Capa B: desfase en la imagen -8\.\d\d px = -0\.35\d mm", capas[2]), capas[2]
@@ -812,10 +816,10 @@ class TestGuardar:
             f"Posición inicial guardada para el cambio de fuente del {CAMBIO}."]
         assert dialogos.de("information")[0]["cursor"] is None
         assert p.etiqueta_registro.text() == f"Guardada: cambio de fuente del {CAMBIO}."
-        celdas = [p.tabla_registros.item(0, c).text() for c in range(4)]
+        celdas = [p.tabla_registros.item(0, c).text() for c in range(5)]                       # B.7: la pagina guarda la capa reportada (la verde, por omision) y la tabla gana la columna «Capa»
         assert celdas[:3] == [CAMBIO, SERIE_C, USUARIO]
-        assert celdas[3].startswith("-0.36 ± 0.09 mm (k = 2), antes de la marca. Cumple (tolerancia 1.0 mm)")
-        assert "Cambio de fuente" not in celdas[3]
+        assert celdas[3].startswith("Capa verde: -0.36 ± 0.07 mm (k = 2), antes de la marca. Cumple (tolerancia 1.0 mm)"), "el resultado es el de la capa que el registro guardo (B.6), no el del gris"
+        assert "Cambio de fuente" not in celdas[3] and celdas[4] == "verde"
 
     def test_10b_sin_usuario_no_se_guarda(self, fabrica, dialogos, archivo_braqui, bd):
         p = fabrica(usuario=Usuario(username="x", fullname=""))
@@ -861,12 +865,12 @@ class TestGuardar:
     def test_12_un_gris_no_medible_se_guarda_solo_si_el_fisico_lo_confirma(self, pagina, dialogos, archivo_braqui, bd):
         p = pagina
         _analizada(p, dialogos, archivo_braqui, CLICS_NO_MEDIBLE)
-        assert p.recuadro_gris.text() == "No medible: la mancha se sale de la zona marcada"
+        assert p.recuadro_gris.text().split("\n\n")[0] == "No medible: la mancha se sale de la zona marcada"       # B.7: y, en otro parrafo, la capa que se reporta
         assert p.boton_guardar.isEnabled(), "una línea refinada con el gris no medible se puede guardar, con confirmación"
         dialogos.respuesta = QMessageBox.No
         p.boton_guardar.click()
         pregunta = dialogos.de("question")[-1]
-        assert pregunta["texto"] == ("Antes de guardar:\n- el perfil de grises no se pudo medir: la mancha se sale de la "
+        assert pregunta["texto"] == ("Antes de guardar:\n- la capa verde, que es la reportada, no se pudo medir: la mancha se sale de la "      # B.7: el aviso es por la capa ELEGIDA (la verde), que es la que se guarda
                                      "zona marcada\n\n¿Guardar de todos modos?")
         assert pregunta["args"][4] == QMessageBox.No
         assert _numero_de_filas(bd) == 0
@@ -989,6 +993,7 @@ class TestLimpiarYRecalcular:
         p.barra_imagen.zoom()
         p.barra_imagen.zoom()
         _marcar(p)
+        p.selector_capa.setCurrentIndex(2)                                   # B.7: el fisico elige la capa azul (Limpiar debe devolver el menu a la capa por omision)
         for barra in (p.barra_gris, p.barra_rgb):
             barra.push_current()
         p.barra_gris.pan()
@@ -1027,6 +1032,7 @@ class TestLimpiarYRecalcular:
                 lambda: p._puntos.append((1.0, 1.0)),
                 lambda: setattr(p, "_bytes", b"x"),
                 lambda: p.selector_cambio.setCurrentIndex(1),
+                lambda: p.selector_capa.setCurrentIndex(0),                  # B.7: el menu de la capa reportada es una pieza del estado que Limpiar repara
                 lambda: p.barra_imagen.zoom(),
                 lambda: p.barra_gris.push_current(),
                 lambda: p.eje_imagen.plot([0, 1], [0, 1]),
@@ -1663,7 +1669,8 @@ class TestLoQueSeDibujaDatoPorDato:
             f"Perfil de grises: en esta cuerda {esperado} px; mediana de 72 cuerdas -8.55 px"
         titulos = [eje.get_title() for eje in pagina._fig_rgb.axes[:3]]       # B.4: el cuarto eje es el barrido de las cuatro capas
         assert titulos[0] == "Capa roja: no medible"
-        assert titulos[1].startswith("Capa verde: en esta cuerda ") and titulos[2].startswith("Capa azul: en esta cuerda ")
+        assert titulos[1].startswith("Capa verde (reportada): en esta cuerda ") and titulos[2].startswith("Capa azul: en esta cuerda "), \
+            "B.7: con el menu en la capa por omision (la verde), su perfil se rotula «reportada»"
 
     def test_8i_con_la_linea_no_refinada_se_ve_la_que_el_motor_encontro_y_no_uso(self, pagina, dialogos, archivo_braqui):
         resultado = _resultado(BRAQUI_00, CLICS_LINEA_ALEJADA)
@@ -1686,10 +1693,10 @@ class TestLoQueSeDibujaDatoPorDato:
         _analizada(pagina, dialogos, archivo_braqui, CLICS_LINEA_ALEJADA)
         resultado = _resultado(BRAQUI_00, CLICS_LINEA_ALEJADA)
         assert pagina.recuadro_gris.text() == pagina_mod.texto_recuadro(resultado)
-        assert pagina.recuadro_rgb.text() == pagina_mod.texto_recuadro_capas(resultado)
+        assert pagina.recuadro_rgb.text() == pagina_mod.texto_recuadro_capas(resultado, "G")       # B.7: con la capa que el menu tiene elegida (la verde)
         for texto in (pagina.recuadro_gris.text(), pagina.recuadro_rgb.text()):
             assert "Cumple" not in texto and "mm =" not in texto and "antes de la marca" not in texto
-        assert pagina.recuadro_rgb.text().startswith("No se encontró la línea marcada"), "el recuadro RGB lleva el mismo aviso"
+        assert pagina.recuadro_rgb.text().split("\n")[1].startswith("No se encontró la línea marcada"), "el recuadro RGB lleva el mismo aviso (B.7: tras la cabeza que dice la capa elegida)"
         assert not pagina.boton_guardar.isEnabled()
 
     def test_18i_cada_clave_comparada_tiene_su_rotulo_legible(self):
@@ -1896,8 +1903,8 @@ class TestLaPaginaNoHaceLoQueNoDebe:
         senales = [(pagina.boton_imagen, "clicked"), (pagina.boton_recalcular, "clicked"), (pagina.boton_limpiar, "clicked"),
                    (pagina.boton_guardar, "clicked"), (pagina.boton_anular, "clicked"),
                    (pagina.selector_cambio, "activated"), (pagina.tabla_registros, "cellDoubleClicked"),
-                   (pagina.pestanas, "currentChanged")]
-        assert len(senales) == 8
+                   (pagina.pestanas, "currentChanged"), (pagina.selector_capa, "currentIndexChanged")]       # B.7: el menu de la capa reportada entra en el censo (una conexion)
+        assert len(senales) == 9
         for objeto, nombre in senales:
             assert objeto.receivers(getattr(objeto, nombre)) == 1, (type(objeto).__name__, nombre)
         manejadores = [m() for m in pagina.lienzo_imagen.callbacks.callbacks["button_press_event"].values()]
@@ -1906,5 +1913,5 @@ class TestLaPaginaNoHaceLoQueNoDebe:
             "un solo `mpl_connect` propio (los otros son de la figura, el lienzo y la barra de herramientas)"
         assert pagina.pestanas.count() == 4 and [pagina.pestanas.tabText(i) for i in range(4)] == [
             "Imagen", "Perfil gris", "Capas RGB", "Imagen sintética"]
-        assert [pagina.tabla_registros.horizontalHeaderItem(i).text() for i in range(4)] == [
-            "Cambio de fuente", "Serie de la fuente", "Guardado por", "Resultado"]
+        assert [pagina.tabla_registros.horizontalHeaderItem(i).text() for i in range(5)] == [
+            "Cambio de fuente", "Serie de la fuente", "Guardado por", "Resultado", "Capa"]         # B.7: la columna «Capa», despues de «Resultado»

@@ -841,7 +841,8 @@ class TestEnLaPaginaReal:
             assert area is not None, f"el lienzo de la pestaña {indice} no está en un área de desplazamiento"
             assert lienzo.height() >= minimo and area.verticalScrollBar().maximum() > 0, f"con una página baja el lienzo ({lienzo.height()} px) se desplaza (mínimo {minimo})"
             assert not area.isAncestorOf(recuadro), "el recuadro del resultado queda dentro del área que se desplaza"
-        pagina.resize(1500, 1300)
+        pagina.resize(1500, 1500)                    # B.7 (17-10): 1300 antes; el recuadro de las capas pasa de 3 a 9 lineas (la capa elegida + sus 4 lineas + las tres de siempre) y el del gris gana 2, y a 1300 px el lienzo
+                                                     # de las capas (630 px) dejaba de caber (140 px de barra): la pagina «alta» de esta prueba es la que le da al lienzo su alto minimo con ESOS recuadros (medido: 1500 px)
         QApplication.processEvents()
         for indice, lienzo, _, _ in casos:
             pagina.pestanas.setCurrentIndex(indice)

@@ -5,7 +5,10 @@ copia del dibujo para el PDF habria que mantenerla dos veces) y la pagina las im
 
 Es DIBUJO y texto sobre un eje que recibe quien llama: ni Qt ni matplotlib (se prueban sobre una `Figure` sin lienzo, y el PDF las compone con su propia disposicion). Del motor solo usa
 `motivos_de_las_filas` y los dos `MOTIVO_*` de las filas puenteadas: dibuja el resultado del motor, no lo corre (un tripwire de PI.10 lo fija por AST). Ningun numero cambia: lo que cada
-funcion dibuja es lo que dibujaba en la pagina, linea por linea."""
+funcion dibuja es lo que dibujaba en la pagina, linea por linea.
+
+B.7 (17-10): el TITULO de un perfil sale de `titulo_del_perfil` (antes eran siete lineas dentro de `dibujar_perfil`, con el mismo texto): la pagina lo vuelve a escribir sin redibujar nada cuando el fisico
+cambia el menu «Capa reportada» (rotula «reportada» la capa elegida); los PDF y la pestana sintetica siguen dibujando el titulo de siempre."""
 import textwrap
 
 import numpy as np
@@ -168,6 +171,21 @@ def dibujar_ventana(ax, resultado, perfil, fila, leyenda=False):
         caja.set_in_layout(False)      # la leyenda va en el hueco de al lado; si la ventana es baja se recorta, pero no hace colapsar los ejes (constrained_layout)
 
 
+def titulo_del_perfil(resultado, perfil, fila, reportada=False):
+    """B.7: el título de la gráfica de un perfil, definido en UN solo sitio: lo escribe `dibujar_perfil` al dibujar y lo vuelve a escribir la página, sin redibujar nada, cuando el físico cambia la capa reportada.
+    Dice el nombre del perfil y, según el caso, dónde cae la cuerda dibujada y la mediana que se reporta, que el perfil no se midió o que se midió contra los puntos y no contra la línea. `reportada` (por omisión
+    False: el título de siempre, el que dibujan los PDF y la pestaña sintética) rotula «(reportada)» el nombre del perfil: la capa que el físico eligió en el menú «Capa reportada» de la página."""
+    r = resultado["perfiles"][perfil]
+    m = r["m"]
+    nombre = NOMBRE_DE_PERFIL[perfil] + (" (reportada)" if reportada else "")
+    if motivo_para_no_guardar(resultado):
+        return f"{nombre}: medido contra los puntos, no contra la línea"
+    if r["estado"] == "ok" and m["inicio"][fila] >= 0:
+        en_cuerda = resultado["x_ref"][fila] - (m["x_izq"][fila] + m["x_der"][fila]) / 2
+        return f"{nombre}: en esta cuerda {_numero(en_cuerda, 2)} px; mediana de {len(r['filas'])} cuerdas {_numero(r['desfase_px'], 2)} px"
+    return f"{nombre}: no medible"
+
+
 def dibujar_perfil(ax, resultado, perfil, fila, color=TINTA, leyenda=False, columnas_de_la_leyenda=3, eje_en_mm=True, rotulo_en_px=True):
     """El perfil de una cuerda, COMPLETO (B.1): el eje x cubre la ventana entera (±`ventana_mm` alrededor de la línea) y el y va de 0 al tope + 5 %. Dibuja el crudo y el filtrado, el TOPE
     (con la regla del umbral, con el delta con que se midió), el umbral de la meseta, la meseta sombreada entre sus bordes subpíxel con los dos bordes marcados donde cruzan el umbral, la línea
@@ -201,15 +219,7 @@ def dibujar_perfil(ax, resultado, perfil, fila, color=TINTA, leyenda=False, colu
         x_linea = float(resultado["x_ref"][fila])
         arriba = ax.secondary_xaxis("top", functions=(lambda v: (v - x_linea) * tam, lambda mm: mm / tam + x_linea))
         arriba.set_xlabel("distancia a la línea de referencia [mm]")
-    nombre = NOMBRE_DE_PERFIL[perfil]
-    if motivo_para_no_guardar(resultado):
-        ax.set_title(f"{nombre}: medido contra los puntos, no contra la línea", fontsize=8)
-    elif r["estado"] == "ok" and m["inicio"][fila] >= 0:
-        en_cuerda = resultado["x_ref"][fila] - (m["x_izq"][fila] + m["x_der"][fila]) / 2
-        ax.set_title(f"{nombre}: en esta cuerda {_numero(en_cuerda, 2)} px; mediana de {len(r['filas'])} cuerdas "
-                     f"{_numero(r['desfase_px'], 2)} px", fontsize=8)
-    else:
-        ax.set_title(f"{nombre}: no medible", fontsize=8)
+    ax.set_title(titulo_del_perfil(resultado, perfil, fila), fontsize=8)
     if leyenda:
         ax.legend(loc="lower center", fontsize=7, ncol=columnas_de_la_leyenda)
 

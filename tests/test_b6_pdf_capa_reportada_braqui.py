@@ -1612,7 +1612,9 @@ class TestLosImportsDeLasTresPiezas:
         arbol = ast.parse(_fuente(DIBUJO_PY))
         funciones = [n.name for n in arbol.body if isinstance(n, ast.FunctionDef)]
         constantes = [t.id for n in arbol.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)]
-        assert len(funciones) == 13 and len(constantes) == 15 and len(set(funciones)) == 13
+        assert len(funciones) == 14 and len(constantes) == 15 and len(set(funciones)) == 14, \
+            "B.7: 13 funciones mudadas de la pagina en B.6 mas `titulo_del_perfil` (el titulo de una grafica, que `dibujar_perfil` y la pagina comparten); las 15 constantes son las mismas"
+        assert "titulo_del_perfil" in funciones
 
 
 class TestElBackendDeMatplotlibNoCambia:

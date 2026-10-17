@@ -58,6 +58,15 @@ B.6 (17-10, DP-157): las 13 funciones y 15 constantes de DIBUJO de arriba (`dibu
 `analisisImagenes/dibujo_posicion_inicial.py`, porque el PDF diario y el mensual imprimen el perfil de la capa reportada con los mismos dibujos; esta página las importa de vuelta con el MISMO nombre
 (`pagina_mod.X` es el mismo objeto) y su `_mostrar` no cambió. La imagen sintética, el recuadro y todo lo de la pantalla siguen aquí.
 
+B.7 (17-10, DP-157, DA-85, PD1): el menú «Capa reportada» (rojo, verde o azul; arranca en `CAPA_POR_OMISION`, la única lectura de esa constante) en la fila de los botones. La elección es del físico y se VE, se
+GUARDA y se IMPRIME: el recuadro de las capas muestra primero el resultado completo de la capa elegida (`texto_recuadro_capas`), el del gris dice qué capa se reporta (`texto_recuadro_gris`), el perfil de esa capa se
+rotula «reportada» (`titulo_del_perfil`), la confirmación de Guardar avisa si ESA capa no se pudo medir (`motivos_para_confirmar`) y `_al_guardar` pasa su letra (`pelicula.CAPAS`) a `svc.guardar(capa_reportada=)`. Abrir un
+registro pone el menú en la capa guardada (con las señales bloqueadas: el menú no es una elección del físico en ese momento), la tabla de registros gana la columna «Capa» y Limpiar devuelve el menú a la capa por omisión
+(`_restablecer_estado`, la única definición de «página recién creada»). CAMBIAR EL MENÚ NO MIDE NI REDIBUJA NADA: el motor ya midió las tres capas; `_al_cambiar_capa` solo vuelve a escribir los dos recuadros y el título
+de los tres perfiles (el zoom que el físico haya hecho en una gráfica se conserva).
+B7-C1 (ronda 1 de revisión, 17-10): CON UN REGISTRO GUARDADO O ABIERTO la capa que la pantalla reporta es la que GUARDÓ ese registro (`_capa_que_se_reporta`; ninguna si el registro no guardó capa) y el menú queda FIJO,
+como Guardar (`_estado` es la única definición de cuándo se bloquea): lo que dicen los recuadros y los títulos no puede contradecir lo guardado, la columna «Capa» ni el PDF. Para reportar otra capa, Recalcular.
+
 Lo que deja preparado: `abrir_registro(id) -> bool` y `refrescar()` públicos (PI.6 y el visor), `pestanas` con la imagen
 sintética como cuarta (su reinicio vive dentro de `_restablecer_estado`), las propiedades `estado` y `puntos`; ninguna
 señal."""
@@ -79,11 +88,16 @@ from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QDialog
 from analisisImagenes import posicion_inicial_braqui as motor
 # B.6 (DP-157): los dibujos que el PDF tambien necesita (13 funciones y 15 constantes) viven en `analisisImagenes/dibujo_posicion_inicial.py` (sin Qt ni matplotlib) y se importan de vuelta con el
 # MISMO nombre: `pagina_mod.X` sigue siendo el mismo objeto (B.1, B.4 y PI.4 los leen desde aqui). Aqui quedan la imagen sintetica, el recuadro y todo lo que es de la pantalla.
+# B.7 suma `titulo_del_perfil` (el titulo de una grafica, que la pagina vuelve a escribir al cambiar la capa reportada).
 from analisisImagenes.dibujo_posicion_inicial import (  # noqa: F401
     ANCHO_DE_LA_LEYENDA, COLOR_CAPA, COLOR_FILA_QUE_NO_ENTRA, COLOR_LINEA_DESCARTADA, COLOR_MEDIDO, COLOR_REFERENCIA, COLOR_REJILLA, COLOR_TRANSITO, LARGO_DEL_PIE,
     LINEA_REFINADA, NIVEL_DE_PERFIL, NOMBRE_DE_PERFIL, TINTA, TINTA_SUAVE, TRAZO_DE_PARAMETRO, _cuantas, _dibujar_bandas, _numero, _poligono, datos_del_barrido,
-    dibujar_barrido_de_filas, dibujar_perfil, dibujar_ventana, fila_representativa, motivo_para_no_guardar, rotular_parametros, texto_de_la_regla, texto_de_parametros
+    dibujar_barrido_de_filas, dibujar_perfil, dibujar_ventana, fila_representativa, motivo_para_no_guardar, rotular_parametros, texto_de_la_regla, texto_de_parametros,
+    titulo_del_perfil
 )
+# B.7 (DP-157, DA-85): las capas, el color de cada una para un MENU (`NOMBRE_DE_CAPA`: rojo, verde, azul), el adjetivo que concuerda con «capa» para toda FRASE (`ADJETIVO_DE_LA_CAPA`: «capa roja») y la capa con
+# que arranca el menu (`CAPA_POR_OMISION`, que SOLO se lee para poner el menu en su valor inicial: ningun PDF ni el servicio la leen).
+from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, CAPA_POR_OMISION, CAPAS, NOMBRE_DE_CAPA
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from services import posicion_inicial_braqui as svc
 from services.audit_minimo import usuario_actual
@@ -268,21 +282,51 @@ def texto_capa(resultado, capa):
     return f"Capa {capa}: desfase en la imagen {_numero(s['desfase_px'], 2)} px = {_numero(s['desfase_mm'], 3)} mm"
 
 
-def texto_recuadro_capas(resultado):
+def texto_recuadro_capas(resultado, reportada=None):
     """El recuadro de la pestaña de capas: una línea por capa y, si la línea de referencia no se refinó, el mismo aviso
-    que el del gris ANTES de ellas (sin él, las tres capas se leían como medidas buenas)."""
-    lineas = [texto_capa(resultado, capa) for capa in ("R", "G", "B")]
-    aviso = motivo_para_no_guardar(resultado)
-    return "\n".join(([aviso] if aviso else []) + lineas)
+    que el del gris ANTES de ellas (sin él, las tres capas se leían como medidas buenas).
+    B.7: con `reportada` (R, G o B; por omisión None: la conducta de siempre) empieza por la capa elegida en el menú «Capa reportada» —su nombre y su
+    resultado COMPLETO (`texto_recuadro`: desfase, incertidumbre, sentido, veredicto; el aviso de la línea sin refinar sale ahí, una sola vez)— y
+    debajo, separadas por una línea en blanco, siguen las tres líneas de siempre."""
+    lineas = [texto_capa(resultado, capa) for capa in CAPAS]
+    if reportada is None:
+        aviso = motivo_para_no_guardar(resultado)
+        return "\n".join(([aviso] if aviso else []) + lineas)
+    return f"Capa reportada: {NOMBRE_DE_CAPA[reportada]}\n{texto_recuadro(resultado, reportada)}\n\n" + "\n".join(lineas)
 
 
-def motivos_para_confirmar(resultado):
+def linea_de_la_capa_reportada(capa):
+    """B.7 (B7-D2, vetable): lo que el recuadro del gris dice de la capa elegida en el menú: el perfil de grises no es el que se reporta, lo es esta capa."""
+    return f"Se reporta la capa {ADJETIVO_DE_LA_CAPA[capa]} (menú «Capa reportada»): es la que se guarda con el registro y la que imprimen los PDF."
+
+
+def texto_recuadro_gris(resultado, reportada=None):
+    """El recuadro de la pestaña del gris: el resultado del gris de siempre (`texto_recuadro`) y, con `reportada` (R, G o B; por omisión None: la conducta de siempre),
+    una línea en otro párrafo que dice qué capa se guarda y se imprime. Con la línea de referencia sin refinar no se agrega (corolario 6: ese resultado no se puede
+    guardar, y decir que «se guarda» algo que Guardar rechaza sería afirmar lo contrario de la pantalla)."""
+    texto = texto_recuadro(resultado, "gris")
+    if reportada is None or motivo_para_no_guardar(resultado):
+        return texto
+    return f"{texto}\n\n{linea_de_la_capa_reportada(reportada)}"
+
+
+def linea_de_un_registro_sin_capa(capa):
+    """B.7 (B7-D6, vetable): lo que la etiqueta de un registro abierto que no guardó la capa reportada (anterior a B.5 o guardado por la página de antes de B.7) dice del menú, que queda en `capa`."""
+    return (f"Este registro no guardó la capa reportada (es anterior a esta opción): el menú queda en la capa {ADJETIVO_DE_LA_CAPA[capa]}, "
+            "pero el PDF lo imprime con el perfil de grises, como antes.")
+
+
+def motivos_para_confirmar(resultado, capa=None):
     """Lo que el físico debe saber antes de guardar y que NO impide guardar (P11, P12): el gris que no se pudo medir y la
-    resolución 'otra' (solo píxeles, sin veredicto). 'Línea no refinada' no está aquí: eso no se guarda (P10)."""
+    resolución 'otra' (solo píxeles, sin veredicto). 'Línea no refinada' no está aquí: eso no se guarda (P10).
+    B.7: con `capa` (R, G o B; por omisión None: la conducta de siempre, el gris) el aviso es por la capa ELEGIDA en el menú «Capa reportada», que es la que
+    se guarda y se imprime, y no por el gris; la nombra. `guardar` no juzga si esa capa se midió (B5-D4): este aviso es de la página."""
     motivos = []
-    estado = resultado["perfiles"]["gris"]["estado"]
-    if estado != "ok":
+    estado = resultado["perfiles"]["gris" if capa is None else capa]["estado"]
+    if estado != "ok" and capa is None:
         motivos.append(f"el perfil de grises no se pudo medir: {_motivo_de_estado(estado)}")
+    elif estado != "ok":
+        motivos.append(f"la capa {ADJETIVO_DE_LA_CAPA[capa]}, que es la reportada, no se pudo medir: {_motivo_de_estado(estado)}")
     if resultado["tamano_pixel_mm"] is None:
         escaneo = resultado["parametros"]["resolucion_escaneo_dpi"]
         motivos.append(f"no habrá milímetros ni veredicto: la imagen declara {resultado['dpi']:g} dpi y el procedimiento "
@@ -495,9 +539,9 @@ def _apagar_barra(barra):
 # ------------------------------------------------------------------------------------------------------------ página
 
 class _SelectorSinRueda(QComboBox):
-    """El combo del cambio de fuente: la rueda del ratón solo actúa si tiene el foco. En Qt un solo paso de la rueda sobre
+    """El combo del cambio de fuente (y, desde B.7, el de la capa reportada): la rueda del ratón solo actúa si tiene el foco. En Qt un solo paso de la rueda sobre
     un combo cerrado cambia su selección y emite `activated` (medido: de 2026-09-27 a 2026-03-01, marcada como manual), y
-    Guardar guarda bajo el cambio de fuente que haya, sea cual sea."""
+    Guardar guarda bajo el cambio de fuente (o la capa) que haya, sea cual sea."""
 
     def wheelEvent(self, evento):
         if self.hasFocus():
@@ -744,8 +788,20 @@ class PosicionInicialBraqui(QWidget):
         self.boton_anular = QPushButton("Anular")
         self.etiqueta_registro = QLabel()
         self.etiqueta_registro.setWordWrap(True)
+        # B.7 (B7-D1, vetable): el menú «Capa reportada» va junto a Guardar, que es lo que guarda la capa que el menú tenga; sus tres entradas salen de `pelicula.CAPAS` (la letra viaja como dato) y su valor
+        # inicial lo pone `_restablecer_estado`.
+        self.etiqueta_capa = QLabel("Capa reportada:")
+        self.selector_capa = _SelectorSinRueda()
+        self.selector_capa.setFocusPolicy(Qt.StrongFocus)
+        self.selector_capa.setToolTip("Capa con la que se reporta esta prueba: la que se guarda con el registro y la que imprimen los PDF (rojo, verde o azul). Cambiarla no vuelve a medir nada. "
+                                         "Con un registro guardado o abierto queda fija en la capa de ese registro: para reportar otra, pulse Recalcular.")
+        for capa in CAPAS:
+            self.selector_capa.addItem(NOMBRE_DE_CAPA[capa], capa)
+        self.etiqueta_capa.setBuddy(self.selector_capa)
         for boton in (self.boton_recalcular, self.boton_limpiar, self.boton_guardar, self.boton_anular):
             fila_botones.addWidget(boton)
+        fila_botones.addWidget(self.etiqueta_capa)
+        fila_botones.addWidget(self.selector_capa)
         fila_botones.addWidget(self.etiqueta_registro, 1)
         principal.addLayout(fila_botones)
 
@@ -775,9 +831,9 @@ class PosicionInicialBraqui(QWidget):
 
         # Registros guardados.
         principal.addWidget(QLabel("Registros guardados"))
-        self.tabla_registros = QTableWidget(0, 4)
+        self.tabla_registros = QTableWidget(0, 5)
         self.tabla_registros.setHorizontalHeaderLabels(["Cambio de fuente", "Serie de la fuente", "Guardado por",
-                                                        "Resultado"])
+                                                        "Resultado", "Capa"])           # B.7: la capa reportada, despues del resultado
         self.tabla_registros.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tabla_registros.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabla_registros.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -785,7 +841,8 @@ class PosicionInicialBraqui(QWidget):
         self.tabla_registros.verticalHeader().setVisible(False)
         cabecera = self.tabla_registros.horizontalHeader()
         cabecera.setSectionResizeMode(QHeaderView.ResizeToContents)
-        cabecera.setStretchLastSection(True)
+        cabecera.setStretchLastSection(False)
+        cabecera.setSectionResizeMode(3, QHeaderView.Stretch)      # B.7 (B7-D10, vetable): «Resultado» (la celda larga: su texto completo es la ayuda) toma lo que sobra y «Capa», ahora la ultima, se queda a la vista a cualquier ancho
         self.tabla_registros.setMinimumHeight(120)
         principal.addWidget(self.tabla_registros, 1)
 
@@ -797,6 +854,7 @@ class PosicionInicialBraqui(QWidget):
         self.boton_guardar.clicked.connect(lambda *_: self._al_guardar())
         self.boton_anular.clicked.connect(lambda *_: self._al_anular())
         self.selector_cambio.activated.connect(lambda indice: self._al_elegir_a_mano(indice))   # solo lo emite el usuario
+        self.selector_capa.currentIndexChanged.connect(lambda indice: self._al_cambiar_capa(indice))   # B.7: cualquier cambio del menu; las veces que la PAGINA lo mueve (`_poner_capa`) lo hace con las senales bloqueadas
         self.tabla_registros.cellDoubleClicked.connect(lambda fila, columna: self._al_doble_clic(fila, columna))
         # UN solo manejador de clics, aquí y no al instalar cada imagen: ya hay otros tres de la barra y N imágenes
         # seguidas acumularían N marcas por clic.
@@ -811,8 +869,40 @@ class PosicionInicialBraqui(QWidget):
         return self._estado
 
     @property
+    def _estado(self):
+        return self._estado_actual
+
+    @_estado.setter
+    def _estado(self, valor):
+        """B7-C1: el estado de la página y, con él, si el menú «Capa reportada» se puede mover. Con un registro guardado o abierto ('registro') la capa que se reporta es la que guardó ese registro y el menú queda fijo, como
+        Guardar; en cualquier otro estado es la elección del físico. UNA sola definición de cuándo se bloquea: cada `self._estado = ...` de la página pasa por aquí (no hay una lista de sitios que recordar)."""
+        self._estado_actual = valor
+        self.selector_capa.setEnabled(valor != "registro")
+
+    @property
     def puntos(self):
         return tuple(self._puntos)
+
+    @property
+    def capa_reportada(self):
+        """B.7: la letra (R, G o B; `pelicula.CAPAS`) de la capa que el menú «Capa reportada» tiene elegida: la que `Guardar` guarda. Con un registro guardado o abierto el menú queda fijo en la capa de ese registro
+        (o en la por omisión si no guardó ninguna); lo que dicen los recuadros y los títulos sale de `_capa_que_se_reporta`, no de aquí."""
+        return self.selector_capa.currentData()
+
+    def _capa_que_se_reporta(self):
+        """B7-C1: la capa que ESTA pantalla dice que se reporta, o None si no dice ninguna. Con un registro guardado o abierto es la que GUARDÓ ese registro (None si no guardó ninguna: anterior a B.5, el PDF lo imprime con el
+        gris) y no depende del menú; en cualquier otro estado es la que el menú tiene elegida, que es la que Guardar guardará. Los recuadros y el rótulo «reportada» salen de aquí: lo que la pantalla afirma de la capa
+        reportada no puede contradecir lo guardado, la columna «Capa» ni el PDF."""
+        return self._capa_guardada if self._estado == "registro" else self.capa_reportada
+
+    def _poner_capa(self, capa):
+        """B.7: pone el menú en `capa` SIN emitir señales. Las veces que la PÁGINA mueve el menú (arrancar, Limpiar, abrir un registro) no son una elección del físico y quien lo mueve ya escribe lo que
+        corresponde (`_mostrar` lee la capa del menú); solo el cambio que hace el físico dispara `_al_cambiar_capa`."""
+        bloqueado = self.selector_capa.blockSignals(True)
+        try:
+            self.selector_capa.setCurrentIndex(self.selector_capa.findData(capa))
+        finally:
+            self.selector_capa.blockSignals(bloqueado)
 
     def _descartar_resultado(self):
         """IM3: antes de analizar, el resultado anterior desaparece (si el nuevo análisis falla, no queda uno viejo que se
@@ -858,6 +948,7 @@ class PosicionInicialBraqui(QWidget):
         self._fecha_escaneo = None
         self._origen_fecha = None
         self._registro_abierto = None
+        self._capa_guardada = None               # B7-C1: la capa que guardó el registro abierto o recién guardado (None: ninguno, o uno anterior a B.5 sin capa); solo se lee con el estado 'registro'
         self._origen_seleccion = None            # None, 'automatica', 'registro' o 'manual'
         self._estado = "vacia"
         self.eje_imagen.clear()
@@ -870,6 +961,7 @@ class PosicionInicialBraqui(QWidget):
         self.indicador.setText(TEXTO_ANALIZANDO)
         self.indicador.hide()
         self.selector_cambio.setCurrentIndex(0 if self.selector_cambio.count() else -1)
+        self._poner_capa(CAPA_POR_OMISION)                      # B.7: el menú de la capa reportada vuelve a la capa por omisión
         self.tabla_registros.clearSelection()
         self.tabla_registros.setCurrentCell(-1, -1)
         self.sintetica.reiniciar()
@@ -927,8 +1019,9 @@ class PosicionInicialBraqui(QWidget):
             fecha = registro["fecha"]
             columna_fecha = fecha if registro["cambio_de_fuente_vigente"] else \
                 f"{fecha}, sin cambio de fuente vigente en esa fecha"
+            capa = svc.capa_del_registro(registro)                 # B.7: la capa que reportó el registro (la misma regla que usan `texto_breve` y los PDF); sin capa, la columna queda vacía
             celdas = (columna_fecha, registro["serie_fuente"] or "", registro["user"] or "",
-                      svc.texto_breve(registro, con_cambio_de_fuente=False))
+                      svc.texto_breve(registro, con_cambio_de_fuente=False), NOMBRE_DE_CAPA[capa] if capa in CAPAS else "")
             for columna, texto in enumerate(celdas):
                 item = QTableWidgetItem(texto)
                 item.setToolTip(texto)                 # la celda del resultado es larga y se corta
@@ -1080,21 +1173,46 @@ class PosicionInicialBraqui(QWidget):
         dibujar_perfil(medio, resultado, "gris", fila, leyenda=True)
         dibujar_barrido_de_filas(abajo, resultado, ("gris",))
         rotular_parametros(self._fig_gris, resultado)
-        self.recuadro_gris.setText(texto_recuadro(resultado, "gris"))
         self._fig_rgb.clear()
         # Las tres capas comparten el eje x (las mismas columnas de la ventana): el eje en mm va solo arriba y el rotulo en px solo abajo; repetidos en cada una, cada perfil quedaba en 35 px de alto.
         ejes_rgb = self._fig_rgb.subplots(len(EJES_DE_LA_PESTANA_DE_LAS_CAPAS), 1, height_ratios=ALTOS_DE_LA_PESTANA_DE_LAS_CAPAS)
-        for eje, capa in zip(ejes_rgb[:3], ("R", "G", "B")):
+        for eje, capa in zip(ejes_rgb[:3], CAPAS):
             if capa != "R":
                 eje.sharex(ejes_rgb[0])
             eje.tick_params(labelbottom=(capa == "B"))
             dibujar_perfil(eje, resultado, capa, fila, COLOR_CAPA[capa], leyenda=(capa == "R"), columnas_de_la_leyenda=4, eje_en_mm=(capa == "R"), rotulo_en_px=(capa == "B"))
         dibujar_barrido_de_filas(ejes_rgb[3], resultado, ("gris", "R", "G", "B"))
         rotular_parametros(self._fig_rgb, resultado)
-        self.recuadro_rgb.setText(texto_recuadro_capas(resultado))
+        self._rotular_la_capa_reportada(resultado)            # B.7: los dos recuadros y el rotulo de la capa elegida salen de aqui y de `_al_cambiar_capa`, que llama a las mismas dos piezas
+        self._escribir_los_recuadros(resultado)
         self.barra_gris.update()                 # X5: sin esto, Home vuelve a la vista de la figura anterior
         self.barra_rgb.update()
         self.lienzo_gris.draw_idle()
+        self.lienzo_rgb.draw_idle()
+
+    def _escribir_los_recuadros(self, resultado):
+        """B.7: los dos recuadros de resultado con la capa que la pantalla reporta (`_capa_que_se_reporta`: la del menú, o la del registro si hay uno). Los escribe `_mostrar` y los vuelve a escribir `_al_cambiar_capa`: una
+        sola definición de qué dicen."""
+        capa = self._capa_que_se_reporta()
+        self.recuadro_gris.setText(texto_recuadro_gris(resultado, capa))
+        self.recuadro_rgb.setText(texto_recuadro_capas(resultado, capa))
+
+    def _rotular_la_capa_reportada(self, resultado):
+        """B.7: rotula «reportada» el título del perfil de la capa que la pantalla reporta (`_capa_que_se_reporta`) y se lo quita a los otros (a los tres si no reporta ninguna). Solo cambia el TEXTO del título
+        (`titulo_del_perfil`, la definición que usa `dibujar_perfil`): las líneas, las bandas y los límites de los ejes no se tocan, así que el zoom que el físico haya hecho en una gráfica se conserva."""
+        reportada = self._capa_que_se_reporta()
+        fila = fila_representativa(resultado, "gris")
+        for eje, capa in zip(self._fig_rgb.axes[:len(CAPAS)], CAPAS):
+            eje.title.set_text(titulo_del_perfil(resultado, capa, fila, reportada=(capa == reportada)))
+
+    @_protegido("Capa reportada")
+    def _al_cambiar_capa(self, _indice):
+        """B.7: el físico eligió otra capa en el menú. NO se mide ni se redibuja nada: el motor ya midió las tres capas y la figura ya las dibuja; cambia lo que se REPORTA, así que solo se vuelven a escribir los dos
+        recuadros y el rótulo de los tres títulos. Sin resultado (la página vacía, la imagen sin marcar, recién limpiada) no hay nada que mostrar: el menú guarda la elección para el próximo análisis."""
+        if self._resultado is None:
+            return
+        self._rotular_la_capa_reportada(self._resultado)
+        self._escribir_los_recuadros(self._resultado)
         self.lienzo_rgb.draw_idle()
 
     # ------------------------------------------------------------------------------------------------ los botones
@@ -1130,8 +1248,9 @@ class PosicionInicialBraqui(QWidget):
         if not fecha:
             QMessageBox.warning(self, "Guardar", AVISO_SIN_CAMBIO)
             return
+        capa = self.capa_reportada                           # B.7: la capa que el menú tiene AHORA; la que se confirma es la que se guarda
         existe = svc.existe_vigente(fecha)
-        motivos = motivos_para_confirmar(self._resultado)
+        motivos = motivos_para_confirmar(self._resultado, capa)
         distancia = motivo_de_distancia(fecha, self._fecha_escaneo, self._origen_fecha)
         if distancia:
             motivos.insert(0, distancia)
@@ -1143,11 +1262,12 @@ class PosicionInicialBraqui(QWidget):
             # Guardar vuelve a analizar desde los bytes y los puntos (el servicio no confía en un resultado ajeno), así
             # que va dentro de la misma espera.
             nuevo = self._con_espera("Guardando...", lambda: svc.guardar(
-                usuario_actual(self), fecha, self._bytes, self._nombre, list(self._puntos), reemplazar=existe))
+                usuario_actual(self), fecha, self._bytes, self._nombre, list(self._puntos), reemplazar=existe, capa_reportada=capa))
         except ValueError as error:
             QMessageBox.warning(self, "Guardar", f"No se guardó: {error}.")
             return
         self._registro_abierto = nuevo
+        self._capa_guardada = capa               # B7-C1: lo que la pantalla diga de la capa reportada sale ahora del registro; el menu queda fijo (el estado 'registro' lo bloquea)
         self._estado = "registro"
         self.boton_guardar.setEnabled(False)
         self.etiqueta_registro.setText(f"Guardada: cambio de fuente del {fecha}.")
@@ -1190,7 +1310,7 @@ class PosicionInicialBraqui(QWidget):
         y se compara con lo guardado (DD3). Devuelve True si se abrió. Si no se puede leer ni analizar, avisa y la página
         queda como estaba (todo se lee y se calcula antes de tocarla). Si fallara después, al dibujar (muy improbable), la
         página queda en estado 'fallida', sin resultado y con Guardar deshabilitado, nunca con medio registro. Deja Guardar
-        deshabilitado: para guardar de nuevo, Recalcular."""
+        deshabilitado y el menú «Capa reportada» fijo en la capa del registro (B7-C1): para guardar de nuevo, con esa capa u otra, Recalcular."""
         registro = svc.leer(id_registro)
         if registro is None:
             QMessageBox.warning(self, "Abrir", "El registro ya no existe.")
@@ -1199,6 +1319,7 @@ class PosicionInicialBraqui(QWidget):
             gris, _color, dpi, _fecha = motor.leer_imagen(registro["imagen"])
             puntos = [tuple(float(v) for v in par) for par in json.loads(registro["puntos"])]
             parametros = json.loads(registro["parametros"])
+            capa = svc.capa_del_registro(registro)           # B.7: la capa que guardó el registro (un valor dañado es un `PosicionInicialError`: se avisa ANTES de tocar la página)
         except (ValueError, TypeError) as error:
             QMessageBox.warning(self, "Abrir", f"No se pudo abrir el registro: {error}")
             return False
@@ -1211,12 +1332,14 @@ class PosicionInicialBraqui(QWidget):
                 self._marcar(punto)
             self._puntos = list(puntos)
             self._resultado = resultado
+            self._poner_capa(capa if capa in CAPAS else CAPA_POR_OMISION)   # B.7: el menú en la capa guardada (sin capa: la por omisión), con las señales bloqueadas, ANTES de dibujar
+            self._capa_guardada = capa if capa in CAPAS else None            # B7-C1: lo que se dice de la capa reportada sale del registro (ninguna si no la guardó) ...
+            self._estado = "registro"                                         # ... y el menú queda fijo; el estado se fija ANTES de dibujar porque `_mostrar` escribe los recuadros con él
             self._mostrar(resultado)
         except Exception:
             self._descartar_resultado()
             self._estado = "fallida"
             raise
-        self._estado = "registro"
         self._registro_abierto = registro["id"]
         self.boton_guardar.setEnabled(False)
         self.pestanas.setCurrentIndex(PESTANA_GRIS)
@@ -1228,6 +1351,8 @@ class PosicionInicialBraqui(QWidget):
             lineas.append("Este registro está anulado: no vale para ningún PDF.")
         if indice <= 0:
             lineas.append(LINEA_SIN_CAMBIO)
+        if capa not in CAPAS:
+            lineas.append(linea_de_un_registro_sin_capa(self.capa_reportada))
         diferencias = diferencias_con_lo_guardado(registro, resultado)
         if diferencias:
             lineas.append("Lo recalculado no coincide con lo guardado:\n" + "\n".join(diferencias))

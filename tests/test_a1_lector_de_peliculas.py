@@ -960,7 +960,7 @@ class TestElAlfaConDieciseisBits:
         assert p.estado == "imagen" and dialogos.de("warning") == []
         _marcar(p, placa.clics)
         assert p.estado == "analizada" and dialogos.de("warning") == []
-        assert p.recuadro_gris.text() == "No medible: la mancha esta cortada por el borde de la pelicula"
+        assert p.recuadro_gris.text().split("\n\n")[0] == "No medible: la mancha esta cortada por el borde de la pelicula"       # B.7: y, en otro parrafo, la capa que se reporta
         for capa in "RGB":
             assert f"Capa {capa}: No medible: la mancha esta cortada por el borde de la pelicula" in p.recuadro_rgb.text()
 
@@ -1112,7 +1112,7 @@ class TestElMotivoDiceQueLaTransparenciaEsLaCausa:
         _cargar(p, dialogos, str(ruta))
         _marcar(p, placa.clics)
         assert p.estado == "analizada" and dialogos.de("warning") == []
-        assert p.recuadro_gris.text() == "No medible: no quedan filas con la mancha a la vista; la zona analizada tiene zonas transparentes"
+        assert p.recuadro_gris.text().split("\n\n")[0] == "No medible: no quedan filas con la mancha a la vista; la zona analizada tiene zonas transparentes"       # B.7: y, en otro parrafo, la capa que se reporta
         assert "linea tapa" not in p.recuadro_gris.text() and "linea tapa" not in p.recuadro_rgb.text()
 
     def test_el_motivo_de_siempre_no_cambia_si_la_transparencia_no_esta_en_la_zona_analizada(self):
