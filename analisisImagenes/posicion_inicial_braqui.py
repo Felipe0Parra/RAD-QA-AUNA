@@ -34,6 +34,10 @@ del plan (los cuatro defectos del método sin corregir y la mejora subpíxel):
       `desde_mm`, `hasta_mm`), para que la pagina dibuje las bandas sin repetir la regla; sin escala (resolucion 'otra') los milimetros son None y quedan las distancias en pixeles al centro de
       la mancha. Es DIBUJO: ningun numero cambia (el lado y los contrastes son los de siempre; un lado sin pelicula suficiente sigue siendo None) y por eso la version sigue siendo PI-2.
 
+  +   (B.5, 16-10) se GUARDAN las mismas medidas para el gris y para cada capa de color: `medir_perfil` entrega ademas la MEDIA de los desfases de las cuerdas (`media_px`; la mediana sigue siendo el
+      desfase) y `valores_medidos` produce las mismas siete medidas por perfil (estado, desfase en px y mm, incertidumbre, dispersion, media y numero de cuerdas) desde UNA lista dentro del bucle de
+      `CAPAS_GUARDADAS`. Es guardar lo que ya se media: ningun numero de antes cambia, por eso la version sigue siendo PI-2.
+
 Sin Qt y sin base de datos (lo comprueba un test por AST): lo usan la página, el recálculo de un
 registro guardado, la pestaña sintética y los tests, todos con la misma función `analizar`. Cualquier
 cambio de la lógica de este archivo obliga a subir `VERSION_ALGORITMO`: lo guardado se compara contra
@@ -419,7 +423,7 @@ def medir_perfil(imagen, x_ref, P, con_transparencia=False):
         otros.append(x_ref[y] - (xi + xd) / 2.0)
     n_eff = max(len(filas) / 8.0, 1.0)
     r.update({"estado": "ok", "centros": centros, "desfases": desfases,
-              "desfase_px": float(np.median(desfases)), "dispersion_px": float(np.std(desfases)),
+              "desfase_px": float(np.median(desfases)), "dispersion_px": float(np.std(desfases)), "media_px": float(np.mean(desfases)),
               "u_filas_px": float(1.2533 * np.std(desfases) / np.sqrt(n_eff)),
               "desfase_cruces_px": float(np.median(otros)) if otros else float("nan")})
     return r
@@ -544,27 +548,29 @@ CAPAS_GUARDADAS = (("gris", "gris"), ("R", "r"), ("G", "g"), ("B", "b"))   # (pe
 
 
 def valores_medidos(resultado):
-    """LO QUE SE GUARDA (PI.3): la ÚNICA definición de los valores medidos de un análisis, con las claves iguales a
-    las columnas de `braqui_posicion_inicial`. Por perfil (gris y capas r, g, b): `estado_*`, `desfase_*_px` y
-    `desfase_*_mm` (px es None si el perfil no se mide; mm = px * `tamano_pixel_mm`, SIN redondear, y None si falta px
-    o la escala). Del gris además `incertidumbre_gris_px` (k = 2), `dispersion_gris_px` y `filas_gris`; y
-    `tamano_pixel_mm` y `lado_transito`. Todo en tipos de Python (listo para SQLite y JSON). Sentido, veredicto y
-    avisos NO se guardan: se construyen al mostrarlos (`resumen`)."""
+    """LO QUE SE GUARDA (PI.3, B.5): la ÚNICA definición de los valores medidos de un análisis, con las claves iguales a las columnas de `braqui_posicion_inicial`. Dos globales (`tamano_pixel_mm` y
+    `lado_transito`) y, por cada perfil de `CAPAS_GUARDADAS` (el gris y las capas r, g y b), LAS MISMAS siete medidas (B.5, 16-10; antes el gris tenía tres que las capas no tenían): `estado_*`,
+    `desfase_*_px` (la mediana de las cuerdas), `desfase_*_mm` (px * `tamano_pixel_mm`, SIN redondear, y None si falta px o la escala), `incertidumbre_*_px` (k = 2, `incertidumbre_px`: la única suma),
+    `dispersion_*_px` (desviación estándar de los desfases de las cuerdas), `media_*_px` (su media) y `filas_*` (cuántas cuerdas entraron). Un perfil que no se mide no guarda ningún número (None).
+    Añadir o quitar una medida es UNA línea de la lista `medidas` del bucle; fuera del motor es además su columna en la tabla y en su migración (`conection.COLUMNAS_NUEVAS_DE_POSICION_INICIAL`), su
+    nombre en `_COLUMNAS_INSERT` y `_COLUMNAS_SQL` del servicio y su rótulo en `ROTULOS_DE_LO_GUARDADO` de la página (pruebas las atan). Todo en tipos de Python (listo para SQLite y JSON). Sentido,
+    veredicto y avisos NO se guardan: se construyen al mostrarlos (`resumen`). Tampoco la capa que se reporta: no es una medida, la recibe el servicio (`guardar(..., capa_reportada=)`)."""
     tam = resultado["tamano_pixel_mm"]
     valores = {"tamano_pixel_mm": tam, "lado_transito": resultado["lado_transito"]}
     for nombre, sufijo in CAPAS_GUARDADAS:
         p = resultado["perfiles"][nombre]
-        px = float(p["desfase_px"]) if p["estado"] == "ok" else None
-        valores[f"estado_{sufijo}"] = p["estado"]
-        valores[f"desfase_{sufijo}_px"] = px
-        valores[f"desfase_{sufijo}_mm"] = px * tam if (px is not None and tam is not None) else None
-    g = resultado["perfiles"]["gris"]
-    ok = g["estado"] == "ok"
-    valores.update({
-        "incertidumbre_gris_px": incertidumbre_px(resultado, "gris"),
-        "dispersion_gris_px": float(g["dispersion_px"]) if ok else None,
-        "filas_gris": int(len(g["filas"])) if ok else None,
-    })
+        ok = p["estado"] == "ok"
+        px = float(p["desfase_px"]) if ok else None
+        medidas = (                          # (plantilla del nombre de la columna, valor): UNA linea por medida
+            ("estado_{}", p["estado"]),
+            ("desfase_{}_px", px),
+            ("desfase_{}_mm", px * tam if (px is not None and tam is not None) else None),
+            ("incertidumbre_{}_px", incertidumbre_px(resultado, nombre)),
+            ("dispersion_{}_px", float(p["dispersion_px"]) if ok else None),
+            ("media_{}_px", float(p["media_px"]) if ok else None),
+            ("filas_{}", int(len(p["filas"])) if ok else None),
+        )
+        valores.update({plantilla.format(sufijo): valor for plantilla, valor in medidas})
     return valores
 
 

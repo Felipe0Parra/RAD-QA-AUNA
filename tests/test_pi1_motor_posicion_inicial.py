@@ -1042,6 +1042,9 @@ CLAVES_VALORES_MEDIDOS = {
     "dispersion_gris_px", "filas_gris",
     "estado_r", "desfase_r_px", "desfase_r_mm", "estado_g", "desfase_g_px", "desfase_g_mm",
     "estado_b", "desfase_b_px", "desfase_b_mm",
+    # B.5 (16-10): las mismas siete medidas para el gris y para cada capa: 13 claves nuevas (la media del gris y, de R, G y B, la incertidumbre, la dispersion, el numero de cuerdas y la media)
+    "incertidumbre_r_px", "incertidumbre_g_px", "incertidumbre_b_px", "dispersion_r_px", "dispersion_g_px", "dispersion_b_px",
+    "filas_r", "filas_g", "filas_b", "media_gris_px", "media_r_px", "media_g_px", "media_b_px",
 }
 
 
@@ -1051,7 +1054,7 @@ class TestValoresMedidos:
 
     def test_las_claves_son_las_de_las_columnas(self, placa_real):
         v = motor.valores_medidos(placa_real["resultado"])
-        assert set(v) == CLAVES_VALORES_MEDIDOS and len(v) == 17
+        assert set(v) == CLAVES_VALORES_MEDIDOS and len(v) == 30         # B.5: eran 17 (PI.1c)
 
     @pytest.mark.parametrize("nombre", ("braqui_00", "EPSON009", "EPSON031"))
     def test_el_mm_es_exactamente_el_px_por_la_escala_y_son_tipos_de_python(self, nombre, placa_real, epson009, epson031):

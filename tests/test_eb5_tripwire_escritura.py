@@ -260,13 +260,13 @@ SITIOS_OPACOS_PERMITIDOS = {
         "template 'SET activo = 0' de EB1.",
     # GI.6 (07-10): el INSERT de `guardar_linealidad_ct` (catphan_db.py:997) sale de esta lista: la funcion ya no envuelve su cuerpo en un `try/except` que se tragaba el fallo, asi que el
     # analizador resuelve su SQL (Trampa 6 del CLAUDE.md: una variable tocada dentro de un `try` se da por irresoluble). Sigue siendo un INSERT, que nunca muta el bloque vigente.
-    ("data/ManejoDatos/conection.py", 767):  # R.1 (11-09): 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682; G.2 (24-09): 682->683; G.3 (24-09): 683->684; PI.2 (01-10): 684->685; RB.3 (05-10): 685->712; GI.0: 712->765; GI.8c (08-10): 765->766; GI.8d (08-10): 766->767
+    ("data/ManejoDatos/conection.py", 780):  # R.1 (11-09): 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682; G.2 (24-09): 682->683; G.3 (24-09): 683->684; PI.2 (01-10): 684->685; RB.3 (05-10): 685->712; GI.0: 712->765; GI.8c (08-10): 765->766; GI.8d (08-10): 766->767; B.5 (12-10): 767->780
         "DDL (E10 -- CREATE TABLE de la tabla temporal de la migración "
         "CASCADE->RESTRICT) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 867):  # R.1 (11-09): 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782; G.2 (24-09): 782->783; G.3 (24-09): 783->784; PI.2 (01-10): 784->785; RB.3 (05-10): 785->812; GI.0: 812->865; GI.8c (08-10): 865->866; GI.8d (08-10): 866->867
+    ("data/ManejoDatos/conection.py", 880):  # R.1 (11-09): 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782; G.2 (24-09): 782->783; G.3 (24-09): 783->784; PI.2 (01-10): 784->785; RB.3 (05-10): 785->812; GI.0: 812->865; GI.8c (08-10): 865->866; GI.8d (08-10): 866->867; B.5 (12-10): 867->880
         "DDL (EB2d, DA-57 -- CREATE TABLE de la tabla temporal que retira "
         "el UNIQUE de angulo_starshot) -- no aplica a EB5.",
-    ("data/ManejoDatos/conection.py", 2757):  # B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461; G.2 (24-09): 2461->2482; G.3 (24-09): 2482->2508; PI.2 (01-10): 2508->2571; RB.3 (05-10): 2571->2598; GI.0: 2598->2706; GI.8c (08-10): 2706->2730; GI.8d (08-10): 2730->2757
+    ("data/ManejoDatos/conection.py", 2802):  # B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461; G.2 (24-09): 2461->2482; G.3 (24-09): 2482->2508; PI.2 (01-10): 2508->2571; RB.3 (05-10): 2571->2598; GI.0: 2598->2706; GI.8c (08-10): 2706->2730; GI.8d (08-10): 2730->2757; B.5 (12-10): 2757->2802
         # R1 (PLAN_REPARACION_ANUAL_27-08.md, 27-08): 2091->2160, desplazado
         # por las 4 tablas nuevas (CREATE TABLE) agregadas a
         # crearTablasAnuales. Mismo sitio. R.1 (11-09): 2224->2309.

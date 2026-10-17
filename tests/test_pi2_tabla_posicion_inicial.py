@@ -53,6 +53,9 @@ COLUMNAS_DATO = (
     "estado_g", "desfase_g_px", "desfase_g_mm",
     "estado_b", "desfase_b_px", "desfase_b_mm",
     "lado_transito", "tolerancia_mm", "observaciones",
+    # B.5 (16-10): las 14 columnas aditivas (las medidas de R, G y B y `capa_reportada`); en una base nueva van ANTES de `activo`
+    "incertidumbre_r_px", "incertidumbre_g_px", "incertidumbre_b_px", "dispersion_r_px", "dispersion_g_px", "dispersion_b_px",
+    "filas_r", "filas_g", "filas_b", "media_r_px", "media_g_px", "media_b_px", "media_gris_px", "capa_reportada",
 )
 OBLIGATORIAS = ("fecha", "imagen", "puntos", "parametros", "version_algoritmo")
 

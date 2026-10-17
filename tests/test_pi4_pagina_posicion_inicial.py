@@ -1204,19 +1204,21 @@ class TestDiferenciasConLoGuardado:
         resultado, registro = base
         assert pagina_mod.diferencias_con_lo_guardado(registro, resultado) == []
 
-    def test_cada_una_de_las_17_claves_y_la_version_se_compara(self, base):
+    def test_cada_una_de_las_30_claves_y_la_version_se_compara(self, base):
+        # B.5 (16-10): eran 17 claves; las 13 nuevas (incertidumbre, dispersion, cuerdas y media de las capas, y la media del gris) tambien se comparan. El registro de control (braqui_00) no mide la capa roja:
+        # sus claves nuevas valen None y se alteran como los textos; las cuentas de cuerdas de G y B (enteros) se alteran sumando uno.
         resultado, registro = base
         claves = sorted(motor.valores_medidos(resultado))
-        assert len(claves) == 17
+        assert len(claves) == 30
         con_numero = [c for c in claves if isinstance(registro[c], float)]
         sin_numero = [c for c in claves if not isinstance(registro[c], float)]
-        assert len(con_numero) == 9 and len(sin_numero) == 8, "compuerta: la composición del registro de control"
+        assert len(con_numero) == 16 and len(sin_numero) == 14, "compuerta: la composición del registro de control"
         corridos = 0
         for clave in claves:
             alterado = dict(registro)
             if clave in con_numero:
                 alterado[clave] = registro[clave] + (0.5 if clave.endswith("_px") else 0.05)
-            elif clave == "filas_gris":
+            elif clave.startswith("filas_") and registro[clave] is not None:
                 alterado[clave] = registro[clave] + 1
             else:
                 alterado[clave] = "otra cosa"
@@ -1224,7 +1226,7 @@ class TestDiferenciasConLoGuardado:
             rotulo = pagina_mod.ROTULOS_DE_LO_GUARDADO[clave]
             assert len(diferencias) == 1 and diferencias[0].startswith(f"{rotulo}: guardado "), (clave, diferencias)
             corridos += 1
-        assert corridos == 17
+        assert corridos == 30
         diferencias = pagina_mod.diferencias_con_lo_guardado(dict(registro, version_algoritmo="PI-0"), resultado)
         assert diferencias == ["versión del algoritmo: guardada PI-0, actual PI-2"]
 
@@ -1690,8 +1692,8 @@ class TestLoQueSeDibujaDatoPorDato:
 
     def test_18i_cada_clave_comparada_tiene_su_rotulo_legible(self):
         rotulos = pagina_mod.ROTULOS_DE_LO_GUARDADO
-        assert set(rotulos) == set(motor.valores_medidos(_resultado())) and len(rotulos) == 17
-        assert len(set(rotulos.values())) == 17 and all(_texto_sin_simbolos(t) for t in rotulos.values())
+        assert set(rotulos) == set(motor.valores_medidos(_resultado())) and len(rotulos) == 30       # B.5 (16-10): eran 17
+        assert len(set(rotulos.values())) == 30 and all(_texto_sin_simbolos(t) for t in rotulos.values())
 
 
 # ================================================== abrir, recalcular y cargar sin dejar medias tintas (N6-N9, N17)

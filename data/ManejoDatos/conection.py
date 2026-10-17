@@ -181,6 +181,18 @@ RENOMBRE_DOS_COLUMNAS = "existen las dos columnas: no se tocó nada"
 RENOMBRE_NADA_QUE_RENOMBRAR = "no existe la columna vieja ni la nueva: nada que renombrar"
 RENOMBRE_SIN_SOPORTE = "SQLite menor que 3.25: no se renombró"
 
+# B.5 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-83/DA-84): las 14 columnas que `braqui_posicion_inicial` ganó DESPUÉS de PI.2 -- las medidas de las tres capas de color que la tabla no guardaba (incertidumbre, dispersión,
+# número de cuerdas y media del desfase; la media del gris también) y la capa que se reportó. FUENTE ÚNICA, en el orden del plan: la usan el `CREATE TABLE` de una base nueva y la migración de una base ya creada con
+# PI.2 (`Conexion._asegurar_medidas_por_capa_posicion_inicial`), así que no pueden discrepar; una prueba la ata además al productor (`valores_medidos`) y al servicio. `capa_reportada` admite NULL (un registro hecho
+# sin elegir capa) y solo R, G o B: el `IS NULL` va EXPLÍCITO (como los CHECK de los milímetros) porque un CHECK que evalúa a NULL deja pasar la fila y el texto de la regla no puede depender de eso.
+COLUMNAS_NUEVAS_DE_POSICION_INICIAL = (
+    ("incertidumbre_r_px", "REAL"), ("incertidumbre_g_px", "REAL"), ("incertidumbre_b_px", "REAL"),
+    ("dispersion_r_px", "REAL"), ("dispersion_g_px", "REAL"), ("dispersion_b_px", "REAL"),
+    ("filas_r", "INTEGER"), ("filas_g", "INTEGER"), ("filas_b", "INTEGER"),
+    ("media_r_px", "REAL"), ("media_g_px", "REAL"), ("media_b_px", "REAL"), ("media_gris_px", "REAL"),
+    ("capa_reportada", "TEXT CHECK (capa_reportada IS NULL OR capa_reportada IN ('R', 'G', 'B'))"),
+)
+
 
 def _asegurar_renombre_columna(cursor, tabla, vieja, nueva):
     """Migración idempotente: renombra `vieja` a `nueva` EN SITIO (`ALTER TABLE ... RENAME COLUMN`).
@@ -309,6 +321,7 @@ class Conexion():
             self._asegurar_error_pct_tamano_pixel()  # GI.0 (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             self._asegurar_criterio_visibilidad_roi()  # GI.8c (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             self._asegurar_rango_referencia_valores_ct()  # GI.8d (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
+            self._asegurar_medidas_por_capa_posicion_inicial()  # B.5 (PLAN_ANALISIS_PELICULAS_08-10.md)
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -1199,6 +1212,33 @@ class Conexion():
                     _asegurar_columna(cur, "valores_ct", columna, "REAL")
             except sqlite3.Error as ex:
                 print(f"Aviso: no se pudo asegurar 'valores_ct.{columna}': {ex}")
+        self.con.commit()
+        cur.close()
+
+    def _asegurar_medidas_por_capa_posicion_inicial(self):
+        """B.5 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-83/DA-84): `braqui_posicion_inicial` gana las 14 columnas de `COLUMNAS_NUEVAS_DE_POSICION_INICIAL`.
+
+        CAUSA: la tabla guardaba de R, G y B solo el estado y el desfase (px y mm); la incertidumbre, la dispersión y el número de cuerdas, solo del gris; la media de las cuerdas, de ninguno; y no decía qué capa
+        se reportó. El físico pidió (09 y 11-10) que braqui guarde TODAS las medidas del gris y de R, G y B («es una aplicación un tanto diferente para braqui debido a cómo varía con el tiempo»): lo que el PDF
+        imprime de la capa reportada (B.6) y lo que se grafique en el tiempo (DP-142) tiene que salir de lo guardado, no de un recálculo.
+
+          incertidumbre_{r,g,b}_px, dispersion_{r,g,b}_px  REAL     k = 2 y desviación estándar de las cuerdas de cada capa [px]
+          filas_{r,g,b}                                    INTEGER  cuántas cuerdas entraron en cada capa
+          media_{gris,r,g,b}_px                            REAL     media de los desfases de las cuerdas (la mediana ya es el desfase)
+          capa_reportada                                   TEXT     R, G o B (CHECK explícito con el IS NULL); la que se eligió al guardar (el menú es B.7)
+
+        Todas admiten NULL y NINGUNA se rellena: un registro hecho antes (hoy no hay ninguno en ninguna base real) queda con las 14 vacías, sin forma honesta de saber qué capa se iba a reportar (DA-13). Aditiva e
+        idempotente (`ALTER TABLE ADD COLUMN` no puede perder una fila): corre al abrir la app, como `error_pct` (GI.0) o `criterio_visibilidad` (GI.8c). Va DESPUÉS de `_asegurar_activo_bloque_qc` (`DP-80`: ADD COLUMN
+        añade al final físico; en una base nueva las 14 ya van declaradas en el `CREATE TABLE`, antes de `activo`). Cada columna tiene su propio intento y un fallo se avisa sin cortar el resto del arranque (la
+        cadena vive en UN try/except)."""
+        cur = self.con.cursor()
+        for columna, ddl in COLUMNAS_NUEVAS_DE_POSICION_INICIAL:
+            try:
+                existentes = [c[1].lower() for c in cur.execute("PRAGMA table_info('braqui_posicion_inicial')").fetchall()]
+                if existentes and columna.lower() not in existentes:
+                    _asegurar_columna(cur, "braqui_posicion_inicial", columna, ddl)
+            except sqlite3.Error as ex:
+                print(f"Aviso: no se pudo asegurar 'braqui_posicion_inicial.{columna}': {ex}")
         self.con.commit()
         cur.close()
 
@@ -2689,8 +2729,12 @@ class Conexion():
         de su serie al guardar; `dpi` es lo que el archivo DECLARA (informativa: la escala es la del procedimiento,
         600 dpi) y `tamano_pixel_mm` la escala con que se midió (NULL si la resolución declarada es otra: sin
         milímetros). Un CHECK por perfil (gris, r, g, b) rechaza milímetros que no sean EXACTAMENTE los píxeles por
-        la escala; se escribe con los `IS NULL` explícitos porque un CHECK que evalúa a NULL deja pasar la fila."""
-        tabla = """
+        la escala; se escribe con los `IS NULL` explícitos porque un CHECK que evalúa a NULL deja pasar la fila.
+
+        B.5 (PLAN_ANALISIS_PELICULAS_08-10.md): lleva además las 14 columnas de `COLUMNAS_NUEVAS_DE_POSICION_INICIAL` (las medidas de R, G y B y `capa_reportada`), declaradas ANTES de `activo` en una base nueva y
+        agregadas por `_asegurar_medidas_por_capa_posicion_inicial` en una base ya creada con PI.2 (donde quedan después de `activo`: nada lee esta tabla por posición, todo va por nombre)."""
+        columnas_nuevas = ",\n                ".join(f"{nombre} {tipo}" for nombre, tipo in COLUMNAS_NUEVAS_DE_POSICION_INICIAL)
+        tabla = f"""
             CREATE TABLE IF NOT EXISTS braqui_posicion_inicial (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha TEXT NOT NULL,
@@ -2722,6 +2766,7 @@ class Conexion():
                 lado_transito TEXT,
                 tolerancia_mm REAL,
                 observaciones TEXT,
+                {columnas_nuevas},
                 CHECK ((desfase_gris_mm IS NULL) = (desfase_gris_px IS NULL OR tamano_pixel_mm IS NULL)
                        AND (desfase_gris_mm IS NULL
                             OR abs(desfase_gris_mm - desfase_gris_px * tamano_pixel_mm) <= 1e-9)),

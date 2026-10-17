@@ -25,8 +25,9 @@ Reglas de este servicio, cada una con su motivo:
   - `guardar` ANALIZA él mismo desde los bytes y los puntos (no recibe un `resultado` ajeno): nada garantiza que un
     resultado recibido sea el de esa imagen, y guardar un análisis viejo contra una imagen nueva es la clase de `IM3`/
     `DA-65`. De ese análisis salen `dpi`, parámetros, versión, md5 y tolerancia: una sola fuente para el veredicto.
-  - Lo que se guarda sale de `motor.valores_medidos` (px y mm del gris y de cada capa, la incertidumbre): este módulo
-    nunca recalcula `px x escala` ni suma incertidumbres.
+  - Lo que se guarda sale de `motor.valores_medidos` (las mismas siete medidas del gris y de cada capa, B.5): este módulo
+    nunca recalcula `px x escala` ni suma incertidumbres. La capa que se reporta (`capa_reportada`, B.5) no es una medida: la
+    elige el físico en la página (B.7) y llega aquí como argumento; sin ella el registro queda sin capa, como antes.
   - La fecha se normaliza SIEMPRE a 'yyyy-MM-dd' (`fecha_iso`): la clave del índice único es la fecha cruda, y guardar
     '2026-06-26 11:42:13' y luego '2026-06-26' dejaría dos pruebas vigentes del mismo cambio.
   - `reemplazar=False` por omisión: con una prueba vigente para esa fecha, `guardar` RECHAZA; la confirmación del físico
@@ -47,7 +48,7 @@ import re
 from datetime import date, datetime
 
 from analisisImagenes import posicion_inicial_braqui as motor
-from analisisImagenes.pelicula import leer_pelicula
+from analisisImagenes.pelicula import CAPAS, leer_pelicula
 from data.ManejoDatos.conection import Conexion
 from services.anulacion import filtro_activo, reemplazar_bloque
 from services.audit_minimo import (ACCION_ANULAR, ACCION_GUARDAR, ACCION_REEMPLAZO,
@@ -60,6 +61,9 @@ TABLA = "braqui_posicion_inicial"
 # (SQLite aplica afinidad numérica al parámetro, no puede convertirlo y compara como texto).
 TIPO_CAMBIO_DE_FUENTE = "Cambio de fuente"
 
+# B.5: lo que la fila de auditoría de un guardado dice de la capa reportada (la letra R, G o B va al final); sin capa no se dice nada y el detalle es el de siempre.
+TEXTO_DE_LA_CAPA_EN_LA_AUDITORIA = "capa reportada {}"
+
 DIAS_PARA_PROPONER = 7      # DD7: el cambio de fuente por defecto, solo si está a 7 días o menos de la fecha del escaneo
 
 # Las columnas que se piden al leer (todas menos `imagen` y `activo`): las claves del dict salen del propio SELECT
@@ -68,16 +72,20 @@ _COLUMNAS_SQL = (
     "id, fecha, serie_fuente, user, imagen_nombre, imagen_md5, dpi, tamano_pixel_mm, puntos, parametros, "
     "version_algoritmo, estado_gris, desfase_gris_px, desfase_gris_mm, incertidumbre_gris_px, dispersion_gris_px, "
     "filas_gris, estado_r, desfase_r_px, desfase_r_mm, estado_g, desfase_g_px, desfase_g_mm, estado_b, desfase_b_px, "
-    "desfase_b_mm, lado_transito, tolerancia_mm, observaciones")
+    "desfase_b_mm, lado_transito, tolerancia_mm, observaciones, incertidumbre_r_px, incertidumbre_g_px, incertidumbre_b_px, "
+    "dispersion_r_px, dispersion_g_px, dispersion_b_px, filas_r, filas_g, filas_b, media_r_px, media_g_px, media_b_px, media_gris_px, "
+    "capa_reportada")
 
-# Lo que se inserta, en este orden (MI0: columnas explícitas). Los 17 valores del motor entran por su nombre.
+# Lo que se inserta, en este orden (MI0: columnas explícitas). Los 30 valores del motor (17 de PI.3 y 13 de B.5) entran por su nombre y `capa_reportada` es el único que no sale del motor.
 _COLUMNAS_INSERT = (
     "fecha", "serie_fuente", "user", "imagen", "imagen_nombre", "imagen_md5", "dpi", "puntos", "parametros",
     "version_algoritmo", "tolerancia_mm", "observaciones",
     "tamano_pixel_mm", "lado_transito",
     "estado_gris", "desfase_gris_px", "desfase_gris_mm", "incertidumbre_gris_px", "dispersion_gris_px", "filas_gris",
     "estado_r", "desfase_r_px", "desfase_r_mm", "estado_g", "desfase_g_px", "desfase_g_mm",
-    "estado_b", "desfase_b_px", "desfase_b_mm")
+    "estado_b", "desfase_b_px", "desfase_b_mm",
+    "incertidumbre_r_px", "incertidumbre_g_px", "incertidumbre_b_px", "dispersion_r_px", "dispersion_g_px", "dispersion_b_px",
+    "filas_r", "filas_g", "filas_b", "media_r_px", "media_g_px", "media_b_px", "media_gris_px", "capa_reportada")
 _SQL_INSERT = (f"INSERT INTO braqui_posicion_inicial ({', '.join(_COLUMNAS_INSERT)}) "
                f"VALUES ({', '.join('?' * len(_COLUMNAS_INSERT))})")
 
@@ -287,12 +295,15 @@ def _nombre_de_archivo(nombre):
     return texto or None
 
 
-def guardar(usuario, fecha, imagen_bytes, imagen_nombre, puntos, reemplazar=False, observaciones=None):
+def guardar(usuario, fecha, imagen_bytes, imagen_nombre, puntos, reemplazar=False, observaciones=None, capa_reportada=None):
     """Guarda la prueba de un cambio de fuente y devuelve el `id` nuevo. ANALIZA desde los bytes y los puntos (ver el
     docstring del módulo). Rechaza con `ValueError` y SIN escribir nada: `PosicionInicialError` (con sus hijas
     `FechaSinCambioDeFuente` y `PruebaYaGuardada`) cuando decide el servicio -- usuario, fecha, imagen vacía, puntos,
     cambio de fuente sin serie (DD8: el mensual no la imprimiría) o con dos series, prueba ya vigente sin
-    `reemplazar=True` --, y el `ValueError` simple del lector si la imagen no se reconoce (una imagen con zonas transparentes ya no se rechaza: A.1).
+    `reemplazar=True`, capa que no es R, G ni B --, y el `ValueError` simple del lector si la imagen no se reconoce (una imagen con zonas transparentes ya no se rechaza: A.1).
+
+    `capa_reportada` (B.5; por omisión None = el registro queda sin capa, como antes): la capa que el físico eligió reportar (B.7), `R`, `G` o `B` (`pelicula.CAPAS`, mayúscula exacta; el gris no se ofrece). El
+    servicio NO juzga si esa capa se midió (la confirmación de la página lo avisa, B.7): guarda lo que se le dice. La fila de auditoría la nombra (`TEXTO_DE_LA_CAPA_EN_LA_AUDITORIA`).
 
     UNA transacción (`reemplazar_bloque`): anula la vigente de esa fecha, inserta la nueva y escribe UNA fila de
     auditoría (`guardar` si no había prueba, `reemplazo` si la había, con el `id` de la reemplazada en el detalle); si
@@ -302,6 +313,8 @@ def guardar(usuario, fecha, imagen_bytes, imagen_nombre, puntos, reemplazar=Fals
     dia = fecha_iso(fecha)
     if dia is None:
         raise PosicionInicialError("la fecha debe ser 'aaaa-mm-dd': la del cambio de fuente al que pertenece la prueba")
+    if capa_reportada is not None and not (isinstance(capa_reportada, str) and capa_reportada in CAPAS):
+        raise PosicionInicialError(f"la capa reportada debe ser {', '.join(CAPAS[:-1])} o {CAPAS[-1]} (o ninguna), no {capa_reportada!r}")
     if not isinstance(imagen_bytes, (bytes, bytearray)) or not imagen_bytes:
         raise PosicionInicialError("falta la imagen")
     imagen = bytes(imagen_bytes)
@@ -334,8 +347,10 @@ def guardar(usuario, fecha, imagen_bytes, imagen_nombre, puntos, reemplazar=Fals
             "imagen_md5": hashlib.md5(imagen).hexdigest(), "dpi": resultado["dpi"],
             "puntos": json.dumps(pares), "parametros": json.dumps(parametros, sort_keys=True),
             "version_algoritmo": resultado["version"], "tolerancia_mm": parametros["tolerancia_mm"],
-            "observaciones": observaciones, **valores}
+            "observaciones": observaciones, "capa_reportada": capa_reportada, **valores}
         detalle = f"{dia} (fuente {serie}); {nombre or 'sin nombre de archivo'}; {resultado['version']}"
+        if capa_reportada is not None:
+            detalle += "; " + TEXTO_DE_LA_CAPA_EN_LA_AUDITORIA.format(capa_reportada)
         if previa is not None:
             detalle += f"; reemplaza id={previa['id']}"
         reemplazar_bloque(

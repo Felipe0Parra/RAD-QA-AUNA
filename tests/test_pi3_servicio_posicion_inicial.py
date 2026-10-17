@@ -297,7 +297,7 @@ class TestGuardar:
     def test_la_firma_no_recibe_un_resultado_ajeno(self):
         """Nada garantiza que un `resultado` recibido sea el de esa imagen (IM3/DA-65): se analiza desde los bytes."""
         parametros = list(inspect.signature(svc.guardar).parameters)
-        assert parametros == ["usuario", "fecha", "imagen_bytes", "imagen_nombre", "puntos", "reemplazar", "observaciones"]
+        assert parametros == ["usuario", "fecha", "imagen_bytes", "imagen_nombre", "puntos", "reemplazar", "observaciones", "capa_reportada"]    # B.5 (16-10): `capa_reportada=None` al final
 
     def test_guarda_un_perfil_no_medible_con_su_estado(self, bd):
         _sembrar(bd)

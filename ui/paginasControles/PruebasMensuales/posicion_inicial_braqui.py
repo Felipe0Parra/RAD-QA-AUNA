@@ -177,8 +177,8 @@ ANCHO_DE_LA_LEYENDA = 64               # caracteres por línea de las etiquetas 
 # el lienzo ~130 px en esa pagina (el area de desplazamiento de B.1); con una pagina alta (1300 px) llena el area sin barra (test_9g). Lo mira la CAPTURA, no las aserciones sobre los limites: lo ensenó B.1.
 ALTO_MINIMO_DEL_LIENZO = {"gris": 600, "rgb": 630, "sintetica": 390}
 
-# Cómo se llama, para el físico, cada cosa que se compara al abrir un registro (las 17 claves de `valores_medidos`): una
-# prueba exige que no falte ninguna y que no sobre ninguna.
+# Cómo se llama, para el físico, cada cosa que se compara al abrir un registro (las 30 claves de `valores_medidos`: las 17 de PI.4 y las 13 de B.5): una
+# prueba exige que no falte ninguna y que no sobre ninguna (sin su rótulo, reabrir un registro que difiera lanzaría `KeyError`). `capa_reportada` no está: no se mide, no se compara.
 ROTULOS_DE_LO_GUARDADO = {
     "tamano_pixel_mm": "escala del píxel [mm]",
     "lado_transito": "lado de la banda de tránsito",
@@ -197,6 +197,19 @@ ROTULOS_DE_LO_GUARDADO = {
     "estado_b": "estado de la capa azul",
     "desfase_b_px": "desfase de la capa azul [px]",
     "desfase_b_mm": "desfase de la capa azul [mm]",
+    "incertidumbre_r_px": "incertidumbre de la capa roja [px]",
+    "incertidumbre_g_px": "incertidumbre de la capa verde [px]",
+    "incertidumbre_b_px": "incertidumbre de la capa azul [px]",
+    "dispersion_r_px": "dispersión entre cuerdas de la capa roja [px]",
+    "dispersion_g_px": "dispersión entre cuerdas de la capa verde [px]",
+    "dispersion_b_px": "dispersión entre cuerdas de la capa azul [px]",
+    "filas_r": "número de cuerdas de la capa roja",
+    "filas_g": "número de cuerdas de la capa verde",
+    "filas_b": "número de cuerdas de la capa azul",
+    "media_gris_px": "media del desfase entre cuerdas del gris [px]",
+    "media_r_px": "media del desfase entre cuerdas de la capa roja [px]",
+    "media_g_px": "media del desfase entre cuerdas de la capa verde [px]",
+    "media_b_px": "media del desfase entre cuerdas de la capa azul [px]",
 }
 
 
@@ -366,7 +379,7 @@ def _como_texto(valor):
 
 
 def diferencias_con_lo_guardado(registro, resultado):
-    """Lo recalculado contra lo guardado (DD3): las 17 claves de `valores_medidos` más la versión del algoritmo. Los
+    """Lo recalculado contra lo guardado (DD3): las 30 claves de `valores_medidos` (B.5) más la versión del algoritmo. Los
     píxeles se comparan a 0.01 px, los milímetros a 0.01 px expresado en milímetros y todo lo demás (estados, lado del
     tránsito, número de filas, versión) exacto: comparar solo el desfase del gris dejaría pasar un `lado_transito`
     distinto, que es el signo que imprime el PDF. Devuelve una lista de textos; vacía si coinciden."""

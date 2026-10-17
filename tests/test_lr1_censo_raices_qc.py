@@ -77,25 +77,25 @@ CENSO_RAICES = {
                 "PruebaAnual600.create_control (fecha LIKE, ver DP-27). Filtra activo con filtro_activo() en el f-string "
                 "y desempata por id"),
     # -- PI.3 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 02-10) --------------
-    ("services/posicion_inicial_braqui.py", 149, "TipoCalibracion"):  # A.1 (12-10): 148->149
+    ("services/posicion_inicial_braqui.py", 157, "TipoCalibracion"):  # A.1 (12-10): 148->149; B.5 (12-10): 149->157
         (LISTA, "_filas_de_cambio_de_fuente: WHERE tipo = ? AND DATE(fecha) IS NOT NULL -- los cambios de fuente de "
          "TODAS las fechas (la clave de bloque es (DATE(fecha), tipo) y aquí se pide el catálogo completo de un tipo); "
          "filtra activo con filtro_activo() dentro del f-string. Es la ÚNICA lectura de TipoCalibracion del servicio: "
          "la regla de vigencia, el selector, el indicador de `listar` y la validación de `guardar` la comparten"),
-    ("services/posicion_inicial_braqui.py", 159, "braqui_posicion_inicial"):  # A.1 (12-10): 158->159
+    ("services/posicion_inicial_braqui.py", 167, "braqui_posicion_inicial"):  # A.1 (12-10): 158->159; B.5 (12-10): 159->167
         (LISTA, "_vigente_por_fecha: WHERE fecha = ? -- la CLAVE DE BLOQUE completa (la fecha del cambio de fuente), no "
          "una fila física; filtra activo con filtro_activo() dentro del f-string. La comparten `existe_vigente`, la "
          "regla (`posicion_inicial_para`) y `guardar` (dentro de su transacción)"),
-    ("services/posicion_inicial_braqui.py", 239, "braqui_posicion_inicial"):  # A.1 (12-10): 238->239
+    ("services/posicion_inicial_braqui.py", 247, "braqui_posicion_inicial"):  # A.1 (12-10): 238->239; B.5 (12-10): 239->247
         (LISTA, "listar: todas las pruebas vigentes para la tabla de la página; filtra activo con filtro_activo() en el "
          "f-string (las anuladas viven en el visor, no en esta lista)"),
-    ("services/posicion_inicial_braqui.py", 254, "braqui_posicion_inicial"):  # A.1 (12-10): 253->254
+    ("services/posicion_inicial_braqui.py", 262, "braqui_posicion_inicial"):  # A.1 (12-10): 253->254; B.5 (12-10): 254->262
         (IDENTIDAD, "leer: WHERE id = ? -- abrir un registro YA ELEGIDO, incluso anulado (DA-47): filtrar lo haría "
          "desaparecer justo cuando se quiere ver; trae la imagen y `activo`"),
-    ("services/posicion_inicial_braqui.py", 357, "braqui_posicion_inicial"):  # A.1 (12-10): 354->357
+    ("services/posicion_inicial_braqui.py", 372, "braqui_posicion_inicial"):  # A.1 (12-10): 354->357; B.5 (12-10): 357->372
         (IDENTIDAD, "anular, SELECT activo: WHERE id = ? -- lee `activo` COMO DATO para decidir si ya estaba anulada "
          "(True/False sin auditar); no puede filtrarlo, o una prueba anulada se confundiría con una que no existe"),
-    ("services/posicion_inicial_braqui.py", 361, "braqui_posicion_inicial"):  # A.1 (12-10): 358->361
+    ("services/posicion_inicial_braqui.py", 376, "braqui_posicion_inicial"):  # A.1 (12-10): 358->361; B.5 (12-10): 361->376
         (IDENTIDAD, "anular, UPDATE ... SET activo = 0 WHERE id = ? -- la fila física ya identificada; a propósito NO "
          "pasa por sql_anular_bloque (su AND de vigencia sobre un WHERE id es el defecto de 'filtro sobre lectura de "
          "identidad' que RT1 vigila)"),
