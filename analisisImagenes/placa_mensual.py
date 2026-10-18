@@ -27,6 +27,12 @@ guardado usa todavía otra. La raíz del resultado dice «ok» si al menos una c
 se entregan aunque el piso o las capas no se puedan medir. La meseta es el nivel medio de la zona central (el plan): con la cúpula de las películas reales el 50 % de esa media no es el 50 % de la
 dosis del centro del campo (ver `medir_perfil`).
 
+C.3 (R9, paso 11) agrega `barrido(resultado)`: con la película ya girada, el piso y los bordes luminosos que `analizar` trae (no gira, no vuelve a calcular el piso y no cambia el resultado), mide con la MISMA
+`medir_perfil` bandas de `banda_perfil_mm` ancladas en el cruce de diagonales (la banda 0 es EXACTAMENTE el perfil central), las del crossplane sobre las filas y las del inplane sobre las columnas, en la misma
+zona central de la meseta para las cuatro capas: ±`fraccion_meseta` / 2 de la distancia entre los bordes luminosos de la línea central PERPENDICULAR, alrededor del cruce (79 bandas en un 10 x 10). No tiene ningún
+parámetro ni descarta ninguna banda (las que no se pueden medir quedan en la lista con su motivo); del FWHM de las medibles da la media, la mediana, la desviación estándar (la de la población, la `np.std` del
+resto de la aplicación) y cuántas son. El barrido se muestra y no se guarda: quien lo necesite lo vuelve a calcular con esta misma función.
+
 CONVENCIONES. Todo está en el marco de la imagen tal como la leyó `analisisImagenes.pelicula.leer_pelicula`: x a la derecha (columna), y hacia abajo (fila), el centro del primer píxel es
 (0, 0). Los ángulos son en GRADOS y su signo es el de la pantalla: positivo = giro HORARIO (la y hacia abajo hace que `atan2(dy, dx)` crezca en el sentido de las agujas del reloj). Un campo
 girado theta en ese sentido tiene el ángulo +theta y se corrige con `matriz_giro(cruce, theta)` (un ángulo positivo de `getRotationMatrix2D` gira en sentido antihorario). Las longitudes salen en
@@ -1182,3 +1188,238 @@ def valores_medidos(resultado, capa):
     m = resultado.capas[capa]
     valores = (m.estado, m.crossplane.fwhm_mm, m.inplane.fwhm_mm) + tuple(m.coincidencia_mm[lado] for lado in LADOS_DE_LA_COINCIDENCIA)
     return {clave: (v if clave == CLAVES_DE_VALORES_MEDIDOS[0] or v is None else float(v)) for clave, v in zip(CLAVES_DE_VALORES_MEDIDOS, valores)}
+
+
+# ============================================================================= C.3: el barrido, sin parámetro, en la misma zona central, con sus medidas estadísticas (R9, paso 11)
+
+EJE_PERPENDICULAR = {"crossplane": "inplane", "inplane": "crossplane"}     # la línea central de donde sale la zona del barrido de un eje es la del OTRO eje
+MOTIVO_BARRIDO_SIN_LINEA = "no medible: la línea central perpendicular no cruza el campo luminoso, así que el barrido no tiene zona"
+MOTIVO_BARRIDO_SIN_BANDA = "no medible: la zona central del barrido es más angosta que una banda"
+MOTIVO_BARRIDO_SIN_PELICULA = "no medible: el resultado no trae la película girada que barrer"
+MOTIVO_NINGUNA_BANDA = "no medible: ninguna banda del barrido se pudo medir; cada capa y cada eje dice su motivo"      # el estado de la raíz cuando ninguna capa de ningún eje tuvo una sola banda medible
+
+
+def _par_como_lista(p):
+    """Un par (o None) como lista de floats para JSON; None donde falte un valor."""
+    return None if p is None else [None if x is None else float(x) for x in p]
+
+
+@dataclass(frozen=True, eq=False)
+class BandaDelBarrido:
+    """Una banda del barrido. `k`: su número (0 es el perfil central; positivo hacia abajo en el crossplane y hacia la derecha en el inplane, en el marco girado). `posicion_mm`: k x `banda_perfil_mm`, su distancia
+    nominal al cruce de diagonales. `linea_px`: su línea central en el marco girado (cruce + k bandas), la que cruza los lados del campo luminoso para dar SUS bordes luminosos. `medida`: la `MedidaDePerfil` de
+    `medir_perfil` (con sus bordes, su centro y su estado; las filas que usó están en `medida.perfil.filas_px`, o `perfil` es None si la banda quedó fuera de la película girada)."""
+    k: int
+    posicion_mm: float
+    linea_px: float
+    medida: MedidaDePerfil
+
+    @property
+    def ok(self):
+        return self.medida.ok
+
+    @property
+    def fwhm_mm(self):
+        return self.medida.fwhm_mm
+
+    def como_dict(self):
+        m = self.medida
+        return {"k": int(self.k), "posicion_mm": float(self.posicion_mm), "linea_px": float(self.linea_px), "estado": m.estado, "fwhm_mm": m.fwhm_mm, "centro_rad_px": m.centro_rad_px,
+                "bordes_rad_px": _par_como_lista(m.bordes_rad_px), "bordes_luz_px": _par_como_lista(m.bordes_luz_px),
+                "banda_px": None if m.perfil is None else _par_como_lista(m.perfil.filas_px)}
+
+
+@dataclass(frozen=True)
+class EstadisticaDelBarrido:
+    """El FWHM de las bandas MEDIBLES de una capa y un eje, sin descartar ninguna: `n_bandas` (las del barrido, medibles o no), `n_medibles`, la media, la mediana y la desviación estándar (de la población, como
+    `np.std`) en milímetros; None si no hay ninguna medible."""
+    n_bandas: int
+    n_medibles: int
+    media_mm: float | None
+    mediana_mm: float | None
+    desviacion_mm: float | None
+
+    def como_dict(self):
+        return {"n_bandas": int(self.n_bandas), "n_medibles": int(self.n_medibles), "media_mm": self.media_mm, "mediana_mm": self.mediana_mm, "desviacion_mm": self.desviacion_mm}
+
+
+@dataclass(frozen=True, eq=False)
+class BarridoDeCapa:
+    """El barrido de UNA capa en UN eje. `estado`: «ok» si al menos una banda se pudo medir, o el motivo (el del piso de esa capa, o que ninguna de sus bandas se midió). `bandas`: TODAS, de -K a +K, en orden
+    (vacía si la capa no se barrió). `estadistica`: la de sus bandas medibles."""
+    capa: str
+    eje: str
+    estado: str
+    bandas: tuple
+    estadistica: EstadisticaDelBarrido
+
+    @property
+    def ok(self):
+        return self.estado == "ok"
+
+    @property
+    def central(self):
+        """La banda 0, que es el perfil central de `analizar` (None si la capa no se barrió)."""
+        return next((b for b in self.bandas if b.k == 0), None)
+
+    def como_dict(self):
+        return {"estado": self.estado, "estadistica": self.estadistica.como_dict(), "bandas": [b.como_dict() for b in self.bandas]}
+
+
+@dataclass(frozen=True, eq=False)
+class BarridoDeEje:
+    """El barrido de un eje: la REGIÓN (la misma para las cuatro capas, sale de los bordes luminosos y de ningún perfil medido) y el de cada capa. `perpendicular`: el eje de la línea central de donde sale la zona.
+    `longitud_perpendicular_mm`: la distancia entre sus dos bordes luminosos. `k_maximo`: K, la mayor banda cuyo borde de afuera cabe en la zona (floor(fraccion_meseta / 2 x L / banda - 1/2)). `zona_px` y
+    `zona_mm`: los límites de la zona, en el marco girado y en milímetros desde el cruce (la zona central de la meseta del perfil perpendicular). `banda_mm`: el ancho de cada banda. Si no hay región
+    (la línea no cruza el campo, la zona no alcanza para una banda o no hay película girada) todo eso es None, `estado` dice por qué y las capas no tienen bandas."""
+    eje: str
+    estado: str
+    perpendicular: str
+    longitud_perpendicular_mm: float | None
+    k_maximo: int | None
+    zona_px: tuple | None
+    zona_mm: tuple | None
+    banda_mm: float
+    capas: dict
+
+    @property
+    def ok(self):
+        return self.estado == "ok"
+
+    @property
+    def ks(self):
+        """Los números de banda del barrido, de -K a +K (vacío si no hay región)."""
+        return () if self.k_maximo is None else tuple(range(-self.k_maximo, self.k_maximo + 1))
+
+    def como_dict(self):
+        return {"estado": self.estado, "perpendicular": self.perpendicular, "longitud_perpendicular_mm": self.longitud_perpendicular_mm, "k_maximo": self.k_maximo,
+                "zona_px": _par_como_lista(self.zona_px), "zona_mm": _par_como_lista(self.zona_mm), "banda_mm": self.banda_mm, "capas": {nombre: c.como_dict() for nombre, c in self.capas.items()}}
+
+
+@dataclass(frozen=True, eq=False)
+class BarridoPlacaMensual:
+    """El resultado de `barrido`: `version`, `estado` («ok» si alguna banda de alguna capa se pudo medir; si no, el motivo), `tam_mm` y `ejes` ({crossplane, inplane} -> `BarridoDeEje`, cada uno con sus cuatro
+    capas). No retiene la película girada ni el resultado que barrió; sí los perfiles de sus bandas (`memoria_bytes`)."""
+    version: str
+    estado: str
+    tam_mm: float | None
+    ejes: dict
+
+    @property
+    def ok(self):
+        return self.estado == "ok"
+
+    def memoria_bytes(self):
+        """Lo que el barrido retiene en arreglos: el perfil y el perfil suavizado de cada banda (la película girada no). Un arreglo que aparece dos veces se cuenta UNA: con `suavizado_perfil_mm` en 0 no se
+        suaviza y el perfil suavizado ES el perfil."""
+        arreglos = {}
+        for e in self.ejes.values():
+            for c in e.capas.values():
+                for b in c.bandas:
+                    for a in (None if b.medida.perfil is None else b.medida.perfil.valores, b.medida.suavizado):
+                        if a is not None:
+                            arreglos[id(a)] = a.nbytes
+        return int(sum(arreglos.values()))
+
+    def como_dict(self):
+        """Solo números y textos (JSON): sin los arreglos de los perfiles."""
+        return {"version": self.version, "estado": self.estado, "tam_mm": self.tam_mm, "ejes": {eje: e.como_dict() for eje, e in self.ejes.items()}}
+
+
+def _estadistica(fwhm, n_bandas):
+    """La media, la mediana y la desviación estándar (de la población, la `np.std` del resto de la aplicación) de los FWHM de las bandas medibles `fwhm`, y cuántas son; ninguna se descarta. Con ninguna, None."""
+    if not len(fwhm):
+        return EstadisticaDelBarrido(n_bandas=int(n_bandas), n_medibles=0, media_mm=None, mediana_mm=None, desviacion_mm=None)
+    v = np.asarray(fwhm, dtype=np.float64)
+    return EstadisticaDelBarrido(n_bandas=int(n_bandas), n_medibles=int(v.size), media_mm=float(np.mean(v)), mediana_mm=float(np.median(v)), desviacion_mm=float(np.std(v)))
+
+
+def _barrido_de_capa_sin_barrer(nombre, eje, motivo):
+    """Una capa que no se barrió: el motivo, ninguna banda y la estadística vacía."""
+    return BarridoDeCapa(capa=nombre, eje=eje, estado=motivo, bandas=(), estadistica=_estadistica([], 0))
+
+
+def _barrido_de_eje_sin_zona(eje, motivo, P):
+    """Un eje sin región que barrer: el motivo en el eje y en cada una de sus cuatro capas."""
+    return BarridoDeEje(eje=eje, estado=motivo, perpendicular=EJE_PERPENDICULAR[eje], longitud_perpendicular_mm=None, k_maximo=None, zona_px=None, zona_mm=None, banda_mm=P["banda_perfil_mm"],
+                        capas={nombre: _barrido_de_capa_sin_barrer(nombre, eje, motivo) for nombre in CAPAS_DEL_PISO})
+
+
+def _barrido_sin_medir(resultado, motivo):
+    """El barrido de un resultado que no trae la película girada: nada que barrer, y el motivo en todas partes."""
+    return BarridoPlacaMensual(version=VERSION_ALGORITMO, estado=motivo, tam_mm=resultado.tam_mm,
+                               ejes={eje: _barrido_de_eje_sin_zona(eje, motivo, resultado.parametros) for eje in EJES})
+
+
+def _banda_del_barrido(resultado, capa, eje, i, k, cruce_luz, mediana):
+    """La banda `k` de `capa` en `eje` (i: 0 si recorre la x, 1 si recorre la y): el perfil de `perfil_central(banda=k)` medido con `medir_perfil`, el piso de esa capa, el cruce a lo largo del eje, los bordes
+    luminosos de SU línea (cruce de diagonales + k bandas, perpendicular al eje: las esquinas pueden quedar inclinadas) y el retículo girado. Una banda fuera de la película girada no se tira: queda «no medible»."""
+    P = resultado.parametros
+    girada = resultado.girada
+    linea = cruce_luz[1 - i] + k * (P["banda_perfil_mm"] / girada.tam_mm)
+    try:
+        perfil = perfil_central(capa, eje, P, banda=k)
+    except ValueError as motivo:
+        medida = MedidaDePerfil(estado=f"no medible: perfil {eje}: {motivo}", capa=capa.nombre, eje=eje, tam_mm=girada.tam_mm, centro_px=float(girada.cruce[i]), piso=float(mediana))
+    else:
+        medida = medir_perfil(perfil, girada.cruce[i], mediana, BASE_VALOR_DE_PIXEL, P, bordes_luz(eje, resultado.geometria.esquinas_giradas, linea_px=linea), resultado.geometria.reticulo_girado[i])
+    return BandaDelBarrido(k=k, posicion_mm=float(k * P["banda_perfil_mm"]), linea_px=float(linea), medida=medida)
+
+
+def _motivo_del_barrido_sin_piso(del_piso):
+    """Por qué no se barre una capa: el motivo de su piso (o, si el piso dice «ok» pero no trae nivel, que no lo tiene)."""
+    return del_piso.estado if del_piso.estado != "ok" else "no medible: la capa no tiene nivel de piso"
+
+
+def _barrer_la_capa(resultado, nombre, eje, i, ks, cruce_luz):
+    """Las bandas `ks` de una capa en un eje y su estadística. Una capa sin piso medido no se barre (su motivo es el de su piso); si ninguna banda se midió lo dice con el motivo de la central."""
+    del_piso = resultado.piso.capas[nombre]
+    if del_piso.estado != "ok" or del_piso.mediana is None:
+        return _barrido_de_capa_sin_barrer(nombre, eje, _motivo_del_barrido_sin_piso(del_piso))
+    capa = resultado.girada.capa(nombre)
+    bandas = tuple(_banda_del_barrido(resultado, capa, eje, i, k, cruce_luz, del_piso.mediana) for k in ks)
+    estadistica = _estadistica([b.fwhm_mm for b in bandas if b.ok], len(bandas))
+    if estadistica.n_medibles:
+        return BarridoDeCapa(capa=nombre, eje=eje, estado="ok", bandas=bandas, estadistica=estadistica)
+    central = next(b for b in bandas if b.k == 0)
+    return BarridoDeCapa(capa=nombre, eje=eje, estado=f"no medible: ninguna de las {len(bandas)} bandas del barrido se pudo medir (la central: {central.medida.estado})", bandas=bandas, estadistica=estadistica)
+
+
+def _barrer_el_eje(resultado, eje, i, cruce_luz):
+    """El barrido de un eje: la región (±`fraccion_meseta` / 2 de la distancia entre los bordes luminosos de la línea central PERPENDICULAR, alrededor del cruce: la misma zona central de la meseta del perfil
+    perpendicular, para las cuatro capas) y las bandas de cada capa. Sin línea perpendicular, o con una zona más angosta que una banda, el eje queda «no medible» y no se inventa ninguna región."""
+    P = resultado.parametros
+    luz = resultado.bordes_luz_px[EJE_PERPENDICULAR[eje]]
+    if luz is None:
+        return _barrido_de_eje_sin_zona(eje, MOTIVO_BARRIDO_SIN_LINEA, P)
+    tam = resultado.girada.tam_mm
+    centro = resultado.girada.cruce[1 - i]
+    extremo = P["fraccion_meseta"] / 2 * (luz[1] - luz[0])
+    k_maximo = math.floor(extremo * tam / P["banda_perfil_mm"] - 1 / 2)
+    if k_maximo < 0:
+        return _barrido_de_eje_sin_zona(eje, MOTIVO_BARRIDO_SIN_BANDA, P)
+    ks = range(-k_maximo, k_maximo + 1)
+    return BarridoDeEje(eje=eje, estado="ok", perpendicular=EJE_PERPENDICULAR[eje], longitud_perpendicular_mm=float((luz[1] - luz[0]) * tam), k_maximo=int(k_maximo),
+                        zona_px=(centro - extremo, centro + extremo), zona_mm=(-extremo * tam, extremo * tam), banda_mm=P["banda_perfil_mm"],
+                        capas={nombre: _barrer_la_capa(resultado, nombre, eje, i, ks, cruce_luz) for nombre in CAPAS_DEL_PISO})
+
+
+def barrido(resultado):
+    """El barrido del análisis mensual (R9, paso 11) -> `BarridoPlacaMensual`: por eje y por capa, las bandas de `banda_perfil_mm` ancladas en el cruce de diagonales sobre la zona central de la meseta del eje
+    perpendicular (±`fraccion_meseta` / 2 de la distancia entre los bordes luminosos de su línea central, alrededor del cruce; la misma para las cuatro capas y para el eje), cada una medida con la MISMA
+    `medir_perfil` que el corte central, y de las medibles la media, la mediana, la desviación estándar y cuántas son. La banda 0 es EXACTAMENTE el perfil central de `analizar`.
+
+    UN solo argumento, el resultado de `analizar`, y ningún parámetro nuevo: usa `resultado.parametros` (los mismos del corte central), su película girada (no se vuelve a girar), el `Piso` que trae (no se vuelve a
+    calcular: el nivel de cada capa es el de `resultado.piso`) y sus bordes luminosos. No descarta ninguna banda ni juzga ninguna: una banda que no se pudo medir queda en la lista con su motivo. No modifica
+    el resultado. Sin película girada (los puntos no forman el campo, no hay escala, el piso no se midió) el barrido es «no medible» con el motivo del resultado; una capa sin piso medido no se barre. Cuando el
+    corte central no se midió pero la película sí está, las bandas se prueban igual (la región no depende de ningún perfil medido). `ValueError` si el argumento no es un `ResultadoPlacaMensual` o a sus
+    parámetros les falta alguno."""
+    if not isinstance(resultado, ResultadoPlacaMensual):
+        raise ValueError(f"`barrido` recibe el `ResultadoPlacaMensual` que devuelve `analizar`, no {type(resultado).__name__}.")
+    _pedir(resultado.parametros, CLAVES_QUE_PIDE_LA_MEDIDA, "`barrido`")
+    if resultado.girada is None or resultado.geometria is None:
+        return _barrido_sin_medir(resultado, resultado.estado if not resultado.ok else MOTIVO_BARRIDO_SIN_PELICULA)
+    cruce_luz = _cruce_de_diagonales(*resultado.geometria.esquinas_giradas)
+    ejes = {eje: _barrer_el_eje(resultado, eje, i, cruce_luz) for i, eje in enumerate(EJES)}
+    ok = any(c.ok for e in ejes.values() for c in e.capas.values())
+    return BarridoPlacaMensual(version=VERSION_ALGORITMO, estado="ok" if ok else MOTIVO_NINGUNA_BANDA, tam_mm=resultado.girada.tam_mm, ejes=ejes)
