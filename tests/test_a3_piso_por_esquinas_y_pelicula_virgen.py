@@ -2401,17 +2401,22 @@ class TestEstructura:
         assert "piso_de_pelicula" not in texto and "referencia_virgen" not in texto
 
     def test_k_ningun_codigo_de_produccion_consume_todavia_el_piso(self):
-        """Lo consume C.2: A.3 no cambia pantallas, PDF ni base. Ningun archivo de produccion, fuera de `pelicula.py`, nombra las funciones nuevas."""
+        """Lo consume C.2: A.3 no cambia pantallas, PDF ni base. Ningun archivo de produccion, fuera de `pelicula.py`, nombra las funciones nuevas.
+
+        EDITADA EN C.2 (17-10-2026, clase b: fijaba el contrato de «nadie lo consume todavia»; el nombre de la prueba es el de A.3 y se conserva para no perder su identidad en el inventario): el consumo que A.3
+        anticipaba llego con `placa_mensual.analizar` (el motor mensual), que llama UNA vez a `piso_de_pelicula`. Hoy ese es el UNICO archivo de produccion, fuera de `pelicula.py`, que nombra alguna de
+        estas funciones, y solo nombra `piso_de_pelicula`: la pelicula virgen, su persistencia y el modo por omision los consumiran la ventana (E.1) y el guardado (D.1)."""
         nombres = ("piso_de_pelicula", "piso_de_pelicula_virgen", "guardar_referencia_virgen", "leer_referencia_virgen", "MODO_DEL_PISO_POR_OMISION")
-        usan = []
+        usan = {}
         for ruta in RAIZ.rglob("*.py"):
             partes = ruta.relative_to(RAIZ).parts
             if partes[0] in {"build", "dist", "tests", "__pycache__", ".venv"} or any(p.startswith(".") for p in partes) or partes[-1] == "pelicula.py":
                 continue
             texto = ruta.read_text(encoding="utf-8", errors="replace")
-            if any(n in texto for n in nombres):
-                usan.append(str(ruta.relative_to(RAIZ)))
-        assert usan == [], usan
+            hallados = [n for n in nombres if n in texto]
+            if hallados:
+                usan[str(ruta.relative_to(RAIZ))] = hallados
+        assert usan == {"analisisImagenes/placa_mensual.py": ["piso_de_pelicula"]}, usan
 
     def test_k_la_escala_sale_de_escala_mm_y_ninguna_funcion_nueva_divide_25_4(self):
         _, arbol = _fuente("analisisImagenes/pelicula.py")

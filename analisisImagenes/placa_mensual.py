@@ -18,6 +18,15 @@ QUÉ HACE (R9, pasos 2 y 3).
   * `recuadro_luminoso(puntos)`: las cuatro esquinas con que se midió (la refinada o, si quedó «sin refinar», el clic) en el orden superior izquierda, superior derecha, inferior derecha,
     inferior izquierda, o el motivo si los puntos no forman el campo. Es la ÚNICA definición del recuadro: la dibujan la ventana (E.1) y la película del PDF (F.1).
 
+C.2 (R9, pasos 4 a 12) agrega, sobre la película ya girada: `girar` (recorta a la película y gira solo eso, con la misma matriz que los puntos), `perfil_central` (la banda de 1 mm por el cruce de diagonales),
+`medir_perfil` (la meseta de la zona central sin la marca del retículo, la altura media, los bordes DESDE la meseta hacia afuera con interpolación lineal, el FWHM, el centro de radiación y la penumbra 80-20),
+`bordes_luz` (la intersección analítica de la línea del perfil con los lados), `coincidencia` (por lado, positiva hacia afuera), `analizar` (arma todo con UNA llamada a `piso_de_pelicula`) y `valores_medidos` (la
+única definición de lo que se guarda). Cada capa, R, G, B y el gris, se mide por separado con UNA base: el valor de píxel normalizado entre el piso y la meseta, sin netOD (PD3: ninguna regla las compara). El
+resultado trae la película recortada y girada, que el barrido de C.3 reutiliza, y nunca la página. Sigue siendo la versión `PM-1`: C.1, C.2 y C.3 son las tres entregas de un mismo motor y ningún análisis
+guardado usa todavía otra. La raíz del resultado dice «ok» si al menos una capa se midió por completo (si no, `MOTIVO_NINGUNA_CAPA`); los bordes luminosos y luz - retículo salen de la geometría y
+se entregan aunque el piso o las capas no se puedan medir. La meseta es el nivel medio de la zona central (el plan): con la cúpula de las películas reales el 50 % de esa media no es el 50 % de la
+dosis del centro del campo (ver `medir_perfil`).
+
 CONVENCIONES. Todo está en el marco de la imagen tal como la leyó `analisisImagenes.pelicula.leer_pelicula`: x a la derecha (columna), y hacia abajo (fila), el centro del primer píxel es
 (0, 0). Los ángulos son en GRADOS y su signo es el de la pantalla: positivo = giro HORARIO (la y hacia abajo hace que `atan2(dy, dx)` crezca en el sentido de las agujas del reloj). Un campo
 girado theta en ese sentido tiene el ángulo +theta y se corrige con `matriz_giro(cruce, theta)` (un ángulo positivo de `getRotationMatrix2D` gira en sentido antihorario). Las longitudes salen en
@@ -41,13 +50,13 @@ Sin Qt, sin base de datos y sin `cv2.imread`."""
 import copy
 import math
 import numbers
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
 from scipy import ndimage as ndi
 
-from analisisImagenes.pelicula import CLAVES_DE_LA_ESCALA, ESQUINAS, PARAMETROS_DEL_PISO, escala_mm
+from analisisImagenes.pelicula import CAPAS_DEL_PISO, CLAVES_DE_LA_ESCALA, ESQUINAS, PARAMETROS_DEL_PISO, escala_mm, piso_de_pelicula
 
 VERSION_ALGORITMO = "PM-1"
 
@@ -546,3 +555,630 @@ def geometria_luz(esquinas, reticulo, tam_mm, pivote=None):
         inclinacion_de_los_lados_grados=inclinacion, luz_menos_reticulo_imagen_mm=luz_menos_reticulo, luz_menos_reticulo_girado_mm=girado,
         luz_menos_reticulo_modulo_mm=math.hypot(*luz_menos_reticulo), matriz_de_giro=tuple(tuple(float(v) for v in fila) for fila in M), pivote=centro_del_giro,
         esquinas_giradas=tuple(giradas), reticulo_girado=ret_girado)
+
+
+# ============================================================================= C.2: los perfiles por capa, el FWHM, la coincidencia por lado, los tres centros y la penumbra (R9, pasos 4 a 12)
+
+BASE_VALOR_DE_PIXEL = "valor de píxel normalizado"           # la UNICA base (decisión del 09-10, sin netOD): n = (piso - v) / (piso - meseta); 0 en el piso, 1 en la meseta, 0.5 en la altura media
+EJES = ("crossplane", "inplane")                              # crossplane = horizontal (recorre x, la banda promedia filas); inplane = vertical (recorre y, la banda promedia columnas)
+LADOS_DEL_EJE = {"crossplane": ("izquierdo", "derecho"), "inplane": ("superior", "inferior")}     # (menor, mayor) a lo largo del eje
+LADOS_DE_LA_COINCIDENCIA = ("izquierdo", "derecho", "superior", "inferior")
+SIGNO_DEL_LADO = {"izquierdo": -1.0, "derecho": 1.0, "superior": -1.0, "inferior": 1.0}          # positivo hacia afuera: con x a la derecha e y hacia abajo, afuera es -x, +x, -y y +y
+CLAVES_DE_VALORES_MEDIDOS = ("estado", "fwhm_crossplane_mm", "fwhm_inplane_mm", "desfase_izquierdo_mm", "desfase_derecho_mm", "desfase_superior_mm", "desfase_inferior_mm")      # lo que se guarda (D.1)
+AVISO_PENUMBRA_INCOMPLETA = "incompleta: el perfil llega al borde de la película antes del {porcentaje:g} %"
+AVISO_PENUMBRA_NO_MONOTONA = "no monótona: el perfil no cruza el {alto:g} %, el {medio:g} % y el {bajo:g} % en ese orden"
+MOTIVO_NINGUNA_CAPA = "no medible: ninguna de las cuatro capas se pudo medir por completo; cada capa dice su motivo"      # el estado de la raíz cuando el piso y la geometría son buenos pero ninguna capa quedó con sus dos perfiles medidos
+PASO_DE_LA_CAJA = 8                                           # la caja de la película se busca en una versión de la imagen con 1 píxel de cada 8 (sin copiar la página)
+UMBRAL_DE_VALIDEZ = 0.999                                     # un píxel girado tiene dato si el 99.9 % de lo que lo forma (los 4 vecinos de la interpolación) lo tenía
+
+PARAMETROS_DE_LA_MEDIDA = {
+    "margen_recorte_mm": {
+        "valor": 2.0, "unidad": "mm",
+        "motivo": "Antes de girar se recorta la imagen a la caja de la película más este margen por cada lado: lo bastante para que el borde de la película y los vecinos que usa la interpolación del giro queden "
+                  "dentro del recorte, y lo bastante poco para no girar la página (girar una página de 6600 x 5100 en cuatro capas costó 984 MB de más y recortando antes 352 MB). No cambia ninguna medida mientras "
+                  "supere a `margen_borde_mm`."},
+    "banda_perfil_mm": {
+        "valor": 1.0, "unidad": "mm",
+        "motivo": "Cada perfil es el promedio de las filas (o columnas) cuyo centro cae a 0.5 mm o menos del cruce de diagonales: una sola fila deja de 0.15 a 0.4 mm de ruido en el FWHM del azul (N5 de R3) y "
+                  "una banda de 1 mm lo baja a menos de 0.05 mm sin mezclar la forma del campo (el borde es recto en esa distancia). Es también el ancho de las bandas del barrido de C.3."},
+    "fraccion_meseta": {
+        "valor": 0.80, "unidad": "fracción",
+        "motivo": "La zona central de la meseta va de -40 % a +40 % de la distancia entre los dos bordes luminosos de esa línea, alrededor del cruce de diagonales: en un 10 x 10, 1 cm hacia dentro de cada lado, la "
+                  "distancia que IEC 60976 usa en los ejes para su zona aplanada (aquí es un criterio geométrico, no la evaluación de planitud de la norma). Sale de las marcas y no es un número libre (PD1); "
+                  "llevarla a 44.45 mm como en el cuaderno cambia el FWHM 0.016 mm o menos."},
+    "excepcion_centro_mm": {
+        "valor": 3.8, "unidad": "mm",
+        "motivo": "La marca del retículo (tinta o anillo de presión) está dentro de la meseta y no es dosis: se excluye de la media de la meseta 3.8 mm a cada lado del RETÍCULO REFINADO (90 píxeles a 600 dpi, la "
+                  "excepción del cuaderno), no del cruce: con el retículo corrido 4 mm del cruce una exclusión centrada en el cruce dejaría la tinta dentro."},
+    "muestras_minimas_de_la_meseta": {
+        "valor": 200, "unidad": "muestras",
+        "motivo": "Con menos de 200 muestras de perfil en la zona central (8 mm a 600 dpi, una décima parte de lo que mide en un 10 x 10) la media de la meseta no es estable ni distingue una mota de un nivel: "
+                  "se prefiere decir «no medible». Es un valor del implementador, sin medición que lo respalde: vetable."},
+    "altura_media": {
+        "valor": 0.5, "unidad": "fracción",
+        "motivo": "El borde de radiación está a mitad de camino entre el piso y la meseta: (piso - v) / (piso - meseta) = 0.5, la definición del ancho a media altura (R9, paso 7). Con la base de valor de píxel "
+                  "no es el 50 % de la dosis (R6): sin la curva del lote ninguna capa es dosis."},
+    "penumbra_alta": {
+        "valor": 0.8, "unidad": "fracción",
+        "motivo": "La penumbra se mide entre el 80 % y el 20 % de la señal (0 en el piso, 1 en la meseta), el rango que usa el cuaderno en la celda 93. Sin calibración no es la penumbra dosimétrica de TG-142."},
+    "penumbra_baja": {
+        "valor": 0.2, "unidad": "fracción",
+        "motivo": "El 20 % de la señal es el extremo de afuera de la penumbra: si el perfil llega al borde de la película antes de cruzarlo, la penumbra de ese lado queda «incompleta» y no se inventa."},
+    "suavizado_perfil_mm": {
+        "valor": 0.5, "unidad": "mm",
+        "motivo": "Antes de buscar los cruces el perfil se promedia con una ventana de 0.5 mm: una mota fina sobre la línea central (EPSON007, azul inplane: 96.04 mm sin suavizar y 99.3 con él) deja de cruzar la altura media "
+                  "y el borde no se pierde. Medido otra vez en C.2 sobre diez películas reales y la sintética: sin sesgo (el borde es simétrico alrededor de su cruce) y con menos ruido. Con 0 no se suaviza. "
+                  "Vetable: es el único valor que no estaba en el plan sino en su obstáculo 7."},
+}
+PARAMETROS.update(copy.deepcopy(PARAMETROS_DE_LA_MEDIDA))
+VALORES_DE_LA_GEOMETRIA.update({nombre: copy.deepcopy(parametro["valor"]) for nombre, parametro in PARAMETROS_DE_LA_MEDIDA.items()})      # el diccionario plano crece solo: lleva TODOS los parámetros del análisis
+CLAVES_QUE_PIDE_LA_MEDIDA = tuple(PARAMETROS_DE_LA_MEDIDA) + ("umbral_fondo", "margen_borde_mm", "delta_tinta", "contraste_minimo")      # lo que `medir_perfil` y `perfil_central` leen de `P`
+CLAVES_QUE_PIDE_ANALIZAR = CLAVES_QUE_PIDE_LA_MEDIDA + CLAVES_DE_LA_ESCALA
+
+
+# ----------------------------------------------------------------------------- lo que devuelven las funciones de C.2
+
+@dataclass(frozen=True, eq=False)
+class CapaGirada:
+    """Una capa de la película ya girada, con lo necesario para sacar un perfil: `nombre` (R, G, B o gris), `datos` (float32, alto x ancho, en niveles de 8 bits), `validos` (bool: el píxel tiene dato),
+    `pelicula` (bool: tiene dato y no es el fondo del escáner), `origen` (x, y: la coordenada en el MARCO GIRADO del elemento [0, 0] del arreglo), `cruce` (x, y: el cruce de diagonales en el marco girado)
+    y `tam_mm` (milímetros por píxel). Es una vista de `PeliculaGirada`: no copia nada."""
+    nombre: str
+    datos: np.ndarray = field(repr=False)
+    validos: np.ndarray = field(repr=False)
+    pelicula: np.ndarray = field(repr=False)
+    origen: tuple
+    cruce: tuple
+    tam_mm: float
+
+
+@dataclass(frozen=True, eq=False)
+class PeliculaGirada:
+    """La película recortada y girada: lo que C.2 mide y lo que C.3, la ventana y el PDF reutilizan SIN volver a girar la página (el resultado conserva esto y nunca la página).
+
+    `capas`: {R, G, B, gris} -> float32 (alto, ancho), solo lectura, en el marco girado. `validos`: ninguno de los píxeles que forman cada uno faltaba (lo que entra por el borde del giro es «sin dato»).
+    `pelicula`: con dato y no fondo del escáner. `origen`: (x, y) en el marco girado del elemento [0, 0]; la coordenada de cada píxel (columna i, fila j) es (origen[0] + i, origen[1] + j). `matriz`: la
+    de 2 x 3 que lleva un punto de la imagen al marco girado (la de `GeometriaLuz`). `caja`: (x0, y0, x1, y1) lo que se recortó de la imagen original antes de girar (x1 e y1 exclusivos). `cruce`: el
+    cruce de diagonales en el marco girado. `tam_mm`: milímetros por píxel."""
+    capas: dict = field(repr=False)
+    validos: np.ndarray = field(repr=False)
+    pelicula: np.ndarray = field(repr=False)
+    origen: tuple
+    matriz: tuple
+    caja: tuple
+    cruce: tuple
+    tam_mm: float
+
+    def capa(self, nombre):
+        return CapaGirada(nombre, self.capas[nombre], self.validos, self.pelicula, self.origen, self.cruce, self.tam_mm)
+
+    def memoria_bytes(self):
+        return int(sum(a.nbytes for a in self.capas.values()) + self.validos.nbytes + self.pelicula.nbytes)
+
+
+@dataclass(frozen=True, eq=False)
+class PerfilCentral:
+    """Un perfil: el promedio de una banda de `n_filas` filas (crossplane) o columnas (inplane) de una capa girada. `valores` (float64, uno por columna o fila de la capa, en niveles de 8 bits) vale NaN
+    donde algún píxel de la banda no tiene dato o no es película, y hasta `margen_borde_mm` de ellos (el borde de la película no es película limpia). `desde_px`: la coordenada, en el marco girado, de
+    `valores[0]` a lo largo del eje. `filas_px`: (primera, fin) de la banda perpendicular al eje, en el marco girado, `fin` exclusivo. `banda`: 0 es el perfil central; k, la banda k de un milímetro."""
+    capa: str
+    eje: str
+    banda: int
+    valores: np.ndarray = field(repr=False)
+    desde_px: int
+    filas_px: tuple
+    n_filas: int
+    tam_mm: float
+
+
+@dataclass(frozen=True, eq=False)
+class MedidaDePerfil:
+    """Lo que `medir_perfil` midió en un perfil. `estado`: «ok» o «no medible: perfil <eje>: <motivo>». Las posiciones son coordenadas del marco girado a lo largo del eje, en píxeles; el par de cada
+    medida es (menor, mayor): (izquierdo, derecho) en crossplane y (superior, inferior) en inplane.
+
+    `centro_px`: el cruce de diagonales a lo largo del eje. `piso`, `meseta` (el nivel medio de la zona central sin la exclusión del retículo y sin la tinta), `altura_media`, `nivel_penumbra_alta` y
+    `nivel_penumbra_baja`: niveles de 8 bits. `zona_px` y `exclusion_px`: los límites de la zona central y de la exclusión del retículo (None si no hay retículo). `muestras_meseta`: cuántas muestras
+    entraron a la media. `bordes_luz_px`: los bordes luminosos de esa línea. `bordes_rad_px`: los bordes de radiación al 50 % (None si no se alcanzó). `fwhm_mm` y `centro_rad_px`: solo si están los dos
+    bordes. `penumbras_mm`: la penumbra 80 a 20 % de cada lado (None si quedó incompleta). `avisos`: los de la penumbra. `perfil` y `suavizado`: el perfil medido y el que se usó para buscar los cruces."""
+    estado: str
+    capa: str
+    eje: str
+    tam_mm: float | None
+    centro_px: float | None
+    perfil: PerfilCentral | None = field(default=None, repr=False)
+    piso: float | None = None
+    meseta: float | None = None
+    altura_media: float | None = None
+    nivel_penumbra_alta: float | None = None
+    nivel_penumbra_baja: float | None = None
+    zona_px: tuple | None = None
+    exclusion_px: tuple | None = None
+    muestras_meseta: int = 0
+    bordes_luz_px: tuple | None = None
+    bordes_rad_px: tuple = (None, None)
+    fwhm_mm: float | None = None
+    centro_rad_px: float | None = None
+    penumbras_mm: tuple = (None, None)
+    avisos: tuple = ()
+    suavizado: np.ndarray | None = field(default=None, repr=False)
+
+    @property
+    def ok(self):
+        return self.estado == "ok"
+
+    def como_dict(self):
+        def par(p):
+            return None if p is None else [None if x is None else float(x) for x in p]
+
+        return {"estado": self.estado, "capa": self.capa, "eje": self.eje, "tam_mm": None if self.tam_mm is None else float(self.tam_mm), "centro_px": None if self.centro_px is None else float(self.centro_px),
+                "banda_px": None if self.perfil is None else [float(self.perfil.filas_px[0]), float(self.perfil.filas_px[1])],
+                "piso": self.piso, "meseta": self.meseta, "altura_media": self.altura_media, "nivel_penumbra_alta": self.nivel_penumbra_alta, "nivel_penumbra_baja": self.nivel_penumbra_baja,
+                "zona_px": par(self.zona_px), "exclusion_px": par(self.exclusion_px), "muestras_meseta": int(self.muestras_meseta), "bordes_luz_px": par(self.bordes_luz_px),
+                "bordes_rad_px": par(self.bordes_rad_px), "fwhm_mm": self.fwhm_mm, "centro_rad_px": self.centro_rad_px, "penumbras_mm": par(self.penumbras_mm), "avisos": list(self.avisos)}
+
+
+@dataclass(frozen=True, eq=False)
+class MedidaDeCapa:
+    """Todo lo que se midió en UNA capa (R, G, B o gris), sin compararla con ninguna otra. `estado`: «ok» o el motivo (el del piso de esa capa o el del primer perfil que no se pudo medir). `piso`: su nivel
+    de piso. `crossplane` e `inplane`: sus dos `MedidaDePerfil`. `coincidencia_mm`: {izquierdo, derecho, superior, inferior} = borde de radiación - borde luminoso, positivo hacia afuera (None si no se midió
+    ese borde). `centro_radiacion_px`: (x, y) en el marco girado. `radiacion_menos_luz_mm` y `radiacion_menos_reticulo_mm`: (x, y), contra el MISMO cruce de diagonales y el retículo girado."""
+    capa: str
+    estado: str
+    piso: float | None
+    crossplane: MedidaDePerfil
+    inplane: MedidaDePerfil
+    coincidencia_mm: dict
+    centro_radiacion_px: tuple
+    radiacion_menos_luz_mm: tuple
+    radiacion_menos_reticulo_mm: tuple
+
+    @property
+    def ok(self):
+        return self.estado == "ok"
+
+    def como_dict(self):
+        def par(p):
+            return [None if x is None else float(x) for x in p]
+
+        return {"capa": self.capa, "estado": self.estado, "piso": self.piso, "crossplane": self.crossplane.como_dict(), "inplane": self.inplane.como_dict(),
+                "coincidencia_mm": dict(self.coincidencia_mm), "centro_radiacion_px": par(self.centro_radiacion_px), "radiacion_menos_luz_mm": par(self.radiacion_menos_luz_mm),
+                "radiacion_menos_reticulo_mm": par(self.radiacion_menos_reticulo_mm)}
+
+
+@dataclass(frozen=True, eq=False)
+class ResultadoPlacaMensual:
+    """El resultado de `analizar`: lo que C.3 (el barrido), D.1 (lo que se guarda), E.1 (la ventana) y F.1 (el PDF) necesitan, sin la página.
+
+    `version`: `VERSION_ALGORITMO`. `estado`: «ok» si al menos una capa se midió por completo (sus dos perfiles) o el motivo por el que no se pudo medir ninguna (los puntos no forman el campo, no hay escala, el piso no es medible, o
+    `MOTIVO_NINGUNA_CAPA`: el piso y la geometría son buenos pero ninguna capa quedó medida por completo); cada capa dice el suyo. `parametros`: copia de los `P` con que se
+    midió (se guarda con el análisis: al reabrir se recalcula con ESTOS, no con los de hoy). `base`: `BASE_VALOR_DE_PIXEL`. `tam_mm`: milímetros por píxel (None sin escala). `marcas`: los cinco puntos tal como
+    llegaron, en el orden en que llegaron, como datos (un par [x, y] o el diccionario de `MarcaRefinada.como_dict()`). `puntos`: su clasificación (`PuntosClasificados`). `geometria`: la de C.1 (`GeometriaLuz`).
+    `piso`: el `Piso` de la UNICA llamada a `piso_de_pelicula` (todas las capas y el barrido de C.3 usan ese). `girada`: la película recortada y girada (None si no se midió). `capas`: {R, G, B, gris} ->
+    `MedidaDeCapa`. `bordes_luz_px`: {crossplane, inplane} -> (menor, mayor) los bordes luminosos de las líneas centrales, en el marco girado (None si la línea no cruza el campo).
+    `luz_menos_reticulo_mm`: (x, y) del centro luminoso menos el retículo en el marco girado (el de C.1). Estos dos salen de la geometría y no de la película (R9): con el piso «no medible» siguen ahí; solo
+    faltan (None) cuando la geometría misma no se pudo calcular (los puntos no forman el campo o no hay escala)."""
+    version: str
+    estado: str
+    parametros: dict
+    base: str
+    tam_mm: float | None
+    marcas: tuple
+    puntos: PuntosClasificados | None
+    geometria: GeometriaLuz | None
+    piso: object
+    girada: PeliculaGirada | None = field(repr=False)
+    capas: dict
+    bordes_luz_px: dict
+    luz_menos_reticulo_mm: tuple | None
+
+    @property
+    def ok(self):
+        return self.estado == "ok"
+
+    def memoria_bytes(self):
+        """Lo que el resultado retiene en arreglos: la película girada y los perfiles medidos (la página no)."""
+        total = 0 if self.girada is None else self.girada.memoria_bytes()
+        for medida in self.capas.values():
+            for m in (medida.crossplane, medida.inplane):
+                if m.perfil is not None:
+                    total += m.perfil.valores.nbytes
+                if m.suavizado is not None:
+                    total += m.suavizado.nbytes
+        return int(total)
+
+    def como_dict(self):
+        """Solo números y textos (JSON): sin la película girada ni los perfiles."""
+        def par(p):
+            return None if p is None else [None if x is None else float(x) for x in p]
+
+        return {"version": self.version, "estado": self.estado, "parametros": copy.deepcopy(self.parametros), "base": self.base, "tam_mm": self.tam_mm, "marcas": copy.deepcopy(list(self.marcas)),
+                "puntos": None if self.puntos is None else self.puntos.como_dict(), "geometria": None if self.geometria is None else self.geometria.como_dict(),
+                "piso": None if self.piso is None else self.piso.como_dict(), "capas": {nombre: medida.como_dict() for nombre, medida in self.capas.items()},
+                "bordes_luz_px": {eje: par(b) for eje, b in self.bordes_luz_px.items()}, "luz_menos_reticulo_mm": par(self.luz_menos_reticulo_mm)}
+
+
+# ----------------------------------------------------------------------------- la base y las claves
+
+def _pedir(P, claves, para):
+    faltan = [k for k in claves if k not in P]
+    if faltan:
+        raise ValueError(f"A `P` le faltan los parámetros {faltan} que pide {para}.")
+
+
+def _exigir_la_base(base):
+    if base != BASE_VALOR_DE_PIXEL:
+        raise ValueError(f"La base de la medida es «{BASE_VALOR_DE_PIXEL}»; «{base}» no está implementada.")
+
+
+def normalizar(base, valores, piso, meseta):
+    """El valor de píxel normalizado entre el piso y la meseta: (piso - v) / (piso - meseta), 0 en el piso, 1 en la meseta y 0.5 en la altura media. Es la ÚNICA base (`BASE_VALOR_DE_PIXEL`,
+    decisión del 09-10): el netOD no se implementa. Cualquier otra base es `ValueError`."""
+    _exigir_la_base(base)
+    return (piso - np.asarray(valores, dtype=np.float64)) / (piso - meseta)
+
+
+# ----------------------------------------------------------------------------- girar
+
+def _caja_de_la_pelicula(pelicula, P, tam_mm):
+    """(x0, y0, x1, y1) en píxeles de la imagen original, x1 e y1 exclusivos: la caja de la componente conexa más grande de lo que es película (tiene dato y su capa más oscura baja de `umbral_fondo`, la
+    definición de A.2) más `margen_recorte_mm` por cada lado y el paso de la búsqueda, dentro de la imagen. Se busca en una versión con 1 píxel de cada `PASO_DE_LA_CAJA` (no se copia la página). None si
+    no hay película."""
+    paso = PASO_DE_LA_CAJA
+    mas_oscura = np.minimum(np.minimum(pelicula.R[::paso, ::paso], pelicula.G[::paso, ::paso]), pelicula.B[::paso, ::paso])
+    es_pelicula = (mas_oscura < P["umbral_fondo"]) & np.asarray(pelicula.validos[::paso, ::paso], dtype=bool)
+    cuantas, _, estadisticas, _ = cv2.connectedComponentsWithStats(es_pelicula.view(np.uint8), connectivity=8)
+    if cuantas < 2:
+        return None
+    k = 1 + int(np.argmax(estadisticas[1:, cv2.CC_STAT_AREA]))
+    x, y, ancho, alto = (int(v) for v in estadisticas[k, :4])
+    margen = int(math.ceil(P["margen_recorte_mm"] / tam_mm)) + 2 * paso
+    alto_imagen, ancho_imagen = pelicula.validos.shape
+    return (max(0, x * paso - margen), max(0, y * paso - margen), min(ancho_imagen, (x + ancho) * paso + margen), min(alto_imagen, (y + alto) * paso + margen))
+
+
+def girar(pelicula, M, P, cruce):
+    """Recorta la película y la gira con la matriz `M` (2 x 3, imagen -> marco girado: la de `GeometriaLuz.matriz_de_giro`) -> `PeliculaGirada`.
+
+    Gira SOLO la película: recorta antes a su caja (más `margen_recorte_mm`) y gira ese recorte; las cuatro capas y la máscara de píxeles con dato salen de `cv2.warpAffine` en flotante (interpolación
+    bilineal; lo que entra por el borde es «sin dato»). El arreglo de salida cubre el recorte girado completo. La matriz es UNA para la imagen (aquí) y para los puntos (`transformar_puntos`). `cruce`: el
+    cruce de diagonales en la imagen original; la salida lo trae llevado al marco girado. `ValueError` si la película no tiene escala (el archivo declara otra resolución que la del procedimiento), no hay
+    película en la imagen o `M` no es de 2 x 3."""
+    _pedir(P, ("umbral_fondo", "margen_recorte_mm") + CLAVES_DE_LA_ESCALA, "`girar`")
+    tam_mm = escala_mm(getattr(pelicula, "dpi", None), P)
+    if tam_mm is None:
+        raise ValueError(MOTIVO_SIN_ESCALA)
+    m = np.asarray(M, dtype=np.float64)
+    if m.shape != (2, 3):
+        raise ValueError(f"La matriz de giro es de 2 x 3, no de forma {m.shape}.")
+    cruce = _punto(cruce, "cruce de diagonales")
+    caja = _caja_de_la_pelicula(pelicula, P, tam_mm)
+    if caja is None:
+        raise ValueError("No hay película en la imagen: todo es fondo del escáner o no tiene dato.")
+    x0, y0, x1, y1 = caja
+    esquinas = transformar_puntos(m, [(x0, y0), (x1 - 1, y0), (x1 - 1, y1 - 1), (x0, y1 - 1)])
+    ox = int(math.floor(min(e[0] for e in esquinas))) - 1
+    oy = int(math.floor(min(e[1] for e in esquinas))) - 1
+    ancho = int(math.ceil(max(e[0] for e in esquinas))) - ox + 2
+    alto = int(math.ceil(max(e[1] for e in esquinas))) - oy + 2
+    lineal, traslado = m[:, :2], m[:, 2]
+    del_recorte = np.hstack([lineal, (lineal @ np.array([x0, y0], dtype=np.float64) + traslado - np.array([ox, oy], dtype=np.float64))[:, None]])     # del índice del recorte al índice de la salida
+    capas = {}
+    for nombre in CAPAS_DEL_PISO:
+        fuente = np.ascontiguousarray(getattr(pelicula, nombre)[y0:y1, x0:x1], dtype=np.float32)
+        capas[nombre] = cv2.warpAffine(fuente, del_recorte, (ancho, alto), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        capas[nombre].setflags(write=False)
+        del fuente
+    con_dato = cv2.warpAffine(np.ascontiguousarray(pelicula.validos[y0:y1, x0:x1], dtype=np.float32), del_recorte, (ancho, alto), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+    validos = con_dato > UMBRAL_DE_VALIDEZ
+    del con_dato
+    es_pelicula = validos & (np.minimum(np.minimum(capas["R"], capas["G"]), capas["B"]) < P["umbral_fondo"])
+    validos.setflags(write=False)
+    es_pelicula.setflags(write=False)
+    return PeliculaGirada(capas=capas, validos=validos, pelicula=es_pelicula, origen=(ox, oy), matriz=tuple(tuple(float(v) for v in fila) for fila in m), caja=caja,
+                          cruce=transformar_puntos(m, [cruce])[0], tam_mm=tam_mm)
+
+
+# ----------------------------------------------------------------------------- el perfil
+
+def perfil_central(capa, eje, P, banda=0):
+    """El perfil de `capa` (una `CapaGirada`) por el cruce de diagonales -> `PerfilCentral`: la fila (crossplane) o la columna (inplane) que pasa por él en el marco girado, PROMEDIADA en una banda de
+    `banda_perfil_mm` de ancho. La banda `banda` es la de las filas (columnas) cuyo centro cae en [cruce + (banda - 1/2) mm, cruce + (banda + 1/2) mm): las vecinas no se solapan ni dejan huecos y la 0
+    es el perfil central. El crossplane recorre x y promedia filas, el inplane recorre y y promedia columnas, nunca cruzados. Un punto del perfil solo vale si TODAS las filas de la banda tienen ahí película
+    con dato y no está a menos de `margen_borde_mm` de lo que no lo es (el fleco del corte); el borde del arreglo cuenta como borde. `ValueError` si el eje no existe o la banda queda vacía o fuera del
+    arreglo."""
+    if eje not in EJES:
+        raise ValueError(f"El eje es uno de {EJES}, no {eje!r}.")
+    _pedir(P, ("banda_perfil_mm", "margen_borde_mm"), "`perfil_central`")
+    ancho_px = P["banda_perfil_mm"] / capa.tam_mm
+    if eje == "crossplane":
+        centro_perpendicular, origen_perpendicular, origen_del_eje = capa.cruce[1], capa.origen[1], capa.origen[0]
+        datos, validos, pelicula = capa.datos, capa.validos, capa.pelicula
+    else:
+        centro_perpendicular, origen_perpendicular, origen_del_eje = capa.cruce[0], capa.origen[0], capa.origen[1]
+        datos, validos, pelicula = capa.datos.T, capa.validos.T, capa.pelicula.T
+    primera = int(math.ceil(centro_perpendicular + banda * ancho_px - ancho_px / 2))
+    fin = int(math.ceil(centro_perpendicular + banda * ancho_px + ancho_px / 2))
+    a, b = primera - origen_perpendicular, fin - origen_perpendicular
+    if fin <= primera:
+        raise ValueError(f"La banda de {P['banda_perfil_mm']:g} mm no contiene el centro de ninguna fila con esta escala.")
+    if a < 0 or b > datos.shape[0]:
+        raise ValueError(f"La banda {banda} del perfil {eje} (de {primera} a {fin}) queda fuera de la película girada.")
+    valores = datos[a:b].mean(axis=0, dtype=np.float64)
+    bueno = pelicula[a:b].all(axis=0) & validos[a:b].all(axis=0)
+    radio = int(math.ceil(P["margen_borde_mm"] / capa.tam_mm))
+    bueno = ndi.binary_erosion(bueno, structure=np.ones(2 * radio + 1, dtype=bool), border_value=0)
+    valores[~bueno] = np.nan
+    return PerfilCentral(capa=capa.nombre, eje=eje, banda=int(banda), valores=valores, desde_px=int(origen_del_eje), filas_px=(primera, fin), n_filas=fin - primera, tam_mm=float(capa.tam_mm))
+
+
+# ----------------------------------------------------------------------------- los bordes luminosos y la coincidencia
+
+def _cruce_de_diagonales(ul, ur, dr, dl):
+    """El cruce de las diagonales UL-DR y UR-DL (la misma fórmula de `geometria_luz`, para esquinas ya giradas)."""
+    d = (ul[0] - dr[0]) * (ur[1] - dl[1]) - (ul[1] - dr[1]) * (ur[0] - dl[0])
+    a, b = ul[0] * dr[1] - ul[1] * dr[0], ur[0] * dl[1] - ur[1] * dl[0]
+    return ((a * (ur[0] - dl[0]) - (ul[0] - dr[0]) * b) / d, (a * (ur[1] - dl[1]) - (ul[1] - dr[1]) * b) / d)
+
+
+def _en_el_lado(a, b, eje_fijo, valor):
+    """La coordenada del lado a-b donde la otra coordenada vale `valor`: eje_fijo 1 da x en la fila y = valor, eje_fijo 0 da y en la columna x = valor. None si el lado no cruza esa línea."""
+    d = b[eje_fijo] - a[eje_fijo]
+    if d == 0 or not min(a[eje_fijo], b[eje_fijo]) <= valor <= max(a[eje_fijo], b[eje_fijo]):
+        return None
+    return a[1 - eje_fijo] + (valor - a[eje_fijo]) * (b[1 - eje_fijo] - a[1 - eje_fijo]) / d
+
+
+def bordes_luz(eje, esquinas_giradas, linea_px=None):
+    """Los dos bordes luminosos de la línea de un perfil: la intersección ANALÍTICA de esa línea con los lados del cuadrilátero luminoso, (menor, mayor) en píxeles del marco girado (no rasterizados: son
+    fraccionarios). `esquinas_giradas`: UL, UR, DR, DL ya en el marco girado. crossplane: la fila y = `linea_px` con los lados izquierdo (UL-DL) y derecho (UR-DR), da x; inplane: la columna x =
+    `linea_px` con los lados superior (UL-UR) e inferior (DL-DR), da y. `linea_px` por omisión es la que pasa por el cruce de diagonales. None si la línea no cruza alguno de los dos lados."""
+    if eje not in EJES:
+        raise ValueError(f"El eje es uno de {EJES}, no {eje!r}.")
+    esquinas = [_punto(p, "esquina") for p in esquinas_giradas]
+    if len(esquinas) != 4:
+        raise ValueError(f"Las esquinas del campo luminoso son cuatro, no {len(esquinas)}.")
+    ul, ur, dr, dl = esquinas
+    cruce = _cruce_de_diagonales(ul, ur, dr, dl)
+    if eje == "crossplane":
+        linea = cruce[1] if linea_px is None else float(linea_px)
+        menor, mayor = _en_el_lado(ul, dl, 1, linea), _en_el_lado(ur, dr, 1, linea)
+    else:
+        linea = cruce[0] if linea_px is None else float(linea_px)
+        menor, mayor = _en_el_lado(ul, ur, 0, linea), _en_el_lado(dl, dr, 0, linea)
+    if menor is None or mayor is None:
+        return None
+    return (float(menor), float(mayor))
+
+
+def coincidencia(bordes_rad, bordes_luz, tam_mm):
+    """La coincidencia por lado: borde de radiación - borde luminoso, POSITIVO HACIA AFUERA en los cuatro lados (R9, paso 9). Con x a la derecha e y hacia abajo: izquierdo x_luz - x_rad, derecho x_rad -
+    x_luz, superior y_luz - y_rad, inferior y_rad - y_luz. `bordes_rad` y `bordes_luz`: {izquierdo, derecho, superior, inferior} -> posición en píxeles del marco girado (None o ausente si no se midió).
+    Devuelve {lado: milímetros o None} con los cuatro lados."""
+    salida = {}
+    for lado in LADOS_DE_LA_COINCIDENCIA:
+        rad, luz = bordes_rad.get(lado), bordes_luz.get(lado)
+        salida[lado] = None if rad is None or luz is None else float(SIGNO_DEL_LADO[lado] * (rad - luz) * tam_mm)
+    return salida
+
+
+# ----------------------------------------------------------------------------- medir un perfil
+
+def _suavizar(valores, muestras):
+    """El promedio móvil centrado de `muestras` (impar) muestras; NaN donde la ventana no está completa o toca un NaN. Con 1 muestra no cambia nada."""
+    if muestras <= 1:
+        return valores
+    finito = np.isfinite(valores)
+    ventana = np.ones(muestras)
+    suma = np.convolve(np.where(finito, valores, 0.0), ventana, mode="same")
+    cuenta = np.convolve(finito.astype(np.float64), ventana, mode="same")
+    salida = np.full(valores.shape, np.nan)
+    completo = cuenta > muestras - 1
+    salida[completo] = suma[completo] / muestras
+    return salida
+
+
+def _primer_cruce(normalizado, inicio, paso, nivel):
+    """El índice (fraccionario, por interpolación lineal) del PRIMER cruce de `nivel` yendo desde `inicio` en la dirección `paso` (+1 o -1) sobre el perfil normalizado, que baja de 1 en la meseta a 0 en el
+    piso. None si el tramo no empieza por encima del nivel, o si llega a un NaN o al final del arreglo antes de cruzarlo."""
+    tramo = normalizado[inicio:] if paso > 0 else normalizado[inicio::-1]
+    if not len(tramo) or not tramo[0] > nivel:
+        return None
+    debajo = ~(tramo > nivel)
+    if not debajo.any():
+        return None
+    k = int(np.argmax(debajo))
+    if k == 0 or not np.isfinite(tramo[k]):
+        return None
+    return inicio + paso * (k - 1 + (tramo[k - 1] - nivel) / (tramo[k - 1] - tramo[k]))
+
+
+def _no_medible(perfil, centro, motivo, **extra):
+    return MedidaDePerfil(estado=f"no medible: perfil {perfil.eje}: {motivo}", capa=perfil.capa, eje=perfil.eje, tam_mm=perfil.tam_mm, centro_px=float(centro), perfil=perfil, **extra)
+
+
+def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None):
+    """Mide un perfil -> `MedidaDePerfil`: meseta, altura media, bordes de radiación, FWHM, centro de radiación y penumbras.
+
+    ZONA CENTRAL: [centro - e, centro + e] con e = `fraccion_meseta` / 2 x la distancia entre los dos bordes luminosos de esa línea (`bordes_luz`, el resultado de la función del mismo nombre), alrededor del cruce de
+    diagonales `centro_px`; sin los `excepcion_centro_mm` alrededor del RETÍCULO REFINADO `reticulo_px` (que no es dosis). MESETA: el nivel medio de esa zona, con la tinta rechazada como en A.2 (lo que baja
+    de la mediana más de `delta_tinta`). Con una meseta que no es plana (la cúpula de las películas reales, de -2 a -5.7 % a 40 mm del centro) el 50 % de ESTA meseta no es el 50 % de la dosis
+    del centro del campo: en el azul, la única capa lineal en la dosis, el FWHM sale más ancho unos 0.0225 mm por cada 1 % de cúpula, 0.13 mm con -5.7 % (C2-D15, medido contra el generador de PF.0). Es la
+    definición del plan y no un defecto de la medida; los 0.15 mm del protocolo contra la dosis valen con la meseta plana. BASE: el valor de píxel normalizado n = (piso - v) / (piso - meseta) (`normalizar`); la altura media es n = `altura_media`. BORDES: se buscan DESDE LA MESETA HACIA
+    AFUERA, el primer cruce al salir de la zona central (nunca el punto más cercano a la altura media de todo el perfil), con interpolación lineal subpíxel, sobre el perfil suavizado
+    `suavizado_perfil_mm`. La penumbra de cada lado va del `penumbra_alta` al `penumbra_baja` de la señal; si el perfil llega al borde de la película antes de cruzar el segundo queda «incompleta» (None y el aviso),
+    nunca un número inventado. Lo que no se puede medir NO lanza: la medida dice «no medible» con su motivo y trae lo que sí se midió (por ejemplo un solo borde). `ValueError` solo si la base no existe o a
+    `P` le falta un parámetro."""
+    _exigir_la_base(base)
+    _pedir(P, CLAVES_QUE_PIDE_LA_MEDIDA, "`medir_perfil`")
+    tam = perfil.tam_mm
+    centro = float(centro_px)
+    if piso is None or not np.isfinite(piso):
+        return _no_medible(perfil, centro, "no hay piso de esta capa")
+    piso = float(piso)
+    if bordes_luz is None:
+        return _no_medible(perfil, centro, "la línea del perfil no cruza el campo luminoso", piso=piso)
+    luz_menor, luz_mayor = (float(b) for b in bordes_luz)
+    if not luz_mayor > luz_menor:
+        return _no_medible(perfil, centro, "los bordes luminosos de la línea no tienen ancho", piso=piso)
+    extremo = P["fraccion_meseta"] / 2 * (luz_mayor - luz_menor)
+    zona = (centro - extremo, centro + extremo)
+    exclusion = None if reticulo_px is None else (float(reticulo_px) - P["excepcion_centro_mm"] / tam, float(reticulo_px) + P["excepcion_centro_mm"] / tam)
+    v = perfil.valores
+    x = perfil.desde_px + np.arange(len(v), dtype=np.float64)
+    datos = dict(piso=piso, zona_px=zona, exclusion_px=exclusion, bordes_luz_px=(luz_menor, luz_mayor))
+    en_zona = (x >= zona[0]) & (x <= zona[1])
+    excluida = np.zeros(len(v), dtype=bool) if exclusion is None else (x >= exclusion[0]) & (x <= exclusion[1])
+    usables = en_zona & ~excluida
+    if not len(v) or x[0] > zona[0] or x[-1] < zona[1] or not np.isfinite(v[usables]).all():
+        return _no_medible(perfil, centro, "la zona central de la meseta no está sobre la película", **datos)
+    if int(usables.sum()) < P["muestras_minimas_de_la_meseta"]:
+        return _no_medible(perfil, centro, f"la zona central de la meseta tiene menos de {P['muestras_minimas_de_la_meseta']} muestras", **datos)
+    mediana = float(np.median(v[usables]))
+    sin_tinta = usables & (v >= mediana - P["delta_tinta"])
+    meseta = float(v[sin_tinta].mean())
+    contraste = piso - meseta
+    datos.update(meseta=meseta, muestras_meseta=int(sin_tinta.sum()))
+    if not contraste >= P["contraste_minimo"]:
+        return _no_medible(perfil, centro, f"el piso no es más claro que la meseta en al menos {P['contraste_minimo']:g} niveles (piso {piso:.1f}, meseta {meseta:.1f})", **datos)
+    datos.update(altura_media=piso - P["altura_media"] * contraste, nivel_penumbra_alta=piso - P["penumbra_alta"] * contraste, nivel_penumbra_baja=piso - P["penumbra_baja"] * contraste)
+    muestras = 2 * int(round((P["suavizado_perfil_mm"] / tam - 1) / 2)) + 1
+    suave = _suavizar(v, max(muestras, 1))
+    datos["suavizado"] = suave
+    n = normalizar(base, suave, piso, meseta)
+    if np.any(n[usables] <= P["altura_media"]):
+        return _no_medible(perfil, centro, "la zona central de la meseta no está toda dentro del campo de radiación (hay muestras bajo la altura media)", **datos)
+    indices = np.flatnonzero(en_zona)
+    inicios = {-1: int(indices[0]), 1: int(indices[-1])}
+    bordes, penumbras, avisos, faltan = [], [], [], []
+    for paso, lado in zip((-1, 1), LADOS_DEL_EJE[perfil.eje]):
+        inicio = inicios[paso]
+        medio = _primer_cruce(n, inicio, paso, P["altura_media"])
+        if medio is None:
+            bordes.append(None)
+            penumbras.append(None)
+            faltan.append(lado)
+            continue
+        bordes.append(float(perfil.desde_px + medio))
+        alto = _primer_cruce(n, inicio, paso, P["penumbra_alta"])
+        bajo = _primer_cruce(n, inicio, paso, P["penumbra_baja"])
+        if bajo is None:
+            penumbras.append(None)
+            avisos.append(AVISO_PENUMBRA_INCOMPLETA.format(porcentaje=P["penumbra_baja"] * 100))
+        elif alto is None or not (alto - inicio) * paso <= (medio - inicio) * paso <= (bajo - inicio) * paso:
+            penumbras.append(None)
+            avisos.append(AVISO_PENUMBRA_NO_MONOTONA.format(alto=P["penumbra_alta"] * 100, medio=P["altura_media"] * 100, bajo=P["penumbra_baja"] * 100))
+        else:
+            penumbras.append(float(abs(bajo - alto) * tam))
+    datos.update(bordes_rad_px=tuple(bordes), penumbras_mm=tuple(penumbras), avisos=tuple(avisos))
+    if faltan:
+        return _no_medible(perfil, centro, f"no se encuentra el borde {' ni el borde '.join(faltan)} al {P['altura_media'] * 100:g} %: el perfil llega al borde de la película o a una zona sin dato antes de cruzar la altura media", **datos)
+    return MedidaDePerfil(estado="ok", capa=perfil.capa, eje=perfil.eje, tam_mm=tam, centro_px=centro, perfil=perfil, fwhm_mm=float((bordes[1] - bordes[0]) * tam),
+                          centro_rad_px=float((bordes[0] + bordes[1]) / 2), **datos)
+
+
+# ----------------------------------------------------------------------------- analizar
+
+def _sin_medir_la_capa(nombre, estado, tam_mm):
+    """Una `MedidaDeCapa` que no se midió, con el motivo."""
+    vacias = {eje: MedidaDePerfil(estado=estado, capa=nombre, eje=eje, tam_mm=tam_mm, centro_px=None) for eje in EJES}
+    return MedidaDeCapa(capa=nombre, estado=estado, piso=None, crossplane=vacias["crossplane"], inplane=vacias["inplane"], coincidencia_mm={lado: None for lado in LADOS_DE_LA_COINCIDENCIA},
+                        centro_radiacion_px=(None, None), radiacion_menos_luz_mm=(None, None), radiacion_menos_reticulo_mm=(None, None))
+
+
+def _medir_la_capa(girada, nombre, piso, geometria, luz, P):
+    """Las dos medidas de perfil de una capa, la coincidencia por lado y los tres centros. El nivel de piso es el de ESE `Piso`; si esa capa no tiene piso no se mide y se dice por qué."""
+    del_piso = piso.capas[nombre]
+    if del_piso.estado != "ok" or del_piso.mediana is None:
+        return _sin_medir_la_capa(nombre, del_piso.estado, girada.tam_mm)
+    capa = girada.capa(nombre)
+    cruce = girada.cruce
+    reticulo = geometria.reticulo_girado
+    medidas = {}
+    for i, eje in enumerate(EJES):
+        try:
+            perfil = perfil_central(capa, eje, P)
+        except ValueError as motivo:
+            medidas[eje] = MedidaDePerfil(estado=f"no medible: perfil {eje}: {motivo}", capa=nombre, eje=eje, tam_mm=girada.tam_mm, centro_px=float(cruce[i]), piso=float(del_piso.mediana))
+            continue
+        medidas[eje] = medir_perfil(perfil, cruce[i], del_piso.mediana, BASE_VALOR_DE_PIXEL, P, luz[eje], reticulo[i])
+    rad, luminoso = {}, {}
+    for eje in EJES:
+        for j, lado in enumerate(LADOS_DEL_EJE[eje]):
+            rad[lado] = medidas[eje].bordes_rad_px[j]
+            luminoso[lado] = None if luz[eje] is None else luz[eje][j]
+    centro = (medidas["crossplane"].centro_rad_px, medidas["inplane"].centro_rad_px)
+    tam = girada.tam_mm
+    menos_luz = tuple(None if c is None else float((c - cruce[i]) * tam) for i, c in enumerate(centro))
+    menos_reticulo = tuple(None if c is None else float((c - reticulo[i]) * tam) for i, c in enumerate(centro))
+    fallas = [m.estado for m in medidas.values() if not m.ok]
+    return MedidaDeCapa(capa=nombre, estado="ok" if not fallas else fallas[0], piso=float(del_piso.mediana), crossplane=medidas["crossplane"], inplane=medidas["inplane"],
+                        coincidencia_mm=coincidencia(rad, luminoso, tam), centro_radiacion_px=centro, radiacion_menos_luz_mm=menos_luz, radiacion_menos_reticulo_mm=menos_reticulo)
+
+
+def _del_campo_luminoso(geometria):
+    """Lo que el resultado dice del campo luminoso y NO depende de la película (R9): los bordes luminosos de las líneas centrales en el marco girado ({eje: (menor, mayor), o None si la línea no cruza el
+    campo}) y luz - retículo en ese marco. Salen de la geometría de C.1: un piso o una capa que no se pueden medir no los quitan. UNA definición para el resultado completo y para el que no se midió."""
+    luz = {eje: bordes_luz(eje, geometria.esquinas_giradas) for eje in EJES}
+    return luz, tuple(geometria.luz_menos_reticulo_girado_mm)
+
+
+def _marca_como_dato(marca):
+    """Un punto tal como llegó, como dato guardable: el diccionario de una marca refinada o [x, y]."""
+    if isinstance(marca, MarcaRefinada):
+        return marca.como_dict()
+    if isinstance(marca, dict):
+        return copy.deepcopy(marca)
+    x, y = _punto(marca)
+    return [x, y]
+
+
+def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, referencia_virgen=None):
+    """El análisis mensual de una película -> `ResultadoPlacaMensual`: los cinco puntos, la geometría del campo luminoso (C.1), UNA llamada a `piso_de_pelicula` (todas las capas usan ese `Piso`), la película
+    recortada y girada y, para R, G, B y el gris por separado, los perfiles centrales, el FWHM, los bordes, la coincidencia por lado y los tres centros.
+
+    `pelicula`: la `Pelicula` de `leer_pelicula` (no se modifica y el resultado no la retiene). `puntos`: los cinco puntos en cualquier orden; cada uno un par (x, y), una `MarcaRefinada` o el diccionario de su
+    `como_dict()` (`punto_de_medida`): reabrir un análisis guardado pasa los guardados, no se vuelve a refinar nada. `parametros`: los `P` con que se mide, que viajan con el resultado (al reabrir se recalcula con los
+    guardados, no con los de hoy). `modo_piso`, `punto_manual` y `referencia_virgen` pasan tal cual a `piso_de_pelicula` (A.3). Lo que no se puede medir NO lanza: el resultado y cada capa dicen «no medible»
+    con su motivo; los bordes luminosos y luz - retículo, que no dependen de la película, se entregan siempre que la geometría sea buena. La raíz es «ok» si al menos una capa se midió
+    por completo (`MOTIVO_NINGUNA_CAPA` si ninguna). `ValueError` solo si los argumentos tienen una forma equivocada (no son cinco puntos, a `P` le falta un parámetro, el modo no existe)."""
+    P = parametros
+    _pedir(P, CLAVES_QUE_PIDE_ANALIZAR, "`analizar`")
+    try:
+        lista = list(puntos)
+    except TypeError:
+        raise ValueError("Los puntos son una lista de cinco pares (x, y).") from None
+    clasificados = clasificar_puntos(lista)
+    tam_mm = escala_mm(getattr(pelicula, "dpi", None), P)
+    marcas = tuple(_marca_como_dato(m) for m in lista)
+    usados = copy.deepcopy(dict(P))
+
+    def sin_medir(estado, **extra):
+        return ResultadoPlacaMensual(version=VERSION_ALGORITMO, estado=estado, parametros=usados, base=BASE_VALOR_DE_PIXEL, tam_mm=tam_mm, marcas=marcas, puntos=extra.get("puntos"),
+                                     geometria=extra.get("geometria"), piso=extra.get("piso"), girada=None, capas={n: _sin_medir_la_capa(n, estado, tam_mm) for n in CAPAS_DEL_PISO},
+                                     bordes_luz_px=extra.get("bordes_luz_px") or {eje: None for eje in EJES}, luz_menos_reticulo_mm=extra.get("luz_menos_reticulo_mm"))
+
+    if not clasificados.ok:
+        return sin_medir(clasificados.estado, puntos=clasificados)
+    geometria = geometria_luz(clasificados.esquinas, clasificados.reticulo, tam_mm)
+    if not geometria.ok:
+        return sin_medir(geometria.estado, puntos=clasificados, geometria=geometria)
+    luz, luz_menos_reticulo = _del_campo_luminoso(geometria)
+    piso = piso_de_pelicula(pelicula, geometria.esquinas, P, punto_manual=punto_manual, modo=modo_piso, referencia_virgen=referencia_virgen)
+    if piso.estado != "ok":
+        return sin_medir(piso.estado, puntos=clasificados, geometria=geometria, piso=piso, bordes_luz_px=luz, luz_menos_reticulo_mm=luz_menos_reticulo)
+    girada = girar(pelicula, geometria.matriz_de_giro, P, geometria.cruce)
+    capas = {nombre: _medir_la_capa(girada, nombre, piso, geometria, luz, P) for nombre in CAPAS_DEL_PISO}
+    estado = "ok" if any(medida.ok for medida in capas.values()) else MOTIVO_NINGUNA_CAPA
+    return ResultadoPlacaMensual(version=VERSION_ALGORITMO, estado=estado, parametros=usados, base=BASE_VALOR_DE_PIXEL, tam_mm=tam_mm, marcas=marcas, puntos=clasificados, geometria=geometria,
+                                 piso=piso, girada=girada, capas=capas, bordes_luz_px=luz, luz_menos_reticulo_mm=luz_menos_reticulo)
+
+
+def valores_medidos(resultado, capa):
+    """La ÚNICA definición de lo que se guarda de un análisis (D.1): de la capa que se le pasa (R, G, B o gris), su `estado` («ok» o el motivo por el que no se midió: sin él un vacío se confundiría con un
+    cero), el FWHM crossplane e inplane y el desfase de cada lado (radiación - luz, positivo hacia afuera), en `CLAVES_DE_VALORES_MEDIDOS` y en milímetros (None lo que no se midió). Las demás capas, el piso, la
+    meseta, las penumbras, los centros, el campo luminoso y el barrido se miden y se muestran, no se guardan. `ValueError` si la capa no existe."""
+    if capa not in CAPAS_DEL_PISO:
+        raise ValueError(f"La capa es una de {CAPAS_DEL_PISO}, no {capa!r}.")
+    m = resultado.capas[capa]
+    valores = (m.estado, m.crossplane.fwhm_mm, m.inplane.fwhm_mm) + tuple(m.coincidencia_mm[lado] for lado in LADOS_DE_LA_COINCIDENCIA)
+    return {clave: (v if clave == CLAVES_DE_VALORES_MEDIDOS[0] or v is None else float(v)) for clave, v in zip(CLAVES_DE_VALORES_MEDIDOS, valores)}

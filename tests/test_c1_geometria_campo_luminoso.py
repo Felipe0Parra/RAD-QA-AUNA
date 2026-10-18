@@ -1674,7 +1674,9 @@ class TestLosParametros:
                   and isinstance(n.slice, ast.Constant) and isinstance(n.slice.value, str)}
         assert usados, "no hay ningun P['...'] en el modulo"
         assert usados <= set(pm.PARAMETROS), usados - set(pm.PARAMETROS)
-        propios = set(pm.PARAMETROS) - set(pel.PARAMETROS_DEL_PISO) - set(pel.CLAVES_DE_LA_ESCALA)
+        # C.2 (17-10): `PARAMETROS` es el diccionario de TODO el modulo y C.2 le suma SUS nueve parametros (`PARAMETROS_DE_LA_MEDIDA`: el recorte, la banda del perfil, la zona central, la exclusion del reticulo,
+        # las muestras minimas, las alturas de la medida y el suavizado). Esta prueba sigue siendo la de los parametros de la MARCA (C.1); los de la medida los vigila `test_c2_perfiles_y_coincidencia.py`.
+        propios = set(pm.PARAMETROS) - set(pel.PARAMETROS_DEL_PISO) - set(pel.CLAVES_DE_LA_ESCALA) - set(pm.PARAMETROS_DE_LA_MEDIDA)
         assert propios == {"radio_marca_mm", "contraste_minimo_marca", "fraccion_del_contraste_marca", "gris_maximo_de_la_tinta", "borde_blando_marca_mm", "area_minima_marca_mm2"}
         assert propios <= usados, propios - usados
         assert set(pm.CLAVES_DE_LA_MARCA) == propios
