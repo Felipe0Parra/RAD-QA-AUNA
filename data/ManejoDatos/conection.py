@@ -292,6 +292,7 @@ class Conexion():
             self.crearTablasMLCs()
             self.crearTablaReferenciasQC()  # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
             self.crearTablaPosicionInicialBraqui()  # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md)
+            self.crearTablaAnalisisPlacaMensual()  # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md)
 
             # R1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): DosisService.crear_tabla()
             # (que asegura columnas como "energia"/"vigente" via ALTER TABLE)
@@ -2783,6 +2784,58 @@ class Conexion():
         """
         cursor = self.con.cursor()
         cursor.execute(tabla)
+        self.con.commit()
+
+    def crearTablaAnalisisPlacaMensual(self):
+        """D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-83 a DA-86): el analisis nuevo del mensual de aceleradores -- la imagen ORIGINAL tal cual (P12), lo necesario para volver a medir (los cinco puntos con
+        sus marcas refinadas, los parametros, la version del motor y el piso con la copia de la referencia virgen en ese modo) y SOLO los datos finales de la capa que el fisico reporta
+        (`services/medidas_placa_mensual.py::MEDIDAS_GUARDADAS`). HIJA de `controles` (`ref`, RESTRICT: el analisis es de UN control, a diferencia de `braqui_posicion_inicial`, que es raiz propia sin FK), asi
+        que `RAICES_QC` no cambia. `capa` es la que se eligio en el menu al guardar (R, G o B, nunca el gris): la copia guardada manda (DA-81). Sin `activo`: la agrega sola
+        `_asegurar_activo_bloque_qc` (la tabla ya esta en TABLAS_ANULABLES desde que nace, mismo patron que `referencias_qc`). El indice unico parcial (un analisis vigente por control) lo crea
+        `crear_indices`, como el de las demas.
+
+        Las columnas de las medidas salen de `MEDIDAS_GUARDADAS` EN CADA LLAMADA (`CREATE TABLE`) y, ademas, una base que ya tenia la tabla recibe las que le falten con un `ALTER TABLE ADD COLUMN`
+        (aditiva e idempotente, sin relleno: lo ya guardado queda vacio; DA-13): anadir un valor a la lista es una linea y llega tambien a las bases ya desplegadas (un valor OBLIGATORIO, `admite_nulo=False`, solo se
+        EXIGE al crear la tabla: SQLite no agrega NOT NULL a una tabla ya creada, asi que ahi se agrega admitiendo NULL y se avisa; D1 R1-PRU-03). Cada columna tiene su propio intento y
+        un fallo se avisa sin cortar el resto del arranque."""
+        from services import medidas_placa_mensual
+        medidas = medidas_placa_mensual.MEDIDAS_GUARDADAS
+        columnas_de_las_medidas = ",\n                ".join(f"{m.nombre} {m.tipo}{'' if m.admite_nulo else ' NOT NULL'}" for m in medidas)
+        tabla = f"""
+            CREATE TABLE IF NOT EXISTS analisis_placa_mensual (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER NOT NULL,
+                imagen BLOB NOT NULL,
+                nombre_archivo TEXT,
+                sha256 TEXT NOT NULL,
+                formato TEXT,
+                bits INTEGER,
+                transparentes INTEGER,
+                dpi_declarado REAL,
+                clase_resolucion TEXT,
+                tamano_pixel_mm REAL,
+                version TEXT NOT NULL,
+                parametros TEXT NOT NULL,
+                puntos TEXT NOT NULL,
+                piso TEXT NOT NULL,
+                capa TEXT NOT NULL CHECK (capa IN ('R', 'G', 'B')),
+                {columnas_de_las_medidas},
+                usuario TEXT NOT NULL,
+                fecha_registro TEXT NOT NULL,
+                FOREIGN KEY (ref) REFERENCES controles(id) ON DELETE RESTRICT ON UPDATE CASCADE
+            )
+        """
+        cursor = self.con.cursor()
+        cursor.execute(tabla)
+        for m in medidas:
+            try:
+                existentes = [c[1].lower() for c in cursor.execute("PRAGMA table_info('analisis_placa_mensual')").fetchall()]
+                if m.nombre.lower() not in existentes:
+                    _asegurar_columna(cursor, "analisis_placa_mensual", m.nombre, m.tipo)
+                    if not m.admite_nulo:
+                        print(f"Aviso: 'analisis_placa_mensual.{m.nombre}' es obligatoria, pero SQLite no agrega una columna NOT NULL a una tabla ya creada: en esta base queda admitiendo NULL (hace falta una migracion que reconstruya la tabla)")
+            except sqlite3.Error as ex:
+                print(f"Aviso: no se pudo asegurar 'analisis_placa_mensual.{m.nombre}': {ex}")
         self.con.commit()
 
 

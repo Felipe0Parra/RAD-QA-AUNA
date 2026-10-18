@@ -362,14 +362,17 @@ class TestDenominadorDeCobertura:
         #             por `ref`: `_ref_de_la_calibracion`, `_cargar_tipo_calibracion`, `_cargar_sistema_medicion`, `_cargar_medidas_maximo`,
         #             `_cargar_condiciones_medicion`, `_cargar_lecturas_maximo` y `_cargar_actividad_monitor` (medido con
         #             `bm1_lectoras_rt1.py` sobre HEAD y sobre el arbol: sale lo dicho y entra lo dicho, nada mas). Baja por consolidacion.
+        #   105 -> 107 D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10): `services/placa_mensual.py` -- dos funciones lectoras nuevas sobre `analisis_placa_mensual`
+        #             (hija de `controles`): `leer` (por la clave de bloque `ref`, con `filtro_activo`) y `guardar` (la lectura de la vigente que reemplaza,
+        #             `SELECT id ... WHERE ref = ?`, con `filtro_activo`); medido con `lectoras_del_bloque_qc()` sobre el arbol: entran esas dos y no sale ninguna.
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 105, (
+        assert len(lectoras) == 107, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
             f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
             f"inicial, FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) y "
             f"FS.2 retiró la lectura propia de `actualizar_fisicos`, y BM.1 consolidó los ocho lectores por fecha del mensual de "
-            f"braquiterapia en siete que leen por `ref` "
-            f"-- 105 funciones esperadas; ahora salen "
+            f"braquiterapia en siete que leen por `ref`, y D.1 sumó `services/placa_mensual.py` (`leer` y `guardar`) "
+            f"-- 107 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"

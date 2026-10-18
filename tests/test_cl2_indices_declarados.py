@@ -135,6 +135,10 @@ CLAVES_ESPERADAS_DEL_PLAN = {
     # posición inicial de braquiterapia -- clave de bloque = la FECHA del
     # cambio de fuente al que pertenece (sexta raíz propia, sin FK).
     "braqui_posicion_inicial": ("fecha",),
+    # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10): el analisis nuevo del
+    # mensual de aceleradores -- HIJA de controles; un analisis vigente por
+    # control (clave de bloque = el propio control).
+    "analisis_placa_mensual": ("ref",),
 }
 
 # Tablas del bloque de QC que YA estaban en TABLAS_ANULABLES antes de IV1

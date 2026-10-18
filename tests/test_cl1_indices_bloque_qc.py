@@ -61,7 +61,7 @@ def _indices_reales(ruta):
 # desde E7, ya tiene `activo` desde siempre.
 
 
-def test_crea_los_63_tras_mi1_mi3_eb6_r1_b1_pi2(bd_temporal):
+def test_crea_los_64_tras_mi1_mi3_eb6_r1_b1_pi2_d1(bd_temporal):
     resultado = crear_indices(bd_temporal)
 
     # R1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, 27-08): +4 sobre las 57
@@ -70,7 +70,9 @@ def test_crea_los_63_tras_mi1_mi3_eb6_r1_b1_pi2(bd_temporal):
     # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md, 21-09): +1 (referencias_qc).
     # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 01-10): +1
     # (braqui_posicion_inicial).
-    assert len(resultado) == 63
+    # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10): +1 (analisis_placa_mensual,
+    # clave ("ref",): un analisis vigente por control).
+    assert len(resultado) == 64
     for tabla, r in resultado.items():
         assert r == "creado", (
             f"{tabla}: se esperaba 'creado' -- tras MI1/MI3/EB6/R1 las 61 "
@@ -182,5 +184,6 @@ def test_claves_coinciden_con_las_del_plan_para_las_8_de_h2():
     # (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, 27-08) añadió las 4 lecturas
     # crudas de Linealidad = 61. B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md,
     # 21-09) añadió referencias_qc = 62. PI.2 (PLAN_POSICION_INICIAL_BRAQUI_
-    # 01-10.md, 01-10) añadió braqui_posicion_inicial = 63.
-    assert len(CLAVES_INDICE) == 63
+    # 01-10.md, 01-10) añadió braqui_posicion_inicial = 63. D.1
+    # (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10) añadió analisis_placa_mensual = 64.
+    assert len(CLAVES_INDICE) == 64

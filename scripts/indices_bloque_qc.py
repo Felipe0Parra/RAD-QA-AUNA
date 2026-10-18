@@ -158,6 +158,10 @@ CLAVES_INDICE = {
     # fuente. Reguardar anula la vigente e inserta la nueva (`id` nuevo, misma fecha): por eso el enlace con el
     # cambio de fuente es por fecha y no por `id`.
     "braqui_posicion_inicial": ("fecha",),
+
+    # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-83 a DA-86): UN analisis vigente por control -- la clave de bloque del analisis nuevo del mensual es el control al que pertenece. Reguardar anula el
+    # vigente e inserta el nuevo (`id` nuevo, mismo `ref`).
+    "analisis_placa_mensual": ("ref",),
 }
 
 _RE_EXPRESION_CLAVE = re.compile(r'^(\w+)\((\w+)\)$')

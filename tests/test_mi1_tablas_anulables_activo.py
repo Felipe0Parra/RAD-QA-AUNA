@@ -83,7 +83,7 @@ class TestInventarioTrasMI1:
             f"MI1 debía mover estas tablas a TABLAS_ANULABLES y no aparecen: "
             f"{faltantes}")
 
-    def test_el_frozenset_tiene_65_entradas(self):
+    def test_el_frozenset_tiene_66_entradas(self):
         # R1 (PLAN_REPARACION_ANUAL_27-08.md §Fase 3, F-5, 27-08): +4
         # (anual_linealidad_um, anual_lecturas_factor_campo,
         # anual_lecturas_transmision, anual_tasa_dosis) sobre las 59 que
@@ -94,8 +94,11 @@ class TestInventarioTrasMI1:
         # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 01-10): +1
         # (braqui_posicion_inicial, sexta raíz propia, sin FK -- también en
         # RAICES_QC) sobre las 64 que dejó B.1.
-        assert len(TABLAS_ANULABLES) == 65, (
-            f"56 hijas + 9 raíces tras MI1+R1+B.1+PI.2 -- hay "
+        # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10): +1
+        # (analisis_placa_mensual, HIJA de controles por FK: no es raíz) sobre
+        # las 65 que dejó PI.2 -- 57 hijas + 9 raíces.
+        assert len(TABLAS_ANULABLES) == 66, (
+            f"57 hijas + 9 raíces tras MI1+R1+B.1+PI.2+D.1 -- hay "
             f"{len(TABLAS_ANULABLES)}. Si el cambio es deliberado, "
             f"actualiza este número a la vez que TABLAS_ANULABLES.")
 

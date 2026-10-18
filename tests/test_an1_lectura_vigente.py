@@ -395,8 +395,9 @@ def test_claves_indice_coincide_con_el_fuente():
     # IV3 (52) + MI3 (4 diarias) + EB6 (TipoCalibracion) + R1 (4 lecturas
     # crudas de Linealidad, PLAN_REPARACION_ANUAL_27-08.md §Fase 3) + B.1
     # (1, referencias_qc, PLAN_REFERENCIAS_EDITABLES_21-09.md) + PI.2 (1,
-    # braqui_posicion_inicial, PLAN_POSICION_INICIAL_BRAQUI_01-10.md)
-    assert len(claves) == 63
+    # braqui_posicion_inicial, PLAN_POSICION_INICIAL_BRAQUI_01-10.md) + D.1 (1,
+    # analisis_placa_mensual, PLAN_ANALISIS_PELICULAS_08-10.md: hija de controles)
+    assert len(claves) == 64
     assert claves == {t: frozenset(c) for t, c in CLAVES_REALES.items()}
     # LF5: la premisa que hace seguro tratar "id"/"rowid" como identidad
     # física en cualquier tabla, sin mirar CLAVES_INDICE caso por caso.

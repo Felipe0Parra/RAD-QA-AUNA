@@ -177,6 +177,9 @@ TABLAS_ANULABLES = frozenset({
     # es por la FECHA (un FK por `id` se rompería al primer reguardado), así que es raíz propia de QC y no forma
     # parte del cierre transitivo por FK que vigila IV2 -- misma razón que `referencias_qc`.
     "braqui_posicion_inicial",
+    # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-83 a DA-86): el analisis nuevo del mensual de aceleradores (imagen + datos finales de la capa reportada). HIJA de `controles` (FK `ref`, RESTRICT): entra al
+    # cierre transitivo por FK que vigila IV2 y NO es raiz (`RAICES_QC` no cambia). Escribe solo `services/placa_mensual.py`.
+    "analisis_placa_mensual",
 })
 
 

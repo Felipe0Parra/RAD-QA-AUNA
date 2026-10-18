@@ -97,8 +97,8 @@ EXEC_METHODS = {"execute", "executemany", "prepare"}
 SITIOS_DINAMICOS_PERMITIDOS = {
     ("services/visor_anulados.py", 77): "LR6 (censo/visor, DA-49): lee TODAS las filas de `tabla` (vigentes e históricas) A PROPÓSITO -- es el visor de solo lectura que sustituye a la reactivación. `tabla` recorre TABLAS_ANULABLES completo (derivado, ver `secciones()`), nunca fuera de ese alcance -- `columnas_de` lo rechaza si no",
     ("data/GraficasyTablas/tablas.py", 213): "identidad (fila antes de anular, diarias)",
-    ("data/ManejoDatos/conection.py", 781): "migración/censo (E10, copia de tabla completa)",  # R.1: 594->679; B.1 (21-09): 680->682; A.1 (23-09): 682->683; G.2 (24-09): 683->684; G.3 (24-09): 684->685; PI.2 (01-10): 685->686; RB.3 (05-10): 686->713; GI.0: 713->766; GI.8c (08-10): 766->767; GI.8d (08-10): 767->768; B.5 (12-10): 768->781
-    ("data/ManejoDatos/conection.py", 575):  # B.1 (21-09): 474->476; A.1 (23-09): 476->477; G.2 (24-09): 477->478; G.3 (24-09): 478->479; PI.2 (01-10): 479->480; RB.3 (05-10): 480->507; GI.0: 507->560; GI.8c (08-10): 560->561; GI.8d (08-10): 561->562; B.5 (12-10): 562->575
+    ("data/ManejoDatos/conection.py", 782): "migración/censo (E10, copia de tabla completa)",  # R.1: 594->679; B.1 (21-09): 680->682; A.1 (23-09): 682->683; G.2 (24-09): 683->684; G.3 (24-09): 684->685; PI.2 (01-10): 685->686; RB.3 (05-10): 686->713; GI.0: 713->766; GI.8c (08-10): 766->767; GI.8d (08-10): 767->768; B.5 (12-10): 768->781; D.1 (12-10): 781->782
+    ("data/ManejoDatos/conection.py", 576):  # B.1 (21-09): 474->476; A.1 (23-09): 476->477; G.2 (24-09): 477->478; G.3 (24-09): 478->479; PI.2 (01-10): 479->480; RB.3 (05-10): 480->507; GI.0: 507->560; GI.8c (08-10): 560->561; GI.8d (08-10): 561->562; B.5 (12-10): 562->575; D.1 (12-10): 575->576
         "R.1 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md, _techo_de_ids): "
         "`MAX(id) FROM \"{tabla}\"` sobre `equipos` -- el techo de ids "
         "debe verse el catálogo ENTERO (filas activas e inactivas por "
@@ -106,7 +106,7 @@ SITIOS_DINAMICOS_PERMITIDOS = {
         "id alguna vez. `equipos` no está en TABLAS_ANULABLES (su "
         "`activo` es un mecanismo propio, DA-74) -- filtrar aquí no "
         "correspondería a ningún contrato de QC.",
-    ("data/ManejoDatos/conection.py", 585):  # B.1 (21-09): 484->486; A.1 (23-09): 486->487; G.2 (24-09): 487->488; G.3 (24-09): 488->489; PI.2 (01-10): 489->490; RB.3 (05-10): 490->517; GI.0: 517->570; GI.8c (08-10): 570->571; GI.8d (08-10): 571->572; B.5 (12-10): 572->585
+    ("data/ManejoDatos/conection.py", 586):  # B.1 (21-09): 484->486; A.1 (23-09): 486->487; G.2 (24-09): 487->488; G.3 (24-09): 488->489; PI.2 (01-10): 489->490; RB.3 (05-10): 490->517; GI.0: 517->570; GI.8c (08-10): 570->571; GI.8d (08-10): 571->572; B.5 (12-10): 572->585; D.1 (12-10): 585->586
         "R.1 (PLAN_PUNTEROS_A_EQUIPOS_11-09.md, _techo_de_ids): "
         "`MAX(\"{columna}\") FROM \"{tabla_puntero}\"` sobre "
         "`equipos_medicion`/`calculadora_dosimetrica` -- el censo tiene "
@@ -376,7 +376,7 @@ SITIOS_CENSALES_LITERALES = {
         "migración (el UPDATE que normaliza ese centinela a NULL): misma "
         "razón que la cuenta de arriba -- si la cuenta ve una fila y el "
         "UPDATE no, la migración se quedaría a medias sin avisar.",
-    ("data/ManejoDatos/conection.py", 881):  # R.1: 694->779; B.1 (21-09): 780->782; A.1 (23-09): 782->783; G.2 (24-09): 783->784; G.3 (24-09): 784->785; PI.2 (01-10): 785->786; RB.3 (05-10): 786->813; GI.0: 813->866; GI.8c (08-10): 866->867; GI.8d (08-10): 867->868; B.5 (12-10): 868->881
+    ("data/ManejoDatos/conection.py", 882):  # R.1: 694->779; B.1 (21-09): 780->782; A.1 (23-09): 782->783; G.2 (24-09): 783->784; G.3 (24-09): 784->785; PI.2 (01-10): 785->786; RB.3 (05-10): 786->813; GI.0: 813->866; GI.8c (08-10): 866->867; GI.8d (08-10): 867->868; B.5 (12-10): 868->881; D.1 (12-10): 881->882
         "migración (EB2d, DA-57, _asegurar_angulo_starshot_sin_unique_de_tabla): "
         "`INSERT INTO \"{temporal}\" SELECT * FROM angulo_starshot` copia la "
         "tabla ENTERA al reconstruirla sin el UNIQUE de tabla viejo. Filtrar "
@@ -437,8 +437,8 @@ SITIOS_OPACOS_PERMITIDOS = {
     # `ast.Call` (función auxiliar), invisible para este detector estático
     # -- verificados a mano, y cubiertos en tiempo de ejecución por RT1
     # (ve el SQL ya resuelto sobre la conexión real).
-    ("services/anulacion.py", 262): "anular_fila -- `_SQL_ANULAR.format(tabla=tabla, where=id_where)`. Mismo UPDATE de siempre (identidad física, sin filtro de vigencia -- ver el docstring de la función), ahora detrás de un helper compartido con sql_anular_bloque en vez de un f-string inline",  # R1: 238->247; B.1 (21-09): 247->257; PI.2 (01-10): 257->262
-    ("services/anulacion.py", 372): "reemplazar_bloque (EB1) -- `sql_anular_bloque(tabla, columnas_clave)` compone el UPDATE con el AND de vigencia ya incluido (ver su propio docstring); es la ESCRITURA que anula el bloque anterior, no una lectura",  # R1: 348->357; B.1 (21-09): 357->367; PI.2 (01-10): 367->372
+    ("services/anulacion.py", 265): "anular_fila -- `_SQL_ANULAR.format(tabla=tabla, where=id_where)`. Mismo UPDATE de siempre (identidad física, sin filtro de vigencia -- ver el docstring de la función), ahora detrás de un helper compartido con sql_anular_bloque en vez de un f-string inline",  # R1: 238->247; B.1 (21-09): 247->257; PI.2 (01-10): 257->262; D.1 (12-10): 262->265
+    ("services/anulacion.py", 375): "reemplazar_bloque (EB1) -- `sql_anular_bloque(tabla, columnas_clave)` compone el UPDATE con el AND de vigencia ya incluido (ver su propio docstring); es la ESCRITURA que anula el bloque anterior, no una lectura",  # R1: 348->357; B.1 (21-09): 357->367; PI.2 (01-10): 367->372; D.1 (12-10): 372->375
     # No hace falta entrada para `cursor.execute(sql_insert, fila)` (dentro
     # del bucle `for fila in filas`, más abajo -- reemplaza al `executemany`
     # original, ver el docstring de `reemplazar_bloque` sobre
@@ -448,9 +448,9 @@ SITIOS_OPACOS_PERMITIDOS = {
     # INSERT lo arma cada llamador con columnas explícitas, MI0).
     ("data/ManejoDatos/catphan_TAC/catphan_db.py", 819): "anular_datos_especificos (EB2c) -- `sql_anular_bloque(tabla, [\"id_prueba\"])` compone el UPDATE con el AND de vigencia ya incluido; es la ESCRITURA que anula las hijas del `id_prueba` ANTERIOR, no una lectura",  # A.1 (23-09): 665->712; A.2 (23-09): 712->718; G.2 (24-09): 718->720; G.3 (24-09): 720->729; GI.4 (07-10): 729->753; GI.5 (07-10): 753->775; GI.6 (07-10): 775->800; GI.8b (08-10): 800->801; GI.8c (08-10): 801->803; GI.8d (08-10): 803->809; GI.8g (08-10): 809->819
     # GI.6 (07-10): el INSERT de `guardar_linealidad_ct` (catphan_db.py:997) sale de esta lista: sin su `try/except` el analizador resuelve su SQL (Trampa 6).
-    ("data/ManejoDatos/conection.py", 780): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",  # R.1: 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682; G.2 (24-09): 682->683; G.3 (24-09): 683->684; PI.2 (01-10): 684->685; RB.3 (05-10): 685->712; GI.0: 712->765; GI.8c (08-10): 765->766; GI.8d (08-10): 766->767; B.5 (12-10): 767->780
-    ("data/ManejoDatos/conection.py", 880): "DDL/migración (EB2d, DA-57, tabla temporal de la migración que retira el UNIQUE de angulo_starshot)",  # R.1: 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782; G.2 (24-09): 782->783; G.3 (24-09): 783->784; PI.2 (01-10): 784->785; RB.3 (05-10): 785->812; GI.0: 812->865; GI.8c (08-10): 865->866; GI.8d (08-10): 866->867; B.5 (12-10): 867->880
-    ("data/ManejoDatos/conection.py", 2802): "INSERT (users, no está en TABLAS_ANULABLES)",  # R1: 2091->2160; R.1: 2224->2309; T.0: 2309->2363; B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461; G.2 (24-09): 2461->2482; G.3 (24-09): 2482->2508; PI.2 (01-10): 2508->2571; RB.3 (05-10): 2571->2598; GI.0: 2598->2706; GI.8c (08-10): 2706->2730; GI.8d (08-10): 2730->2757; B.5 (12-10): 2757->2802
+    ("data/ManejoDatos/conection.py", 781): "DDL/migración (E10, tabla temporal de la migración CASCADE->RESTRICT)",  # R.1: 593->678; B.1 (21-09): 679->681; A.1 (23-09): 681->682; G.2 (24-09): 682->683; G.3 (24-09): 683->684; PI.2 (01-10): 684->685; RB.3 (05-10): 685->712; GI.0: 712->765; GI.8c (08-10): 765->766; GI.8d (08-10): 766->767; B.5 (12-10): 767->780; D.1 (12-10): 780->781
+    ("data/ManejoDatos/conection.py", 881): "DDL/migración (EB2d, DA-57, tabla temporal de la migración que retira el UNIQUE de angulo_starshot)",  # R.1: 693->778; B.1 (21-09): 779->781; A.1 (23-09): 781->782; G.2 (24-09): 782->783; G.3 (24-09): 783->784; PI.2 (01-10): 784->785; RB.3 (05-10): 785->812; GI.0: 812->865; GI.8c (08-10): 865->866; GI.8d (08-10): 866->867; B.5 (12-10): 867->880; D.1 (12-10): 880->881
+    ("data/ManejoDatos/conection.py", 2855): "INSERT (users, no está en TABLAS_ANULABLES)",  # R1: 2091->2160; R.1: 2224->2309; T.0: 2309->2363; B.1 (21-09): 2363->2417; A.1 (23-09): 2417->2457; A.2 (23-09): 2457->2461; G.2 (24-09): 2461->2482; G.3 (24-09): 2482->2508; PI.2 (01-10): 2508->2571; RB.3 (05-10): 2571->2598; GI.0: 2598->2706; GI.8c (08-10): 2706->2730; GI.8d (08-10): 2730->2757; B.5 (12-10): 2757->2802; D.1 (12-10): 2802->2852; D.1 (ronda 1 de la revision, 18-10): 2852->2855
     ("data/ManejoDatos/load.py", 375): "INSERT (controles -- un INSERT nunca necesita filtro)",  # FS.1 (06-10): 370->375
     ("data/ManejoDatos/load.py", 4406): "UPDATE por id_where -- identidad, edición directa de UNA celda ya identificada (equivalente al patrón 'identidad' de tablas dinámicas)",  # RC.2 (30-09): 4376->4382; FS.1 (06-10): 4382->4387; GI.3 (07-10): 4387->4406
     # LF (gap hallado por el subagente que resolvió LF3): decía "no está en
