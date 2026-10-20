@@ -20,6 +20,9 @@ LO QUE SE GARANTIZA, cada cosa contra una verdad que NO sale del servicio (el or
   (f) el esquema: columnas y orden, NOT NULL, `capa IN ('R','G','B')`, FK a `controles` con RESTRICT, en `TABLAS_ANULABLES`, clave de bloque `("ref",)` con su indice unico parcial, hija (no raiz) del
       grafo de FK, ensayo sobre COPIA de las bases de referencia (solo aparece la tabla, `integrity_check` ok, `foreign_key_check` sin aumento, segunda apertura idempotente);
   (g) TRIPWIRE (patron C.3 del 21-09): toda escritura a la tabla vive en el servicio y toda funcion que escribe comprueba W1.
+  (h) D.1b (20-10-2026, decision del fisico que revierte D1-D3): una capa elegida que NO es medible, por el motivo que sea, NO se guarda: `guardar` la rechaza sin escribir, sin auditar y sin
+      anular el vigente, con el texto de `motivo_para_no_guardar` (la UNICA definicion de la regla, la que usa la ventana); una penumbra incompleta no la vuelve no medible. Ronda 1 de la revision: se
+      juzga cada capa por lo suyo y cada uno de sus dos perfiles (la pelicula cortada por un solo lado), y el rechazo sin piso nombra la capa elegida y no siempre la verde.
 
 Rojo contra HEAD (5079b2f): el servicio y la lista unica no existen y la tabla no existe; las pruebas importan por dentro (`_svc()`), asi que cada una cae con su error y las que fijan lo que D.1 no
 cambia pasan. El rojo clasificado y las mutaciones estan en el anexo del plan (`d1_rojo_head.py`, `d1_mutaciones.py`).
@@ -873,18 +876,249 @@ class TestGuardarYLeer:
         assert registro["imagen"] == grande.datos and registro["sha256"] == hashlib.sha256(grande.datos).hexdigest()
         assert (registro["formato"], registro["bits"]) == ("TIFF", 16) and registro["estado"] == "ok"
 
-    def test_una_capa_que_no_se_pudo_medir_se_guarda_tal_cual_con_su_motivo_y_nunca_como_cero(self, bd, guardar):
-        """B5-D4: el servicio no juzga si la capa se midio (eso es de la pagina): guarda lo que el analisis dijo, el estado con su motivo y los seis numeros vacios."""
-        P = _P()
-        P["piso_esperado"] = {"R": [200.0, 250.0], "G": [200.0, 250.0], "B": [200.0, 250.0], "gris": [200.0, 250.0]}      # un rango en que ningun piso real cae
+    def test_un_registro_viejo_con_una_capa_no_medible_se_sigue_leyendo_recalculando_y_comparando(self, bd, guardar, monkeypatch):
+        """D.1b (20-10-2026) revierte D1-D3: una capa no medible ya NO se guarda. Un registro de ANTES (aqui se fabrica quitando la regla para UN guardado, como guardaba D.1) se sigue leyendo con su estado y
+        los numeros vacios (nunca ceros: S12), y recalcularlo da cero diferencias: `leer`, `recalcular` y `diferencias` no dependen de la regla. Hoy ese mismo analisis no se podria volver a guardar."""
+        svc = _svc()
         ref = _control(bd)
-        guardar(ref, capa="G", parametros=P)
-        registro = _svc().leer(ref)
+        with monkeypatch.context() as sin_la_regla:
+            sin_la_regla.setattr(svc, "motivo_para_no_guardar", lambda resultado, capa: None)
+            guardar(ref, capa="G", parametros=_rango_imposible())
+        registro = svc.leer(ref)
         assert registro["estado"].startswith("no medible") and "rango" in registro["estado"]
         assert all(registro[n] is None for n in MEDIDAS_DEL_PLAN[1:])
         assert registro["piso"]["estado"].startswith("no medible")
-        resultado = _svc().recalcular(registro)
-        assert _svc().diferencias(registro, resultado) == []
+        resultado = svc.recalcular(registro)
+        assert svc.diferencias(registro, resultado) == []
+        assert svc.motivo_para_no_guardar(resultado, "G") == MENSAJE_NO_MEDIBLE.format(capa="verde", estado=registro["estado"])
+
+
+# ====================================================================================================================== D.1b: una capa NO medible no se guarda (decision del fisico del 20-10-2026)
+
+# El texto del rechazo, escrito aqui a mano a proposito (el ancla EXTERNA de `motivo_para_no_guardar`): dice que la capa no es medible, que no se guarda sea cual sea el motivo, y el estado del motor tal cual.
+MENSAJE_NO_MEDIBLE = "la capa {capa} no es medible y no se guarda, sea cual sea el motivo; el análisis dice «{estado}»"
+
+
+def _rango_imposible():
+    """Los parametros de fabrica con un rango del piso en que ningun piso real cae: el piso automatico es «no medible» (el caso del test de D1-D3)."""
+    P = _P()
+    P["piso_esperado"] = {"R": [200.0, 250.0], "G": [200.0, 250.0], "B": [200.0, 250.0], "gris": [200.0, 250.0]}
+    return P
+
+
+@pytest.fixture(scope="module")
+def recortada(placa, clics):
+    """La pelicula «cortada»: recortada a 3 mm del campo LUMINOSO por los cuatro lados. Sin pelicula en las esquinas el piso automatico no es medible; con la pelicula virgen como piso la roja pierde sus
+    bordes al 50 % (salen de la pelicula) y la verde y la azul se miden con penumbras incompletas (medido en D.1b: logs/D1b/v1_hechos.log, casos c2 y c2v). Devuelve (bytes, los cinco clics desplazados)."""
+    cx, cy = placa.verdad.centro_campo_px
+    luz = placa.verdad.bordes_luz
+    x0, x1 = int(round(cx + (luz["L"] - 3.0) / TAM)), int(round(cx + (luz["R"] + 3.0) / TAM))
+    y0, y1 = int(round(cy + (luz["T"] - 3.0) / TAM)), int(round(cy + (luz["B"] + 3.0) / TAM))
+    return gen.codificar(np.ascontiguousarray(placa.imagen[y0:y1, x0:x1]), "png", 600), [(c[0] - x0, c[1] - y0) for c in clics]
+
+
+# cada causa por la que la capa elegida no es medible y que D.1 GUARDABA igual (con su estado y los numeros vacios): (capa, modo del piso, lo que cambia en `guardar`)
+CAUSAS_NO_MEDIBLES = ("piso fuera del rango esperado", "modo virgen sin pelicula virgen", "sexto clic sobre pelicula irradiada", "pelicula cortada, piso automatico sin esquinas",
+                      "pelicula cortada, la roja con sus bordes fuera de la pelicula")
+
+
+def _causa(nombre, placa, recortada):
+    cx, cy = placa.verdad.centro_campo_px
+    datos, cl = recortada
+    return {
+        "piso fuera del rango esperado": ("G", "automatico", dict(parametros=_rango_imposible())),
+        "modo virgen sin pelicula virgen": ("G", "virgen", dict(referencia_virgen=None)),
+        "sexto clic sobre pelicula irradiada": ("G", "punto_manual", dict(punto_manual=(float(round(cx + 20 / TAM)), float(round(cy + 20 / TAM))))),
+        "pelicula cortada, piso automatico sin esquinas": ("G", "automatico", dict(datos=datos, puntos=cl)),
+        "pelicula cortada, la roja con sus bordes fuera de la pelicula": ("R", "virgen", dict(datos=datos, puntos=cl)),
+        "puntos que no forman el campo": ("G", "automatico", dict(puntos=[(10, 10), (20, 20), (30, 30), (40, 40), (50, 50)])),
+        "otra resolucion declarada": ("G", "automatico", dict(datos=gen.codificar(placa.imagen, "png", 300))),
+        "medible": ("G", "automatico", {}),
+    }[nombre]
+
+
+def _resultado_de(argumentos):
+    """El `ResultadoPlacaMensual` que el MOTOR da con los argumentos de `guardar` (lo que la ventana tendra en mano antes de ofrecer «Guardar»)."""
+    pm, pel = _pm(), _pel()
+    pelicula = pel.leer_pelicula(argumentos["datos"])
+    P = argumentos["parametros"]
+    tam = pel.escala_mm(pelicula.dpi, P)
+    marcas = [pm.refinar_marca(pelicula.gris, clic, P, tam, pelicula.validos) for clic in argumentos["puntos"]]
+    return pm.analizar(pelicula, marcas, P, modo_piso=argumentos["modo_piso"], punto_manual=argumentos.get("punto_manual"), referencia_virgen=argumentos.get("referencia_virgen"))
+
+
+# --- RONDA 1 DE LA REVISION DE D.1b (hallazgos P-01, P-02 y P-03 / D1b-PROD-R1-01): la pelicula cortada por UN solo lado y el rechazo sin piso con una capa que no es la verde.
+# La regla juzga la capa ELEGIDA y sus DOS perfiles. Ni los escenarios de `CAUSAS_NO_MEDIBLES` ni `test_se_juzga_la_capa_elegida_...` lo distinguian: en ellos la capa que falla falla en el crossplane o en los dos
+# perfiles, y la verde y la azul siempre comparten estado; la rama SIN piso solo se probaba con la verde. Una regla que mirara un solo perfil, una que cruzara la verde con la azul o una rama sin piso que nombrara
+# siempre la verde pasaban el archivo entero (206 casos). Las dos escenas se fabrican recortando la pelicula sintetica de PF.0 (independiente del motor) a `u` mm del centro del campo de radiacion, en el MEDIO
+# del intervalo donde se cumplen (medido con pasos de 0.05 a 0.1 mm en logs/D1b/correccion_ronda1/escenas_afinadas.log: derecha de 51.3 a 51.6 mm, arriba de 52.0 a 52.6 mm; margen de 0.15 mm = 3 pixeles o mas a cada lado).
+ESCENAS_DE_UN_SOLO_LADO = {"derecha": 51.45, "arriba": 52.3}
+# El nombre de cada capa tal como lo dice el rechazo, escrito a mano a proposito (el ancla EXTERNA de `ADJETIVO_DE_LA_CAPA`: si el servicio nombrara siempre la verde, el texto de la roja y el de la azul no coincidirian).
+ADJETIVO_A_MANO = {"R": "roja", "G": "verde", "B": "azul"}
+
+
+@pytest.fixture(scope="module")
+def cortadas(placa, clics):
+    """Las dos escenas de la pelicula cortada por UN solo lado (`ESCENAS_DE_UN_SOLO_LADO`) y lo que el MOTOR dice de cada capa en ellas: {escena: SimpleNamespace(datos, puntos, perfiles, valores)}. `perfiles[capa]` es
+    (crossplane medido, inplane medido); `valores[capa]` es `valores_medidos` (el estado literal y los seis numeros). Las premisas son `assert`, nunca un `skip`: si el motor cambia y la escena deja de ser la que las
+    pruebas necesitan, falla aqui diciendo cual era la premisa. Se guardan solo los numeros: ningun resultado completo (con sus arreglos) queda vivo en el modulo."""
+    pm = _pm()
+    cx, cy = placa.verdad.centro_campo_px
+    escenas = {}
+    for escena, u in ESCENAS_DE_UN_SOLO_LADO.items():
+        if escena == "derecha":
+            corte, puntos = placa.imagen[:, :int(round(cx + u / TAM))], list(clics)
+        else:
+            y0 = max(0, int(round(cy - u / TAM)))
+            corte, puntos = placa.imagen[y0:, :], [(c[0], c[1] - y0) for c in clics]
+        datos = gen.codificar(np.ascontiguousarray(corte), "png", 600)
+        resultado = _resultado_de(dict(datos=datos, puntos=puntos, parametros=_P(), modo_piso="automatico"))
+        escenas[escena] = SimpleNamespace(datos=datos, puntos=puntos, perfiles={c: (resultado.capas[c].crossplane.ok, resultado.capas[c].inplane.ok) for c in CAPAS},
+                                          valores={c: pm.valores_medidos(resultado, c) for c in CAPAS})
+    assert escenas["derecha"].perfiles == {"R": (False, True), "G": (False, True), "B": (True, True)}, (
+        "la premisa de la escena «derecha»: la roja y la verde pierden su perfil crossplane (el inplane se mide) y la azul se mide entera", escenas["derecha"].perfiles)
+    assert escenas["arriba"].perfiles == {"R": (True, False), "G": (True, True), "B": (True, True)}, (
+        "la premisa de la escena «arriba»: la roja pierde su perfil inplane (el crossplane se mide) y la verde y la azul se miden enteras", escenas["arriba"].perfiles)
+    return escenas
+
+
+class TestUnaCapaNoMedibleNoSeGuarda:
+    """D.1b. Decision del fisico (20-10-2026), que revierte D1-D3: «que se rechace el guardado de la capa que es no medible con el comentario de que es no medible por cualquier motivo». La regla es UNA
+    funcion (`motivo_para_no_guardar`), que usa `guardar` y usara la ventana (E.1) antes de ofrecer «Guardar»; va despues de armar la fila (lo que no cabe en JSON se dice como tal) y ANTES de W1 y de la
+    transaccion: el rechazo no escribe, no audita ni anula el vigente. Medible = el estado de ESA capa es «ok» (sus dos perfiles medidos: los dos FWHM y los cuatro desfases existen; medido en D.1b sobre 69
+    analisis, 185 capas «ok» con los seis numeros y 91 no «ok» con al menos uno vacio); una penumbra incompleta no la vuelve no medible (la penumbra no se guarda)."""
+
+    @pytest.mark.parametrize("causa", CAUSAS_NO_MEDIBLES)
+    def test_cada_causa_se_rechaza_sin_escribir_ni_auditar_y_dice_por_que(self, causa, bd, guardar, placa, clics, punto_manual, virgen, recortada):
+        capa, modo, cambios = _causa(causa, placa, recortada)
+        estado = _pm().valores_medidos(_resultado_de(_argumentos(placa, clics, punto_manual, virgen, capa, modo, **cambios)), capa)["estado"]
+        assert estado.startswith("no medible"), (causa, estado)                    # la premisa: el MOTOR dice que esa capa no es medible
+        ref = _control(bd)
+        with pytest.raises(_svc().PlacaMensualError) as error:
+            guardar(ref, capa=capa, modo=modo, **cambios)
+        assert type(error.value) is _svc().PlacaMensualError
+        assert str(error.value) == MENSAJE_NO_MEDIBLE.format(capa=_pel().ADJETIVO_DE_LA_CAPA[capa], estado=estado)
+        assert _filas(bd) == [] and _auditoria(bd) == []
+
+    def test_se_juzga_la_capa_elegida_y_no_otra_ni_la_raiz(self, bd, guardar, virgen, recortada):
+        datos, cl = recortada
+        o = _oraculo(datos, cl, _P(), "virgen", referencia=virgen)
+        assert o.estado == "ok" and o.valores["R"]["estado"].startswith("no medible") and o.valores["G"]["estado"] == "ok" == o.valores["B"]["estado"], "la prueba necesita una capa si y otra no"
+        roja, verde, azul = _control(bd), _control(bd), _control(bd)
+        with pytest.raises(_svc().PlacaMensualError, match="^la capa roja no es medible"):
+            guardar(roja, capa="R", modo="virgen", datos=datos, puntos=cl)
+        guardar(verde, capa="G", modo="virgen", datos=datos, puntos=cl)
+        guardar(azul, capa="B", modo="virgen", datos=datos, puntos=cl)
+        assert _svc().leer(roja) is None
+        for ref, capa in ((verde, "G"), (azul, "B")):
+            assert {n: _svc().leer(ref)[n] for n in MEDIDAS_DEL_PLAN} == o.valores[capa]
+        assert [f[2] for f in _auditoria(bd)] == [str(verde), str(azul)]
+
+    def test_una_penumbra_incompleta_no_vuelve_no_medible_la_capa(self, bd, guardar, virgen, recortada):
+        """«como con las penumbras»: la penumbra incompleta dice su motivo (un aviso) y no se guarda; la capa sigue siendo medible y se guarda con sus seis numeros. Las diez peliculas reales traen la roja
+        con 2 a 4 penumbras incompletas y la verde de ML0, EPSON030 y EPSON028 con una (D.1b, logs/D1b/v1_hechos.log): si la penumbra contara, no se guardaria la roja de ninguna."""
+        datos, cl = recortada
+        resultado = _resultado_de(dict(datos=datos, puntos=cl, parametros=_P(), modo_piso="virgen", referencia_virgen=virgen))
+        verde = resultado.capas["G"]
+        penumbras = verde.crossplane.penumbras_mm + verde.inplane.penumbras_mm
+        assert verde.estado == "ok" and None in penumbras and any(a.startswith("incompleta") for a in verde.crossplane.avisos + verde.inplane.avisos), "la prueba necesita una penumbra incompleta"
+        assert _svc().motivo_para_no_guardar(resultado, "G") is None
+        ref = _control(bd)
+        guardar(ref, capa="G", modo="virgen", datos=datos, puntos=cl)
+        registro = _svc().leer(ref)
+        assert registro["estado"] == "ok" and all(registro[n] is not None for n in MEDIDAS_DEL_PLAN[1:])
+
+    def test_un_reguardado_no_medible_deja_el_analisis_vigente_intacto_y_no_audita(self, bd, guardar):
+        ref = _control(bd)
+        vigente = guardar(ref, capa="G")
+        antes, auditoria = _consulta(bd, f"SELECT * FROM {TABLA}"), _auditoria(bd)
+        with pytest.raises(_svc().PlacaMensualError, match="^la capa azul no es medible"):
+            guardar(ref, capa="B", parametros=_rango_imposible())
+        assert _consulta(bd, f"SELECT * FROM {TABLA}") == antes and _filas(bd) == [(vigente, ref, 1, "G")]
+        assert _auditoria(bd) == auditoria and len(auditoria) == 1
+        assert _svc().leer(ref)["id"] == vigente
+
+    @pytest.mark.parametrize("control", ["anulado", "inexistente"])
+    def test_con_el_control_anulado_la_capa_no_medible_se_dice_antes_que_w1(self, bd, guardar, control):
+        """La regla mira lo medido y va ANTES de W1, que sigue justo antes de la transaccion (D1-D8): un control anulado o inexistente con una capa no medible dice que la capa no es medible; con una capa medible, W1."""
+        ref, w1 = (_control(bd, activo=0), "anulado") if control == "anulado" else (99999, "no existe")
+        with pytest.raises(_svc().PlacaMensualError) as error:
+            guardar(ref, parametros=_rango_imposible())
+        assert type(error.value) is _svc().PlacaMensualError and str(error.value).startswith("la capa verde no es medible")
+        with pytest.raises(_svc().ControlNoEditable, match=w1):
+            guardar(ref)
+        assert _filas(bd) == [] and _auditoria(bd) == []
+
+    @pytest.mark.parametrize("causa", CAUSAS_NO_MEDIBLES + ("puntos que no forman el campo", "otra resolucion declarada", "medible"))
+    def test_la_ventana_tiene_la_misma_regla_y_el_mismo_texto_que_guardar(self, causa, bd, guardar, placa, clics, punto_manual, virgen, recortada):
+        """E.1 llamara a `motivo_para_no_guardar(resultado, capa)` con SU analisis antes de ofrecer «Guardar»: da None exactamente cuando `guardar` guarda y, si no, el texto con que `guardar` rechaza
+        (tambien sin piso: los puntos que no forman el campo y otra resolucion)."""
+        capa, modo, cambios = _causa(causa, placa, recortada)
+        motivo = _svc().motivo_para_no_guardar(_resultado_de(_argumentos(placa, clics, punto_manual, virgen, capa, modo, **cambios)), capa)
+        assert (motivo is None) == (causa == "medible"), (causa, motivo)
+        ref = _control(bd)
+        if motivo is None:
+            guardar(ref, capa=capa, modo=modo, **cambios)
+            assert _svc().leer(ref)["estado"] == "ok"
+        else:
+            with pytest.raises(_svc().PlacaMensualError) as error:
+                guardar(ref, capa=capa, modo=modo, **cambios)
+            assert str(error.value) == motivo
+            assert _filas(bd) == [] and _auditoria(bd) == []
+
+    @pytest.mark.parametrize("escena,capa,perfil", [("arriba", "R", "inplane"), ("derecha", "G", "crossplane")],
+                             ids=["solo el inplane: la roja con la pelicula cortada por arriba", "solo el crossplane: la verde con la pelicula cortada por la derecha"])
+    def test_una_capa_con_solo_uno_de_sus_dos_perfiles_medidos_no_se_guarda(self, escena, capa, perfil, bd, guardar, cortadas):
+        """P-01 (ronda 1): medible = los DOS perfiles de la capa medidos (D1b-D2), no uno. A la capa le falta UN solo perfil y del otro SI hay numeros (los que una regla mas floja se llevaria a la base): no se guarda,
+        no se audita, y el texto es el de la regla con el estado literal del motor. Una regla que mire solo el crossplane (M8) deja pasar la roja de «arriba»; una que mire solo el inplane (M9), la verde de «derecha»."""
+        e = cortadas[escena]
+        assert dict(zip(("crossplane", "inplane"), e.perfiles[capa])) == {"crossplane": perfil != "crossplane", "inplane": perfil != "inplane"}, ("la premisa: a esa capa le falta UN solo perfil", perfil, e.perfiles[capa])
+        assert e.valores[capa]["estado"].startswith("no medible") and any(e.valores[capa][n] is not None for n in MEDIDAS_DEL_PLAN[1:]), "la premisa: no medible, pero con numeros del perfil que si se midio"
+        ref = _control(bd)
+        with pytest.raises(_svc().PlacaMensualError) as error:
+            guardar(ref, capa=capa, datos=e.datos, puntos=e.puntos)
+        assert type(error.value) is _svc().PlacaMensualError
+        assert str(error.value) == MENSAJE_NO_MEDIBLE.format(capa=ADJETIVO_A_MANO[capa], estado=e.valores[capa]["estado"])
+        assert _filas(bd) == [] and _auditoria(bd) == []
+
+    @pytest.mark.parametrize("capa", CAPAS)
+    def test_cada_capa_se_juzga_por_lo_suyo_con_la_pelicula_cortada_por_la_derecha(self, capa, bd, guardar, cortadas):
+        """P-02 (ronda 1): con la pelicula terminando a 51.45 mm por la derecha el MOTOR separa a la azul (medible) de la roja y la verde (no medibles). La roja y la verde se rechazan, nombrando cada una la SUYA; la azul
+        se guarda con sus seis numeros. Una regla que juzgue la verde por la azul y la azul por la verde (M1) guarda la verde que no se midio y rechaza la azul que si; antes ninguna prueba tenia una verde y una azul con
+        estados distintos."""
+        e = cortadas["derecha"]
+        se_guarda = {"R": False, "G": False, "B": True}[capa]
+        assert (e.valores[capa]["estado"] == "ok") == se_guarda, ("la premisa: el motor separa la azul de la roja y la verde", capa, e.valores[capa]["estado"])
+        ref = _control(bd)
+        if se_guarda:
+            nuevo = guardar(ref, capa=capa, datos=e.datos, puntos=e.puntos)
+            registro = _svc().leer(ref)
+            assert registro["id"] == nuevo and registro["capa"] == capa and {n: registro[n] for n in MEDIDAS_DEL_PLAN} == e.valores[capa]
+            assert _filas(bd) == [(nuevo, ref, 1, capa)] and [f[2] for f in _auditoria(bd)] == [str(ref)]
+        else:
+            with pytest.raises(_svc().PlacaMensualError) as error:
+                guardar(ref, capa=capa, datos=e.datos, puntos=e.puntos)
+            assert type(error.value) is _svc().PlacaMensualError
+            assert str(error.value) == MENSAJE_NO_MEDIBLE.format(capa=ADJETIVO_A_MANO[capa], estado=e.valores[capa]["estado"])
+            assert _filas(bd) == [] and _auditoria(bd) == []
+
+    @pytest.mark.parametrize("capa", CAPAS)
+    @pytest.mark.parametrize("causa", ["puntos que no forman el campo", "otra resolucion declarada"])
+    def test_el_rechazo_de_un_analisis_sin_piso_nombra_la_capa_elegida(self, causa, capa, bd, guardar, placa, clics, punto_manual, virgen, recortada):
+        """P-03 / D1b-PROD-R1-01 (ronda 1): el rechazo de la rama SIN piso (los puntos no forman el campo, el archivo declara otra resolucion: `resultado.piso is None`) nombra la capa ELEGIDA, la roja, la verde o la
+        azul, y trae el estado del motor tal cual: es el texto que la ventana (E.1) le copiara al fisico para decirle por que no puede guardar. Antes solo se probaba con la verde: una rama que nombrara siempre la
+        verde (M2p) le habria dicho «la capa verde» a quien eligio la roja."""
+        _, modo, cambios = _causa(causa, placa, recortada)
+        resultado = _resultado_de(_argumentos(placa, clics, punto_manual, virgen, capa, modo, **cambios))
+        assert resultado.piso is None, "la premisa: este analisis ni llega a tomar el piso (la rama SIN piso de `guardar`)"
+        estado = _pm().valores_medidos(resultado, capa)["estado"]
+        assert estado.startswith({"puntos que no forman el campo": "no medible: los puntos no forman el campo", "otra resolucion declarada": "no medible: no hay escala en milímetros"}[causa]), (causa, estado)
+        ref = _control(bd)
+        with pytest.raises(_svc().PlacaMensualError) as error:
+            guardar(ref, capa=capa, modo=modo, **cambios)
+        assert type(error.value) is _svc().PlacaMensualError
+        assert str(error.value) == MENSAJE_NO_MEDIBLE.format(capa=ADJETIVO_A_MANO[capa], estado=estado)
+        assert _filas(bd) == [] and _auditoria(bd) == []
 
 
 # ====================================================================================================================== lo que se rechaza ANTES de escribir
@@ -1040,12 +1274,13 @@ class TestRechazaSinEscribirNada:
         assert _consulta(bd, f"SELECT * FROM {TABLA}") == antes and _filas(bd) == [(anterior, ref, 1, "G")]
 
     def test_si_el_analisis_no_llega_a_tomar_el_piso_no_hay_nada_que_volver_a_medir_y_no_se_guarda(self, bd, guardar, placa):
-        """Los cinco puntos no forman el campo, o el archivo declara otra resolucion (no hay escala): `analizar` no llega al piso, la columna `piso` es obligatoria y no hay con que reabrir."""
+        """Los cinco puntos no forman el campo, o el archivo declara otra resolucion (no hay escala): `analizar` no llega al piso, la columna `piso` es obligatoria y no hay con que reabrir. D.1b: el texto
+        es el de la regla unica (`motivo_para_no_guardar`): la capa no es medible, con el motivo del motor."""
         ref = _control(bd)
-        with pytest.raises(_svc().PlacaMensualError, match="piso"):
+        with pytest.raises(_svc().PlacaMensualError, match="^la capa verde no es medible y no se guarda, sea cual sea el motivo; el análisis dice «no medible: los puntos no forman el campo"):
             guardar(ref, puntos=[(10, 10), (20, 20), (30, 30), (40, 40), (50, 50)])
         con_300_dpi = gen.codificar(placa.imagen, "png", 300)
-        with pytest.raises(_svc().PlacaMensualError, match="piso"):
+        with pytest.raises(_svc().PlacaMensualError, match="^la capa verde no es medible y no se guarda, sea cual sea el motivo; el análisis dice «no medible: no hay escala en milímetros"):
             guardar(ref, datos=con_300_dpi)
         assert _filas(bd) == [] and _auditoria(bd) == []
 
@@ -1339,6 +1574,19 @@ class TestElServicioPorDentro:
         """DA-18: sin marcas ni emojis en lo que ve el usuario (el servicio solo da textos de auditoria, de error y de diferencias)."""
         texto = SERVICIO_PY.read_text(encoding="utf-8")
         assert not any(s in texto for s in ("✓", "✗", "✔", "✘", "⚠", "❌", "✅", "☑", "☒"))
+
+    def test_la_regla_de_la_capa_no_medible_es_una_funcion_publica_y_guardar_no_la_repite(self):
+        """D.1b: la ventana (E.1) necesita la MISMA regla antes de ofrecer «Guardar» (corolario 1: una operacion, una definicion). `guardar` la consulta en sus dos puntos (sin piso y antes de W1) y no
+        decide por su cuenta si la capa es medible (ninguna comparacion con «ok» propia, ni un `.ok` ni un `startswith`)."""
+        assert list(inspect.signature(_svc().motivo_para_no_guardar).parameters) == ["resultado", "capa"]
+        guardar_def = next(n for n in ast.parse(SERVICIO_PY.read_text(encoding="utf-8")).body if isinstance(n, ast.FunctionDef) and n.name == "guardar")
+        llamadas = [n for n in ast.walk(guardar_def) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "motivo_para_no_guardar"]
+        assert len(llamadas) == 2, len(llamadas)
+        propias = [n for n in ast.walk(guardar_def) if isinstance(n, ast.Compare) and any(isinstance(c, ast.Constant) and c.value == "ok" for c in [n.left, *n.comparators])]
+        assert propias == [], "guardar decide por su cuenta si la capa es medible: eso lo dice `motivo_para_no_guardar`"
+        por_su_cuenta = [n for n in ast.walk(guardar_def) if (isinstance(n, ast.Attribute) and n.attr == "ok")
+                         or (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "startswith")]
+        assert por_su_cuenta == [], "guardar decide por su cuenta si la capa es medible (un `.ok` o un `startswith`): eso lo dice `motivo_para_no_guardar`"
 
 
 # ====================================================================================================================== (g) el tripwire: toda escritura a la tabla vive en el servicio

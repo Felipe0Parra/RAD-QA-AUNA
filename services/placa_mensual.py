@@ -14,9 +14,9 @@ Reglas de este servicio, cada una con su motivo:
     parámetros, no un dato final. La copia guardada manda (DA-81): `recalcular` toma el modo, el punto y la referencia virgen del registro (con `referencia_virgen_desde_dict`), NUNCA del archivo vigente.
   - La CAPA (`R`, `G` o `B`) y el MODO del piso llegan como argumentos SIN valor por omisión: son lo que decide qué número se guarda, y un valor por omisión para un dato que decide lo que se guarda es el
     defecto que el plan existe para evitar. `CAPA_POR_OMISION` es solo el valor con que arranca el menú de la ventana; este módulo no la lee.
-  - El servicio NO juzga si la capa se midió (B5-D4: es de la ventana): guarda lo que el análisis dijo, su estado con el motivo y los números vacíos si no se midieron, nunca ceros. Lo único que rechaza
-    de lo medido es un análisis que ni siquiera llegó a tomar el piso (los cinco puntos no forman el campo, o el archivo declara otra resolución y no hay milímetros): la columna `piso` es obligatoria
-    y no hay con qué volver a medir.
+  - Una capa que NO es medible no se guarda, por el motivo que sea (decisión del físico del 20-10-2026, que revierte D1-D3): la ÚNICA definición de esa regla y de su texto es `motivo_para_no_guardar`,
+    que usan `guardar` (antes de W1 y de la transacción: el rechazo no escribe, no audita ni anula el vigente) y la ventana antes de ofrecer «Guardar». Medible = el estado de esa capa es «ok», sus dos
+    perfiles medidos; una penumbra incompleta no la vuelve no medible. Un análisis sin piso (los puntos no forman el campo, otra resolución) se rechaza antes, con el mismo texto: no hay fila que armar.
   - Comprueba W1 (`puede_editarse(ref)`): un control anulado o inexistente no acepta el análisis. Va justo ANTES de abrir la transacción, después del análisis (que tarda un segundo): así la
     ventana entre la comprobación y la escritura es la más corta posible.
   - UNA transacción (`reemplazar_bloque`): anula el análisis vigente de ese control, inserta el nuevo y escribe UNA fila de auditoría (`guardar` si no había análisis, `reemplazo` si lo había, con el `id` de
@@ -115,17 +115,28 @@ def _json_estricto(valor, columna, **opciones):
         raise PlacaMensualError(f"lo que se guarda en la columna '{columna}' no es JSON válido ({error}): hay un número no finito (NaN o infinito) o un valor que JSON no admite") from error
 
 
+def motivo_para_no_guardar(resultado, capa):
+    """La ÚNICA definición de cuándo un análisis NO se guarda por lo que midió (decisión del físico del 20-10-2026, que revierte D1-D3): si la capa elegida no es medible, por el motivo que sea,
+    devuelve el texto con que se rechaza (nombra la capa y trae el estado del motor tal cual); si se puede guardar, None. Medible = el estado de esa capa es «ok»: sus dos perfiles medidos, con los dos
+    FWHM y los cuatro desfases; una penumbra incompleta no la vuelve no medible (la penumbra no se guarda). La usan `guardar` y la ventana, antes de ofrecer «Guardar». `capa`: R, G o B."""
+    estado = motor.valores_medidos(resultado, capa)["estado"]
+    if estado == "ok":
+        return None
+    return f"la capa {ADJETIVO_DE_LA_CAPA[capa]} no es medible y no se guarda, sea cual sea el motivo; el análisis dice «{estado}»"
+
+
 def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, punto_manual=None, referencia_virgen=None):
     """Guarda el análisis de la película de un control y devuelve el `id` nuevo. ANALIZA desde los bytes y los clics (ver el docstring del módulo). Rechaza con `PlacaMensualError` (que es un `ValueError`) y SIN
     escribir nada: ref que no es un control, usuario, capa que no es R, G ni B, modo del piso que no existe, imagen vacía o que no se lee, puntos que no son los cinco, parámetros incompletos, un punto marcado
     con un modo que no es «punto_manual», un análisis que no llegó a tomar el piso, lo que no cabe en JSON válido (un número no finito, NaN o infinito, o un escalar de numpy, en los parámetros o en el punto
-    marcado: las columnas `parametros`, `puntos` y `piso` se escriben solo por `_json_estricto`); y `ControlNoEditable` si el control está anulado o no existe (W1).
+    marcado: las columnas `parametros`, `puntos` y `piso` se escriben solo por `_json_estricto`), una capa elegida que no es medible (`motivo_para_no_guardar`); y `ControlNoEditable` si el control
+    está anulado o no existe (W1).
 
     `ref`: el id del control (`controles.id`). `datos`: los bytes de la imagen tal como se subió (bytes o bytearray). `nombre`: el nombre del archivo (se guarda sin la carpeta). `puntos`: los CINCO CLICS (x, y)
     en cualquier orden: aquí se refinan. `parametros`: los `P` con que se mide (TODOS los de `analisisImagenes.placa_mensual.VALORES_DE_LA_GEOMETRIA`, los 40: si falta uno se rechaza, porque el motor lo rellenaria con el valor de hoy y lo guardado dejaria de
     reproducirse si ese valor cambia; se guardan y al reabrir se recalcula con ESTOS).
     `capa`: la que el físico reporta (`R`, `G` o `B`, mayúscula exacta; el gris no se ofrece), SIN valor por omisión. `modo_piso`: «automatico», «punto_manual» o «virgen», SIN valor por omisión;
-    `punto_manual` (x, y) es el sexto clic del modo «punto_manual»; `referencia_virgen` es la `ReferenciaVirgen` del modo «virgen». Si la capa elegida no se pudo medir se guarda igual: su estado dice por qué.
+    `punto_manual` (x, y) es el sexto clic del modo «punto_manual»; `referencia_virgen` es la `ReferenciaVirgen` del modo «virgen». Si la capa elegida no es medible, por el motivo que sea, no se guarda.
 
     UNA transacción (`reemplazar_bloque`): anula el análisis vigente del control, inserta el nuevo y escribe UNA fila de auditoría (`guardar`, o `reemplazo` si había uno, con el `id` de la reemplazada)."""
     ref = _ref_valido(ref)
@@ -152,7 +163,7 @@ def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, pu
     except ValueError as error:
         raise PlacaMensualError(str(error)) from error
     if resultado.piso is None:
-        raise PlacaMensualError(f"el análisis no llegó a tomar el piso ({resultado.estado}): no hay nada que volver a medir y no se guarda")
+        raise PlacaMensualError(motivo_para_no_guardar(resultado, capa))
     valores = motor.valores_medidos(resultado, capa)
     faltan = [n for n in _columnas_de_las_medidas() if n not in valores]
     if faltan:
@@ -166,6 +177,9 @@ def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, pu
         "piso": _json_estricto(piso, "piso", sort_keys=True),
         "capa": capa, "usuario": usuario, "fecha_registro": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
     fila.update({n: valores[n] for n in _columnas_de_las_medidas()})
+    motivo = motivo_para_no_guardar(resultado, capa)          # después de armar la fila (lo que no cabe en JSON se dice como tal) y ANTES de W1 y de la transacción
+    if motivo is not None:
+        raise PlacaMensualError(motivo)
     if not puede_editarse(ref):
         raise ControlNoEditable(mensaje_bloqueo_edicion(ref))
     with Conexion().conectar() as db:
