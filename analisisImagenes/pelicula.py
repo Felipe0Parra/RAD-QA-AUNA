@@ -884,10 +884,63 @@ def _exige_la_referencia(condicion, que):
         raise ValueError(f"La referencia de la película virgen está dañada: {que}.")
 
 
+# OD.1c, R1-PROD-01 (ronda 1 de la revisión): lo que una referencia guardada trae SIN FORMA fija, la región, la procedencia y los parámetros (de ellos solo se exige que sean un diccionario), no puede anidar más
+# de estos niveles. Lo que la aplicación escribe llega a 3 niveles en los parámetros y a 2 en los otros dos [medido en la referencia sintética de las pruebas y en la película virgen real EPSON179, 22-10]. La copia
+# recursiva (`_json_normal`) gasta dos marcos de pila por nivel: sin un tope, de 13 a unos 470 niveles se aceptaban como válidos y, según la pila de quien guardaba después, `como_dict()` o `json.dumps` lanzaban
+# `RecursionError` en vez de `ValueError`. Con un tope fijo, lo que se acepta se copia y se serializa en cualquier punto de la pila. Decisión vetable del corrector (OD1c-R1-D1); se veta quitando la
+# comprobación de `referencia_virgen_desde_dict` y esta constante.
+PROFUNDIDAD_MAXIMA_DE_LO_LIBRE = 10
+
+
+def _anida_mas_de(valor, tope):
+    """Si `valor` (diccionarios y listas) anida más de `tope` niveles; un escalar anida 0 y un contenedor, aunque esté vacío, 1. Se recorre con una pila propia y SIN recursión, de modo que un contenido anidado
+    a propósito no puede agotar la pila de Python al medirlo, y se detiene en el primer nivel que pasa del tope: también termina con un contenido que se contiene a sí mismo."""
+    pila = [(valor, 1)]
+    while pila:
+        actual, nivel = pila.pop()
+        if isinstance(actual, dict):
+            hijos = actual.values()
+        elif isinstance(actual, (list, tuple)):
+            hijos = actual
+        else:
+            continue
+        if nivel > tope:
+            return True
+        pila.extend((hijo, nivel + 1) for hijo in hijos)
+    return False
+
+
+def _exige_la_tabla_de_uniformidad(tabla):
+    """`ValueError` si `tabla` no tiene la FORMA que escribe `uniformidad_y_ruido` (OD.1c, OD1b-PROD-03), sin recursión: un diccionario con EXACTAMENTE las claves de `_FORMA_DE_LA_TABLA` (la forma del productor:
+    el validador no puede divergir de lo que la función escribe); `cabe` verdadero o falso; `lado_mm` un número; las cinco regiones, cada una con su caja en None o de 4 números; y las cuatro capas, cada una
+    con exactamente sus medidas, sus regiones y sus valores en None o un número. Los motivos dicen «la tabla de uniformidad y ruido ...»."""
+    forma = _FORMA_DE_LA_TABLA
+    que = "la tabla de uniformidad y ruido"
+    _exige_la_referencia(isinstance(tabla, dict) and set(tabla) == set(forma), f"{que} no tiene las claves de siempre: {', '.join(forma)}")
+    _exige_la_referencia(isinstance(tabla["cabe"], bool), f"{que} no dice con verdadero o falso si caben sus regiones")
+    _exige_la_referencia(_es_numero(tabla["lado_mm"]), f"{que} no trae el lado de sus regiones como un número")
+    regiones = tabla["regiones"]
+    _exige_la_referencia(isinstance(regiones, dict) and set(regiones) == set(forma["regiones"]), f"{que} no trae exactamente sus cinco regiones: {', '.join(forma['regiones'])}")
+    for nombre, region in regiones.items():
+        _exige_la_referencia(isinstance(region, dict) and set(region) == set(forma["regiones"][nombre]), f"la región {nombre} de {que} no trae solo su caja")
+        caja = region["caja"]
+        _exige_la_referencia(caja is None or (isinstance(caja, list) and len(caja) == 4 and all(_es_numero(x) for x in caja)), f"la caja de la región {nombre} de {que} no son 4 números")
+    capas = tabla["capas"]
+    _exige_la_referencia(isinstance(capas, dict) and set(capas) == set(forma["capas"]), f"{que} no trae exactamente sus cuatro capas: {', '.join(forma['capas'])}")
+    for capa, fila in capas.items():
+        modelo = forma["capas"][capa]
+        _exige_la_referencia(isinstance(fila, dict) and set(fila) == set(modelo), f"la capa {capa} de {que} no trae exactamente sus medidas")
+        medias = fila["regiones"]
+        _exige_la_referencia(isinstance(medias, dict) and set(medias) == set(modelo["regiones"]), f"las regiones de la capa {capa} de {que} no son las cinco de siempre")
+        _exige_la_referencia(all(x is None or _es_numero(x) for x in medias.values()) and all(x is None or _es_numero(x) for nombre, x in fila.items() if nombre != "regiones"),
+                             f"un valor de la capa {capa} de {que} no es un número")
+
+
 def referencia_virgen_desde_dict(d):
     """La inversa de `ReferenciaVirgen.como_dict()`. `ValueError` con el motivo si no es un diccionario, si falta una clave, si la versión no es la actual (`VERSION_PISO_VIRGEN`) o si un valor no es
-    del TIPO que `como_dict()` escribe (una lista de avisos que es `null`, una mediana de texto, unos píxeles negativos...): un archivo dañado o editado a mano se rechaza AQUÍ, con su motivo, y
-    no revienta más tarde, lejos de donde se leyó, con otra excepción (RV-A3-3). Una referencia «ok» además debe poder USARSE: sus cuatro capas «ok» con mediana, media (su valor, OD.1) y píxeles, su tabla de uniformidad y ruido, su región (píxeles,
+    del TIPO que `como_dict()` escribe (una lista de avisos que es `null`, una mediana de texto, unos píxeles negativos...), si la tabla de uniformidad y ruido no tiene la forma que escribe
+    `uniformidad_y_ruido` (`_exige_la_tabla_de_uniformidad`) o si la región, la procedencia o los parámetros anidan más de `PROFUNDIDAD_MAXIMA_DE_LO_LIBRE` niveles (OD.1c): un archivo dañado o editado a
+    mano se rechaza AQUÍ, con su motivo, y no revienta más tarde, lejos de donde se leyó, con otra excepción (RV-A3-3). Una referencia «ok» además debe poder USARSE: sus cuatro capas «ok» con mediana, media (su valor, OD.1) y píxeles, su tabla de uniformidad y ruido, su región (píxeles,
     área y caja), la huella, el archivo y la fecha de su procedencia y el margen con que se midió. Del resto de la procedencia y de los parámetros solo se exige que sean un diccionario: nada
     de lo que se hace con una referencia lo calcula."""
     if not isinstance(d, dict):
@@ -915,7 +968,11 @@ def referencia_virgen_desde_dict(d):
     _exige_la_referencia(d["region"] is None or isinstance(d["region"], dict), "la región no es un diccionario")
     _exige_la_referencia(isinstance(d["procedencia"], dict), "la procedencia no es un diccionario")
     _exige_la_referencia(isinstance(d["parametros"], dict), "los parámetros no son un diccionario")
+    for nombre, contenido in (("la región", d["region"]), ("la procedencia", d["procedencia"]), ("los parámetros", d["parametros"])):
+        _exige_la_referencia(not _anida_mas_de(contenido, PROFUNDIDAD_MAXIMA_DE_LO_LIBRE), f"{nombre} anida demasiados niveles (más de {PROFUNDIDAD_MAXIMA_DE_LO_LIBRE})")
     _exige_la_referencia(d["uniformidad"] is None or isinstance(d["uniformidad"], dict), "la tabla de uniformidad y ruido no es un diccionario")
+    if d["uniformidad"] is not None:
+        _exige_la_tabla_de_uniformidad(d["uniformidad"])
     if d["estado"] == "ok":
         region, procedencia = d["region"], d["procedencia"]
         _exige_la_referencia(all(capa.estado == "ok" and capa.mediana is not None and capa.media is not None and capa.n >= 1 for capa in capas.values()),
@@ -1954,6 +2011,9 @@ def uniformidad_y_ruido(planos, zona, escala, v=None, origen=(0, 0), gradientes=
     return {"cabe": bool(cabe), "lado_mm": lado_mm, "regiones": regiones, "capas": capas}
 
 
+_FORMA_DE_LA_TABLA = uniformidad_y_ruido({c: np.zeros((1, 1), np.float32) for c in CAPAS_DEL_PISO}, np.zeros((1, 1), bool), 1.0)      # OD.1c: la tabla de una zona vacía, solo por su FORMA: la que valida `_exige_la_tabla_de_uniformidad`
+
+
 def _virgen_caja_de_la_pelicula(componente, origen, escala, forma):
     """DÓNDE estaba la película en el vidrio del escáner (OD.1): {"pelicula_mm": {x, y, ancho, alto}, "pagina_mm": {ancho, alto}}, en milímetros desde la esquina superior izquierda de la imagen. La
     caja de la película es la de su componente conexa (la película entera, sin erosionar); la página es la imagen entera (`forma` = (alto, ancho) en píxeles). Una pieza de 10 × 10 cm pegada al borde
@@ -2153,6 +2213,8 @@ def leer_referencia_virgen(carpeta):
     try:
         with open(ruta, "r", encoding="utf-8") as archivo:
             contenido = json.load(archivo)
+    except RecursionError:                # un archivo que anida miles de niveles: `json.load` lanza RecursionError (no ValueError) y su mensaje de Python está en inglés
+        raise ValueError(f"El archivo de la referencia de la película virgen está dañado ({ruta}): anida demasiados niveles.") from None
     except ValueError as error:
         raise ValueError(f"El archivo de la referencia de la película virgen está dañado ({ruta}): {error}") from None
     if not isinstance(contenido, dict) or contenido.get("version") != VERSION_PISO_VIRGEN:

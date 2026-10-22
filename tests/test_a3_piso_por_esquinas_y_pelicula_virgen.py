@@ -277,9 +277,11 @@ class TestElSelectorDeModo:
         assert A2._medianas(con_punto) == A2._medianas(piso(s.pelicula, s.campo, punto=punto, modo="punto_manual"))
         assert tuple(con_punto.punto) == punto and auto.punto is None
 
-    def test_a_cambiar_el_modo_por_omision_es_una_linea_y_sin_referencia_nunca_cae_al_automatico(self, monkeypatch):
+    def test_a_con_la_omision_virgen_y_sin_referencia_son_las_esquinas_y_la_virgen_pedida_nunca_cae_al_automatico(self, monkeypatch):
         """OD.1 (DA-87): con el modo por omision en «virgen» y SIN un modo pedido, la regla (`modo_efectivo`) toma las esquinas si todavia no hay una referencia cargada (el `Piso` dice su origen); con el modo
-        «virgen» PEDIDO y sin referencia el piso sigue siendo «no medible» y nunca cae solo al automatico (V7)."""
+        «virgen» PEDIDO y sin referencia el piso sigue siendo «no medible» y nunca cae solo al automatico (V7). OD.1c (OD1b-PRU-06, OD1c-D4): el `monkeypatch` de abajo se CONSERVA aunque hoy fije el valor que la constante
+        ya tiene: fija la premisa de la prueba (la omision «virgen») aunque la constante cambie manana. Lo que el nombre de antes prometia, que cambiar el modo por omision es UNA linea, no lo prueba este archivo: lo prueba
+        `test_od1_densidad_optica.py::TestUnaConstantePorDecision::test_el_modo_del_piso_por_omision_se_cambia_en_una_linea` (ejecuta una copia del modulo con esa linea cambiada)."""
         s = A2._sint("B", 0.4)
         pel = _pel()
         monkeypatch.setattr(pel, "MODO_DEL_PISO_POR_OMISION", "virgen")
@@ -1352,8 +1354,10 @@ class TestLaPeliculaVirgen:
         x0b, y0b, x1b, y1b = mas.region["caja"]
         assert min(x0b, y0b, ancho - x1b, alto - y1b) >= 5.0 / ESC - 1.0 > margen
 
-    def test_g_el_valor_de_la_virgen_es_la_mediana_de_la_zona_y_no_su_media(self):
-        """Los mismos pixeles claros aislados de arriba (6 % de la zona, +60): la media subiria 3.8 niveles, la mediana 0.1. El valor que se guarda es la mediana (diseño V6)."""
+    def test_g_el_valor_de_la_virgen_es_la_media_sin_lo_que_se_aparta_mas_de_delta_tinta_por_arriba_y_por_abajo(self):
+        """Los mismos pixeles claros aislados de arriba (6 % de la zona, +60): la media pura subiria 3.8 niveles, la mediana 0.1. El valor que se guarda es la MEDIA de la zona SIN lo que se aparta mas de `delta_tinta`
+        niveles de la mediana, por arriba y por abajo (V6 de OD.1, OD1-D5): estos pixeles claros quedan fuera por el lado de ARRIBA del corte (la unica prueba que ve ese lado; la tinta oscura la prueba
+        `test_od1_densidad_optica.py`). OD.1c (OD1b-PRU-05, antes se llamaba «...es_la_mediana_de_la_zona_y_no_su_media»): renombrada porque el nombre decia lo contrario del contrato; las aserciones no cambian."""
         base = _base()[0]
         img = _virgen_arreglo("A").astype(np.int16)
         img[::4, ::4, :] += 60
@@ -1362,6 +1366,9 @@ class TestLaPeliculaVirgen:
         zona = np.array(img[ref.region["caja"][1]:ref.region["caja"][3], ref.region["caja"][0]:ref.region["caja"][2], 1], np.float64)
         assert zona.mean() - np.median(zona) > 3.0, "la prueba tiene que discriminar entre la media y la mediana"
         assert abs(ref.valor("G") - base.valor("G")) <= 0.6 and ref.valor("G") < zona.mean() - 3.0
+        # OD.1c (RJ111): la MEDIANA de la capa (la que mira el rango esperado, no el valor) tampoco se mueve con los claros aislados: sin esta asercion la mutacion «la mediana de la virgen es la media» sobrevivia,
+        # porque el valor es la media recortada y esta prueba solo miraba el valor.
+        assert abs(ref.capas["G"].mediana - base.capas["G"].mediana) <= 0.6
 
     def test_g_el_ancho_de_los_bloques_y_su_minimo_se_usan(self):
         datos = _base()[1]

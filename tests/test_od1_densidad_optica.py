@@ -13,7 +13,8 @@ LO QUE SE GARANTIZA, cada cosa contra una verdad que NO sale del codigo bajo pru
       EPSON008.TIF, EPSON001.TIF y EPSON007, SIN EXCEPCION. La banda de 1 mm se promedia como esa imagen convertida (la media de log10 por pixel, `perfil_central(..., base=)`), asi que una mota brillante
       dentro de la banda ya no acorta el azul (EPSON007 y EPSON008.TIF inplane: 95.85 y 96.04 mm con el promedio lineal, 98.78 y 99.03 con el de los logaritmos). Decision OD1-REV-D1 (opcion B, de Opus,
       vetable por el fisico): `TestLaImagenConvertidaEnPeliculasReales`, `TestElPromedioDeLaBandaEsElDeLaImagenConvertida` (la banda de una `CapaGirada` disenada) y el AST de `perfil_central`.
-  (d) EL RECORTE: mas del 1 % de la zona central en 1.5 niveles o menos es «no medible» con su motivo, solo en netOD.
+  (d) EL RECORTE: mas del 1 % de la zona central en 1.5 niveles o menos es «no medible» con su motivo, solo en netOD y solo si la MEDIANA de la zona central vale 11.5 niveles o menos, una meseta cerca del negro
+      del escaner (OD.1c, OD1c-D1: una marca de tinta dentro de una meseta mas clara no es recorte; sus fronteras las prueba `test_od1c_endurecimiento.py`). El umbral de 1.5 es ABSOLUTO: limite conocido (OD1b-PROD-02).
   (e) PELICULAS REALES (TIFF primero): con el piso de las esquinas y con el piso fijado en los valores del pre-vuelo los FWHM del verde, el azul y el gris, a 0.011 mm; el rojo, «no medible». Los cuatro
       del azul inplane de EPSON007 y EPSON008.TIF (y el gris crossplane de EPSON029 con las esquinas, que con B queda 1.5e-5 fuera) toman el valor de la imagen convertida pixel a pixel, medido por una ruta
       independiente (decision OD1-REV-D1); la tolerancia no cambia.
@@ -304,9 +305,15 @@ class TestVerdadConocidaEnUnaDimension:
 
 # ===================================================================================================== (d) el recorte
 
+# OD.1c (OD1c-D1): la regla del recorte solo mira una meseta cuya MEDIANA esta cerca del negro del escaner (11.5 niveles o menos). Estas pruebas ponian las muestras «recortadas» en 1.0 sobre una meseta de netOD
+# 0.7 (33.9 niveles), que con la regla nueva es TINTA (un 1.0 dentro de una meseta de 34 niveles no puede ser el escaner; sus fronteras: `test_od1c_endurecimiento.py`). Siguen probando lo MISMO, los mismos niveles, las
+# mismas fracciones y las mismas aserciones, sobre una meseta de 5 niveles, que SI esta cerca del negro.
+OD_CERCA_DEL_NEGRO = math.log10(170.0 / 5.0)
+
+
 def posiciones_usables_de_la_meseta():
-    """Los indices del perfil de dosis de netOD 0.7 que `medir_perfil` cuenta como zona central USABLE (la zona central menos la marca del reticulo): sobre ellos se cuenta la fraccion de la regla del recorte."""
-    limpio, centro = perfil_de_dosis(0.7)
+    """Los indices del perfil de dosis de netOD `OD_CERCA_DEL_NEGRO` que `medir_perfil` cuenta como zona central USABLE (la zona central menos la marca del reticulo): sobre ellos se cuenta la fraccion de la regla del recorte."""
+    limpio, centro = perfil_de_dosis(OD_CERCA_DEL_NEGRO)
     m = medir(limpio, centro, BASE_OD)
     x = limpio.desde_px + np.arange(len(limpio.valores), dtype=float)
     usables = (x >= m.zona_px[0]) & (x <= m.zona_px[1]) & ~((x >= m.exclusion_px[0]) & (x <= m.exclusion_px[1]))
@@ -314,7 +321,7 @@ def posiciones_usables_de_la_meseta():
 
 
 def perfil_con_k_muestras_en(k, nivel, posiciones):
-    """El perfil de dosis de netOD 0.7 con EXACTAMENTE `k` de las muestras usables de la meseta puestas en `nivel`, repartidas parejo por toda la zona: (perfil, centro)."""
+    """El perfil de dosis de netOD `OD_CERCA_DEL_NEGRO` (una meseta de 5 niveles) con EXACTAMENTE `k` de las muestras usables de la meseta puestas en `nivel`, repartidas parejo por toda la zona: (perfil, centro)."""
     elegidas = posiciones[np.linspace(0, len(posiciones) - 1, k).round().astype(int)]
     assert len(set(elegidas.tolist())) == k
 
@@ -322,7 +329,7 @@ def perfil_con_k_muestras_en(k, nivel, posiciones):
         v = v.copy()
         v[elegidas] = nivel
         return v
-    return perfil_de_dosis(0.7, modificar=poner)
+    return perfil_de_dosis(OD_CERCA_DEL_NEGRO, modificar=poner)
 
 
 class TestElRecorteEsNoMedible:
@@ -341,14 +348,14 @@ class TestElRecorteEsNoMedible:
 
     @pytest.mark.parametrize("fraccion, mide", [(0.0, True), (0.004, True), (0.02, False), (0.30, False)])
     def test_la_regla_es_mas_del_uno_por_ciento_de_la_zona_en_un_nivel_y_medio_o_menos(self, fraccion, mide):
-        """Las muestras recortadas se reparten por TODA la zona (cada k-esima), a niveles de 1.0 (<= 1.5)."""
+        """Las muestras recortadas se reparten por TODA la zona (cada k-esima), a niveles de 1.0 (<= 1.5), sobre una meseta de 5 niveles (OD.1c: cerca del negro del escaner; sobre una de 34 niveles esas muestras son tinta)."""
         def con_recorte(x, v):
             if fraccion > 0:
                 paso = max(2, int(round(1.0 / fraccion)))
                 v = v.copy()
                 v[(np.arange(len(v)) % paso == 0) & (np.abs(x - 1700.0) * TAM < 38.0)] = 1.0
             return v
-        perfil, centro = perfil_de_dosis(0.7, modificar=con_recorte)
+        perfil, centro = perfil_de_dosis(OD_CERCA_DEL_NEGRO, modificar=con_recorte)
         m = medir(perfil, centro, BASE_OD)
         if mide:
             assert m.ok, (fraccion, m.estado)
@@ -356,10 +363,12 @@ class TestElRecorteEsNoMedible:
             assert not m.ok and _pm().MOTIVO_MESETA_RECORTADA in m.estado, (fraccion, m.estado)
 
     def test_un_nivel_de_dos_no_esta_recortado(self):
-        """El umbral es 1.5 niveles: una meseta de 2 niveles (netOD enorme pero real) se mide."""
+        """LIMITE CONOCIDO (OD1b-PROD-02, OD.1c), no «una netOD enorme pero real»: el umbral es 1.5 niveles y es ABSOLUTO, asi que una meseta clavada en 2 niveles (un escaner cuyo negro estuviera en 2) NO se reconoce
+        como recortada: se mide y se puede guardar. Con el WF-6590 de hoy el rojo recortado lee 0 o 1 y no pasa; si cambia el escaner, se revisa `NIVEL_DE_RECORTE` (su comentario dice como). Si alguien lo arregla,
+        esta prueba cae y se actualiza con su motivo. La version con la pelicula real, `test_od1c_endurecimiento.py`."""
         perfil, centro = perfil_de_dosis(1.93, piso=170.0, modificar=lambda x, v: np.maximum(v, 2.0))
         m = medir(perfil, centro, BASE_OD)
-        assert "recortada" not in m.estado
+        assert m.ok and "recortada" not in m.estado, m.estado
 
     def test_el_recorte_se_cuenta_solo_en_la_zona_central_y_no_en_todo_el_perfil(self):
         """La regla es de la MESETA (la zona central, a +-40 % del ancho luminoso): un tramo del perfil casi negro FUERA de ella (una mancha de tinta entre su limite, a 39.8 mm, y el borde del campo, a 49.8)
@@ -369,7 +378,7 @@ class TestElRecorteEsNoMedible:
             v = v.copy()
             v[(u > 41.0) & (u < 46.0)] = 0.3
             return v
-        perfil, centro = perfil_de_dosis(0.7, modificar=tinta_afuera)
+        perfil, centro = perfil_de_dosis(OD_CERCA_DEL_NEGRO, modificar=tinta_afuera)           # OD.1c: una meseta de 5 niveles (cerca del negro); con 34 la regla ni miraria esta meseta y la mutacion N16 sobreviviria
         afuera = np.asarray(perfil.valores) <= 1.5
         assert 0.05 < afuera.mean() < 0.09, "premisa: el tramo oscuro es el 7 % del perfil"
         m = medir(perfil, centro, BASE_OD)

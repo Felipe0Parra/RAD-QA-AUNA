@@ -577,8 +577,9 @@ BASE_DENSIDAD_OPTICA = "densidad óptica neta"
 BASES = (BASE_DENSIDAD_OPTICA, BASE_VALOR_DE_PIXEL)
 BASE_POR_OMISION = BASE_DENSIDAD_OPTICA                        # EL lugar para cambiar la base del análisis (una línea): viaja como `PARAMETROS["base_de_la_medida"]` y cada análisis guarda la que usó
 VP_MINIMO = 0.5                                                # medio nivel de 8 bits: por debajo, el escáner recortó y log10(piso / v) no existe; se toma este piso del logaritmo (el del pre-vuelo `od_prevuelo.py`)
-NIVEL_DE_RECORTE = 1.5                                         # la regla del recorte (solo netOD): una muestra de la meseta en este nivel o menos está recortada por el escáner (el rojo a 800 UM: 66 a 99.6 % de la meseta; verde, azul y gris, 0 %)
+NIVEL_DE_RECORTE = 1.5                                         # el NEGRO DEL ESCÁNER en la regla del recorte (solo netOD): una muestra de la meseta en este nivel o menos está recortada por el escáner (el rojo a 800 UM: la mediana de su meseta vale de 0.5 a 1.0 en las 8 películas; verde, azul y gris, 18 o más). LÍMITE CONOCIDO (OD1b-PROD-02, OD.1c): es un umbral ABSOLUTO; con un escáner cuyo negro estuviera en 2 niveles o más una meseta recortada no se reconocería y daría un ancho creíble. REAPERTURA: si cambia el escáner o sus ajustes, medir la mediana del rojo de una película a 800 UM en la zona central y, si pasa de 1.5, subir esta constante y su prueba
 FRACCION_DE_RECORTE_MAXIMA = 0.01                              # y más de esta fracción de la zona central recortada hace «no medible» a esa capa (logs/OD/od_recorte.log: de 0 % a 66 % no hay ninguna película en medio)
+MARGEN_DEL_RECORTE = 10.0                                      # OD.1c (OD1c-D1, vetable por el físico): la regla del recorte solo mira una meseta cuya MEDIANA vale NIVEL_DE_RECORTE más este margen o menos: el escáner solo recorta una meseta cerca de su negro; una muestra de 1.5 o menos dentro de una meseta más clara es tinta, polvo o un rayón (8 películas reales: mediana del rojo de 0.5 a 1.0; la más baja del verde 26.1, del azul 32.3 y del gris 18.6; ruido de la banda de 2.6 niveles como máximo)
 MOTIVO_MESETA_RECORTADA = "la meseta está recortada por el escáner"
 EJES = ("crossplane", "inplane")                            # crossplane = horizontal (recorre x, la banda promedia filas); inplane = vertical (recorre y, la banda promedia columnas)
 LADOS_DEL_EJE = {"crossplane": ("izquierdo", "derecho"), "inplane": ("superior", "inferior")}     # (menor, mayor) a lo largo del eje
@@ -1075,8 +1076,10 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None)
     del centro del campo: en el azul, la única capa lineal en la dosis, el FWHM sale más ancho unos 0.0225 mm por cada 1 % de cúpula, 0.13 mm con -5.7 % (C2-D15, medido contra el generador de PF.0). Es la
     definición del plan y no un defecto de la medida; los 0.15 mm del protocolo contra la dosis valen con la meseta plana (en netOD la meseta sigue siendo el nivel medio de la zona, no la media de las densidades). BASE
     (OD.1): `base`, una de `BASES`, normaliza el perfil entre el piso (0) y la meseta (1) con `normalizar` (netOD: n = log10(piso / v) / log10(piso / meseta); valor de píxel: (piso - v) / (piso - meseta)); el `perfil` ya viene promediado en esa base (`perfil_central(base=)`: en netOD, la media de log10 por píxel de la banda); la altura media es
-    n = `altura_media` y los niveles de la altura media y de la penumbra, en niveles de 8 bits, salen de `nivel_de_la_base`. SOLO EN netOD, si más de `FRACCION_DE_RECORTE_MAXIMA` de las muestras de la zona central valen
-    `NIVEL_DE_RECORTE` niveles o menos, la meseta está recortada por el escáner (`MOTIVO_MESETA_RECORTADA`) y el perfil es «no medible». BORDES: se buscan DESDE LA MESETA HACIA
+    n = `altura_media` y los niveles de la altura media y de la penumbra, en niveles de 8 bits, salen de `nivel_de_la_base`. SOLO EN netOD, si la MEDIANA de la zona central vale `NIVEL_DE_RECORTE` más `MARGEN_DEL_RECORTE` niveles o menos (una meseta cerca del negro del escáner, el único lugar donde el escáner la
+    puede recortar) y más de `FRACCION_DE_RECORTE_MAXIMA` de las muestras de la zona central valen `NIVEL_DE_RECORTE` niveles o menos, la meseta está recortada por el escáner (`MOTIVO_MESETA_RECORTADA`) y el perfil
+    es «no medible». Una muestra de ese nivel dentro de una meseta más clara es tinta, polvo o un rayón y la regla no la mira: la tinta se trata como en valor de píxel (la aparta de la meseta lo que baja de la
+    mediana más de `delta_tinta`). BORDES: se buscan DESDE LA MESETA HACIA
     AFUERA, el primer cruce al salir de la zona central (nunca el punto más cercano a la altura media de todo el perfil), con interpolación lineal subpíxel, sobre el perfil suavizado
     `suavizado_perfil_mm`. La penumbra de cada lado va del `penumbra_alta` al `penumbra_baja` de la señal; si el perfil llega al borde de la película antes de cruzar el segundo queda «incompleta» (None y el aviso),
     nunca un número inventado. Lo que no se puede medir NO lanza: la medida dice «no medible» con su motivo y trae lo que sí se midió (por ejemplo un solo borde). `ValueError` solo si la base no existe o a
@@ -1113,7 +1116,7 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None)
     datos.update(meseta=meseta, muestras_meseta=int(sin_tinta.sum()))
     if not contraste >= P["contraste_minimo"]:
         return _no_medible(perfil, centro, f"el piso no es más claro que la meseta en al menos {P['contraste_minimo']:g} niveles (piso {piso:.1f}, meseta {meseta:.1f})", **datos)
-    if base == BASE_DENSIDAD_OPTICA:
+    if base == BASE_DENSIDAD_OPTICA and mediana <= NIVEL_DE_RECORTE + MARGEN_DEL_RECORTE:
         recortada = float(np.mean(v[usables] <= NIVEL_DE_RECORTE))
         if recortada > FRACCION_DE_RECORTE_MAXIMA:          # el escáner recortó la meseta (el rojo a 800 UM): el logaritmo de un valor recortado no es la densidad óptica y ninguna capa «con netOD» se inventa
             return _no_medible(perfil, centro, f"{MOTIVO_MESETA_RECORTADA}: el {100 * recortada:.0f} % de la zona central de la meseta vale {NIVEL_DE_RECORTE:g} niveles o menos y la densidad óptica no existe", **datos)
