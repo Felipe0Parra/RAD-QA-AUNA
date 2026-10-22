@@ -2401,11 +2401,17 @@ class TestEstructura:
         assert "piso_de_pelicula" not in texto and "referencia_virgen" not in texto
 
     def test_k_ningun_codigo_de_produccion_consume_todavia_el_piso(self):
-        """Lo consume C.2: A.3 no cambia pantallas, PDF ni base. Ningun archivo de produccion, fuera de `pelicula.py`, nombra las funciones nuevas.
+        """Lo consumen C.2 y E.1: A.3 no cambia pantallas, PDF ni base. Fuera de `pelicula.py`, solo nombran las funciones nuevas el motor mensual y la ventana del analisis mensual.
 
         EDITADA EN C.2 (17-10-2026, clase b: fijaba el contrato de «nadie lo consume todavia»; el nombre de la prueba es el de A.3 y se conserva para no perder su identidad en el inventario): el consumo que A.3
-        anticipaba llego con `placa_mensual.analizar` (el motor mensual), que llama UNA vez a `piso_de_pelicula`. Hoy ese es el UNICO archivo de produccion, fuera de `pelicula.py`, que nombra alguna de
-        estas funciones, y solo nombra `piso_de_pelicula`: la pelicula virgen, su persistencia y el modo por omision los consumiran la ventana (E.1) y el guardado (D.1)."""
+        anticipaba llego con `placa_mensual.analizar` (el motor mensual), que llama UNA vez a `piso_de_pelicula`. Ese era el UNICO archivo de produccion, fuera de `pelicula.py`, que nombraba alguna de
+        estas funciones, y solo nombraba `piso_de_pelicula`: la pelicula virgen, su persistencia y el modo por omision los consumirian la ventana (E.1) y el guardado (D.1).
+
+        EDITADA EN E.1 (21-10-2026, clase b: fijaba el contrato de «solo el motor mensual lo consume»; la identidad de la prueba se conserva por la misma razon): el consumo que C.2 anticipaba llego con la
+        ventana del analisis mensual (`VentanaPlacaMensual`), que elige el modo del piso (`MODO_DEL_PISO_POR_OMISION`), mide la pelicula virgen (`piso_de_pelicula_virgen`) y la guarda y la lee junto a la
+        base (`guardar_referencia_virgen`, `leer_referencia_virgen`). Hoy los UNICOS archivos de produccion, fuera de `pelicula.py`, que nombran alguna de estas funciones son el motor mensual (solo
+        `piso_de_pelicula`) y esa ventana (las cinco); el servicio del guardado (D.1) recibe la referencia por argumento y no las nombra, y el modulo de dibujo tampoco. Un consumidor nuevo sigue haciendo
+        caer la prueba."""
         nombres = ("piso_de_pelicula", "piso_de_pelicula_virgen", "guardar_referencia_virgen", "leer_referencia_virgen", "MODO_DEL_PISO_POR_OMISION")
         usan = {}
         for ruta in RAIZ.rglob("*.py"):
@@ -2416,7 +2422,8 @@ class TestEstructura:
             hallados = [n for n in nombres if n in texto]
             if hallados:
                 usan[str(ruta.relative_to(RAIZ))] = hallados
-        assert usan == {"analisisImagenes/placa_mensual.py": ["piso_de_pelicula"]}, usan
+        assert usan == {"analisisImagenes/placa_mensual.py": ["piso_de_pelicula"],
+                        "ui/paginasControles/PruebasMensuales/placa_mensual.py": ["piso_de_pelicula", "piso_de_pelicula_virgen", "guardar_referencia_virgen", "leer_referencia_virgen", "MODO_DEL_PISO_POR_OMISION"]}, usan
 
     def test_k_la_escala_sale_de_escala_mm_y_ninguna_funcion_nueva_divide_25_4(self):
         _, arbol = _fuente("analisisImagenes/pelicula.py")
