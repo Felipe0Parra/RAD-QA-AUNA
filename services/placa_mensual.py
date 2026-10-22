@@ -133,7 +133,7 @@ def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, pu
     está anulado o no existe (W1).
 
     `ref`: el id del control (`controles.id`). `datos`: los bytes de la imagen tal como se subió (bytes o bytearray). `nombre`: el nombre del archivo (se guarda sin la carpeta). `puntos`: los CINCO CLICS (x, y)
-    en cualquier orden: aquí se refinan. `parametros`: los `P` con que se mide (TODOS los de `analisisImagenes.placa_mensual.VALORES_DE_LA_GEOMETRIA`, los 40: si falta uno se rechaza, porque el motor lo rellenaria con el valor de hoy y lo guardado dejaria de
+    en cualquier orden: aquí se refinan. `parametros`: los `P` con que se mide (TODOS los de `analisisImagenes.placa_mensual.VALORES_DE_LA_GEOMETRIA`, incluida la base de la medida: si falta uno se rechaza, porque el motor lo rellenaria con el valor de hoy y lo guardado dejaria de
     reproducirse si ese valor cambia; se guardan y al reabrir se recalcula con ESTOS).
     `capa`: la que el físico reporta (`R`, `G` o `B`, mayúscula exacta; el gris no se ofrece), SIN valor por omisión. `modo_piso`: «automatico», «punto_manual» o «virgen», SIN valor por omisión;
     `punto_manual` (x, y) es el sexto clic del modo «punto_manual»; `referencia_virgen` es la `ReferenciaVirgen` del modo «virgen». Si la capa elegida no es medible, por el motivo que sea, no se guarda.

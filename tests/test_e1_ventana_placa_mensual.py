@@ -16,7 +16,7 @@ NO sale de la ventana (el motor sobre esos mismos bytes: `leer_pelicula` + `refi
      orden de los clics no importa; el analisis falla con aviso (nunca con una excepcion) y el cursor de espera y el indicador estan puestos solo mientras se mide.
   4. «MARCAR PELICULA SIN IRRADIAR». El clic siguiente es el SEXTO: nunca entra a la clasificacion de los cinco puntos, pone el menu «Piso» en «Punto marcado», dibuja su cuadrado de 3 x 3 mm y, con los cinco
      puntos hechos, vuelve a medir con el.
-  5. EL ANALISIS ES EL DEL MOTOR (los valores de cada capa, el piso, el barrido) y se mide con los 40 parametros de fabrica, sin ningun control que los cambie.
+  5. EL ANALISIS ES EL DEL MOTOR (los valores de cada capa, el piso, el barrido) y se mide con los parametros de fabrica (todos, la base incluida), sin ningun control que los cambie.
   6. CADA PESTANA DIBUJA LO QUE DICE. (1) la imagen con los cinco clics, su punto refinado y su circulo de busqueda, el recuadro del campo luminoso (los vertices de `recuadro_luminoso`, los mismos del PDF),
      las diagonales, el cruce, el reticulo, las dos bandas de 1 mm, la zona central y la region del piso; al lado los dos perfiles del GRIS con todas sus lineas y debajo la tabla de sus desfases;
      (2) las tres capas acondicionadas en `jet` con la cruz, la cuadricula, el recuadro y la region del piso; (3) los ocho perfiles completos (la pelicula a los dos lados del campo, en mm desde el cruce)
@@ -61,6 +61,17 @@ from test_d1_guardado_placa_mensual import _control, _P, bd, clics, oraculos, pl
 
 
 # ------------------------------------------------------------------------------------------------------ el oraculo: el motor, directamente
+
+from _e1_ayudas import con_la_base_de_pixel  # noqa: F401  (fixture)
+
+
+# OD.1 (DA-87): la netOD es la base por omision del analisis y el rojo de la sintetica esta recortado en ella (la capa roja ya no se mide ni se guarda). Las pruebas de la
+# ventana de E.1 prueban el flujo (marcar, medir, guardar, reabrir, la regla de D.1b) con las TRES capas medibles, asi que fijan la base de VALOR DE PIXEL en todo el
+# archivo; la ventana en netOD (el menu del piso, el cuadro de la virgen, los perfiles dibujados en la base) la prueba `test_od1_densidad_optica.py`.
+@pytest.fixture(scope="module", autouse=True)
+def _base_de_pixel(con_la_base_de_pixel):
+    yield
+
 
 @pytest.fixture(scope="module")
 def directo(placa, clics):
@@ -204,7 +215,8 @@ class TestLaVentanaArranca:
         assert v.abrir_guardado() is False and v.estado == "vacia" and not dialogos.llamadas
 
     def test_los_menus_arrancan_en_lo_que_dicen_las_constantes(self, ventana):
-        assert ventana.capa_reportada == pel().CAPA_POR_OMISION == "G" and ventana.modo_del_piso == pel().MODO_DEL_PISO_POR_OMISION == "automatico"
+        # OD.1: la constante del modo de omision es «virgen» y el menu arranca en `modo_efectivo`: sin una pelicula virgen cargada (esta ventana no tiene ninguna) son las esquinas
+        assert ventana.capa_reportada == pel().CAPA_POR_OMISION == "G" and pel().MODO_DEL_PISO_POR_OMISION == "virgen" and ventana.modo_del_piso == pel().modo_efectivo(None, None) == "automatico"
         assert ventana.selector_capa.isEnabled() and ventana.selector_piso.isEnabled()
         # `_restablecer_estado` (lo llaman el constructor y Limpiar, y los dos lo siguen con `refrescar`, que devolveria al modo de omision uno que no esta disponible) deja los dos menus en su valor inicial
         # POR SI SOLO: sin esta llamada directa una rotura de esa linea quedaria tapada por `refrescar`.
@@ -643,7 +655,7 @@ class TestElAnalisisEsElDelMotor:
         assert piso.modo == "automatico" and piso.como_dict() == oraculos["automatico"].piso
 
     def test_se_mide_con_los_40_parametros_de_fabrica_enteros(self, solo_lectura):
-        assert solo_lectura.v._resultado.parametros == _P() and len(_P()) == 40
+        assert solo_lectura.v._resultado.parametros == _P() and len(_P()) == len(pm().VALORES_DE_LA_GEOMETRIA) == 41      # OD.1: eran 40; la base de la medida es el 41
 
     def test_la_pelicula_no_se_retiene_tras_el_analisis(self, solo_lectura):
         v = solo_lectura.v
@@ -795,7 +807,8 @@ class TestPestana2Capas:
     def test_el_titulo_dice_el_piso_y_la_meseta_con_que_se_normalizo(self, solo_lectura, directo, k, capa):
         m = directo.resultado.capas[capa]
         meseta = float(np.mean([m.crossplane.meseta, m.inplane.meseta]))
-        assert solo_lectura.v._fig_capas.axes[k].get_title() == f"Capa {ADJETIVO[capa]}: 0 es el piso ({m.piso:.1f}) y 1 la meseta ({meseta:.1f})"
+        # OD.1 (21-10): el titulo dice ademas la base con que se acondiciono la capa («; base: ...»: la que dice el motor).
+        assert solo_lectura.v._fig_capas.axes[k].get_title() == f"Capa {ADJETIVO[capa]}: 0 es el piso ({m.piso:.1f}) y 1 la meseta ({meseta:.1f}); base: {directo.resultado.base}"
 
     def test_la_cruz_punteada_blanca_pasa_por_el_cruce_de_diagonales_y_hay_cuadricula(self, solo_lectura, directo):
         cx, cy = directo.resultado.girada.cruce
@@ -920,8 +933,10 @@ class TestPestana3PerfilesPorCapa:
         piso = directo.resultado.piso
         distancia = piso.region.distancia_media_mm
         esperado = f"Piso (capa verde): {piso.capas['G'].mediana:.0f} niveles; automático, en las cuatro esquinas de la película a {distancia:.1f} mm del campo."
-        assert solo_lectura.v.etiqueta_piso.text() == esperado
-        assert [w.text() for w in recorrer(solo_lectura.v) if isinstance(w, QLabel) and w.text().startswith("Piso (capa")] == [esperado], "la distancia del piso al campo se dice UNA vez, no en cada pestana"
+        # OD.1 (21-10): la linea empieza por la frase de la base con que se midio, y tras ella viene la del piso de siempre.
+        esperado_completo = dibujo_mod().texto_de_la_base(directo.resultado.base) + " " + esperado
+        assert solo_lectura.v.etiqueta_piso.text() == esperado_completo
+        assert [w.text() for w in recorrer(solo_lectura.v) if isinstance(w, QLabel) and "Piso (capa" in w.text()] == [esperado_completo], "la distancia del piso al campo se dice UNA vez, no en cada pestana"
 
 
 class TestPestana4Barridos:
@@ -1322,7 +1337,7 @@ def _funciones_alcanzables(fuentes, raices):
 
 
 def parametros_que_entran_en_la_medida(fuentes, claves):
-    """Las claves de `claves` (los 40 parametros) que aparecen como constante de texto en las funciones alcanzables desde `analizar`, `barrido`, `refinar_marca` y el piso: `P["x"]`, `P.get("x")`, `_pedir(P, ("x",))` y
+    """Las claves de `claves` (todos los parametros) que aparecen como constante de texto en las funciones alcanzables desde `analizar`, `barrido`, `refinar_marca` y el piso: `P["x"]`, `P.get("x")`, `_pedir(P, ("x",))` y
     el `P['x']` dentro de un mensaje (f-string) son todas constantes de texto."""
     funciones = _funciones_alcanzables(fuentes, ("analizar", "barrido", "refinar_marca", "piso_de_pelicula", "perfil_central", "girar"))
     encontradas = set()
@@ -1346,7 +1361,7 @@ class TestCadaParametroTieneSuTrazo:
 
     def test_las_entradas_son_exactamente_los_40_parametros_y_declaran_un_tipo_conocido(self):
         trazo = dibujo_mod().TRAZO_DE_PARAMETRO
-        assert set(trazo) == set(_P()) and len(trazo) == 40
+        assert set(trazo) == set(_P()) and len(trazo) == 41      # OD.1: eran 40; la base de la medida es el 41
         tipos = {"marca", "sexto", "banda", "zona", "perfil", "exclusion", "pagina", "pie"}
         assert all(isinstance(v, tuple) and len(v) == 2 and v[0] in tipos and isinstance(v[1], str) and v[1] for v in trazo.values())
 

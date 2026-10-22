@@ -64,8 +64,11 @@ TEXTO_DE_LA_VIRGEN = "Película virgen..."
 RESPUESTA_AL_REEMPLAZAR = "Ya hay un análisis guardado para este control. Guardar este lo REEMPLAZA (el anterior queda anulado, con su rastro). ¿Reemplazarlo?"
 NOTA_DE_LA_CAPA = ("Capa con la que se reporta este análisis: la que se guarda y la que imprimen los PDF (rojo, verde o azul). Cambiarla no vuelve a medir nada. Con un análisis guardado o abierto "
                    "queda fija en la capa de ese análisis: para reportar otra, pulse Recalcular.")
-NOTA_DEL_PISO = ("Cómo se toma el piso de la película: automático (en las cuatro esquinas), el punto marcado sobre película sin irradiar o la película virgen guardada como referencia. Cambiarlo vuelve a "
-                 "medir (el piso cambia los números); se guarda y se imprime con el análisis. Con un análisis guardado o abierto queda fijo: para tomar otro piso, pulse Recalcular.")
+NOTA_DEL_PISO = ("Cómo se toma el piso de la película: la película virgen guardada como referencia (el piso por omisión cuando la hay), automático (en las cuatro esquinas) o el punto marcado sobre película "
+                 "sin irradiar. Cambiarlo vuelve a medir (el piso cambia los números); se guarda y se imprime con el análisis. Con un análisis guardado o abierto queda fijo: para tomar otro piso, pulse Recalcular.")
+AYUDA_DE_LA_VIRGEN = (f"Mide una película virgen (sin irradiar) escaneada aparte y la guarda como referencia: su valor medio por capa es el piso de los análisis. Escanéela UNA vez, en TIFF a "
+                      f"{motor.VALORES_DE_LA_GEOMETRIA['resolucion_escaneo_dpi']:g} ppp, en el mismo lugar del vidrio donde van las placas (una pieza de 10 × 10 cm) o como una hoja entera; el cuadro muestra su "
+                      "uniformidad y su ruido como el Catphan.")
 
 
 # ----------------------------------------------------------------------------------------------------- piezas de pantalla (copias de las de la posición inicial; ver obstaculos de E.1)
@@ -209,7 +212,8 @@ def _nombre_del_usuario(usuario):
 # ----------------------------------------------------------------------------------------------------- la película virgen
 
 class DialogoPeliculaVirgen(QDialog):
-    """El cuadro de «Película virgen...»: el escaneo de la película virgen con la zona que se midió dibujada, su valor por capa, cada comprobación con su cifra y su resultado en palabras, los avisos, de
+    """El cuadro de «Película virgen...»: el escaneo de la película virgen con la zona que se midió y las cinco regiones de la uniformidad dibujadas, su valor por capa (la media: el piso), su uniformidad y su
+    ruido como los mide el Catphan (OD.1), dónde estaba la película en el vidrio del escáner, cada comprobación con su cifra y su resultado en palabras, los avisos, de
     dónde salió el archivo y la orientación que el físico declara (no se mide), y «Guardar como referencia» (solo si la referencia es válida; si ya había una, pregunta con «No» por omisión). NO guarda nada
     por sí mismo: al aceptar deja `guardar_solicitado` en True y `referencia_final()` con la orientación declarada; quien lo abrió escribe el archivo y la fila de auditoría."""
 
@@ -228,9 +232,16 @@ class DialogoPeliculaVirgen(QDialog):
         derecha = QVBoxLayout()
         self.resumen = _recuadro()
         derecha.addWidget(self.resumen)
-        derecha.addWidget(QLabel("Valor de la película virgen por capa"))
+        derecha.addWidget(QLabel("Valor de la película virgen por capa (es el piso)"))
         self.tabla_valores = _nueva_tabla(dibujo.COLUMNAS_DE_LA_VIRGEN, 150)
         derecha.addWidget(self.tabla_valores)
+        derecha.addWidget(QLabel("Uniformidad y ruido"))
+        self.tabla_uniformidad = _nueva_tabla(dibujo.COLUMNAS_DE_LA_UNIFORMIDAD, 150)
+        derecha.addWidget(self.tabla_uniformidad)
+        self.nota_uniformidad = _recuadro()
+        derecha.addWidget(self.nota_uniformidad)
+        self.caja_de_la_pelicula = _recuadro()
+        derecha.addWidget(self.caja_de_la_pelicula)
         derecha.addWidget(QLabel("Comprobaciones"))
         self.tabla_pruebas = _nueva_tabla(dibujo.COLUMNAS_DE_LAS_PRUEBAS, 200)
         derecha.addWidget(self.tabla_pruebas, 1)
@@ -264,6 +275,9 @@ class DialogoPeliculaVirgen(QDialog):
         r = self.referencia
         self.resumen.setText(r.descripcion())
         _llenar_tabla(self.tabla_valores, dibujo.filas_de_la_virgen(r))
+        _llenar_tabla(self.tabla_uniformidad, dibujo.filas_de_la_uniformidad(r))
+        self.nota_uniformidad.setText(dibujo.texto_de_la_uniformidad(r))
+        self.caja_de_la_pelicula.setText(dibujo.texto_de_la_caja_de_la_pelicula(r))
         _llenar_tabla(self.tabla_pruebas, dibujo.filas_de_las_pruebas(r))
         _poner_texto(self.avisos, "Avisos: " + "; ".join(r.avisos) if r.avisos else "")
         self.procedencia.setText(dibujo.texto_de_la_procedencia(r))
@@ -273,6 +287,7 @@ class DialogoPeliculaVirgen(QDialog):
             return
         dibujo.dibujar_imagen(self.eje, dibujo.imagen_rgb(pelicula))
         dibujo.dibujar_zona_de_la_virgen(self.eje, r)
+        dibujo.dibujar_regiones_de_la_virgen(self.eje, r)
         manejadores, etiquetas = self.eje.get_legend_handles_labels()
         if manejadores:
             self.eje.legend(manejadores, etiquetas, loc="upper center", bbox_to_anchor=(0.5, -0.1), fontsize=7)
@@ -314,6 +329,7 @@ class VentanaPlacaMensual(QWidget):
         self.setWindowTitle(f"Análisis de la placa del campo luminoso - {equipo}" if equipo else "Análisis de la placa del campo luminoso")
         self._referencia_virgen = None
         self._aviso_referencia = ""
+        self._modo_elegido = False               # True cuando el físico eligió el piso (el menú, el sexto clic): una referencia nueva no se lo cambia
         self.resize(*_tamano_inicial())
         self._construir()
         self._restablecer_estado()
@@ -352,6 +368,7 @@ class VentanaPlacaMensual(QWidget):
             self.selector_piso.addItem("", modo)
         self.etiqueta_piso_menu.setBuddy(self.selector_piso)
         self.boton_virgen = QPushButton(TEXTO_DE_LA_VIRGEN)
+        self.boton_virgen.setToolTip(AYUDA_DE_LA_VIRGEN)
         self.etiqueta_capa = QLabel("Capa reportada:")
         self.selector_capa = _SelectorSinRueda()
         self.selector_capa.setToolTip(NOTA_DE_LA_CAPA)
@@ -518,7 +535,7 @@ class VentanaPlacaMensual(QWidget):
             self.selector_piso.blockSignals(bloqueado)
 
     def _parametros(self):
-        """Los parámetros con que se mide: una copia de los del motor (los 40, de fábrica). Ningún control de la ventana los cambia (PD1)."""
+        """Los parámetros con que se mide: una copia de los del motor (todos, de fábrica, incluida la base del análisis). Ningún control de la ventana los cambia (PD1)."""
         return copy.deepcopy(motor.VALORES_DE_LA_GEOMETRIA)
 
     def _descartar_resultado(self):
@@ -583,8 +600,9 @@ class VentanaPlacaMensual(QWidget):
         for etiqueta in (self.etiqueta_imagen, self.etiqueta_marcas, self.etiqueta_registro):
             _poner_texto(etiqueta, "")
         self._poner_capa(pel.CAPA_POR_OMISION)                  # el menú de la capa reportada arranca en la capa por omisión (el valor inicial: ningún PDF la lee)
+        self._modo_elegido = False
         self._actualizar_el_menu_del_piso()
-        self._poner_modo(pel.MODO_DEL_PISO_POR_OMISION)
+        self._poner_modo(self._modo_por_omision())
         self.pestanas.setCurrentIndex(PESTANA_IMAGEN)
 
     # ----------------------------------------------------------------------------------------------------- el menú «Piso» y la película virgen
@@ -593,8 +611,15 @@ class VentanaPlacaMensual(QWidget):
         """La carpeta de la base de datos: donde se guarda la película virgen de referencia (la comparten todos los equipos que abren esa base)."""
         return os.path.dirname(conection.ruta_base_datos())
 
+    def _modo_por_omision(self):
+        """El modo del piso con que arranca el menú «Piso» (OD.1): `pelicula.modo_efectivo`, la ÚNICA regla (la película virgen si hay una referencia válida y las esquinas si no; el cambio de omisión es la
+        constante `MODO_DEL_PISO_POR_OMISION` de `pelicula.py`)."""
+        return pel.modo_efectivo(None, self._referencia_utilizable())
+
     def refrescar(self):
-        """Vuelve a leer la película virgen de referencia (y con ella el menú «Piso»). Público y llamado en `showEvent`: la ventana puede quedar abierta mientras otro equipo guarda una referencia nueva."""
+        """Vuelve a leer la película virgen de referencia (y con ella el menú «Piso»). Público y llamado en `showEvent`: la ventana puede quedar abierta mientras otro equipo guarda una referencia nueva.
+        Mientras el físico no haya ELEGIDO el piso (el menú o el sexto clic) y no haya un análisis guardado a la vista, el menú sigue a `_modo_por_omision`: una referencia que aparece se usa sola (y si ya
+        había un análisis de esta sesión, se vuelve a medir con ella); una elección del físico se respeta."""
         try:
             self._referencia_virgen = pel.leer_referencia_virgen(self._carpeta_de_la_base())
             self._aviso_referencia = ""
@@ -602,7 +627,11 @@ class VentanaPlacaMensual(QWidget):
             self._referencia_virgen = None
             self._aviso_referencia = str(error)
         modo_perdido = self._actualizar_el_menu_del_piso()
-        if len(self._marcas) == 5 and self._estado_actual in ("analizada", "fallida") and (modo_perdido or self._la_virgen_del_analisis_ya_no_es_la_vigente()):
+        cambio_de_modo = False
+        if self._estado_actual != "registro" and not self._modo_elegido and self._modo_por_omision() != self.modo_del_piso:
+            self._poner_modo(self._modo_por_omision())
+            cambio_de_modo = True
+        if len(self._marcas) == 5 and self._estado_actual in ("analizada", "fallida") and (modo_perdido or cambio_de_modo or self._la_virgen_del_analisis_ya_no_es_la_vigente()):
             self._analizar()                        # el análisis se hizo con un modo que ya no está disponible, o con una película virgen que ya no es la vigente: se vuelve a medir con la que el menú dice
         else:
             self._aplicar_la_regla()
@@ -658,7 +687,8 @@ class VentanaPlacaMensual(QWidget):
         finally:
             self.selector_piso.blockSignals(bloqueado)
         if self._estado_actual != "registro" and not disponible.get(self.modo_del_piso, True):
-            self._poner_modo(pel.MODO_DEL_PISO_POR_OMISION)
+            self._modo_elegido = False               # lo que el físico había elegido ya no existe: el menú vuelve a seguir a la omisión
+            self._poner_modo(self._modo_por_omision())
             return True
         return False
 
@@ -691,7 +721,7 @@ class VentanaPlacaMensual(QWidget):
         audit_minimo.registrar(self.usuario, audit_minimo.ACCION_REEMPLAZO if existia else audit_minimo.ACCION_GUARDAR, "piso_pelicula_virgen", ref=str(pr["sha256"])[:8],
                                detalle=dibujo.detalle_de_la_referencia_virgen(pr))
         self.refrescar()
-        QMessageBox.information(self, "Película virgen", f"Película virgen guardada como referencia: «{pr.get('archivo')}». Elija «Película virgen» en el menú «Piso» para usarla.")
+        QMessageBox.information(self, "Película virgen", f"Película virgen guardada como referencia: «{pr.get('archivo')}». Es el piso de los análisis nuevos (menú «Piso»).")
 
     # ----------------------------------------------------------------------------------------------------- la imagen y los clics
 
@@ -794,6 +824,7 @@ class VentanaPlacaMensual(QWidget):
         self._sexto = punto
         self.boton_sexto.setChecked(False)
         self._actualizar_el_menu_del_piso()
+        self._modo_elegido = True                    # marcar el punto ES elegir el piso: una referencia nueva no se lo quita
         self._poner_modo("punto_manual")
         if len(self._marcas) == 5 and self._estado in ("analizada", "fallida"):
             self._analizar()
@@ -899,9 +930,10 @@ class VentanaPlacaMensual(QWidget):
             lienzo.draw_idle()
 
     def _texto_del_piso(self):
-        """La línea del piso (de dónde salió, a qué distancia del campo y, en el modo virgen, la comparación solo informativa) y, si el piso no se pudo medir, lo que se puede hacer."""
+        """La línea del piso: la base del análisis (OD.1: la que dice el motor, `resultado.base`) y, tras ella, de dónde salió el piso, a qué distancia del campo y, en el modo virgen, la comparación solo
+        informativa y, si el piso no se pudo medir, lo que se puede hacer."""
         piso = self._resultado.piso if self._resultado is not None else None
-        partes = []
+        partes = [] if self._resultado is None else [dibujo.texto_de_la_base(self._resultado.base)]       # OD.1: la base del análisis, a la vista, antes del piso
         if piso is not None:
             texto = dibujo.con_punto_final(pel.texto_breve_del_piso(piso, self._capa_que_se_reporta()))       # la frase de una capa o de un piso sin número no trae punto: se cierra antes de lo que sigue
             if piso.estado == "ok":
@@ -968,7 +1000,8 @@ class VentanaPlacaMensual(QWidget):
     @_protegido("Piso")
     def _al_cambiar_piso(self, _indice):
         """El físico eligió otro piso: eso SÍ cambia los números, así que se vuelve a medir (con las marcas ya hechas) y se vuelve a evaluar la regla; se guarda con el análisis y el PDF lo imprime (PD1).
-        Sin los cinco puntos el menú guarda la elección para cuando se completen."""
+        Sin los cinco puntos el menú guarda la elección para cuando se completen. Es una ELECCIÓN del físico (`_modo_elegido`): una referencia que aparezca después no la cambia."""
+        self._modo_elegido = True
         if len(self._marcas) == 5 and self._bytes is not None and self._estado in ("analizada", "fallida"):
             self._analizar()
 

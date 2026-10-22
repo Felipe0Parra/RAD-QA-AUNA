@@ -77,8 +77,25 @@ def pel():
 
 
 def parametros():
-    """Los 40 parametros de fabrica del analisis (una copia: nadie muta los del modulo)."""
+    """Los parametros de fabrica del analisis, todos (una copia: nadie muta los del modulo)."""
     return copy.deepcopy(pm().VALORES_DE_LA_GEOMETRIA)
+
+
+def sin_la_base(texto, base=None):
+    """OD.1: la linea del piso de la ventana (`etiqueta_piso`) empieza, con un analisis hecho, por la frase de la base con que se midio («Base de la medida: ...»), y tras ella viene la frase del piso de
+    siempre. Esto quita la primera (y comprueba que esta) para mirar la segunda tal como la fijaban las pruebas de E.1. `base`: la del analisis (por omision el valor de pixel, la que fijan estas pruebas)."""
+    frase = dibujo_mod().texto_de_la_base(pm().BASE_VALOR_DE_PIXEL if base is None else base)
+    assert texto.startswith(frase + " "), texto[:240]
+    return texto[len(frase) + 1:]
+
+
+@pytest.fixture(scope="module")
+def con_la_base_de_pixel():
+    """OD.1: la base de VALOR DE PIXEL como base por omision del motor mientras dura el modulo que la pide (el diccionario de fabrica del motor se parcha y se restaura al terminar). Una prueba de la
+    ventana que necesita las tres capas medibles (el rojo de la sintetica esta recortado en netOD) la pide con un `autouse` de modulo; la netOD la prueba `test_od1_densidad_optica.py`."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setitem(pm().VALORES_DE_LA_GEOMETRIA, "base_de_la_medida", pm().BASE_VALOR_DE_PIXEL)
+        yield
 
 
 def resultado_directo(datos, puntos, modo="automatico", punto=None, referencia=None):

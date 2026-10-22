@@ -26,8 +26,9 @@ dónde lo sacó y a qué distancia del campo: el 50 % del borde de radiación es
 y el gris). Se llama «piso» y no «película virgen»: la película de fuera del campo recibe dosis periférica y se sigue aclarando con la distancia (R7, H18), por eso se toma LO MÁS LEJOS POSIBLE
 del campo y se dice a qué distancia.
 
-TRES MODOS (A.3, DA-86; `MODOS_DEL_PISO`). El argumento `modo` los elige; con None es «punto_manual» si hay un `punto_manual` y, si no, `MODO_DEL_PISO_POR_OMISION`, la ÚNICA definición del modo
-con que arrancan todos los análisis (pasar de uno a otro es cambiar esa línea). «automatico»: por ESQUINAS, con un rango esperado y un respaldo. «punto_manual»: el sexto clic sobre un trozo
+TRES MODOS (A.3, DA-86; `MODOS_DEL_PISO`). El argumento `modo` los elige; con None es lo que diga `modo_efectivo`, la ÚNICA regla del modo (OD.1): «punto_manual» si hay un `punto_manual` y, si no,
+`MODO_DEL_PISO_POR_OMISION`, la ÚNICA definición del modo con que arrancan todos los análisis (pasar de uno a otro es cambiar esa línea; hoy «virgen», que mientras no haya una película virgen cargada
+cae a las esquinas y el `Piso` lo dice en su `origen`). «automatico»: por ESQUINAS, con un rango esperado y un respaldo. «punto_manual»: el sexto clic sobre un trozo
 sin irradiar. «virgen»: el piso de la película virgen de `referencia_virgen`, que se midió aparte con `piso_de_pelicula_virgen`; sin referencia el piso es «no medible» (NUNCA cae al automático)
 y con ella el piso automático de la misma película se calcula igual, solo para compararlo (`Piso.comparacion`, sin veredicto). Los valores están en `PARAMETROS_DEL_PISO`, con nombre, unidad y
 motivo. Reglas:
@@ -67,10 +68,15 @@ motivo. Reglas:
       esquina; el primero que pasa la reemplaza. Si ninguno pasa, la esquina se quita y el piso sale de las otras. El piso es la mediana de la unión de lo válido, y `Piso.esquinas` dice qué pasó
       con cada una (`EsquinaDelPiso`: estado, motivo, origen, píxeles, medianas, distancia, caja e intentos de respaldo).
 
-PELÍCULA VIRGEN (A.3). `piso_de_pelicula_virgen(datos, P, nombre_archivo, fecha_calculo, orientacion_declarada)` mide el escaneo de una película SIN IRRADIAR con las comprobaciones C1 a C7 de la
-investigación de A.3: C1 la cadena de captura (resolución, formato y si parece vuelta a guardar por un editor), C2 la zona (película a 2 mm de los bordes, 400 mm² como mínimo), C3 el recorte y
-el blanco del fondo, C7 el ruido y las rayas, C6 las motas y rayones (se apartan), el rango de una película sin irradiar y el azul testigo, C5 la uniformidad por bloques de 5 mm y el
-gradiente. Devuelve una `ReferenciaVirgen` («ok» o «no válida: <el primer rechazo>») con sus pruebas, avisos y procedencia (archivo, huella, formato, bits, resolución, fecha). Todos sus umbrales
+PELÍCULA VIRGEN (A.3, OD.1). `piso_de_pelicula_virgen(datos, P, nombre_archivo, fecha_calculo, orientacion_declarada)` mide el escaneo de una película SIN IRRADIAR (escaneada APARTE y una vez, de 10 × 10 cm
+o una hoja entera) con las comprobaciones C1 a C7 de la investigación de A.3: C1 la cadena de captura (resolución, formato y si parece vuelta a guardar por un editor), C2 la zona (película a 2 mm de los
+bordes, 400 mm² como mínimo), C3 el recorte y el blanco del fondo, C7 el ruido y las rayas, C6 las motas y rayones (se apartan), el rango de una película sin irradiar y el azul testigo, C5 la
+uniformidad por bloques de 5 mm y el gradiente. OD.1: el recorte (C3), la uniformidad (C5) y las motas (C6) AVISAN y ya no rechazan (lo único que rechaza son la cadena, la zona, que no quepan los
+bloques y el rango de una película sin irradiar: la película de la que sale el piso tiene que parecerse a una); el VALOR de cada capa es la MEDIA de la zona medida (sin lo que se aparta más de
+`delta_tinta` niveles de su mediana: `CapaDelPiso.media`; la mediana sigue siendo la que mira el rango); y `uniformidad_y_ruido` agrega la tabla que el Catphan llama uniformidad y ruido (cinco regiones de
+10 × 10 mm, la mayor diferencia con el centro en % y la desviación del centro) más dónde estaba la película en el vidrio, para que el físico VEA la película que usa. Devuelve una `ReferenciaVirgen`
+(«ok» o «no válida: <el primer rechazo>») con sus pruebas, avisos y procedencia (archivo, huella, formato, bits, resolución, fecha). Su JSON es el PV-2 (el PV-1, sin la media ni la tabla, se rechaza al
+leerlo con su motivo; no hay ninguno guardado). Todos sus umbrales
 (`PARAMETROS_DE_LA_VIRGEN`) son PROPUESTAS sin una película virgen real detrás: hay que recalibrarlos con los primeros escaneos vírgenes (deuda declarada; la ranura de prueba mide cada
 `VIRGEN*` que el físico deje en `ImagenesDeReferencia/PlacasHistoricas`). `guardar_referencia_virgen` y `leer_referencia_virgen` la guardan junto a la base como `piso_pelicula_virgen.json` (atómico,
 con el escaneo y las anteriores archivados: nada se borra); cada análisis guarda la COPIA de la referencia con que se midió dentro de `Piso.como_dict()` y esa copia manda (DA-81). Un archivo
@@ -342,10 +348,11 @@ _NOMBRE_DE_LA_CAPA_DEL_PISO = dict(NOMBRE_DE_CAPA, gris="gris")
 CLAVES_DE_LA_ESCALA = ("resolucion_escaneo_dpi", "resoluciones_de_editor_dpi", "tolerancia_dpi_relativa")      # lo que `escala_mm` le pide a `P`
 FILAS_POR_BLOQUE = 256                                    # las operaciones por píxel de una página completa se hacen por bloques de filas: sin temporales de 135 MB
 
-# A.3 (13-10): el selector de modo. `MODO_DEL_PISO_POR_OMISION` es la ÚNICA definición del modo con que arrancan todos los análisis: cambiarlo es esta línea («virgen» cuando haya una
-# referencia verificada). `MODO_DE_ORIGEN` traduce `Piso.origen` (A.2 lo llama «manual») al nombre del modo.
+# A.3 (13-10): el selector de modo. `MODO_DEL_PISO_POR_OMISION` es la ÚNICA definición del modo con que arrancan todos los análisis: cambiarlo es esta línea. OD.1 (21-10, DA-87) la pone en
+# «virgen»; las otras opciones son «automatico» (el piso de las cuatro esquinas) y «punto_manual». Sin una película virgen cargada, «virgen» cae a las esquinas y el `Piso` lo dice (`modo_efectivo`).
+# `MODO_DE_ORIGEN` traduce `Piso.origen` (A.2 lo llama «manual») al nombre del modo.
 MODOS_DEL_PISO = ("automatico", "punto_manual", "virgen")
-MODO_DEL_PISO_POR_OMISION = "automatico"
+MODO_DEL_PISO_POR_OMISION = "virgen"
 MODO_DE_ORIGEN = {"automatico": "automatico", "manual": "punto_manual", "virgen": "virgen"}
 ORIGEN_DE_MODO = {modo: origen for origen, modo in MODO_DE_ORIGEN.items()}
 CAPAS_QUE_LA_VIRGEN_NO_PUEDE_TENER_MAS_OSCURAS = ("R", "G", "gris")      # el azul casi no responde a la dosis periférica: no se le pide a la virgen ser más clara que el piso
@@ -356,7 +363,8 @@ NIVEL_MAXIMO = 255.0                                      # el máximo de las ca
 FACTOR_MAD = 1.4826                                       # la desviación robusta: 1.4826 · MAD (igual a la sigma de una gaussiana)
 SIGMAS_DE_LA_MEDIA_RECORTADA = 3.0                        # la media de un bloque descarta lo que está a más de 3 sigmas robustas de su mediana
 MM_EN_10_CM = 100.0
-VERSION_PISO_VIRGEN = "PV-1"
+REGIONES_DE_UNIFORMIDAD = ("centro", "arriba", "abajo", "izquierda", "derecha")      # OD.1: las cinco regiones de la tabla de uniformidad y ruido, en el orden en que se muestran
+VERSION_PISO_VIRGEN = "PV-2"        # OD.1: la referencia gana la media de cada capa (su valor) y la tabla de uniformidad y ruido; una PV-1 se rechaza al leerla con su motivo
 PREFIJO_NO_VALIDA = "no válida: "
 ARCHIVO_REFERENCIA_VIRGEN = "piso_pelicula_virgen.json"
 CARPETA_REFERENCIAS_VIRGEN_ANTERIORES = "piso_pelicula_virgen_anteriores"
@@ -492,13 +500,11 @@ PARAMETROS_DE_LA_VIRGEN = {
     "bloques_minimos_virgen": {
         "valor": 4, "unidad": "bloques",
         "motivo": "Con menos de 4 bloques la desviación entre bloques y el gradiente no significan nada [propuesta, investigación de A.3]."},
-    "recorte_rechazo": {
-        "valor": 0.001, "unidad": "fracción",
-        "motivo": "La película de fuera del campo va de 73 a 183 niveles, lejos de 0 y de 255: si más del 0.1 % de la zona medida está en 0 o en el máximo, la exposición o los ajustes automáticos "
-                  "del escáner son los equivocados [propuesta, investigación de A.3]."},
     "recorte_aviso": {
         "valor": 0.0001, "unidad": "fracción",
-        "motivo": "Más del 0.01 % de la zona medida en 0 o en el máximo avisa [propuesta, investigación de A.3]."},
+        "motivo": "La película de fuera del campo va de 73 a 183 niveles, lejos de 0 y de 255: si más del 0.01 % de la zona medida está en 0 o en el máximo, la exposición o los ajustes automáticos del "
+                  "escáner pueden ser los equivocados y se avisa. Desde OD.1 el recorte AVISA y no rechaza (una película con ajustes automáticos la rechaza el rango de una película sin irradiar) "
+                  "[propuesta, investigación de A.3]."},
     "distancia_fondo_mm": {
         "valor": 2.0, "unidad": "mm",
         "motivo": "El fondo del escáner se mide a 2 mm o más de la película (lejos de su halo) [propuesta, investigación de A.3]."},
@@ -515,16 +521,11 @@ PARAMETROS_DE_LA_VIRGEN = {
     "cv_aviso": {
         "valor": {"R": 0.015, "G": 0.010, "B": 0.015, "gris": 0.010}, "unidad": "fracción (desviación entre bloques / media)",
         "motivo": "Una virgen real da 0.2 a 0.7 % entre bloques de 5 mm (la literatura, con escáneres CCD de 16 bits); la película de fuera del campo, que incluye la estructura de dosis, da "
-                  "de 0.4 a 2.9 % en el verde: se avisa pasado 1 % en el verde y el gris y 1.5 % en el rojo y el azul [propuesta, investigación de A.3]."},
-    "cv_rechazo": {
-        "valor": {"R": 0.03, "G": 0.02, "B": 0.03, "gris": 0.02}, "unidad": "fracción (desviación entre bloques / media)",
-        "motivo": "El doble del umbral de aviso: una película con 2 % de desviación entre bloques en el verde no es uniforme (irradiada, velada o con huellas) [propuesta, investigación de A.3]."},
+                  "de 0.4 a 2.9 % en el verde: se avisa pasado 1 % en el verde y el gris y 1.5 % en el rojo y el azul. Desde OD.1 la uniformidad AVISA y no rechaza: se ve en la tabla de uniformidad y ruido "
+                  "[propuesta, investigación de A.3]."},
     "dev_aviso": {
         "valor": {"R": 0.03, "G": 0.02, "B": 0.03, "gris": 0.02}, "unidad": "fracción (bloque más lejano de la mediana de los bloques)",
         "motivo": "Un bloque a más del 2 % de la mediana en el verde (unos 4 niveles, 0.11 mm de FWHM si el piso saliera de ahí) avisa; 3 % en el rojo y el azul [propuesta, investigación de A.3]."},
-    "dev_rechazo": {
-        "valor": {"R": 0.06, "G": 0.04, "B": 0.06, "gris": 0.04}, "unidad": "fracción (bloque más lejano de la mediana de los bloques)",
-        "motivo": "El doble del umbral de aviso: un bloque a más del 4 % de la mediana en el verde se rechaza [propuesta, investigación de A.3]."},
     "gradiente_aviso_pct_por_10cm": {
         "valor": 1.0, "unidad": "% de la media por 10 cm",
         "motivo": "Una pendiente mayor de 1 % por 10 cm avisa de respuesta lateral del escáner o de una película curvada [propuesta, investigación de A.3: no hay dato publicado de virgen ni de CIS]."},
@@ -548,13 +549,15 @@ PARAMETROS_DE_LA_VIRGEN = {
         "motivo": "La tinta y las motas se apartan dilatadas 0.5 mm [propuesta, investigación de A.3]."},
     "motas_aviso_fraccion": {
         "valor": 0.0005, "unidad": "fracción",
-        "motivo": "Si las motas cubren más del 0.05 % de la zona medida se avisa [propuesta, investigación de A.3: en el interior de las películas reales casi no hay motas]."},
+        "motivo": "Si las motas cubren más del 0.05 % de la zona medida se avisa [propuesta, investigación de A.3: en el interior de las películas reales casi no hay motas]. Desde OD.1 las motas "
+                  "AVISAN y no rechazan: la pieza de 10 × 10 cm del centro de EPSON179 tiene motas en el 2.14 % de su zona (las de toda la hoja, 1.95 %) y es una película sin tocar."},
     "motas_aviso_grupo_mm2": {
         "valor": 0.2, "unidad": "mm²",
         "motivo": "O si algún grupo pasa de 0.2 mm² [propuesta, investigación de A.3]."},
-    "motas_rechazo_fraccion": {
-        "valor": 0.02, "unidad": "fracción",
-        "motivo": "Si cubren más del 2 % la película está sucia o rayada y se rechaza [propuesta, investigación de A.3]."},
+    "lado_region_uniformidad_virgen_mm": {
+        "valor": 10.0, "unidad": "mm",
+        "motivo": "La uniformidad y el ruido de la película virgen se miden como el Catphan mide el suyo: en cinco regiones cuadradas de 10 × 10 mm (el centro y cuatro a medio camino entre el centro y cada borde "
+                  "útil de la zona medida). Con una pieza de 10 × 10 cm (96 × 96 mm útiles) las cinco caben (a ±24 mm del centro); una pieza más chica deja alguna sin medir y la tabla lo dice [propuesta de OD.1, para recalibrar con las primeras películas vírgenes de 10 × 10 cm]."},
     "ventana_ruido_mm": {
         "valor": 0.5, "unidad": "mm",
         "motivo": "El ruido es 1.4826 veces la MAD del residuo de una media móvil de 0.5 mm (13 píxeles) [propuesta, investigación de A.3]."},
@@ -600,6 +603,25 @@ _RANGO_DEL_PISO_AUTOMATICO = ("piso_esperado", MOTIVO_PISO_FUERA_DEL_RANGO, "rev
 _RANGO_DEL_PUNTO_MARCADO = ("piso_esperado_sin_irradiar", MOTIVO_PUNTO_FUERA_DEL_RANGO, "marque un punto sobre película sin irradiar")
 
 
+def modo_efectivo(modo, referencia_virgen=None, punto_manual=None):
+    """El modo del piso que se usa de verdad: la ÚNICA regla (OD.1), que usan `piso_de_pelicula` (y con él `analizar`) y la ventana del análisis.
+
+    Un `modo` pedido se respeta tal cual (también «virgen» sin referencia, que sigue siendo «no medible», nunca el automático: V7). Sin modo pedido: con un `punto_manual` es «punto_manual»; si no,
+    `MODO_DEL_PISO_POR_OMISION`, con dos salvedades que se dicen y no se ocultan (el `Piso` trae su `origen`): «virgen» sin una `referencia_virgen` es «automatico» (la película virgen todavía no se
+    cargó) y «punto_manual» sin un punto es «automatico» (no hay punto que tomar). Una referencia presente se usa aunque no sea válida: entonces el piso es «no medible», no otro. No valida el nombre del
+    modo: `piso_de_pelicula` lo hace."""
+    if modo is not None:
+        return modo
+    if punto_manual is not None:
+        return "punto_manual"
+    por_omision = MODO_DEL_PISO_POR_OMISION
+    if por_omision == "virgen" and referencia_virgen is None:
+        return "automatico"
+    if por_omision == "punto_manual":
+        return "automatico"
+    return por_omision
+
+
 def _cifra(x):
     """Un número para un texto: sin decimales si es entero (152.0 -> 152) y con uno si no (131.5)."""
     texto = f"{x:.1f}"
@@ -619,9 +641,11 @@ def _unir_con_y(elementos):
 
 @dataclass(frozen=True)
 class CapaDelPiso:
-    """El piso de UNA capa. `estado`: «ok» o «no medible: <motivo>». `mediana`: el nivel de piso (niveles de 8 bits) o None; `n`: los píxeles en que se basa (los mismos en las cuatro
-    capas); `iqr`: la dispersión (rango intercuartílico); `meseta`: la mediana de la película dentro del campo luminoso, la referencia de la comprobación de coherencia; `contraste` =
-    mediana - meseta (se informa aunque la capa sea «no medible» por ese motivo: es lo que lo explica)."""
+    """El piso de UNA capa. `estado`: «ok» o «no medible: <motivo>». `mediana`: el nivel de piso (niveles de 8 bits) o None, el que usa el análisis: la mediana de los píxeles de la región (modos
+    automático y punto marcado) o el VALOR de la película virgen, su media (OD.1; ver `media`); `n`: los píxeles en que se basa (los mismos en las cuatro capas); `iqr`: la dispersión (rango
+    intercuartílico); `meseta`: la mediana de la película dentro del campo luminoso, la referencia de la comprobación de coherencia; `contraste` = mediana - meseta (se informa aunque la capa sea «no
+    medible» por ese motivo: es lo que lo explica). `media` (OD.1): solo en la capa de una `ReferenciaVirgen` «ok», la MEDIA de la zona medida sin lo que se aparta más de `delta_tinta` niveles de la
+    mediana de su capa, que es el valor de la película virgen (V6); ahí `mediana` es la mediana de esa misma zona, que mira el rango esperado."""
     capa: str
     estado: str
     mediana: float | None = None
@@ -629,6 +653,7 @@ class CapaDelPiso:
     iqr: float | None = None
     meseta: float | None = None
     contraste: float | None = None
+    media: float | None = None
 
 
 @dataclass(frozen=True, eq=False)
@@ -801,9 +826,10 @@ class PruebaDeLaVirgen:
 
 @dataclass(frozen=True, eq=False)
 class ReferenciaVirgen:
-    """El piso medido en el escaneo de una película VIRGEN (sin irradiar). `estado`: «ok» o «no válida: <motivo>» (el del primer rechazo); `capas`: R, G, B y gris (`CapaDelPiso` con la mediana, el
-    n y el IQR de la zona medida; sin meseta ni contraste, que son de la película irradiada); `pruebas` y `avisos`: lo que se comprobó; `region`: {"caja", "n", "area_mm2"} en píxeles del ESCANEO de la
-    virgen; `procedencia`: de dónde salió el archivo (nombre, huella, formato, bits, resolución...); `parametros`: los de la virgen y los del piso con que se midió."""
+    """El piso medido en el escaneo de una película VIRGEN (sin irradiar). `estado`: «ok» o «no válida: <motivo>» (el del primer rechazo); `capas`: R, G, B y gris (`CapaDelPiso` con la mediana, la
+    MEDIA —el valor—, el n y el IQR de la zona medida; sin meseta ni contraste, que son de la película irradiada); `pruebas` y `avisos`: lo que se comprobó; `region`: {"caja", "n", "area_mm2",
+    "pelicula_mm", "pagina_mm"} (la caja en píxeles del ESCANEO de la virgen; la película y la página en milímetros, para saber DÓNDE del vidrio estaba); `procedencia`: de dónde salió el archivo
+    (nombre, huella, formato, bits, resolución...); `parametros`: los de la virgen y los del piso con que se midió; `uniformidad` (OD.1): la tabla de uniformidad y ruido de `uniformidad_y_ruido`."""
     estado: str
     capas: dict
     pruebas: tuple
@@ -811,17 +837,19 @@ class ReferenciaVirgen:
     region: dict | None
     procedencia: dict
     parametros: dict
+    uniformidad: dict | None = None
 
     def valor(self, capa):
-        """El valor (mediana) de una capa (R, G, B o gris) de la virgen, o None si no se pudo medir."""
-        return self.capas[capa].mediana
+        """El valor de una capa (R, G, B o gris) de la virgen, que es su MEDIA (V6 de OD.1: el piso de la virgen es el valor medio de cada capa), o None si no se pudo medir."""
+        return self.capas[capa].media
 
     def como_dict(self):
         return {"version": VERSION_PISO_VIRGEN, "estado": self.estado,
-                "capas": {c: {"estado": capa.estado, "mediana": capa.mediana, "n": int(capa.n), "iqr": capa.iqr, "meseta": capa.meseta, "contraste": capa.contraste}
+                "capas": {c: {"estado": capa.estado, "mediana": capa.mediana, "media": capa.media, "n": int(capa.n), "iqr": capa.iqr, "meseta": capa.meseta, "contraste": capa.contraste}
                           for c, capa in self.capas.items()},
                 "pruebas": [{"nombre": p.nombre, "resultado": p.resultado, "texto": p.texto} for p in self.pruebas], "avisos": list(self.avisos),
-                "region": _json_normal(self.region), "procedencia": _json_normal(self.procedencia), "parametros": _json_normal(self.parametros)}
+                "region": _json_normal(self.region), "procedencia": _json_normal(self.procedencia), "parametros": _json_normal(self.parametros),
+                "uniformidad": _json_normal(self.uniformidad)}
 
     def descripcion(self):
         """«Película virgen «archivo» (escaneada el …, huella 3fa9c2d1): rojo 106, verde 174, azul 82, gris 143 en N píxeles a 2 mm o más de sus bordes.» y los avisos."""
@@ -830,7 +858,7 @@ class ReferenciaVirgen:
         if self.estado != "ok":
             return f"Película virgen «{nombre}»: {self.estado}."
         cuando = f"escaneada el {pr['fecha_escaneo']}" if pr.get("fecha_escaneo") else f"medida el {pr['fecha_calculo']}"
-        valores = ", ".join(f"{_NOMBRE_DE_LA_CAPA_DEL_PISO[c]} {_cifra(self.capas[c].mediana)}" for c in CAPAS_DEL_PISO)
+        valores = ", ".join(f"{_NOMBRE_DE_LA_CAPA_DEL_PISO[c]} {_cifra(self.valor(c))}" for c in CAPAS_DEL_PISO)
         texto = (f"Película virgen «{nombre}» ({cuando}, huella {pr['sha256'][:8]}): {valores} en {self.region['n']} píxeles "
                  f"a {self.parametros['margen_borde_virgen_mm']:g} mm o más de sus bordes.")
         return texto + ("" if not self.avisos else " Avisos: " + "; ".join(self.avisos) + ".")
@@ -859,18 +887,18 @@ def _exige_la_referencia(condicion, que):
 def referencia_virgen_desde_dict(d):
     """La inversa de `ReferenciaVirgen.como_dict()`. `ValueError` con el motivo si no es un diccionario, si falta una clave, si la versión no es la actual (`VERSION_PISO_VIRGEN`) o si un valor no es
     del TIPO que `como_dict()` escribe (una lista de avisos que es `null`, una mediana de texto, unos píxeles negativos...): un archivo dañado o editado a mano se rechaza AQUÍ, con su motivo, y
-    no revienta más tarde, lejos de donde se leyó, con otra excepción (RV-A3-3). Una referencia «ok» además debe poder USARSE: sus cuatro capas «ok» con mediana y píxeles, su región (píxeles,
+    no revienta más tarde, lejos de donde se leyó, con otra excepción (RV-A3-3). Una referencia «ok» además debe poder USARSE: sus cuatro capas «ok» con mediana, media (su valor, OD.1) y píxeles, su tabla de uniformidad y ruido, su región (píxeles,
     área y caja), la huella, el archivo y la fecha de su procedencia y el margen con que se midió. Del resto de la procedencia y de los parámetros solo se exige que sean un diccionario: nada
     de lo que se hace con una referencia lo calcula."""
     if not isinstance(d, dict):
         raise ValueError("La referencia de la película virgen debe ser un diccionario.")
     if d.get("version") != VERSION_PISO_VIRGEN:
         raise ValueError(f"La referencia de la película virgen es de la versión {d.get('version')!r} y esta aplicación lee la {VERSION_PISO_VIRGEN!r}.")
-    faltan = [k for k in ("estado", "capas", "pruebas", "avisos", "region", "procedencia", "parametros") if k not in d]
+    faltan = [k for k in ("estado", "capas", "pruebas", "avisos", "region", "procedencia", "parametros", "uniformidad") if k not in d]
     if faltan:
         raise ValueError(f"A la referencia de la película virgen le faltan: {', '.join(faltan)}.")
     try:
-        capas = {c: CapaDelPiso(c, v["estado"], v["mediana"], v["n"], v["iqr"], v["meseta"], v["contraste"]) for c, v in d["capas"].items()}
+        capas = {c: CapaDelPiso(c, v["estado"], v["mediana"], v["n"], v["iqr"], v["meseta"], v["contraste"], v["media"]) for c, v in d["capas"].items()}
         pruebas = tuple(PruebaDeLaVirgen(p["nombre"], p["resultado"], p["texto"]) for p in d["pruebas"])
     except (KeyError, TypeError, AttributeError) as e:
         raise ValueError(f"La referencia de la película virgen está incompleta: {e!r}.") from None
@@ -880,16 +908,19 @@ def referencia_virgen_desde_dict(d):
     for c, capa in capas.items():
         _exige_la_referencia(isinstance(capa.estado, str), f"el estado de la capa {c} no es un texto")
         _exige_la_referencia(_es_entero(capa.n) and capa.n >= 0, f"los píxeles (n) de la capa {c} no son un entero de 0 o más")
-        _exige_la_referencia(all(x is None or _es_numero(x) for x in (capa.mediana, capa.iqr, capa.meseta, capa.contraste)),
-                             f"la mediana, el IQR, la meseta o el contraste de la capa {c} no son un número")
+        _exige_la_referencia(all(x is None or _es_numero(x) for x in (capa.mediana, capa.media, capa.iqr, capa.meseta, capa.contraste)),
+                             f"la mediana, la media, el IQR, la meseta o el contraste de la capa {c} no son un número")
     _exige_la_referencia(all(isinstance(x, str) for p in pruebas for x in (p.nombre, p.resultado, p.texto)), "el nombre, el resultado o el texto de una prueba no son un texto")
     _exige_la_referencia(isinstance(d["avisos"], list) and all(isinstance(a, str) for a in d["avisos"]), "los avisos no son una lista de textos")
     _exige_la_referencia(d["region"] is None or isinstance(d["region"], dict), "la región no es un diccionario")
     _exige_la_referencia(isinstance(d["procedencia"], dict), "la procedencia no es un diccionario")
     _exige_la_referencia(isinstance(d["parametros"], dict), "los parámetros no son un diccionario")
+    _exige_la_referencia(d["uniformidad"] is None or isinstance(d["uniformidad"], dict), "la tabla de uniformidad y ruido no es un diccionario")
     if d["estado"] == "ok":
         region, procedencia = d["region"], d["procedencia"]
-        _exige_la_referencia(all(capa.estado == "ok" and capa.mediana is not None and capa.n >= 1 for capa in capas.values()), "una referencia «ok» trae las cuatro capas «ok», con su mediana y sus píxeles")
+        _exige_la_referencia(all(capa.estado == "ok" and capa.mediana is not None and capa.media is not None and capa.n >= 1 for capa in capas.values()),
+                             "una referencia «ok» trae las cuatro capas «ok», con su mediana, su media y sus píxeles")
+        _exige_la_referencia(isinstance(d["uniformidad"], dict), "una referencia «ok» trae su tabla de uniformidad y ruido")
         _exige_la_referencia(region is not None, "una referencia «ok» trae su región")
         _exige_la_referencia(_es_entero(region.get("n")) and region["n"] >= 1, "la región no dice cuántos píxeles midió (n)")
         _exige_la_referencia(_es_numero(region.get("area_mm2")), "la región no dice su área (area_mm2)")
@@ -898,7 +929,7 @@ def referencia_virgen_desde_dict(d):
         _exige_la_referencia(isinstance(procedencia.get("fecha_calculo"), str) and procedencia["fecha_calculo"] != "", "la procedencia no trae la fecha de cálculo")
         _exige_la_referencia(isinstance(procedencia.get("sha256"), str) and _HUELLA_SHA256.fullmatch(procedencia["sha256"]) is not None, "la huella (sha256) de la procedencia no es una huella")
         _exige_la_referencia(_es_numero(d["parametros"].get("margen_borde_virgen_mm")), "los parámetros no traen el margen con que se midió (margen_borde_virgen_mm)")
-    return ReferenciaVirgen(d["estado"], capas, pruebas, tuple(d["avisos"]), _json_normal(d["region"]), _json_normal(d["procedencia"]), _json_normal(d["parametros"]))
+    return ReferenciaVirgen(d["estado"], capas, pruebas, tuple(d["avisos"]), _json_normal(d["region"]), _json_normal(d["procedencia"]), _json_normal(d["parametros"]), _json_normal(d["uniformidad"]))
 
 
 def texto_de_la_comparacion(piso):
@@ -1531,7 +1562,7 @@ def _piso_con_virgen(pelicula, campo, campo_texto, escala, P, p, referencia):
     if clase_de_la_pelicula != procedencia.get("clase_resolucion"):
         avisos.append(f"La resolución declarada de la película ({clase_de_la_pelicula}) y la de la virgen ({procedencia.get('clase_resolucion')}) son de clases distintas: compruebe que "
                       f"se escanearon a la misma resolución.")
-    medidas = {c: (referencia.capas[c].mediana, referencia.capas[c].n, referencia.capas[c].iqr) for c in CAPAS_DEL_PISO}
+    medidas = {c: (referencia.valor(c), referencia.capas[c].n, referencia.capas[c].iqr) for c in CAPAS_DEL_PISO}
     capas = _piso_capas(pelicula, campo, escala, p, medidas)
     if capas is None:
         return sin_numero(MOTIVO_SIN_MESETA, comparacion=automatico)
@@ -1543,7 +1574,7 @@ def piso_de_pelicula(pelicula, campo_luz, P, punto_manual=None, modo=None, refer
     entradas y lo que significa «no medible» están en el docstring del módulo. `P`: la escala del procedimiento (`CLAVES_DE_LA_ESCALA`) y, si se quieren cambiar, los parámetros del piso
     (`VALORES_DEL_PISO`; los que falten se ponen de fábrica y los usados quedan en `Piso.parametros`).
 
-    A.3: `modo` («automatico», «punto_manual» o «virgen»; None = «punto_manual» si hay un `punto_manual` y, si no, `MODO_DEL_PISO_POR_OMISION`): cómo se toma el piso. El automático es por
+    A.3: `modo` («automatico», «punto_manual» o «virgen»; None = lo que diga `modo_efectivo`: «punto_manual» si hay un `punto_manual` y, si no, `MODO_DEL_PISO_POR_OMISION`, que sin película virgen cae a las esquinas): cómo se toma el piso. El automático es por
     esquinas, con un rango esperado y un respaldo junto a la esquina; «punto_manual» es el sexto clic (un cuadrado de 3 × 3 mm sobre película sin irradiar); «virgen» es el de la película virgen
     de `referencia_virgen` (una `ReferenciaVirgen`), sin referencia «no medible» (nunca cae al automático). `ValueError` solo si los argumentos tienen una forma equivocada (el campo no son
     4 puntos, el punto no es (x, y), `P` sin la escala, un modo que no existe, un punto con un modo que no es «punto_manual», una referencia que no es una `ReferenciaVirgen`)."""
@@ -1554,8 +1585,7 @@ def piso_de_pelicula(pelicula, campo_luz, P, punto_manual=None, modo=None, refer
     p = _piso_parametros(P)
     campo, crudos = _piso_cuadrilatero(campo_luz)
     punto = None if punto_manual is None else _piso_punto(punto_manual)
-    if modo is None:
-        modo = "punto_manual" if punto is not None else MODO_DEL_PISO_POR_OMISION
+    modo = modo_efectivo(modo, referencia_virgen, punto)
     _piso_validar_la_llamada(modo, punto, referencia_virgen)
     origen = ORIGEN_DE_MODO[modo]
     dpi = getattr(pelicula, "dpi", None)
@@ -1633,15 +1663,16 @@ def _virgen_lado_impar(pixeles):
     return lado if lado % 2 else lado + 1
 
 
-def _virgen_cerrar(pruebas, procedencia, parametros, valores=None, region=None):
-    """Arma la `ReferenciaVirgen`: «ok» si ninguna comprobación rechazó y hay valores; si no, «no válida: » + el texto del PRIMER rechazo y ninguna capa trae número."""
+def _virgen_cerrar(pruebas, procedencia, parametros, valores=None, region=None, medias=None, uniformidad=None):
+    """Arma la `ReferenciaVirgen`: «ok» si ninguna comprobación rechazó y hay valores; si no, «no válida: » + el texto del PRIMER rechazo y ninguna capa trae número (la tabla de uniformidad y ruido, si se
+    pudo medir, se conserva: es lo que le explica al físico por qué no sirve). `medias`: {capa: la media de la zona medida}, el valor de cada capa (V6 de OD.1)."""
     avisos = tuple(x.texto for x in pruebas if x.resultado == "aviso")
     rechazos = [x.texto for x in pruebas if x.resultado == "rechazo"]
-    if rechazos or valores is None:
+    if rechazos or valores is None or medias is None:
         estado = PREFIJO_NO_VALIDA + (rechazos[0] if rechazos else "no se pudo medir la película")
-        return ReferenciaVirgen(estado, {c: CapaDelPiso(c, estado) for c in CAPAS_DEL_PISO}, tuple(pruebas), avisos, None, procedencia, parametros)
-    capas = {c: CapaDelPiso(c, "ok", mediana, n, iqr, None, None) for c, (mediana, n, iqr) in valores.items()}
-    return ReferenciaVirgen("ok", capas, tuple(pruebas), avisos, region, procedencia, parametros)
+        return ReferenciaVirgen(estado, {c: CapaDelPiso(c, estado) for c in CAPAS_DEL_PISO}, tuple(pruebas), avisos, None, procedencia, parametros, uniformidad)
+    capas = {c: CapaDelPiso(c, "ok", mediana, n, iqr, None, None, medias[c]) for c, (mediana, n, iqr) in valores.items()}
+    return ReferenciaVirgen("ok", capas, tuple(pruebas), avisos, region, procedencia, parametros, uniformidad)
 
 
 def _virgen_cadena(pelicula, procedencia, calidad, submuestreo, v):
@@ -1656,13 +1687,12 @@ def _virgen_cadena(pelicula, procedencia, calidad, submuestreo, v):
 
 
 def _virgen_recorte(planos, roi, v):
-    """C3, el recorte: la mayor, entre R, G y B, de las fracciones de la zona medida en 0 o en el máximo. Más de `recorte_rechazo` rechaza; más de `recorte_aviso` avisa."""
+    """C3, el recorte: la mayor, entre R, G y B, de las fracciones de la zona medida en 0 o en el máximo. Más de `recorte_aviso` AVISA (OD.1: ya no rechaza; una película escaneada con los ajustes
+    automáticos del escáner la rechaza el rango de una película sin irradiar, no su recorte)."""
     n = float(np.count_nonzero(roi))
     recorte = max(float(np.count_nonzero(((planos[c] <= 0) | (planos[c] >= NIVEL_MAXIMO)) & roi)) / n for c in CAPAS)
-    if recorte > v["recorte_rechazo"]:
-        return PruebaDeLaVirgen("C3 recorte", "rechazo", f"el {100 * recorte:.2f} % de la película está recortada en 0 o en el máximo: revise la exposición y los ajustes automáticos del escáner")
     if recorte > v["recorte_aviso"]:
-        return PruebaDeLaVirgen("C3 recorte", "aviso", f"el {100 * recorte:.3f} % de la película está recortada en 0 o en el máximo")
+        return PruebaDeLaVirgen("C3 recorte", "aviso", f"el {100 * recorte:.3f} % de la película está recortada en 0 o en el máximo: revise la exposición y los ajustes automáticos del escáner")
     return PruebaDeLaVirgen("C3 recorte", "ok", f"recorte {100 * recorte:.3f} %")
 
 
@@ -1719,7 +1749,8 @@ def _virgen_ruido(planos, valida, v, escala):
 
 def _virgen_motas(planos, roi, tinta, sigma, v, escala):
     """C6, las motas, rayones y huellas: (la máscara de lo que se aparta, la prueba). Residuo contra la mediana móvil de `ventana_motas_mm` (la capa en 8 bits) mayor que
-    max(`motas_sigmas` · sigma, `motas_niveles`), en grupos de `motas_pixeles_grupo` píxeles o más, dilatados. Avisa o rechaza según la fracción de la zona medida que cubren."""
+    max(`motas_sigmas` · sigma, `motas_niveles`), en grupos de `motas_pixeles_grupo` píxeles o más, dilatados. AVISA según la fracción de la zona medida que cubren o el área del grupo mayor (OD.1:
+    ya no rechaza; las apartadas no entran a la mediana del rango, y la media del valor solo aparta lo que se aleja más de `delta_tinta` niveles)."""
     lado = _virgen_lado_impar(v["ventana_motas_mm"] / escala)
     candidatas = np.zeros(roi.shape, bool)
     for c in CAPAS:
@@ -1734,8 +1765,6 @@ def _virgen_motas(planos, roi, tinta, sigma, v, escala):
     mayor_mm2 = float(areas[grandes].max() if grandes.any() else 0) * escala * escala
     motas = _virgen_dilatar(grandes[etiquetas], v, escala) & roi
     fraccion = float(np.count_nonzero(motas)) / float(np.count_nonzero(roi))
-    if fraccion > v["motas_rechazo_fraccion"]:
-        return motas, PruebaDeLaVirgen("C6 motas", "rechazo", f"película sucia o rayada: las motas cubren el {100 * fraccion:.2f} %")
     if fraccion > v["motas_aviso_fraccion"] or mayor_mm2 > v["motas_aviso_grupo_mm2"]:
         return motas, PruebaDeLaVirgen("C6 motas", "aviso", f"motas en el {100 * fraccion:.3f} % (la mayor, {mayor_mm2:.2f} mm²); se apartan del piso")
     return motas, PruebaDeLaVirgen("C6 motas", "ok", f"motas {100 * fraccion:.3f} %")
@@ -1796,35 +1825,57 @@ def _virgen_bloques(planos, roi, usar, v, escala):
     return bloques
 
 
-def _virgen_uniformidad_y_gradiente(bloques, v):
-    """(prueba «C5 uniformidad», prueba «C5 gradiente» o None). Uniformidad: el CV entre bloques y la desviación del bloque más lejano de la mediana, por capa. Gradiente: un plano ajustado
-    por mínimos cuadrados a los bloques (en mm), en % de la media por 10 cm, solo en la dirección en que la zona mide `extension_minima_gradiente_mm` o más."""
-    if len(bloques) < v["bloques_minimos_virgen"]:
-        return PruebaDeLaVirgen("C5 uniformidad", "rechazo", f"no caben {v['bloques_minimos_virgen']} bloques de {v['lado_bloque_virgen_mm']:g} mm en la película"), None
-    peor, textos = "ok", []
-    for c in CAPAS_DEL_PISO:
-        medias = np.array([b[c] for b in bloques])
-        cv_ = float(medias.std() / medias.mean())
-        desviacion = float(np.max(np.abs(medias - np.median(medias))) / np.median(medias))
-        if cv_ > v["cv_rechazo"][c] or desviacion > v["dev_rechazo"][c]:
-            peor = "rechazo"
-        elif (cv_ > v["cv_aviso"][c] or desviacion > v["dev_aviso"][c]) and peor == "ok":
-            peor = "aviso"
-        textos.append(f"{_NOMBRE_DE_LA_CAPA_DEL_PISO[c]} CV {100 * cv_:.2f} % desviación {100 * desviacion:.2f} %")
-    uniformidad = PruebaDeLaVirgen("C5 uniformidad", peor, ("no es uniforme (¿irradiada, velada o con huellas?): " if peor == "rechazo" else "") + "; ".join(textos) + f" ({len(bloques)} bloques)")
+def _por_ciento_del_nivel(valor, nivel):
+    """`valor` como porcentaje de `nivel` (el nivel medio o el del centro de una capa de la virgen), o None si `nivel` no es mayor que cero: una capa en 0 (un escaneo negro, un canal recortado) no tiene
+    respecto de que medir un porcentaje, y dividir entre ese 0 con floats de Python lanzaba `ZeroDivisionError` en una funcion que promete no lanzar por el contenido (OD.1, OD1-REV-PROD-02; en HEAD la division era de
+    numpy y daba nan). La UNICA division entre el nivel de una capa de la virgen: el gradiente de C5 y la uniformidad de la tabla pasan por aqui."""
+    return float(valor) / float(nivel) * 100.0 if nivel > 0 else None
+
+
+def _virgen_gradientes(bloques, v):
+    """({capa: {"x": %, "y": %}} para R, G y B, [los textos de los que pasan del aviso], extensión en x, extensión en y). Un plano ajustado por mínimos cuadrados a los bloques (en mm); la pendiente en %
+    de la media por 10 cm, CON SIGNO (más clara hacia la derecha o hacia abajo = positiva), solo en la dirección en que la zona mide `extension_minima_gradiente_mm` o más (en la otra, None)."""
     diseno = np.array([[1.0, b["x_mm"], b["y_mm"]] for b in bloques])
     extension_x, extension_y = np.ptp(diseno[:, 1]) + v["lado_bloque_virgen_mm"], np.ptp(diseno[:, 2]) + v["lado_bloque_virgen_mm"]
-    inclinadas = []
+    gradientes, inclinadas = {}, []
     for c in CAPAS:
         coeficientes, *_ = np.linalg.lstsq(diseno, np.array([b[c] for b in bloques]), rcond=None)
         media = float(np.mean([b[c] for b in bloques]))
+        gradientes[c] = {}
         for eje, pendiente, extension in (("x", coeficientes[1], extension_x), ("y", coeficientes[2], extension_y)):
-            por_ciento = abs(pendiente) * MM_EN_10_CM / media * 100.0
-            if extension >= v["extension_minima_gradiente_mm"] and por_ciento > v["gradiente_aviso_pct_por_10cm"]:
-                inclinadas.append(f"{_NOMBRE_DE_LA_CAPA_DEL_PISO[c]} {por_ciento:.2f} % por 10 cm en {eje}")
+            if extension < v["extension_minima_gradiente_mm"]:
+                gradientes[c][eje] = None
+                continue
+            por_ciento = _por_ciento_del_nivel(float(pendiente) * MM_EN_10_CM, media)
+            gradientes[c][eje] = por_ciento
+            if por_ciento is not None and abs(por_ciento) > v["gradiente_aviso_pct_por_10cm"]:
+                inclinadas.append(f"{_NOMBRE_DE_LA_CAPA_DEL_PISO[c]} {abs(por_ciento):.2f} % por 10 cm en {eje}")
+    return gradientes, inclinadas, extension_x, extension_y
+
+
+def _virgen_uniformidad_y_gradiente(bloques, v):
+    """(prueba «C5 uniformidad», prueba «C5 gradiente» o None, los gradientes por capa o None). Uniformidad: el CV entre bloques y la desviación del bloque más lejano de la mediana, por capa. OD.1: AVISA
+    y ya no rechaza (la uniformidad de verdad se mira en la tabla de `uniformidad_y_ruido`, como la del Catphan); lo único que rechaza es que no quepan `bloques_minimos_virgen` bloques. Gradiente: ver
+    `_virgen_gradientes`; AVISA pasado `gradiente_aviso_pct_por_10cm` y los números van a la misma tabla."""
+    if len(bloques) < v["bloques_minimos_virgen"]:
+        return PruebaDeLaVirgen("C5 uniformidad", "rechazo", f"no caben {v['bloques_minimos_virgen']} bloques de {v['lado_bloque_virgen_mm']:g} mm en la película"), None, None
+    peor, textos = "ok", []
+    for c in CAPAS_DEL_PISO:
+        medias = np.array([b[c] for b in bloques])
+        nivel, mediana = float(medias.mean()), float(np.median(medias))
+        if not (nivel > 0 and mediana > 0):                     # una capa en 0 no tiene respecto de que medir el CV (numpy daba nan y el texto decia «CV nan %»): se dice y se sigue (OD1-REV-PROD-02)
+            textos.append(f"{_NOMBRE_DE_LA_CAPA_DEL_PISO[c]} sin medir (su nivel es 0)")
+            continue
+        cv_ = float(medias.std() / nivel)
+        desviacion = float(np.max(np.abs(medias - mediana)) / mediana)
+        if cv_ > v["cv_aviso"][c] or desviacion > v["dev_aviso"][c]:
+            peor = "aviso"
+        textos.append(f"{_NOMBRE_DE_LA_CAPA_DEL_PISO[c]} CV {100 * cv_:.2f} % desviación {100 * desviacion:.2f} %")
+    uniformidad = PruebaDeLaVirgen("C5 uniformidad", peor, "; ".join(textos) + f" ({len(bloques)} bloques)")
+    gradientes, inclinadas, extension_x, extension_y = _virgen_gradientes(bloques, v)
     if inclinadas:
-        return uniformidad, PruebaDeLaVirgen("C5 gradiente", "aviso", "gradiente (respuesta lateral del escáner o película curvada): " + ", ".join(inclinadas))
-    return uniformidad, PruebaDeLaVirgen("C5 gradiente", "ok", f"sin gradiente (extensión {extension_x:.0f} × {extension_y:.0f} mm)")
+        return uniformidad, PruebaDeLaVirgen("C5 gradiente", "aviso", "gradiente (respuesta lateral del escáner o película curvada): " + ", ".join(inclinadas)), gradientes
+    return uniformidad, PruebaDeLaVirgen("C5 gradiente", "ok", f"sin gradiente (extensión {extension_x:.0f} × {extension_y:.0f} mm)"), gradientes
 
 
 def _virgen_rayas(planos, usar, sigma, v, escala):
@@ -1846,6 +1897,73 @@ def _virgen_rayas(planos, usar, sigma, v, escala):
     if rayas:
         return PruebaDeLaVirgen("C7 rayas", "aviso", "rayas o bandas: " + ", ".join(rayas))
     return PruebaDeLaVirgen("C7 rayas", "ok", "sin rayas")
+
+
+def _virgen_media(planos, roi, p):
+    """{capa: la MEDIA de la zona medida (`roi`) sin lo que se aparta más de `delta_tinta` niveles de la mediana de su capa}: el VALOR de la película virgen, el piso con que se normaliza (V6 de OD.1).
+    La mediana (la que mira el rango) y la media no son lo mismo en el azul: la mediana de la zona de EPSON179 es 88 y su media 86.77, y 1.2 niveles de piso son 0.17 mm de FWHM. Media en float64."""
+    medias = {}
+    for c in CAPAS_DEL_PISO:
+        a = planos[c][roi]
+        medias[c] = float(a[np.abs(a - np.median(a)) <= p["delta_tinta"]].mean(dtype=np.float64))
+    return medias
+
+
+def uniformidad_y_ruido(planos, zona, escala, v=None, origen=(0, 0), gradientes=None):
+    """La tabla de uniformidad y ruido de una película, como la mide el Catphan (OD.1): CINCO regiones cuadradas de `lado_region_uniformidad_virgen_mm` (10 × 10 mm), el centro de la zona y cuatro a
+    medio camino entre el centro y cada borde útil de la zona (arriba, abajo, izquierda y derecha: a un cuarto de su extensión del centro). Por capa (R, G, B y gris): `regiones` (la media de cada una),
+    `centro`, `uniformidad_pct` (la mayor diferencia entre una región y el centro, en % del centro) y `ruido` (la desviación estándar de los píxeles del centro, en niveles).
+
+    `planos`: {capa: arreglo de la VENTANA}; `zona`: bool de la ventana, la película medible; `escala`: mm por píxel; `origen`: (x, y) de la ventana en la imagen: la geometría se calcula en
+    coordenadas de la IMAGEN (el centro y los cuartos no cambian por recortar la ventana) y las cajas salen en píxeles de la imagen, (x0, y0, x1, y1) con x1 e y1 exclusivos. `gradientes`: lo que
+    devuelve `_virgen_uniformidad_y_gradiente` (C5), para dejarlo en la misma tabla (R, G y B; el gris no se juzga: None).
+
+    Una región que no cabe entera dentro de la zona NO se mide: su caja es None, no se inventa ningún número y, si falta alguna, `cabe` es False y la uniformidad de toda capa es None (el centro y su
+    ruido se dan si el centro cabe). Todo son números y listas de Python (sin arreglos de numpy ni tuplas): viaja como JSON."""
+    lado_mm = float((VALORES_DE_LA_VIRGEN if v is None else v)["lado_region_uniformidad_virgen_mm"])
+    lado = int(round(lado_mm / escala))
+    ox, oy = origen
+    alto, ancho = zona.shape
+    regiones = {nombre: {"caja": None} for nombre in REGIONES_DE_UNIFORMIDAD}
+    capas = {c: {"centro": None, "regiones": {nombre: None for nombre in REGIONES_DE_UNIFORMIDAD}, "uniformidad_pct": None, "ruido": None,
+                 "gradiente_x_pct_por_10cm": None, "gradiente_y_pct_por_10cm": None} for c in CAPAS_DEL_PISO}
+    ys, xs = np.nonzero(zona)
+    if len(ys):
+        ys, xs = ys + oy, xs + ox
+        cy, cx = (ys.min() + ys.max()) / 2, (xs.min() + xs.max()) / 2
+        my, mx = (ys.max() - ys.min()) / 4, (xs.max() - xs.min()) / 4
+        centros = {"centro": (cy, cx), "arriba": (cy - my, cx), "abajo": (cy + my, cx), "izquierda": (cy, cx - mx), "derecha": (cy, cx + mx)}
+        for nombre, (yc, xc) in centros.items():
+            x1, y1 = int(round(xc - lado / 2)), int(round(yc - lado / 2))
+            fx, fy = x1 - ox, y1 - oy
+            if fx < 0 or fy < 0 or fx + lado > ancho or fy + lado > alto or not zona[fy:fy + lado, fx:fx + lado].all():
+                continue
+            regiones[nombre]["caja"] = [x1, y1, x1 + lado, y1 + lado]
+            for c in CAPAS_DEL_PISO:
+                caja = planos[c][fy:fy + lado, fx:fx + lado]
+                capas[c]["regiones"][nombre] = float(caja.mean(dtype=np.float64))
+                if nombre == "centro":
+                    capas[c]["ruido"] = float(caja.std(dtype=np.float64))
+    cabe = all(r["caja"] is not None for r in regiones.values())
+    for c, fila in capas.items():
+        fila["centro"] = fila["regiones"]["centro"]
+        if cabe:
+            fila["uniformidad_pct"] = _por_ciento_del_nivel(max(abs(fila["regiones"][nombre] - fila["centro"]) for nombre in REGIONES_DE_UNIFORMIDAD[1:]), fila["centro"])
+        if gradientes and c in gradientes:
+            fila["gradiente_x_pct_por_10cm"], fila["gradiente_y_pct_por_10cm"] = gradientes[c].get("x"), gradientes[c].get("y")
+    return {"cabe": bool(cabe), "lado_mm": lado_mm, "regiones": regiones, "capas": capas}
+
+
+def _virgen_caja_de_la_pelicula(componente, origen, escala, forma):
+    """DÓNDE estaba la película en el vidrio del escáner (OD.1): {"pelicula_mm": {x, y, ancho, alto}, "pagina_mm": {ancho, alto}}, en milímetros desde la esquina superior izquierda de la imagen. La
+    caja de la película es la de su componente conexa (la película entera, sin erosionar); la página es la imagen entera (`forma` = (alto, ancho) en píxeles). Una pieza de 10 × 10 cm pegada al borde
+    del vidrio y una hoja entera dan pisos que difieren unos niveles por la respuesta lateral del escáner: la referencia lo dice para que se vea."""
+    filas, columnas = np.flatnonzero(componente.any(axis=1)), np.flatnonzero(componente.any(axis=0))
+    ox, oy = origen
+    x0, y0 = int(columnas[0]) + ox, int(filas[0]) + oy
+    ancho, alto = int(columnas[-1]) - int(columnas[0]) + 1, int(filas[-1]) - int(filas[0]) + 1
+    return {"pelicula_mm": {"x": round(x0 * escala, 1), "y": round(y0 * escala, 1), "ancho": round(ancho * escala, 1), "alto": round(alto * escala, 1)},
+            "pagina_mm": {"ancho": round(int(forma[1]) * escala, 1), "alto": round(int(forma[0]) * escala, 1)}}
 
 
 def piso_de_pelicula_virgen(datos, P, nombre_archivo="", fecha_calculo=None, orientacion_declarada=None):
@@ -1908,6 +2026,9 @@ def piso_de_pelicula_virgen(datos, P, nombre_archivo="", fecha_calculo=None, ori
         bien = blanco >= v["fondo_blanco_minimo"]
         pruebas.append(PruebaDeLaVirgen("C3 fondo", "ok" if bien else "aviso", f"el {100 * blanco:.2f} % del fondo está en el blanco máximo"
                                                                               + ("" if bien else ": revise la tapa, el vidrio o los ajustes (quitar fondo, brillo)")))
+    else:
+        pruebas.append(PruebaDeLaVirgen("C3 fondo", "ok", "no se ve fondo del escáner; no se juzga"))
+    donde = _virgen_caja_de_la_pelicula(componente, origen, escala, pelicula.validos.shape)
     del componente
     tinta = _virgen_tinta(planos, roi, p, v, escala)
     sigma, prueba_de_ruido = _virgen_ruido(planos, roi & ~tinta, v, escala)
@@ -1921,14 +2042,15 @@ def piso_de_pelicula_virgen(datos, P, nombre_archivo="", fecha_calculo=None, ori
     valores, como_fondo = _virgen_valores(planos, usar, p)
     prueba_de_rango, prueba_del_azul = _virgen_rango_y_testigo(valores, como_fondo, p, v)
     pruebas += [prueba_de_rango, prueba_del_azul]
-    uniformidad, gradiente = _virgen_uniformidad_y_gradiente(_virgen_bloques(planos, roi, usar, v, escala), v)
+    uniformidad, gradiente, gradientes = _virgen_uniformidad_y_gradiente(_virgen_bloques(planos, roi, usar, v, escala), v)
     pruebas.append(uniformidad)
     if gradiente is not None:
         pruebas.append(gradiente)
     pruebas.append(_virgen_rayas(planos, usar, sigma, v, escala))
     filas, columnas = np.flatnonzero(usar.any(axis=1)), np.flatnonzero(usar.any(axis=0))
-    region = {"caja": [int(columnas[0]) + ox, int(filas[0]) + oy, int(columnas[-1]) + 1 + ox, int(filas[-1]) + 1 + oy], "n": valores["G"][1], "area_mm2": round(area, 1)}
-    return _virgen_cerrar(pruebas, procedencia, parametros, valores, region)
+    region = {"caja": [int(columnas[0]) + ox, int(filas[0]) + oy, int(columnas[-1]) + 1 + ox, int(filas[-1]) + 1 + oy], "n": valores["G"][1], "area_mm2": round(area, 1), **donde}
+    tabla = uniformidad_y_ruido(planos, roi, escala, v, origen, gradientes)
+    return _virgen_cerrar(pruebas, procedencia, parametros, valores, region, _virgen_media(planos, roi, p), tabla)
 
 
 # ============================================================================= A.3: la referencia de la película virgen junto a la base de datos (un JSON, sin tabla nueva)

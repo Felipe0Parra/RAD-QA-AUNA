@@ -15,6 +15,7 @@ PF.0 (12-10-2026, PLAN_ANALISIS_PELICULAS_08-10.md) la extiende a la raiz de las
 anteriores): `verificar_peliculas` es la misma regla con archivos en vez de carpetas y con la raiz como criterio de "hay corpus": si la carpeta existe
 y falta una pelicula declarada, FALLA nombrandola; si la carpeta no existe, SALTA. Las dos reglas no se tocan entre si.
 """
+import ast
 import os
 
 import pytest
@@ -67,7 +68,7 @@ def verificar_peliculas(raiz, declaradas):
     assert not faltan, (
         f"La carpeta de peliculas existe ({raiz}), pero faltan peliculas declaradas en tests/_corpus.py: {detalle}. "
         "Las pruebas que usan esas claves SE SALTARIAN EN SILENCIO (DP-151). Si el archivo se renombro, edite SOLO la "
-        "entrada de PELICULAS_MENSUALES o PELICULAS_BRAQUI en tests/_corpus.py."
+        "entrada de PELICULAS_MENSUALES, PELICULAS_BRAQUI o PELICULAS_VIRGENES en tests/_corpus.py."
     )
 
 
@@ -219,4 +220,46 @@ class TestLasPeliculasReales:
         assert len(_corpus.PELICULAS_MENSUALES) >= 10 and len(_corpus.PELICULAS_BRAQUI) >= 4
 
     def test_si_la_carpeta_de_peliculas_esta_estan_todas_las_declaradas(self):
-        verificar_peliculas(_corpus.PELICULAS_RAIZ, _corpus.todas_las_peliculas_declaradas())
+        verificar_peliculas(_corpus.PELICULAS_RAIZ, _corpus.peliculas_vigiladas_por_pr0())
+
+
+class TestLasPeliculasVirgenesDeOD1:
+    """OD1-REV-PRU-02. EPSON178.TIF y EPSON179.TIF son el oraculo de la pelicula virgen de OD.1 (13 pruebas) y no estaban declaradas en `tests/_corpus.py`: si desaparecian o se renombraban, PR.0 seguia en verde y las 13
+    pruebas se saltaban en silencio (HI-0), la clase de DP-151. Ahora estan declaradas (registro aparte, para no entrar a las pruebas de A.1 y PF.0 que iteran las otras) y la regla de PR.0 las mira."""
+
+    def test_las_dos_virgenes_estan_declaradas_en_un_registro_aparte_y_la_regla_las_vigila(self):
+        assert _corpus.PELICULAS_VIRGENES == {"VIRGEN_EPSON178": "EPSON178.TIF", "VIRGEN_EPSON179": "EPSON179.TIF"}
+        assert set(_corpus.PELICULAS_VIRGENES) <= set(_corpus.peliculas_vigiladas_por_pr0())
+        assert not set(_corpus.PELICULAS_VIRGENES) & set(_corpus.todas_las_peliculas_declaradas()), "registro aparte: A.1 y PF.0 iteran el otro y exigen su forma y sus capturas"
+        assert len(_corpus.peliculas_vigiladas_por_pr0()) == len(_corpus.todas_las_peliculas_declaradas()) + len(_corpus.PELICULAS_VIRGENES)
+
+    def test_si_la_carpeta_existe_y_falta_una_virgen_la_regla_FALLA_nombrandola(self, tmp_path):
+        vigiladas = _corpus.peliculas_vigiladas_por_pr0()
+        for relativa in vigiladas.values():
+            (tmp_path / relativa).write_bytes(b"x" * 16)
+        verificar_peliculas(str(tmp_path), vigiladas)                                      # completa: ni salta ni falla
+        (tmp_path / vigiladas["VIRGEN_EPSON179"]).unlink()
+        texto = texto_del_fallo_de_peliculas(str(tmp_path), vigiladas)
+        assert "VIRGEN_EPSON179 ->" in texto and str(tmp_path / "EPSON179.TIF") in texto and texto.count(" -> ") == 1, texto
+
+    def test_con_el_registro_real_y_una_virgen_renombrada_FALLA_nombrandola(self, monkeypatch):
+        if not os.path.isdir(_corpus.PELICULAS_RAIZ):
+            pytest.skip(f"no hay carpeta de peliculas reales en esta maquina ({_corpus.PELICULAS_RAIZ}): HI-0, salto honesto")
+        monkeypatch.setitem(_corpus.PELICULAS_VIRGENES, "VIRGEN_EPSON178", "EPSON178_renombrada.TIF")
+        texto = texto_del_fallo_de_peliculas(_corpus.PELICULAS_RAIZ, _corpus.peliculas_vigiladas_por_pr0())
+        assert "VIRGEN_EPSON178 ->" in texto and "EPSON178_renombrada.TIF" in texto and "VIRGEN_EPSON179 ->" not in texto
+
+    def test_pelicula_resuelve_las_virgenes_por_su_clave(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_corpus, "PELICULAS_RAIZ", str(tmp_path))
+        assert _corpus.pelicula("VIRGEN_EPSON179") is None
+        (tmp_path / "EPSON179.TIF").write_bytes(b"x")
+        assert _corpus.pelicula("VIRGEN_EPSON179") == str(tmp_path / "EPSON179.TIF")
+
+    def test_toda_pelicula_real_que_pide_la_prueba_de_od1_esta_declarada(self):
+        """Por AST: cada `_ruta_real("X")` de `tests/test_od1_densidad_optica.py` nombra un archivo que el corpus declara (las virgenes o cualquiera de las otras): una pelicula real nueva sin declarar no puede saltarse en
+        silencio. No vacuidad: la prueba de OD.1 pide hoy las dos virgenes."""
+        arbol = ast.parse(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_od1_densidad_optica.py"), encoding="utf-8").read())
+        pedidas = [n.args[0].value for n in ast.walk(arbol) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "_ruta_real" and n.args and isinstance(n.args[0], ast.Constant)]
+        assert len(pedidas) >= 3 and {"EPSON178.TIF", "EPSON179.TIF"} <= set(pedidas), pedidas
+        declaradas = set(_corpus.peliculas_vigiladas_por_pr0().values())
+        assert all(nombre in declaradas for nombre in pedidas), [nombre for nombre in pedidas if nombre not in declaradas]

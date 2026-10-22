@@ -32,8 +32,19 @@ from PyQt5.QtWidgets import QComboBox, QPushButton
 
 import _placa_mensual_sintetica as gen
 from _e1_ayudas import (ADJETIVO, CAPAS, COLOR, TAM, USUARIO, _cursor_limpio, analizada, app, archivo_placa, cargar, clic, con_gid, dialogos, elegir_capa, escaneo_virgen,  # noqa: F401
-                        elegir_piso, etiquetas, fabrica, guardada, huella, marcar, parametros, pel, pm, recorrer, resultado_directo, svc, texto_de_la_tabla, ventana, ventana_mod)
+                        elegir_piso, etiquetas, fabrica, guardada, huella, marcar, parametros, pel, pm, recorrer, resultado_directo, sin_la_base, svc, texto_de_la_tabla, ventana, ventana_mod)
 from test_d1_guardado_placa_mensual import CAUSAS_NO_MEDIBLES, MENSAJE_NO_MEDIBLE, _auditoria, _causa, _consulta, bd, clics, placa, plantilla, recortada, virgen  # noqa: F401  (fixtures y ayudas de D.1)
+
+from _e1_ayudas import con_la_base_de_pixel  # noqa: F401  (fixture)
+
+
+# OD.1 (DA-87): la netOD es la base por omision del analisis y el rojo de la sintetica esta recortado en ella (la capa roja ya no se mide ni se guarda). Las pruebas de la
+# ventana de E.1 prueban el flujo (marcar, medir, guardar, reabrir, la regla de D.1b) con las TRES capas medibles, asi que fijan la base de VALOR DE PIXEL en todo el
+# archivo; la ventana en netOD (el menu del piso, el cuadro de la virgen, los perfiles dibujados en la base) la prueba `test_od1_densidad_optica.py`.
+@pytest.fixture(scope="module", autouse=True)
+def _base_de_pixel(con_la_base_de_pixel):
+    yield
+
 
 PREFIJO = "No se puede guardar: "
 NINGUNA = " Ninguna de las tres capas es medible en esta película: de este análisis no se guarda nada, ni la imagen."
@@ -156,7 +167,8 @@ class TestLaVentanaNoOfreceGuardarUnaCapaNoMedible:
     def test_con_el_piso_no_medible_la_ventana_dice_su_motivo_y_ofrece_la_virgen_y_el_sexto_clic(self, fabrica, dialogos, escenas, clics):
         v = analizada(fabrica(), dialogos, escenas[51.0].ruta, clics)
         assert not escenas[51.0].estado_del_piso.endswith("."), "premisa: el motivo del motor no trae punto final"
-        assert v.etiqueta_piso.text() == "Piso: " + escenas[51.0].estado_del_piso + ". Puede tomar el piso con «Marcar película sin irradiar» o con una película virgen («Película virgen...»).", \
+        # OD.1 (21-10): con un analisis hecho la linea del piso empieza por la frase de la base; la del piso, que es lo que esta prueba fija, sigue tras ella.
+        assert sin_la_base(v.etiqueta_piso.text()) == "Piso: " + escenas[51.0].estado_del_piso + ". Puede tomar el piso con «Marcar película sin irradiar» o con una película virgen («Película virgen...»).", \
             "E1-R2-PROD-02: la frase del motivo se cierra con su punto antes de la que ofrece la virgen y el sexto clic (EDITADA en la ronda 2: esperaba las dos frases pegadas sin punto)"
         assert not v.boton_guardar.isEnabled() and v.estado == "analizada"
 
@@ -186,7 +198,7 @@ class TestLaVentanaNoOfreceGuardarUnaCapaNoMedible:
         resultado, _b, _m = resultado_directo(placa.datos, clics, "punto_manual", dentro)
         assert resultado.piso.estado.startswith("no medible: el punto marcado no tiene el nivel de una película sin irradiar")
         assert v.linea_regla.text() == _linea(_motivo(resultado, "G"), ()) and "el punto marcado no tiene el nivel de una película sin irradiar" in v.linea_regla.text()
-        assert v.etiqueta_piso.text().startswith("Piso: no medible: el punto marcado no tiene el nivel") and "Puede tomar el piso con" in v.etiqueta_piso.text()
+        assert sin_la_base(v.etiqueta_piso.text()).startswith("Piso: no medible: el punto marcado no tiene el nivel") and "Puede tomar el piso con" in v.etiqueta_piso.text()       # OD.1: tras la frase de la base
         assert _controles(v) == _controles(fabrica())
 
     def test_una_pelicula_que_declara_otra_resolucion_no_se_ofrece(self, fabrica, dialogos, placa, clics, tmp_path):
@@ -209,6 +221,9 @@ class TestLaVentanaNoOfreceGuardarUnaCapaNoMedible:
         ruta.write_bytes(datos)
         pel().guardar_referencia_virgen(escaneo_virgen.referencia, os.path.dirname(bd), escaneo_virgen.datos, USUARIO)
         v = analizada(fabrica(), dialogos, str(ruta), puntos)
+        # OD.1 (21-10): con una referencia vigente el piso arranca en la virgen (`modo_efectivo`: DA-87), asi que la premisa de las esquinas se mira ELIGIENDO el piso automatico.
+        assert v.modo_del_piso == "virgen" and not v._modo_elegido, "con la referencia vigente el menu arranca en la virgen"
+        elegir_piso(v, "automatico")
         assert not v.boton_guardar.isEnabled() and v._resultado.piso.estado != "ok", "premisa: con el piso automatico esta pelicula no se mide (sin pelicula en las esquinas)"
         elegir_piso(v, "virgen")
         resultado, _b, _m = resultado_directo(datos, puntos, "virgen", None, escaneo_virgen.referencia)
@@ -437,7 +452,7 @@ class TestLaLineaDelPisoCierraSusFrases:
         alto, ancho = v._forma
         marcar(v, [(ancho * 0.2, alto * 0.2), (ancho * 0.8, alto * 0.2), (ancho * 0.5, alto * 0.5), (ancho * 0.8, alto * 0.8), (ancho * 0.2, alto * 0.8)])
         assert v.estado == "analizada" and v._resultado.piso is not None and v._resultado.piso.estado.startswith("no medible"), "premisa: el piso no se pudo medir"
-        texto = v.etiqueta_piso.text()
+        texto = sin_la_base(v.etiqueta_piso.text())               # OD.1: la frase de la base va primero; esta prueba mira la del piso
         assert texto.startswith("Piso: no medible: ") and texto.count("Puede tomar el piso con") == 1 and texto.endswith(" " + OFRECE_EL_PISO), texto
         antes = texto[:len(texto) - len(OFRECE_EL_PISO) - 1]
         assert antes[-1] in ".!?" and ".." not in antes, f"la frase del motivo termina en un signo final: ...{antes[-50:]!r}"
@@ -451,7 +466,7 @@ class TestLaLineaDelPisoCierraSusFrases:
         sin_piso = dataclasses.replace(piso.capas["G"], estado="no medible: el piso no es al menos 10 niveles más claro que la meseta")
         v._resultado = dataclasses.replace(v._resultado, piso=dataclasses.replace(piso, capas={**piso.capas, "G": sin_piso}, avisos=("Un aviso de prueba.",)))
         v._aplicar_la_regla()
-        assert v.etiqueta_piso.text() == "Piso (capa verde): no medible: el piso no es al menos 10 niveles más claro que la meseta. Un aviso de prueba."
+        assert sin_la_base(v.etiqueta_piso.text()) == "Piso (capa verde): no medible: el piso no es al menos 10 niveles más claro que la meseta. Un aviso de prueba."       # OD.1: tras la base
 
 
 ROTULOS_DEL_BARRIDO = {"central": "corte central, banda 0", "media": "media, discontinua", "mediana": "mediana, punteada"}

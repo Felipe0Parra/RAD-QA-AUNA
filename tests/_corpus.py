@@ -123,6 +123,15 @@ PELICULAS_BRAQUI = {
     "EPSON009": "EPSON009.jpeg",               # la TÍPICA: un TIFF RGBA de Paint con la extensión .jpeg y 96.012 dpi declarados
     "EPSON031": "EPSON031.JPG",                # el escaneo crudo (página entera) de la que sale braqui_00
 }
+# OD.1 (21-10-2026, DA-87; ronda 1 de revision, OD1-REV-PRU-02): las DOS peliculas VIRGENES TIFF que el fisico escaneo el 21-10, el ORACULO de la pelicula virgen de `tests/test_od1_densidad_optica.py`:
+# EPSON178 (ajustes automaticos del escaner: R 193, G 240, gris 212, fuera del rango de una pelicula sin irradiar: se rechaza solo por el rango) y EPSON179 (la cadena de las mensuales: una hoja de 210.9 x 279.1 mm en una
+# pagina carta; su media por capa R 152.12, G 194.11, B 86.77, gris 169.30 y las cuatro piezas de 10 x 10 cm y la hoja sin fondo que se arman con trozos suyos). Pesan 99 MB cada una. Registro APARTE de los dos
+# de arriba a proposito (igual que CORPUS_HOSPITAL junto a CATPHAN): las pruebas de A.1 y de PF.0 iteran `todas_las_peliculas_declaradas()` y exigen su forma, sus 23 nombres y sus capturas de HEAD. La regla de PR.0 las
+# mira igual (`peliculas_vigiladas_por_pr0()`): si la carpeta de peliculas existe y falta una, FALLA nombrandola. Antes de declararlas, un renombre apagaba 13 pruebas de OD.1 sin un solo rojo (la clase de DP-151).
+PELICULAS_VIRGENES = {
+    "VIRGEN_EPSON178": "EPSON178.TIF",
+    "VIRGEN_EPSON179": "EPSON179.TIF",
+}
 # Lo que se midió de cada película (12-10-2026) y que las pruebas dan por sentado: (ancho, alto, formato real según Pillow). Si el físico
 # reemplaza un archivo por otro distinto, la prueba lo nombra y se corrige AQUÍ.
 FORMA_DE_LAS_PELICULAS = {
@@ -137,6 +146,12 @@ MISMO_ARCHIVO = {"PLACA_REF6": "EPSON001_JPG"}
 COPIAS_EN_EL_REPO = {"BRAQUI_00_JPEG": "braqui_00.jpeg", "EPSON009": "EPSON009.jpeg", "EPSON031": "EPSON031.JPG"}
 
 
+def peliculas_vigiladas_por_pr0():
+    """`{clave: archivo relativo a PELICULAS_RAIZ}` de TODAS las peliculas que la regla de PR.0 vigila (si la carpeta existe, tienen que estar todas): las declaradas (mensuales y de braqui) MAS las virgenes de OD.1 (`PELICULAS_VIRGENES`,
+    registro aparte para no entrar a las pruebas que iteran `todas_las_peliculas_declaradas()`)."""
+    return {**todas_las_peliculas_declaradas(), **PELICULAS_VIRGENES}
+
+
 def todas_las_peliculas_declaradas():
     """`{clave: archivo relativo a PELICULAS_RAIZ}` de TODAS las películas del corpus externo (mensuales y de braqui): la que mira la regla de
     PR.0 aplicada a PELICULAS_RAIZ (`tests/test_pr0_corpus_completo.py::verificar_peliculas`). Aparte de `todas_las_series_declaradas()`: son
@@ -146,7 +161,7 @@ def todas_las_peliculas_declaradas():
 
 def pelicula(clave):
     """Ruta a una película real del corpus, o None si no existe (skip honesto)."""
-    ruta = os.path.join(PELICULAS_RAIZ, todas_las_peliculas_declaradas()[clave])
+    ruta = os.path.join(PELICULAS_RAIZ, peliculas_vigiladas_por_pr0()[clave])
     return ruta if os.path.isfile(ruta) else None
 
 

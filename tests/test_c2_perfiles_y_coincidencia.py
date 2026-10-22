@@ -72,7 +72,10 @@ def _pel():
 
 
 def _P(**cambios):
-    return {**_pm().VALORES_DE_LA_GEOMETRIA, **cambios}
+    # OD.1 (DA-87): la netOD es la base por omision del analisis y el rojo de la sintetica (y de las peliculas a 800 UM) esta recortado en ella; las pruebas de este
+    # archivo fijan verdades del VALOR DE PIXEL (el generador de PF.0 las da en esa base), asi que la fijan explicitamente para seguir probando lo mismo. La netOD la
+    # prueba `test_od1_densidad_optica.py`.
+    return {**_pm().VALORES_DE_LA_GEOMETRIA, "base_de_la_medida": _pm().BASE_VALOR_DE_PIXEL, **cambios}
 
 
 def _real(clave):
@@ -1154,10 +1157,10 @@ class TestAnalizarArmaTodoYLlamaUnaVezAlPiso:
         pm = _pm()
         original = pm.perfil_central
 
-        def sin_el_inplane(capa, eje, P, banda=0):
+        def sin_el_inplane(capa, eje, P, banda=0, **kw):                # OD.1 (OD1-REV-D1): `analizar` ahora pasa `base=` a `perfil_central`; el envoltorio lo deja pasar
             if eje == "inplane":
                 raise ValueError("La banda 0 del perfil inplane (de 1 a 25) queda fuera de la película girada.")
-            return original(capa, eje, P, banda)
+            return original(capa, eje, P, banda, **kw)
         monkeypatch.setattr(pm, "perfil_central", sin_el_inplane)
         res = pm.analizar(base.pelicula, base.puntos, _P())
         assert all(not res.capas[c].ok and res.capas[c].crossplane.ok and res.capas[c].inplane.fwhm_mm is None for c in CAPAS)
@@ -1282,10 +1285,10 @@ class TestAnalizarArmaTodoYLlamaUnaVezAlPiso:
         pm = _pm()
         original = pm.perfil_central
 
-        def sin_la_banda_del_azul(capa, eje, P, banda=0):
+        def sin_la_banda_del_azul(capa, eje, P, banda=0, **kw):         # OD.1 (OD1-REV-D1): idem, deja pasar `base=`
             if capa.nombre == "B" and eje == "inplane":
                 raise ValueError("La banda 0 del perfil inplane (de 1 a 25) queda fuera de la película girada.")
-            return original(capa, eje, P, banda)
+            return original(capa, eje, P, banda, **kw)
         monkeypatch.setattr(pm, "perfil_central", sin_la_banda_del_azul)
         res = pm.analizar(base.pelicula, base.puntos, _P())
         assert res.ok

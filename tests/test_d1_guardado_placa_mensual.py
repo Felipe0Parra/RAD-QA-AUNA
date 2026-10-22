@@ -101,7 +101,10 @@ def _pel():
 
 
 def _P():
-    return copy.deepcopy(_pm().VALORES_DE_LA_GEOMETRIA)
+    # OD.1 (DA-87): la netOD es la base por omision del analisis y el rojo de la sintetica (y de las peliculas a 800 UM) esta recortado en ella; las pruebas de este
+    # archivo fijan verdades del VALOR DE PIXEL (el generador de PF.0 las da en esa base), asi que la fijan explicitamente para seguir probando lo mismo. La netOD la
+    # prueba `test_od1_densidad_optica.py`.
+    return {**copy.deepcopy(_pm().VALORES_DE_LA_GEOMETRIA), "base_de_la_medida": _pm().BASE_VALOR_DE_PIXEL}
 
 
 def _json(valor):
@@ -1449,14 +1452,15 @@ class TestRecalcularYDiferencias:
         distinta = copy.deepcopy(registro["piso"]["referencia_virgen"])
         for capa in distinta["capas"].values():
             capa["mediana"] = capa["mediana"] + 15.0
+            capa["media"] = capa["media"] + 15.0                          # OD.1 (21-10): el VALOR de la referencia (`valor`, el piso que se usa) es la MEDIA de su zona, no la mediana
         otra = _pel().referencia_virgen_desde_dict(distinta)
         carpeta = str(Path(guardados.ruta).parent)                                       # la carpeta de la base: donde E.1 guarda `piso_pelicula_virgen.json`
         monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: guardados.ruta)    # la base "en uso" es esa: un servicio que buscara la referencia VIGENTE junto a ella la encontraria
         _pel().guardar_referencia_virgen(otra, carpeta)
-        assert _pel().leer_referencia_virgen(carpeta).valor("G") == registro["piso"]["referencia_virgen"]["capas"]["G"]["mediana"] + 15.0
+        assert _pel().leer_referencia_virgen(carpeta).valor("G") == registro["piso"]["referencia_virgen"]["capas"]["G"]["media"] + 15.0
         resultado = _svc().recalcular(registro)
         assert _svc().diferencias(registro, resultado) == []
-        assert resultado.piso.referencia.valor("G") == registro["piso"]["referencia_virgen"]["capas"]["G"]["mediana"]
+        assert resultado.piso.referencia.valor("G") == registro["piso"]["referencia_virgen"]["capas"]["G"]["media"]
 
     def test_diferencias_ve_cada_valor_guardado_que_cambia(self, registro_guardado, recalculado):
         svc = _svc()

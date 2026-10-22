@@ -12,7 +12,7 @@ LO QUE SE GARANTIZA, todo POR EL CAMINO DEL USUARIO (botones y menus reales, cli
      y mide de nuevo; un archivo de referencia danado se dice y no se usa.
   3. «PELICULA VIRGEN...». Elegir el escaneo, medirlo, el cuadro con la zona dibujada, su valor por capa, cada comprobacion con su cifra y su resultado en palabras, la orientacion declarada, y «Guardar como
      referencia» solo si es valida (si ya habia una pregunta con «No» por omision y la anterior se archiva); la ventana escribe el archivo junto a la base y la fila de auditoria; una virgen rechazada no se guarda.
-  4. GUARDAR Y REABRIR. Guardar llama al servicio con los clics SIN refinar, los 40 parametros de fabrica, la capa y el modo y deja lo mismo que el servicio llamado directo; una pregunta de reemplazo con «No»
+  4. GUARDAR Y REABRIR. Guardar llama al servicio con los clics SIN refinar, todos los parametros de fabrica (la base incluida), la capa y el modo y deja lo mismo que el servicio llamado directo; una pregunta de reemplazo con «No»
      por omision; el control anulado o un rechazo del servicio se dicen tal cual y la ventana queda como estaba. Abrir un control con analisis guardado carga la imagen y los puntos, vuelve a medir con LOS
      PARAMETROS, EL PISO Y LA COPIA DE LA VIRGEN GUARDADOS (nunca los de hoy ni la referencia vigente) y compara con lo guardado (DD3: una diferencia se dice); la capa y el piso quedan fijos (B7-C1); lo que
      la ventana muestra al reabrir es lo que mostraba al guardar.
@@ -49,6 +49,17 @@ from _e1_ayudas import (ADJETIVO, CAPAS, COLOR, DIBUJO_PY, FECHA_DE_PRUEBA, USUA
 from test_d1_guardado_placa_mensual import _auditoria, _consulta, _control, _sql, bd, clics, placa, plantilla  # noqa: F401  (fixtures y ayudas de D.1)
 
 CLICS_EPSON027 = [(206, 150), (2552, 154), (1381, 1337), (2536, 2508), (181, 2487)]     # los clics de la pagina entera del escaner (los de ML0 mas su desplazamiento, C.1)
+from _e1_ayudas import con_la_base_de_pixel  # noqa: F401  (fixture)
+
+
+# OD.1 (DA-87): la netOD es la base por omision del analisis y el rojo de la sintetica esta recortado en ella (la capa roja ya no se mide ni se guarda). Las pruebas de la
+# ventana de E.1 prueban el flujo (marcar, medir, guardar, reabrir, la regla de D.1b) con las TRES capas medibles, asi que fijan la base de VALOR DE PIXEL en todo el
+# archivo; la ventana en netOD (el menu del piso, el cuadro de la virgen, los perfiles dibujados en la base) la prueba `test_od1_densidad_optica.py`.
+@pytest.fixture(scope="module", autouse=True)
+def _base_de_pixel(con_la_base_de_pixel):
+    yield
+
+
 TABLA = "analisis_placa_mensual"
 
 
@@ -189,7 +200,7 @@ class TestElMenuCapaReportada:
         titulos = [a.get_title() for a in v._fig_perfiles.axes]
         assert [("(reportada)" in t) for t in titulos] == [t.startswith(f"Capa {ADJETIVO[capa]}") for t in titulos] and sum("(reportada)" in t for t in titulos) == 2
         assert v.nota_pestana1.text() == f"Estos son los desfases del perfil de grises. Lo que se guarda y se imprime es lo de la capa {ADJETIVO[capa]}, que se ve en la pestaña 3."
-        assert v.etiqueta_piso.text().startswith(f"Piso (capa {ADJETIVO[capa]}): ")
+        assert v.etiqueta_piso.text().startswith("Base de la medida: ") and f"Piso (capa {ADJETIVO[capa]}): " in v.etiqueta_piso.text()      # OD.1: la linea empieza por la base
 
     def test_los_perfiles_y_la_tabla_de_la_pestana_1_son_los_del_gris_y_no_cambian_con_el_menu(self, fabrica, dialogos, archivo_placa, clics):
         v = analizada(fabrica(), dialogos, archivo_placa, clics)
@@ -261,7 +272,8 @@ class TestElMenuDelPiso:
         """Cambiar el piso vuelve a medir y cambia los numeros: pasar la rueda por la ventana no puede hacerlo (la virgen esta disponible: sin la proteccion la rueda saltaria a ella)."""
         _guardar_referencia(bd, escaneo_virgen)
         v = fabrica()
-        assert v.selector_piso.model().item(2).isEnabled() and v.modo_del_piso == "automatico" and not v.selector_piso.hasFocus()
+        assert v.selector_piso.model().item(2).isEnabled() and v.modo_del_piso == "virgen" and not v.selector_piso.hasFocus()       # OD.1: con una referencia vigente el menu arranca en la virgen
+        v._poner_modo("automatico")                    # el fisico tiene elegido el automatico (la virgen sigue disponible: sin la proteccion la rueda saltaria a ella)
         rueda = QWheelEvent(QPointF(5, 5), QPointF(5, 5), QPoint(0, 0), QPoint(0, -120), 0, Qt.Vertical, Qt.NoButton, Qt.NoModifier)
         QApplication.sendEvent(v.selector_piso, rueda)
         assert v.modo_del_piso == "automatico" and not rueda.isAccepted()
@@ -286,13 +298,17 @@ class TestElMenuDelPiso:
         v = analizada(fabrica(), dialogos, archivo_placa, clics)
         assert len(espias["analizar"]) == 1
         primera = espias["analizar"][0][1]
-        assert primera["modo_piso"] == "automatico" and primera["referencia_virgen"] is None and primera["punto_manual"] is None, "el modo automatico no recibe la referencia aunque haya una"
-        elegir_piso(v, "virgen")
+        assert primera["modo_piso"] == "virgen" and primera["referencia_virgen"].procedencia["sha256"] == escaneo_virgen.referencia.procedencia["sha256"] and primera["punto_manual"] is None, \
+            "OD.1: con una referencia vigente el menu arranca en la virgen y el primer analisis la usa"
+        elegir_piso(v, "automatico")
         assert len(espias["analizar"]) == 2 and v.estado == "analizada"
         (args, kwargs) = espias["analizar"][1]
-        assert kwargs["modo_piso"] == "virgen" and kwargs["referencia_virgen"].procedencia["sha256"] == escaneo_virgen.referencia.procedencia["sha256"] and kwargs["punto_manual"] is None
+        assert kwargs["modo_piso"] == "automatico" and kwargs["referencia_virgen"] is None and kwargs["punto_manual"] is None, "el modo automatico no recibe la referencia aunque haya una"
         assert [m.clic for m in args[1]] == [m.clic for m in v.marcas], "con las mismas marcas ya hechas"
-        assert v._resultado.piso.modo == "virgen"
+        assert v._resultado.piso.modo == "automatico"
+        elegir_piso(v, "virgen")
+        assert len(espias["analizar"]) == 3 and v.estado == "analizada"
+        assert espias["analizar"][2][1]["modo_piso"] == "virgen" and espias["analizar"][2][1]["referencia_virgen"] is not None and v._resultado.piso.modo == "virgen"
 
     def test_en_el_modo_virgen_no_hay_region_en_la_pelicula_y_la_linea_dice_la_comparacion(self, fabrica, dialogos, archivo_placa, clics, bd, escaneo_virgen, placa):
         _guardar_referencia(bd, escaneo_virgen)
@@ -301,6 +317,7 @@ class TestElMenuDelPiso:
         assert not con_gid(v.eje_imagen, "piso:") and not any(con_gid(ax, "piso:") for ax in v._fig_capas.axes[:3]), "ninguna region del piso en la pelicula"
         resultado, _b, _m = resultado_directo(placa.datos, clics, "virgen", None, escaneo_virgen.referencia)
         texto = pel().texto_breve_del_piso(resultado.piso, "G") + " " + pel().texto_de_la_comparacion(resultado.piso) + "".join(" " + a for a in resultado.piso.avisos)
+        texto = ventana_mod().dibujo.texto_de_la_base(resultado.base) + " " + texto          # OD.1: la linea del piso empieza por la base del analisis
         assert v.etiqueta_piso.text() == texto, f"\n{v.etiqueta_piso.text()!r}\n{texto!r}"
         assert "película virgen «virgen_lote.tif»" in v.etiqueta_piso.text() and "Comparación" in v.etiqueta_piso.text() and pel().texto_de_la_comparacion(resultado.piso)
 
@@ -397,7 +414,9 @@ class TestElMenuDelPiso:
     def test_un_cambio_de_la_referencia_no_vuelve_a_medir_un_analisis_hecho_con_otro_piso(self, fabrica, dialogos, archivo_placa, clics, bd, escaneo_virgen, otro_escaneo_virgen, espias):
         """El analisis automatico (o con el punto marcado) no usa la referencia: que otro equipo guarde una no lo cambia, no se mide de nuevo."""
         _guardar_referencia(bd, escaneo_virgen)
-        v = analizada(fabrica(), dialogos, archivo_placa, clics)
+        v = fabrica()
+        elegir_piso(v, "automatico")                   # OD.1: con una referencia el menu arranca en la virgen; el fisico elige las esquinas
+        analizada(v, dialogos, archivo_placa, clics)
         medidas = len(espias["analizar"])
         _guardar_referencia(bd, otro_escaneo_virgen)
         v.refrescar()
@@ -505,10 +524,10 @@ class TestPeliculaVirgen:
         try:
             assert cuadro.windowTitle() == "Película virgen" and cuadro.boton_guardar.isEnabled()
             valores = texto_de_la_tabla(cuadro.tabla_valores)
-            assert [f[0] for f in valores] == ["Capa roja", "Capa verde", "Capa azul", "Gris"] and [f[1] for f in valores] == [f"{r.capas[c].mediana:.1f}" for c in ("R", "G", "B", "gris")]
+            assert [f[0] for f in valores] == ["Capa roja", "Capa verde", "Capa azul", "Gris"] and [f[1] for f in valores] == [f"{r.valor(c):.1f}" for c in ("R", "G", "B", "gris")]      # OD.1: el valor del piso es la media
             pruebas = texto_de_la_tabla(cuadro.tabla_pruebas)
-            assert len(pruebas) == len(r.pruebas) == 10 and all(f[1] in ("pasa", "aviso", "rechazo") and f[2] for f in pruebas)
-            assert [f[1] for f in pruebas] == ["pasa"] * 10 and "virgen_lote.tif" in cuadro.procedencia.text() and "huella" in cuadro.procedencia.text() and cuadro.resumen.text() == r.descripcion()
+            assert len(pruebas) == len(r.pruebas) == 11 and all(f[1] in ("pasa", "aviso", "rechazo") and f[2] for f in pruebas)      # OD.1: una mas, «C3 fondo: no se ve fondo del escaner; no se juzga»
+            assert [f[1] for f in pruebas] == ["pasa"] * 11 and "virgen_lote.tif" in cuadro.procedencia.text() and "huella" in cuadro.procedencia.text() and cuadro.resumen.text() == r.descripcion()
             assert [cuadro.selector_orientacion.itemText(i) for i in range(2)] == ["misma que la película irradiada", "girada"] and cuadro.orientacion_declarada() == "misma que la película irradiada"
             assert por_gid(cuadro.eje, "virgen:zona"), "la zona que se midio se ve dibujada sobre el escaneo"
         finally:
@@ -526,7 +545,7 @@ class TestPeliculaVirgen:
     def test_un_escaneo_que_ya_no_se_puede_leer_deja_el_cuadro_con_sus_tablas_y_sin_imagen(self, escaneo_virgen, app):
         cuadro = ventana_mod().DialogoPeliculaVirgen(escaneo_virgen.referencia, b"esto no es una imagen", None, None)
         try:
-            assert cuadro.tabla_valores.rowCount() == 4 and cuadro.tabla_pruebas.rowCount() == 10 and not cuadro.eje.images and not por_gid(cuadro.eje, "virgen:zona")
+            assert cuadro.tabla_valores.rowCount() == 4 and cuadro.tabla_pruebas.rowCount() == 11 and not cuadro.eje.images and not por_gid(cuadro.eje, "virgen:zona")
         finally:
             cerrar(cuadro)
 
@@ -537,7 +556,7 @@ class TestPeliculaVirgen:
         try:
             assert not cuadro.boton_guardar.isEnabled()
             resultados = {f[0]: f[1] for f in texto_de_la_tabla(cuadro.tabla_pruebas)}
-            assert resultados["C3 recorte"] == "rechazo" and resultados["rango"] == "rechazo" and resultados["C5 uniformidad"] == "rechazo"
+            assert resultados["rango"] == "rechazo" and resultados["C3 recorte"] == "aviso" and resultados["C5 uniformidad"] == "aviso"      # OD.1: el recorte y la uniformidad avisan; el rango rechaza
             cuadro._al_guardar()
             assert not cuadro.guardar_solicitado, "ni llamando al manejador por codigo se pide guardar una referencia que no es valida"
         finally:
@@ -642,7 +661,7 @@ class TestGuardar:
         (args, kwargs), = espias["guardar"]
         assert args[0] == v.ref_de_prueba and args[1] == USUARIO and args[2] == placa.datos and args[3] == "placa.png"
         assert args[4] == [m.clic for m in v.marcas] and all(m.estado == "refinada" and m.punto != m.clic for m in v.marcas), "los clics SIN refinar: el servicio los refina el mismo"
-        assert args[5] == parametros() and len(args[5]) == 40 and args[6] == "G" and args[7] == "automatico" and kwargs == {"punto_manual": None, "referencia_virgen": None}
+        assert args[5] == parametros() and len(args[5]) == len(pm().VALORES_DE_LA_GEOMETRIA) == 41 and args[6] == "G" and args[7] == "automatico" and kwargs == {"punto_manual": None, "referencia_virgen": None}
 
     def test_guardar_llamado_por_codigo_sin_un_analisis_de_esta_sesion_no_hace_nada(self, fabrica, dialogos, archivo_placa, clics, espias):
         v = fabrica()
@@ -900,10 +919,10 @@ class TestLimpiarYRecalcular:
         v = fabrica()
         nueva = huella(v)
         analizada(v, dialogos, archivo_placa, clics)
-        elegir_piso(v, "virgen")
-        assert v.modo_del_piso == "virgen" and v.estado == "analizada", "premisa: la virgen esta elegida y disponible"
+        elegir_piso(v, "automatico")                   # OD.1: con una referencia la ventana nueva arranca en la virgen; el fisico eligio las esquinas
+        assert v.modo_del_piso == "automatico" and v.estado == "analizada" and v.selector_piso.model().item(2).isEnabled(), "premisa: las esquinas estan elegidas y la virgen sigue disponible"
         v.boton_limpiar.click()
-        assert v.modo_del_piso == "automatico" and v.selector_piso.model().item(2).isEnabled() and huella(v) == nueva
+        assert v.modo_del_piso == "virgen" and v.selector_piso.model().item(2).isEnabled() and huella(v) == nueva
 
     def test_limpiar_vuelve_a_leer_la_referencia_de_la_pelicula_virgen(self, fabrica, bd, escaneo_virgen):
         """Una ventana recien creada lee la referencia vigente; «Limpiar» la deja igual a una recien creada, asi que la lee otra vez (otro equipo pudo guardar una con la ventana abierta)."""
@@ -1216,9 +1235,10 @@ class TestLaVentanaNoHaceLoQueNoDebe:
         donde = {}
         for f in (n for n in ast.walk(arbol_de_la_ventana) if isinstance(n, ast.FunctionDef)):
             for a in ast.walk(f):
-                if isinstance(a, ast.Attribute) and a.attr in ("CAPA_POR_OMISION", "MODO_DEL_PISO_POR_OMISION"):
+                if isinstance(a, ast.Attribute) and a.attr in ("CAPA_POR_OMISION", "MODO_DEL_PISO_POR_OMISION", "modo_efectivo"):
                     donde.setdefault(a.attr, set()).add(f.name)
-        assert donde == {"CAPA_POR_OMISION": {"_restablecer_estado"}, "MODO_DEL_PISO_POR_OMISION": {"_restablecer_estado", "_actualizar_el_menu_del_piso"}}, donde
+        # OD.1: el modo con que arranca el menu «Piso» lo da `pelicula.modo_efectivo` (la UNICA regla, que lee la constante); la ventana la pregunta en UN solo sitio y no lee la constante.
+        assert donde == {"CAPA_POR_OMISION": {"_restablecer_estado"}, "modo_efectivo": {"_modo_por_omision"}}, donde
 
     def test_no_escribe_las_tres_capas_a_mano_ni_ningun_modo_del_piso_suelto(self, arbol_de_la_ventana):
         assert not _las_tres_capas_a_mano(arbol_de_la_ventana) and not _las_tres_capas_a_mano(ast.parse(DIBUJO_PY.read_text(encoding="utf-8")))

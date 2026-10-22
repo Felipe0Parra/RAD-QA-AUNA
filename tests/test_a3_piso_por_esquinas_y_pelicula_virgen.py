@@ -71,13 +71,15 @@ PLAN_A3 = {"margen_borde_mm": 1.0, "apartar_borde_de_la_imagen": True, "piso_esp
            "iqr_maximo": 15.0, "esquinas_minimas": 3, "giro_respaldo_grados": 5.0, "s_respaldo": [0.05, 0.10], "distancia_respaldo_maxima_mm": 11.0, "paso_respaldo_mm": 0.5,
            "tolerancia_virgen_mas_oscura": 3.0, "aviso_azul_virgen": 5.0, "aviso_verde_virgen": 25.0}
 PLAN_DEL_PISO = {**A2.PLAN, **PLAN_A3}
+# OD.1 (21-10): el recorte (C3), la uniformidad (C5) y las motas (C6) AVISAN y ya no rechazan: se retiran `recorte_rechazo`, `cv_rechazo`, `dev_rechazo` y `motas_rechazo_fraccion`; se suma
+# `lado_region_uniformidad_virgen_mm` (las cinco regiones de 10 x 10 mm de la tabla de uniformidad y ruido, como el Catphan).
 PLAN_DE_LA_VIRGEN = {
-    "margen_borde_virgen_mm": 2.0, "area_minima_virgen_mm2": 400.0, "lado_bloque_virgen_mm": 5.0, "bloques_minimos_virgen": 4, "recorte_rechazo": 0.001, "recorte_aviso": 0.0001,
+    "margen_borde_virgen_mm": 2.0, "area_minima_virgen_mm2": 400.0, "lado_bloque_virgen_mm": 5.0, "bloques_minimos_virgen": 4, "recorte_aviso": 0.0001,
     "distancia_fondo_mm": 2.0, "borde_imagen_fondo_mm": 1.0, "pixeles_fondo_minimos": 10000, "fondo_blanco_minimo": 0.995,
-    "cv_aviso": {"R": 0.015, "G": 0.010, "B": 0.015, "gris": 0.010}, "cv_rechazo": {"R": 0.03, "G": 0.02, "B": 0.03, "gris": 0.02},
-    "dev_aviso": {"R": 0.03, "G": 0.02, "B": 0.03, "gris": 0.02}, "dev_rechazo": {"R": 0.06, "G": 0.04, "B": 0.06, "gris": 0.04},
+    "cv_aviso": {"R": 0.015, "G": 0.010, "B": 0.015, "gris": 0.010},
+    "dev_aviso": {"R": 0.03, "G": 0.02, "B": 0.03, "gris": 0.02},
     "gradiente_aviso_pct_por_10cm": 1.0, "extension_minima_gradiente_mm": 60.0, "ventana_motas_mm": 1.3, "motas_sigmas": 6.0, "motas_niveles": 8.0, "motas_pixeles_grupo": 3,
-    "dilatacion_tinta_y_motas_mm": 0.5, "motas_aviso_fraccion": 0.0005, "motas_aviso_grupo_mm2": 0.2, "motas_rechazo_fraccion": 0.02, "ventana_ruido_mm": 0.5,
+    "dilatacion_tinta_y_motas_mm": 0.5, "motas_aviso_fraccion": 0.0005, "motas_aviso_grupo_mm2": 0.2, "lado_region_uniformidad_virgen_mm": 10.0, "ventana_ruido_mm": 0.5,
     "ruido_aviso": {"R": 3.5, "G": 2.5, "B": 3.5}, "ventana_rayas_mm": 2.0, "rayas_aviso_niveles": 1.0, "azul_testigo": [75.0, 95.0], "calidad_jpeg_editor": 90.0}
 ABIERTO = {"piso_esperado": {c: [0.0, 255.0] for c in CAPAS}, "iqr_maximo": 255.0}          # el rango y el IQR abiertos: lo que el control de la regla (7) necesita
 
@@ -260,7 +262,7 @@ class TestElSelectorDeModo:
     def test_a_las_constantes_del_selector(self):
         pel = _pel()
         assert pel.MODOS_DEL_PISO == ("automatico", "punto_manual", "virgen")
-        assert pel.MODO_DEL_PISO_POR_OMISION == "automatico"
+        assert pel.MODO_DEL_PISO_POR_OMISION == "virgen"           # OD.1 (DA-87): el piso por omision es el de la pelicula virgen; sin una referencia cargada `modo_efectivo` toma las esquinas
         assert pel.MODO_DE_ORIGEN == {"automatico": "automatico", "manual": "punto_manual", "virgen": "virgen"}
         assert pel.ESQUINAS == ESQUINAS and pel.NOMBRE_DE_ESQUINA == NOMBRE_DE_ESQUINA
 
@@ -276,12 +278,16 @@ class TestElSelectorDeModo:
         assert tuple(con_punto.punto) == punto and auto.punto is None
 
     def test_a_cambiar_el_modo_por_omision_es_una_linea_y_sin_referencia_nunca_cae_al_automatico(self, monkeypatch):
+        """OD.1 (DA-87): con el modo por omision en «virgen» y SIN un modo pedido, la regla (`modo_efectivo`) toma las esquinas si todavia no hay una referencia cargada (el `Piso` dice su origen); con el modo
+        «virgen» PEDIDO y sin referencia el piso sigue siendo «no medible» y nunca cae solo al automatico (V7)."""
         s = A2._sint("B", 0.4)
         pel = _pel()
         monkeypatch.setattr(pel, "MODO_DEL_PISO_POR_OMISION", "virgen")
-        p = piso(s.pelicula, s.campo)
+        sin = piso(s.pelicula, s.campo)
+        assert sin.estado == "ok" and sin.origen == "automatico" and sin.modo == "automatico", "OD.1: la omision «virgen» sin referencia son las esquinas"
+        p = piso(s.pelicula, s.campo, modo="virgen")
         assert p.estado.startswith(pel.MOTIVO_SIN_REFERENCIA_VIRGEN) and p.origen == "virgen" and p.modo == "virgen" and p.region is None
-        assert all(c.mediana is None and c.estado == p.estado for c in p.capas.values()), "con el modo «virgen» y sin referencia dio un numero (¿cayo al automatico?)"
+        assert all(c.mediana is None and c.estado == p.estado for c in p.capas.values()), "con el modo «virgen» pedido y sin referencia dio un numero (¿cayo al automatico?)"
         assert piso(s.pelicula, s.campo, punto=_punto_sobre_la_pelicula(s)).modo == "punto_manual", "el punto marcado manda sobre el modo por omision, como en A.2"
 
     @pytest.mark.parametrize("modo,con_punto,referencia", [("otro", False, None), ("AUTOMATICO", False, None), ("automatico", True, None), ("punto_manual", False, None),
@@ -317,7 +323,10 @@ class TestElSelectorDeModo:
         f = next(n for n in arbol.body if isinstance(n, ast.FunctionDef) and n.name == "piso_de_pelicula")
         firma = {a.arg: d for a, d in zip(f.args.args[-len(f.args.defaults):], f.args.defaults)}
         assert isinstance(firma["modo"], ast.Constant) and firma["modo"].value is None, "el modo por omision de la firma es None: lo decide la constante"
-        assert "MODO_DEL_PISO_POR_OMISION" in {n.id for n in ast.walk(f) if isinstance(n, ast.Name)}, "la funcion no lee la constante del modo por omision"
+        # OD.1: la constante la lee la regla del modo, `modo_efectivo` (la UNICA), y `piso_de_pelicula` le pregunta a ella; ninguna funcion escribe el modo por omision a mano
+        g = next(n for n in arbol.body if isinstance(n, ast.FunctionDef) and n.name == "modo_efectivo")
+        assert "MODO_DEL_PISO_POR_OMISION" in {n.id for n in ast.walk(g) if isinstance(n, ast.Name)}, "`modo_efectivo` no lee la constante del modo por omision"
+        assert "modo_efectivo" in {n.id for n in ast.walk(f) if isinstance(n, ast.Name)}, "la funcion no le pregunta a la regla del modo"
         escritos = [c.value for n in ast.walk(f) if isinstance(n, ast.Compare) for c in [n.comparators[0]] if isinstance(c, ast.Constant) and c.value == "automatico"]
         assert not [n for n in ast.walk(f) if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "modo" for t in n.targets)
                     and isinstance(n.value, ast.Constant) and n.value.value == "automatico"], "la funcion escribe el modo por omision en vez de leerlo de la constante"
@@ -1074,7 +1083,7 @@ class TestLaPeliculaVirgen:
         pr = ref.procedencia
         assert pr["archivo"] == "virgen_lote.tif" and pr["sha256"] == hashlib.sha256(datos).hexdigest() and pr["bytes"] == len(datos)
         assert pr["formato"] == "TIFF" and pr["bits"] == 8 and abs(pr["dpi_declarado"] - 600.0) < 0.01 and pr["clase_resolucion"] == "coincide" and pr["forma"] == [3300, 3300]
-        assert pr["fecha_calculo"] == FECHA and pr["version"] == "PV-1" and pr["orientacion_declarada"] is None and pr["calidad_jpeg"] is None
+        assert pr["fecha_calculo"] == FECHA and pr["version"] == "PV-2" and pr["orientacion_declarada"] is None and pr["calidad_jpeg"] is None
         assert ref.region["n"] == ref.capas["G"].n and ref.region["area_mm2"] > 10000 and len(ref.region["caja"]) == 4
         assert {k: ref.parametros[k] for k in PLAN_DE_LA_VIRGEN} == PLAN_DE_LA_VIRGEN and {k: ref.parametros[k] for k in PLAN_DEL_PISO} == PLAN_DEL_PISO
         # el control del fondo: con el ruido del generador en el fondo de la pagina, C3 fondo avisa
@@ -1099,7 +1108,7 @@ class TestLaPeliculaVirgen:
 
     def test_g_recortada_a_ras_no_tiene_fondo_y_da_lo_mismo(self):
         ref, base = _base()[0], _medir_virgen(gen.codificar(_virgen_arreglo("B"), "tiff", 600))
-        assert "C3 fondo" not in _resultados(ref) and ref.estado == "ok"
+        assert ref.estado == "ok" and {p.nombre: (p.resultado, p.texto) for p in ref.pruebas}["C3 fondo"] == ("ok", "no se ve fondo del escáner; no se juzga"), "OD.1: antes se omitia en silencio"
         assert all(abs(ref.valor(c) - base.valor(c)) <= 0.6 for c in CAPAS)
 
     def test_g_un_jpeg_vuelto_a_guardar_avisa_de_la_cadena_de_captura(self):
@@ -1124,25 +1133,26 @@ class TestLaPeliculaVirgen:
         assert [(p.nombre, p.resultado) for p in ref.pruebas] == [("C1 cadena", "rechazo")] and "300" in ref.pruebas[0].texto
         assert all(ref.valor(c) is None and ref.capas[c].estado.startswith("no") for c in CAPAS) and ref.region is None
 
-    def test_g_la_pelicula_irradiada_no_es_virgen_recorte_rango_y_uniformidad(self):
+    def test_g_la_pelicula_irradiada_no_es_virgen_por_el_rango_y_su_recorte_y_su_uniformidad_solo_avisan(self):
+        """OD.1 (DA-87): lo unico que rechaza una pelicula irradiada es el rango de una pelicula sin irradiar; su recorte (C3) y su uniformidad (C5) AVISAN y se ven en la tabla."""
         irradiada = A2._sint("B", 0.0)
         ref = _medir_virgen(gen.codificar(np.array(irradiada.img), "tiff", 600))
         malas = {p.nombre for p in ref.pruebas if p.resultado == "rechazo"}
-        assert ref.estado.startswith("no válida: ") and {"C3 recorte", "rango", "C5 uniformidad"} <= malas, (ref.estado, malas)
+        avisos = {p.nombre for p in ref.pruebas if p.resultado == "aviso"}
+        assert ref.estado.startswith("no válida: ") and malas == {"rango"} and {"C3 recorte", "C5 uniformidad"} <= avisos, (ref.estado, malas, avisos)
         primero = next(p for p in ref.pruebas if p.resultado == "rechazo")
-        assert ref.estado == _pel().PREFIJO_NO_VALIDA + primero.texto and primero.nombre == "C3 recorte"
+        assert ref.estado == _pel().PREFIJO_NO_VALIDA + primero.texto and primero.nombre == "rango"
 
-    def test_g_una_zona_irradiada_se_rechaza_por_uniformidad_y_solo_por_ella(self):
+    def test_g_una_zona_irradiada_avisa_por_uniformidad_y_no_se_rechaza(self):
         img = _virgen_arreglo("A").astype(np.float32)
         h, w = img.shape[:2]
         bulto = np.exp(-(((np.arange(w)[None, :] - w * 0.35) ** 2 + (np.arange(h)[:, None] - h * 0.35) ** 2) / (2 * 300.0 ** 2)))
         for canal, dv in ((0, -2), (1, -6), (2, -10)):
             img[:, :, canal] += dv * bulto
         ref = _medir_virgen(gen.codificar(np.clip(np.rint(img), 0, 255).astype(np.uint8), "tiff", 600))
-        malas = {p.nombre for p in ref.pruebas if p.resultado == "rechazo"}
-        assert malas == {"C5 uniformidad"}, _resultados(ref)
+        assert ref.estado == "ok" and not [p for p in ref.pruebas if p.resultado == "rechazo"], _resultados(ref)          # OD.1: la uniformidad avisa; la tabla de uniformidad y ruido la muestra
         texto = next(p.texto for p in ref.pruebas if p.nombre == "C5 uniformidad")
-        assert "no es uniforme" in texto and "rojo" in texto and ref.estado == _pel().PREFIJO_NO_VALIDA + texto
+        assert _resultados(ref)["C5 uniformidad"] == "aviso" and "rojo" in texto and "no es uniforme" not in texto and texto in ref.avisos
 
     def test_g_una_irregularidad_leve_solo_avisa_y_no_rechaza(self):
         """El umbral de aviso no es el de rechazo: un bulto de -4 niveles en el rojo (3.8 % del valor) avisa y no rechaza."""
@@ -1153,18 +1163,18 @@ class TestLaPeliculaVirgen:
         ref = _medir_virgen(gen.codificar(np.clip(np.rint(img), 0, 255).astype(np.uint8), "tiff", 600))
         assert ref.estado == "ok" and _resultados(ref)["C5 uniformidad"] == "aviso", _resultados(ref)
 
-    def test_g_un_pixel_recortado_en_el_1_por_ciento_se_rechaza_por_recorte(self):
+    def test_g_un_pixel_recortado_en_el_1_por_ciento_avisa_por_recorte_y_no_se_rechaza(self):
         img = _virgen_arreglo("A")
         rng = np.random.default_rng(3)
         img[:, :, 2][rng.random(img.shape[:2]) < 0.01] = 255
         ref = _medir_virgen(gen.codificar(img, "tiff", 600))
-        assert ref.estado.startswith("no válida: ") and _resultados(ref)["C3 recorte"] == "rechazo", _resultados(ref)
+        assert ref.estado == "ok" and _resultados(ref)["C3 recorte"] == "aviso", _resultados(ref)          # OD.1: el recorte avisa (el rango de una pelicula sin irradiar es quien rechaza)
         assert "recortada" in next(p.texto for p in ref.pruebas if p.nombre == "C3 recorte")
 
     def test_g_el_recorte_entre_el_umbral_de_aviso_y_el_de_rechazo_solo_avisa(self):
         img = _virgen_arreglo("A")
         rng = np.random.default_rng(3)
-        img[:, :, 2][rng.random(img.shape[:2]) < 0.0005] = 255                      # 0.05 %: mas que el aviso (0.01 %), menos que el rechazo (0.1 %)
+        img[:, :, 2][rng.random(img.shape[:2]) < 0.0005] = 255                      # 0.05 %: mas que el aviso (0.01 %); desde OD.1 el recorte ya no rechaza ni con el 1 %
         ref = _medir_virgen(gen.codificar(img, "tiff", 600))
         assert _resultados(ref)["C3 recorte"] == "aviso" and ref.estado == "ok", _resultados(ref)
 
@@ -1252,8 +1262,9 @@ class TestLaPeliculaVirgen:
         assert _resultados(ref)["C7 rayas"] == "aviso" and ref.estado == "ok", _resultados(ref)
         assert "columnas" in next(p.texto for p in ref.pruebas if p.nombre == "C7 rayas")
 
-    def test_g_una_pelicula_sucia_o_rayada_se_rechaza(self):
-        """400 motas de 7 x 7 pixeles (0.3 mm, +60 niveles) al azar: con el halo de 0.5 mm cubren el 4.6 % de la zona medida, mas que el 2 % del rechazo. 40 motas (0.5 %) solo avisan."""
+    def test_g_una_pelicula_sucia_o_rayada_avisa_y_no_se_rechaza(self):
+        """400 motas de 7 x 7 pixeles (0.3 mm, +60 niveles) al azar: con el halo de 0.5 mm cubren el 4.6 % de la zona medida. OD.1 (DA-87): las motas AVISAN y se apartan del piso (antes el 2 % rechazaba: una
+        pieza de 10 x 10 cm de una pelicula sin tocar tiene motas en el 2.14 % de su zona); 40 motas (0.5 %) tambien avisan."""
         rng = np.random.default_rng(5)
         resultados = {}
         for n in (40, 400):
@@ -1263,30 +1274,29 @@ class TestLaPeliculaVirgen:
                 img[y:y + 7, x:x + 7, :] += 60
             resultados[n] = _medir_virgen(gen.codificar(np.clip(img, 0, 255).astype(np.uint8), "tiff", 600))
         sucia, poca = resultados[400], resultados[40]
-        assert sucia.estado.startswith("no válida: ") and _resultados(sucia)["C6 motas"] == "rechazo", _resultados(sucia)
-        assert sucia.estado == _pel().PREFIJO_NO_VALIDA + next(p.texto for p in sucia.pruebas if p.resultado == "rechazo") and "sucia o rayada" in sucia.estado
-        assert all(sucia.valor(c) is None for c in CAPAS) and sucia.region is None
+        assert sucia.estado == "ok" and _resultados(sucia)["C6 motas"] == "aviso", _resultados(sucia)
+        assert "se apartan del piso" in next(p.texto for p in sucia.pruebas if p.nombre == "C6 motas") and not [p for p in sucia.pruebas if p.resultado == "rechazo"]
+        assert all(sucia.valor(c) is not None for c in CAPAS) and sucia.region is not None, "una pelicula con motas se mide: las motas se apartan del piso y no la rechazan"
+        assert sucia.capas["G"].n < poca.capas["G"].n, "con mas motas se apartan mas pixeles"
         assert poca.estado == "ok" and _resultados(poca)["C6 motas"] == "aviso", (poca.estado, _resultados(poca))
-        con_mas_margen = _medir_virgen(gen.codificar(np.clip(np.array(_virgen_arreglo("A")).astype(np.int16), 0, 255).astype(np.uint8), "tiff", 600), P=_P(motas_rechazo_fraccion=0.0001))
-        assert _resultados(con_mas_margen)["C6 motas"] == "ok", "sin motas, el parametro del rechazo no cambia nada"
 
     def test_g_los_pixeles_sueltos_y_los_pares_no_son_motas_y_los_grupos_de_tres_si(self):
         """600 grupos de 1, de 2 y de 3 pixeles claros (+60) en una cuadricula: un pixel o dos son ruido del sensor (la mota minima es `motas_pixeles_grupo` = 3 pixeles) y no se apartan ni
-        avisan; con tres, los mismos 600 grupos cubren el 4.6 % de la zona (con su halo) y se rechazan."""
+        avisan; con tres, los mismos 600 grupos cubren el 4.6 % de la zona (con su halo): avisan y se apartan del piso (OD.1: ya no rechazan)."""
         paso = 60
         base = _virgen_arreglo("A")
         alto, ancho = base.shape[:2]
         celdas = [(y, x) for y in range(150, alto - 150, paso) for x in range(150, ancho - 150, paso)]
         elegidas = np.random.default_rng(7).permutation(len(celdas))[:600]
         sin_motas = _base()[0]
-        for tam, rechaza in ((1, False), (2, False), (3, True)):
+        for tam, avisa in ((1, False), (2, False), (3, True)):
             img = base.astype(np.int16)
             for k in elegidas:
                 y, x = celdas[k]
                 img[y, x:x + tam, :] += 60
             ref = _medir_virgen(gen.codificar(np.clip(img, 0, 255).astype(np.uint8), "tiff", 600))
-            if rechaza:
-                assert ref.estado.startswith("no válida: ") and _resultados(ref)["C6 motas"] == "rechazo", (tam, _resultados(ref))
+            if avisa:
+                assert ref.estado == "ok" and _resultados(ref)["C6 motas"] == "aviso" and ref.capas["G"].n < sin_motas.capas["G"].n, (tam, _resultados(ref))      # OD.1: las motas avisan y se apartan
             else:
                 assert ref.estado == "ok" and _resultados(ref)["C6 motas"] == "ok", (tam, _resultados(ref))
                 assert ref.capas["G"].n == sin_motas.capas["G"].n, "los pixeles sueltos no se apartan del piso"
@@ -1409,7 +1419,7 @@ class TestLaReferenciaVirgenSeGuardaJuntoALaBase:
         ruta = pel.guardar_referencia_virgen(ref, str(tmp_path), datos=datos, usuario="lamaya")
         assert Path(ruta) == tmp_path / pel.ARCHIVO_REFERENCIA_VIRGEN == tmp_path / "piso_pelicula_virgen.json"
         contenido = json.loads(Path(ruta).read_text(encoding="utf-8"))
-        assert set(contenido) == {"version", "referencia", "guardada_por", "guardada_el"} and contenido["version"] == "PV-1" and contenido["guardada_por"] == "lamaya"
+        assert set(contenido) == {"version", "referencia", "guardada_por", "guardada_el"} and contenido["version"] == "PV-2" and contenido["guardada_por"] == "lamaya"
         assert len(contenido["guardada_el"]) == 19 and contenido["guardada_el"][4] == "-" and contenido["guardada_el"][10] == "T"
         assert contenido["referencia"] == ref.como_dict()
         leida = pel.leer_referencia_virgen(str(tmp_path))
@@ -1503,7 +1513,7 @@ class TestLaReferenciaVirgenSeGuardaJuntoALaBase:
         ruta.write_text("{ esto no es json", encoding="utf-8")
         with pytest.raises(ValueError):
             pel.leer_referencia_virgen(str(tmp_path))
-        bueno = {"version": "PV-1", "referencia": a.como_dict(), "guardada_por": None, "guardada_el": "2026-10-13T10:00:00"}
+        bueno = {"version": "PV-2", "referencia": a.como_dict(), "guardada_por": None, "guardada_el": "2026-10-13T10:00:00"}
         for cambio in ({"version": "PV-9"}, {"referencia": {**a.como_dict(), "version": "PV-9"}}, {"referencia": {k: v for k, v in a.como_dict().items() if k != "capas"}}):
             ruta.write_text(json.dumps({**bueno, **cambio}), encoding="utf-8")
             with pytest.raises(ValueError):
@@ -1541,7 +1551,7 @@ class TestLaReferenciaVirgenSeGuardaJuntoALaBase:
     def test_h_la_referencia_desde_su_diccionario_es_la_inversa_de_como_dict(self):
         a = _base()[0]
         d = a.como_dict()
-        assert json.loads(json.dumps(d)) == d and d["version"] == "PV-1" and d["estado"] == "ok"
+        assert json.loads(json.dumps(d)) == d and d["version"] == "PV-2" and d["estado"] == "ok"
         assert _pel().referencia_virgen_desde_dict(d).como_dict() == d
         for malo in ({**d, "version": "PV-9"}, {k: v for k, v in d.items() if k != "procedencia"}, {k: v for k, v in d.items() if k != "estado"}, "no es un diccionario"):
             with pytest.raises(ValueError):
@@ -1559,12 +1569,12 @@ _JSON_ANTERIOR_QUE_NO_SE_PUEDE_LEER = {
     "vacio": b"",                                                                # JSONDecodeError (un ValueError)
     "una_lista": b"[1, 2, 3]",                                                   # TypeError
     "un_texto": b'"solo un texto"',                                              # TypeError
-    "sin_la_referencia": b'{"version": "PV-1"}',                                 # KeyError
-    "la_referencia_es_un_texto": b'{"version": "PV-1", "referencia": "x"}',      # TypeError
-    "sin_procedencia": b'{"version": "PV-1", "referencia": {}}',                 # KeyError
-    "procedencia_nula": b'{"version": "PV-1", "referencia": {"procedencia": null}}',          # TypeError
-    "sin_huella": b'{"version": "PV-1", "referencia": {"procedencia": {"fecha_calculo": "2026-10-13"}}}',         # KeyError
-    "sin_fecha": b'{"version": "PV-1", "referencia": {"procedencia": {"sha256": "' + b"ab" * 32 + b'"}}}',      # KeyError
+    "sin_la_referencia": b'{"version": "PV-2"}',                                 # KeyError
+    "la_referencia_es_un_texto": b'{"version": "PV-2", "referencia": "x"}',      # TypeError
+    "sin_procedencia": b'{"version": "PV-2", "referencia": {}}',                 # KeyError
+    "procedencia_nula": b'{"version": "PV-2", "referencia": {"procedencia": null}}',          # TypeError
+    "sin_huella": b'{"version": "PV-2", "referencia": {"procedencia": {"fecha_calculo": "2026-10-13"}}}',         # KeyError
+    "sin_fecha": b'{"version": "PV-2", "referencia": {"procedencia": {"sha256": "' + b"ab" * 32 + b'"}}}',      # KeyError
 }
 
 
@@ -1572,11 +1582,11 @@ def _contenido_que_no_es_una_referencia(caso, a):
     """El texto de un `piso_pelicula_virgen.json` que `leer_referencia_virgen` debe rechazar con `ValueError`: no es un diccionario, le falta la version o la referencia, o es de otra version."""
     d = a.como_dict()
     return {"vacio": "", "una_lista": "[]", "un_texto": '"texto"', "un_numero": "5", "nulo": "null", "verdadero": "true", "objeto_vacio": "{}",
-            "solo_la_version": '{"version": "PV-1"}',
-            "referencia_nula": '{"version": "PV-1", "referencia": null}',
-            "referencia_lista": '{"version": "PV-1", "referencia": []}',
+            "solo_la_version": '{"version": "PV-2"}',
+            "referencia_nula": '{"version": "PV-2", "referencia": null}',
+            "referencia_lista": '{"version": "PV-2", "referencia": []}',
             "sin_version_arriba": json.dumps({"referencia": d}),
-            "otra_version_dentro": json.dumps({"version": "PV-1", "referencia": {**d, "version": "PV-9"}})}[caso]
+            "otra_version_dentro": json.dumps({"version": "PV-2", "referencia": {**d, "version": "PV-9"}})}[caso]
 
 
 CASOS_DE_JSON_QUE_NO_ES_UNA_REFERENCIA = ["vacio", "una_lista", "un_texto", "un_numero", "nulo", "verdadero", "objeto_vacio", "solo_la_version", "referencia_nula", "referencia_lista",
@@ -1879,7 +1889,7 @@ class TestUnaReferenciaDanadaSeRechazaAlLeerla:
         with pytest.raises(ValueError):
             pel.referencia_virgen_desde_dict(d)
         ruta = tmp_path / pel.ARCHIVO_REFERENCIA_VIRGEN
-        ruta.write_text(json.dumps({"version": "PV-1", "referencia": d, "guardada_por": None, "guardada_el": "2026-10-13T10:00:00"}), encoding="utf-8")
+        ruta.write_text(json.dumps({"version": "PV-2", "referencia": d, "guardada_por": None, "guardada_el": "2026-10-13T10:00:00"}), encoding="utf-8")
         with pytest.raises(ValueError) as error:
             pel.leer_referencia_virgen(str(tmp_path))
         assert str(ruta) in str(error.value), "el mensaje dice cual archivo esta dañado"
@@ -2056,7 +2066,8 @@ class TestElModoVirgen:
         p = piso(s.pelicula, s.campo, modo="virgen", referencia=mala)
         assert p.estado.startswith(pel.MOTIVO_REFERENCIA_VIRGEN_NO_VALIDA + ": ") and mala.estado.removeprefix(pel.PREFIJO_NO_VALIDA) in p.estado
         assert all(c.mediana is None for c in p.capas.values())
-        assert piso(s.pelicula, s.campo, referencia=_base()[0]).modo == "automatico", "una referencia que no se pide no cambia el modo"
+        # OD.1: sin modo pedido, una referencia presente SI cambia el modo (`modo_efectivo`: la virgen si hay referencia); un modo pedido se respeta
+        assert piso(s.pelicula, s.campo, referencia=_base()[0]).modo == "virgen" and piso(s.pelicula, s.campo, modo="automatico", referencia=_base()[0]).modo == "automatico"
 
     def test_i_si_el_automatico_no_se_puede_medir_la_virgen_si_y_el_aviso_lo_dice(self):
         """El caso para el que sirve: un recorte demasiado ajustado, donde el piso automatico es "no medible" (A -3 grados)."""

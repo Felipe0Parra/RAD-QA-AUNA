@@ -8,7 +8,10 @@ PD1 (nada escondido que cambie el número): cada gráfica dibuja TODO lo que se 
 el recuadro del campo luminoso con sus diagonales, el cruce y el retículo, las dos bandas de 1 mm de donde salen los perfiles centrales, la zona central de la meseta y del barrido y la región de donde salió el
 piso. En cada perfil: el perfil crudo y el suavizado con que se buscaron los cruces, el piso, la media de la meseta, la altura media, los niveles de la penumbra, los límites de la zona central y de la
 exclusión del retículo, los bordes de radiación y los bordes luminosos de esa línea, en milímetros desde el cruce de diagonales y con la película completa a los dos lados del campo. `TRAZO_DE_PARAMETRO`
-dice dónde se ve cada uno de los 40 parámetros del análisis (un trazo, una etiqueta o una frase del pie) y una prueba lo deriva del código del motor por AST.
+dice dónde se ve cada uno de los 41 parámetros del análisis (un trazo, una etiqueta o una frase del pie) y una prueba lo deriva del código del motor por AST.
+
+OD.1 (DA-87): la BASE del análisis (`motor.BASE_POR_OMISION`: la densidad óptica neta o el valor de píxel normalizado) es un parámetro más que viaja con cada análisis; los perfiles se dibujan en la unidad de
+esa base (`motor.valores_en_la_base`), la pestaña de las capas se acondiciona con ella (`motor.normalizar`) y la ventana dice cuál es (`texto_de_la_base`). Ningún dibujo escribe el nombre de una base: sale del motor.
 
 Marcos. Los dibujos de la pestaña 1 (la imagen) están en el marco de la IMAGEN, el que el físico ve y en el que marca; los de las pestañas 2 a 5 en el marco GIRADO que usa el motor (la película recortada
 y girada hasta que los ejes del campo quedan horizontal y vertical). `a_imagen(matriz, puntos)` es la inversa de la matriz de giro del motor y lleva un trazo del marco girado a la imagen.
@@ -49,7 +52,7 @@ NO_MEDIBLE = "no medible"
 PREFIJO_DE_LA_REGLA = "No se puede guardar: "
 TEXTO_DEL_FACTOR = f"desviaciones × {FACTOR_DE_AMPLIACION}"
 
-# qué trazo o qué rótulo muestra CADA parámetro del análisis (los 40 de `motor.VALORES_DE_LA_GEOMETRIA`). `{clave: (dónde, texto)}`; una prueba deriva por AST qué claves leen el motor y el piso, exige que cada una
+# qué trazo o qué rótulo muestra CADA parámetro del análisis (los 41 de `motor.VALORES_DE_LA_GEOMETRIA`). `{clave: (dónde, texto)}`; una prueba deriva por AST qué claves leen el motor y el piso, exige que cada una
 # tenga su entrada y comprueba que cada entrada está de verdad en la ventana. Dónde:
 #   "marca"      el círculo de búsqueda de cada clic (la etiqueta del trazo empieza por `texto`);
 #   "sexto"      el cuadrado del punto marcado sobre película sin irradiar (la etiqueta empieza por `texto`);
@@ -60,6 +63,7 @@ TEXTO_DEL_FACTOR = f"desviaciones × {FACTOR_DE_AMPLIACION}"
 #   "pagina"     la etiqueta de la ventana con ese nombre, que DICE el valor con que se midió (la resolución del escaneo);
 #   "pie"        una frase del pie de parámetros fijos de la ventana; `texto` es su plantilla y se llena con el valor con que se midió.
 TRAZO_DE_PARAMETRO = {
+    "base_de_la_medida": ("pie", "base de la medida: {}"),
     "radio_marca_mm": ("marca", "círculo de búsqueda"),
     "contraste_minimo_marca": ("pie", "tinta: al menos {:g} niveles más oscura que su entorno"),
     "fraccion_del_contraste_marca": ("pie", "borde de la mancha al {:.0%} de su contraste"),
@@ -102,9 +106,31 @@ TRAZO_DE_PARAMETRO = {
     "suavizado_perfil_mm": ("perfil", "perfil suavizado"),
 }
 LARGO_DEL_PIE = 220                    # caracteres por línea del pie de parámetros fijos
+ETIQUETA_DEL_EJE_Y = {motor.BASE_DENSIDAD_OPTICA: f"{motor.BASE_DENSIDAD_OPTICA} [1]", motor.BASE_VALOR_DE_PIXEL: "valor de píxel [nivel]"}      # OD.1: lo que dice el eje vertical de un perfil en cada base
 
 
 # ----------------------------------------------------------------------------------------------------- textos y números (puros)
+
+def base_de(parametros=None):
+    """La base con que se midió un análisis (OD.1): la de sus `parametros` (los que viajan con él) o, si no los trae —un diccionario de antes de OD.1—, el valor de píxel normalizado, que es como se midió.
+    Sin `parametros` es la de fábrica (`motor.BASE_POR_OMISION`)."""
+    P = motor.VALORES_DE_LA_GEOMETRIA if parametros is None else parametros
+    return P.get("base_de_la_medida", motor.BASE_VALOR_DE_PIXEL)
+
+
+def texto_de_la_base(base):
+    """Lo que la ventana dice de la BASE del análisis, en una frase: cómo se vuelve la señal que se mide. Empieza por «Base de la medida: <nombre>». En la densidad óptica neta (Devic 2004, ec. 1 de Vargas-Segura
+    2023), n = log10(piso / valor) / log10(piso / meseta); en el valor de píxel, n = (piso − valor) / (piso − meseta). En las dos 0 es el piso, 1 es la meseta y el borde de radiación es donde n vale 0.5."""
+    if base == motor.BASE_DENSIDAD_OPTICA:
+        formula = ("la película se convierte en densidad óptica neta, n = log10(piso / valor) / log10(piso / meseta): 0 en el piso, 1 en la meseta, y el borde de radiación donde n vale 0.5 "
+                   "(a la media geométrica entre el piso y la meseta)")
+    elif base == motor.BASE_VALOR_DE_PIXEL:
+        formula = ("la película se mide en valor de píxel, n = (piso − valor) / (piso − meseta): 0 en el piso, 1 en la meseta, y el borde de radiación donde n vale 0.5 "
+                   "(a la media aritmética entre el piso y la meseta)")
+    else:
+        return f"Base de la medida: {base}."
+    return f"Base de la medida: {base}; {formula}."
+
 
 def numero(valor, decimales=3, con_signo=False):
     """El número con sus decimales y nunca '-0.000' (lo que redondea a cero no tiene signo); `SIN_DATO` si falta."""
@@ -316,7 +342,7 @@ def _valor_del_pie(valor):
 def texto_de_parametros(parametros=None):
     """El pie de parámetros fijos de la ventana (PD1): las frases de las entradas «pie» de `TRAZO_DE_PARAMETRO`, con el valor con que se midió (`parametros`: los del análisis, que se guardan con él; por omisión los
     de fábrica `motor.VALORES_DE_LA_GEOMETRIA`), en líneas de `LARGO_DEL_PIE` caracteres sin partir una frase."""
-    P = motor.VALORES_DE_LA_GEOMETRIA if parametros is None else parametros
+    P = {"base_de_la_medida": motor.BASE_VALOR_DE_PIXEL, **(motor.VALORES_DE_LA_GEOMETRIA if parametros is None else parametros)}       # un análisis de antes de OD.1 no trae la base y se midió en valor de píxel
     titulo = "Parámetros fijos del método (se guardan con cada análisis; no se ajustan en pantalla):"
     lineas, linea = [], titulo
     for clave, (donde, plantilla) in TRAZO_DE_PARAMETRO.items():
@@ -528,27 +554,38 @@ def dibujar_perfil(ax, medida, capa, parametros=None, reportada=False):
     cada etiqueta. Cada trazo lleva su `gid` (`perfil:crudo`, `perfil:suavizado`, `perfil:piso`, `perfil:meseta`, `perfil:altura_media`, `perfil:penumbra_alta`, `perfil:penumbra_baja`, `perfil:zona`,
     `perfil:exclusion`, `perfil:borde_luz`, `perfil:borde_rad`, `perfil:cruce`)."""
     P = motor.VALORES_DE_LA_GEOMETRIA if parametros is None else parametros
+    base = base_de(parametros)
     color = COLOR_CAPA[capa]
     ax.set_title(titulo_del_perfil(medida, capa, reportada), fontsize=8)
     ax.set_xlabel("posición desde el cruce de diagonales [mm]")
-    ax.set_ylabel("valor de píxel [nivel]")
+    ax.set_ylabel(ETIQUETA_DEL_EJE_Y[base])
     perfil = medida.perfil
     if perfil is None or medida.centro_px is None:
         ax.text(0.5, 0.5, textwrap.fill(medida.estado, 55), transform=ax.transAxes, ha="center", va="center", fontsize=8, color=TINTA_SUAVE, gid="perfil:sin_medida")
         return
+    if base == motor.BASE_DENSIDAD_OPTICA and medida.piso is None:
+        ax.text(0.5, 0.5, textwrap.fill(f"Sin piso no hay densidad óptica: {medida.estado}", 55), transform=ax.transAxes, ha="center", va="center", fontsize=8, color=TINTA_SUAVE, gid="perfil:sin_medida")
+        return
+
+    def en_la_base(niveles):
+        """Niveles de 8 bits -> la unidad del eje (OD.1): los mismos en valor de píxel, la densidad óptica neta absoluta en netOD (0 en el piso). Una sola cuenta: la del motor."""
+        return motor.valores_en_la_base(base, niveles, medida.piso)
+
     x = _mm(perfil.desde_px + np.arange(len(perfil.valores)), medida)
-    ax.plot(x, perfil.valores, color=TINTA_SUAVE, lw=0.7, gid="perfil:crudo", label="perfil, promedio de la banda")
+    crudo = en_la_base(perfil.valores)
+    ax.plot(x, crudo, color=TINTA_SUAVE, lw=0.7, gid="perfil:crudo", label="perfil, promedio de la banda")
     if medida.suavizado is not None:
-        ax.plot(x, medida.suavizado, color=color, lw=1.2, gid="perfil:suavizado", label=f"{TRAZO_DE_PARAMETRO['suavizado_perfil_mm'][1]}, ventana de {P['suavizado_perfil_mm']:g} mm")
+        ax.plot(x, en_la_base(medida.suavizado), color=color, lw=1.2, gid="perfil:suavizado", label=f"{TRAZO_DE_PARAMETRO['suavizado_perfil_mm'][1]}, ventana de {P['suavizado_perfil_mm']:g} mm")
     if medida.piso is not None:
-        ax.axhline(medida.piso, color=TINTA, ls="-.", lw=1, gid="perfil:piso", label="piso")
+        ax.axhline(float(en_la_base(medida.piso)), color=TINTA, ls="-.", lw=1, gid="perfil:piso", label="piso")
     if medida.meseta is not None:
-        ax.axhline(medida.meseta, color=TINTA_SUAVE, ls="--", lw=1, gid="perfil:meseta", label="media de la meseta")
+        ax.axhline(float(en_la_base(medida.meseta)), color=TINTA_SUAVE, ls="--", lw=1, gid="perfil:meseta", label="media de la meseta")
     if medida.altura_media is not None:
-        ax.axhline(medida.altura_media, color=color, ls="-", lw=1, gid="perfil:altura_media", label=f"{TRAZO_DE_PARAMETRO['altura_media'][1]}, al {P['altura_media']:.0%} entre el piso y la meseta")
+        ax.axhline(float(en_la_base(medida.altura_media)), color=color, ls="-", lw=1, gid="perfil:altura_media",
+                   label=f"{TRAZO_DE_PARAMETRO['altura_media'][1]}, al {P['altura_media']:.0%} entre el piso y la meseta")
     for clave, nivel in (("penumbra_alta", medida.nivel_penumbra_alta), ("penumbra_baja", medida.nivel_penumbra_baja)):
         if nivel is not None:
-            ax.axhline(nivel, color=color, ls=":", lw=0.6, gid=f"perfil:{clave}", label=f"{TRAZO_DE_PARAMETRO[clave][1]}, al {P[clave]:.0%}")
+            ax.axhline(float(en_la_base(nivel)), color=color, ls=":", lw=0.6, gid=f"perfil:{clave}", label=f"{TRAZO_DE_PARAMETRO[clave][1]}, al {P[clave]:.0%}")
     if medida.zona_px is not None:
         for i, borde in enumerate(medida.zona_px):
             _vertical(ax, borde, medida, color=COLOR_ZONA, ls=":", lw=1, gid="perfil:zona", label=_etiqueta(i == 0, "límites de la zona central de la meseta"))
@@ -562,8 +599,8 @@ def dibujar_perfil(ax, medida, capa, parametros=None, reportada=False):
         _vertical(ax, borde, medida, color=color, ls="-", lw=1.6, gid="perfil:borde_rad", label=_etiqueta(i == 0, "bordes de radiación"))
     ax.axvline(0.0, color=COLOR_CRUCE, ls="-", lw=0.8, gid="perfil:cruce", label="cruce de diagonales")
     ax.set_xlim(float(x[0]), float(x[-1]))
-    finitos = perfil.valores[np.isfinite(perfil.valores)]
-    valores = ([float(finitos.min()), float(finitos.max())] if len(finitos) else []) + [v for v in (medida.piso, medida.meseta) if v is not None]
+    finitos = crudo[np.isfinite(crudo)]
+    valores = ([float(finitos.min()), float(finitos.max())] if len(finitos) else []) + [float(en_la_base(v)) for v in (medida.piso, medida.meseta) if v is not None]
     if valores:
         holgura = 0.05 * max(max(valores) - min(valores), 1.0)
         ax.set_ylim(min(valores) - holgura, max(valores) + holgura)
@@ -614,7 +651,8 @@ def colorear(normalizada):
 
 
 def capa_acondicionada(resultado, capa):
-    """(arreglo, texto, meseta): la capa girada normalizada entre su piso y su meseta (0 en el piso, 1 en la meseta: `motor.normalizar`) para dibujarla, el texto que lo dice y la meseta usada. La meseta es el promedio
+    """(arreglo, texto, meseta): la capa girada normalizada entre su piso y su meseta (0 en el piso, 1 en la meseta: `motor.normalizar`) en la BASE del análisis (OD.1: `resultado.base`; la densidad óptica neta
+    por omisión, que es la imagen «con la densidad óptica aplicada» que el físico pidió ver) para dibujarla, el texto que lo dice y la meseta usada. La meseta es el promedio
     de las de sus dos perfiles (o la del que la tiene). Lo que no tiene dato (lo que el giro dejó fuera de la película) queda NaN. Si la capa no tiene piso o ninguno de sus perfiles tiene meseta no se puede
     acondicionar: el arreglo es la capa tal cual dividida entre 255, el texto dice por qué y la meseta es None."""
     girada = resultado.girada
@@ -625,9 +663,9 @@ def capa_acondicionada(resultado, capa):
         motivo = m.estado if m.estado != "ok" else "la capa no tiene meseta medida"
         return np.asarray(datos, dtype=np.float32) / np.float32(255.0), f"sin acondicionar (0 a 255): {motivo}", None
     meseta = float(np.mean(mesetas))
-    normalizada = motor.normalizar(motor.BASE_VALOR_DE_PIXEL, datos, m.piso, meseta).astype(np.float32)
+    normalizada = motor.normalizar(resultado.base, datos, m.piso, meseta).astype(np.float32)
     normalizada[~girada.validos] = np.nan
-    return normalizada, f"0 es el piso ({numero(m.piso, 1)}) y 1 la meseta ({numero(meseta, 1)})", meseta
+    return normalizada, f"0 es el piso ({numero(m.piso, 1)}) y 1 la meseta ({numero(meseta, 1)}); base: {resultado.base}", meseta
 
 
 def dibujar_capas(figura, resultado):
@@ -788,14 +826,63 @@ def texto_de_la_imagen(formato, bits, forma, dpi, clase, fecha, transparentes, r
 
 
 COLUMNAS_DE_LA_VIRGEN = ("Capa", "Valor [nivel]", "Píxeles", "Dispersión, IQR [nivel]")
+COLUMNAS_DE_LA_UNIFORMIDAD = ("Capa", "Centro [nivel]", "Arriba [nivel]", "Abajo [nivel]", "Izquierda [nivel]", "Derecha [nivel]", "Uniformidad [%]", "Ruido, desviación del centro [nivel]",
+                              "Gradiente en x [% por 10 cm]", "Gradiente en y [% por 10 cm]")
+NO_SE_JUZGA = "no se juzga"
 COLUMNAS_DE_LAS_PRUEBAS = ("Comprobación", "Resultado", "Cifra y límite")
 RESULTADO_EN_PALABRAS = {"ok": "pasa", "aviso": "aviso", "rechazo": "rechazo"}
 ORIENTACIONES_DE_LA_VIRGEN = ("misma que la película irradiada", "girada")
 
 
 def filas_de_la_virgen(referencia):
-    """Las filas del valor de la película virgen por capa (R, G, B y el gris, cada una por separado): su nivel (la mediana de la zona medida), los píxeles en que se basa y su dispersión."""
-    return [(nombre_de_la_capa(capa), numero(referencia.capas[capa].mediana, 1), str(referencia.capas[capa].n), numero(referencia.capas[capa].iqr, 1)) for capa in (*CAPAS, "gris")]
+    """Las filas del valor de la película virgen por capa (R, G, B y el gris, cada una por separado): su nivel (el VALOR del piso, la media de la zona medida sin lo que se aparta de ella: OD.1), los
+    píxeles en que se basa y su dispersión."""
+    return [(nombre_de_la_capa(capa), numero(referencia.valor(capa), 1), str(referencia.capas[capa].n), numero(referencia.capas[capa].iqr, 1)) for capa in (*CAPAS, "gris")]
+
+
+def filas_de_la_uniformidad(referencia):
+    """Las filas de la tabla de uniformidad y ruido de la película virgen, como la del Catphan (OD.1): por capa (R, G, B y el gris), el centro, la media de cada región, la uniformidad (la mayor diferencia entre
+    una región y el centro, en % del centro), el ruido (la desviación estándar de los píxeles del centro) y los gradientes en x y en y de C5 (el gris no se juzga). Cada fila es una tupla de
+    `COLUMNAS_DE_LA_UNIFORMIDAD`, con los números como texto y dos decimales; lo que no cabe o no se juzga lo dice. Una referencia sin tabla (no se llegó a medirla) no da filas."""
+    tabla = referencia.uniformidad
+    if not tabla:
+        return []
+    filas = []
+    for capa in (*CAPAS, "gris"):
+        f = tabla["capas"][capa]
+        regiones = f["regiones"]
+        filas.append((nombre_de_la_capa(capa), numero(f["centro"], 2), numero(regiones["arriba"], 2), numero(regiones["abajo"], 2), numero(regiones["izquierda"], 2),
+                      numero(regiones["derecha"], 2), numero(f["uniformidad_pct"], 2), numero(f["ruido"], 2),
+                      NO_SE_JUZGA if f["gradiente_x_pct_por_10cm"] is None else numero(f["gradiente_x_pct_por_10cm"], 2, True),
+                      NO_SE_JUZGA if f["gradiente_y_pct_por_10cm"] is None else numero(f["gradiente_y_pct_por_10cm"], 2, True)))
+    return filas
+
+
+def texto_de_la_uniformidad(referencia):
+    """Lo que dice la tabla de uniformidad y ruido, en una frase: cómo se mide (cinco regiones cuadradas, el centro y cuatro a medio camino entre el centro y cada borde de la zona útil) y, si alguna no cabe
+    en la película, que no se mide la uniformidad y no se inventa ningún número."""
+    tabla = referencia.uniformidad
+    if not tabla:
+        return "No se midió la uniformidad ni el ruido de esta película."
+    lado = numero(tabla["lado_mm"], 0)
+    base = (f"Uniformidad y ruido en {len(tabla['regiones'])} regiones de {lado} × {lado} mm: el centro y cuatro a medio camino entre el centro y cada borde de la zona útil. Uniformidad: la mayor "
+            "diferencia entre una región y el centro, en % del centro. Ruido: la desviación estándar de los píxeles del centro.")
+    if tabla["cabe"]:
+        return base
+    faltan = [nombre for nombre, r in tabla["regiones"].items() if r["caja"] is None]
+    return base + f" No caben enteras en la película: {_unir(faltan)}; la uniformidad no se mide."
+
+
+def texto_de_la_caja_de_la_pelicula(referencia):
+    """DÓNDE estaba la película en el vidrio del escáner (OD.1): sus milímetros, los de la página y a cuánto de los bordes. El escáner responde unos niveles distinto en cada lugar del vidrio (hasta 2.8 en el
+    azul con una pieza de 10 × 10 cm): la virgen se escanea en el mismo lugar que las películas a medir, o es una hoja entera."""
+    region = referencia.region or {}
+    pelicula, pagina = region.get("pelicula_mm"), region.get("pagina_mm")
+    if not pelicula or not pagina:
+        return "No se sabe dónde estaba la película en el vidrio del escáner."
+    return (f"La película mide {numero(pelicula['ancho'], 1)} × {numero(pelicula['alto'], 1)} mm y estaba en una página de {numero(pagina['ancho'], 1)} × {numero(pagina['alto'], 1)} mm, con su esquina "
+            f"superior izquierda a {numero(pelicula['x'], 1)} mm del borde izquierdo y a {numero(pelicula['y'], 1)} mm del superior. El escáner responde distinto en cada lugar del vidrio: escanee la virgen "
+            "en el mismo lugar que las películas a medir.")
 
 
 def filas_de_las_pruebas(referencia):
@@ -839,3 +926,19 @@ def dibujar_zona_de_la_virgen(ax, referencia):
     x0, y0, x1, y1 = region["caja"]
     caja = _cerrado(_rectangulo(x0 - 0.5, x1 - 0.5, y0 - 0.5, y1 - 0.5))
     ax.plot([p[0] for p in caja], [p[1] for p in caja], "-", color=COLOR_PISO, lw=1.5, gid="virgen:zona", label="zona medida de la película virgen")
+
+
+def dibujar_regiones_de_la_virgen(ax, referencia):
+    """Las cinco regiones de la tabla de uniformidad y ruido sobre el escaneo de la virgen: un cuadrado de `lado_mm` por región, con su nombre; la que no cabe no se dibuja."""
+    tabla = referencia.uniformidad
+    if not tabla:
+        return
+    primera = True
+    for nombre, region in tabla["regiones"].items():
+        if region["caja"] is None:
+            continue
+        x0, y0, x1, y1 = region["caja"]
+        caja = _cerrado(_rectangulo(x0 - 0.5, x1 - 0.5, y0 - 0.5, y1 - 0.5))
+        ax.plot([p[0] for p in caja], [p[1] for p in caja], "-", color=COLOR_RECUADRO, lw=1.2, gid=f"virgen:region:{nombre}", label=_etiqueta(primera, "regiones de la uniformidad y el ruido"))
+        ax.annotate(nombre, ((x0 + x1) / 2.0 - 0.5, y0 - 0.5), xytext=(0, 3), textcoords="offset points", ha="center", color=COLOR_RECUADRO, fontsize=7, gid=f"virgen:rotulo:{nombre}")
+        primera = False

@@ -72,7 +72,10 @@ def _pel():
 
 
 def _P(**cambios):
-    return {**_pm().VALORES_DE_LA_GEOMETRIA, **cambios}
+    # OD.1 (DA-87): la netOD es la base por omision del analisis y el rojo de la sintetica (y de las peliculas a 800 UM) esta recortado en ella; las pruebas de este
+    # archivo fijan verdades del VALOR DE PIXEL (el generador de PF.0 las da en esa base), asi que la fijan explicitamente para seguir probando lo mismo. La netOD la
+    # prueba `test_od1_densidad_optica.py`.
+    return {**_pm().VALORES_DE_LA_GEOMETRIA, "base_de_la_medida": _pm().BASE_VALOR_DE_PIXEL, **cambios}
 
 
 def _real(clave):
@@ -742,7 +745,8 @@ class TestBarridoNoTieneParametros:
     def test_c3_no_agrega_ningun_parametro_ni_cambia_la_version(self):
         pm = _pm()
         assert pm.VERSION_ALGORITMO == "PM-1"
-        propios = set(pm.PARAMETROS) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(_pel().PARAMETROS_DEL_PISO)
+        # OD.1 (21-10): `PARAMETROS` suma `base_de_la_medida` (`PARAMETROS_DE_LA_BASE`), que tampoco es de C.3: la vigila `test_od1_densidad_optica.py`.
+        propios = set(pm.PARAMETROS) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(_pel().PARAMETROS_DEL_PISO) - set(pm.PARAMETROS_DE_LA_BASE)
         assert propios == {"radio_marca_mm", "contraste_minimo_marca", "fraccion_del_contraste_marca", "gris_maximo_de_la_tinta", "borde_blando_marca_mm", "area_minima_marca_mm2",
                            "resolucion_escaneo_dpi", "resoluciones_de_editor_dpi", "tolerancia_dpi_relativa"}, "los de C.1: ninguno de C.3"
         assert set(pm.PARAMETROS_DE_LA_MEDIDA) == {"margen_recorte_mm", "banda_perfil_mm", "fraccion_meseta", "excepcion_centro_mm", "muestras_minimas_de_la_meseta",

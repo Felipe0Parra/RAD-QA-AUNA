@@ -21,7 +21,9 @@ QUÉ HACE (R9, pasos 2 y 3).
 C.2 (R9, pasos 4 a 12) agrega, sobre la película ya girada: `girar` (recorta a la película y gira solo eso, con la misma matriz que los puntos), `perfil_central` (la banda de 1 mm por el cruce de diagonales),
 `medir_perfil` (la meseta de la zona central sin la marca del retículo, la altura media, los bordes DESDE la meseta hacia afuera con interpolación lineal, el FWHM, el centro de radiación y la penumbra 80-20),
 `bordes_luz` (la intersección analítica de la línea del perfil con los lados), `coincidencia` (por lado, positiva hacia afuera), `analizar` (arma todo con UNA llamada a `piso_de_pelicula`) y `valores_medidos` (la
-única definición de lo que se guarda). Cada capa, R, G, B y el gris, se mide por separado con UNA base: el valor de píxel normalizado entre el piso y la meseta, sin netOD (PD3: ninguna regla las compara). El
+única definición de lo que se guarda). Cada capa, R, G, B y el gris, se mide por separado con UNA base, la misma para las cuatro (PD3: ninguna regla las compara): desde OD.1 (DA-87, 21-10) la densidad óptica neta normalizada entre el piso y la
+meseta por omisión (`BASE_POR_OMISION`, un parámetro más, `base_de_la_medida`, que viaja con cada análisis) o, si el parámetro lo pide o el registro no lo trae, el valor de píxel normalizado de antes; con la netOD, una
+capa con la meseta recortada por el escáner (el rojo a 800 UM) es «no medible». El
 resultado trae la película recortada y girada, que el barrido de C.3 reutiliza, y nunca la página. Sigue siendo la versión `PM-1`: C.1, C.2 y C.3 son las tres entregas de un mismo motor y ningún análisis
 guardado usa todavía otra. La raíz del resultado dice «ok» si al menos una capa se midió por completo (si no, `MOTIVO_NINGUNA_CAPA`); los bordes luminosos y luz - retículo salen de la geometría y
 se entregan aunque el piso o las capas no se puedan medir. La meseta es el nivel medio de la zona central (el plan): con la cúpula de las películas reales el 50 % de esa media no es el 50 % de la
@@ -565,8 +567,20 @@ def geometria_luz(esquinas, reticulo, tam_mm, pivote=None):
 
 # ============================================================================= C.2: los perfiles por capa, el FWHM, la coincidencia por lado, los tres centros y la penumbra (R9, pasos 4 a 12)
 
-BASE_VALOR_DE_PIXEL = "valor de píxel normalizado"           # la UNICA base (decisión del 09-10, sin netOD): n = (piso - v) / (piso - meseta); 0 en el piso, 1 en la meseta, 0.5 en la altura media
-EJES = ("crossplane", "inplane")                              # crossplane = horizontal (recorre x, la banda promedia filas); inplane = vertical (recorre y, la banda promedia columnas)
+# OD.1 (DA-87, 21-10): las DOS bases del análisis. Cada perfil se normaliza entre el piso (0) y la meseta (1) y su borde de radiación está donde la señal vale `altura_media` (0.5):
+#   valor de píxel: n = (piso - v) / (piso - meseta); el 0.5 está en el nivel de la media ARITMÉTICA entre el piso y la meseta (la base del 09-10);
+#   densidad óptica neta: n = log10(piso / v) / log10(piso / meseta), la netOD de Devic et al. 2004 con el piso como I0 (Vargas-Segura et al. 2023, ec. 1); el 0.5 está en la media GEOMÉTRICA.
+# Y la banda de 1 mm de cada perfil se promedia EN ESA BASE (`perfil_central(base=)`; decisión OD1-REV-D1, 22-10): en netOD, como la imagen ya convertida píxel a píxel (la media de log10 por píxel).
+# La netOD es la base por omisión (decisión del físico del 21-10); `BASE_VALOR_DE_PIXEL` sigue siendo una opción y la base de todo registro guardado sin el parámetro `base_de_la_medida`.
+BASE_VALOR_DE_PIXEL = "valor de píxel normalizado"
+BASE_DENSIDAD_OPTICA = "densidad óptica neta"
+BASES = (BASE_DENSIDAD_OPTICA, BASE_VALOR_DE_PIXEL)
+BASE_POR_OMISION = BASE_DENSIDAD_OPTICA                        # EL lugar para cambiar la base del análisis (una línea): viaja como `PARAMETROS["base_de_la_medida"]` y cada análisis guarda la que usó
+VP_MINIMO = 0.5                                                # medio nivel de 8 bits: por debajo, el escáner recortó y log10(piso / v) no existe; se toma este piso del logaritmo (el del pre-vuelo `od_prevuelo.py`)
+NIVEL_DE_RECORTE = 1.5                                         # la regla del recorte (solo netOD): una muestra de la meseta en este nivel o menos está recortada por el escáner (el rojo a 800 UM: 66 a 99.6 % de la meseta; verde, azul y gris, 0 %)
+FRACCION_DE_RECORTE_MAXIMA = 0.01                              # y más de esta fracción de la zona central recortada hace «no medible» a esa capa (logs/OD/od_recorte.log: de 0 % a 66 % no hay ninguna película en medio)
+MOTIVO_MESETA_RECORTADA = "la meseta está recortada por el escáner"
+EJES = ("crossplane", "inplane")                            # crossplane = horizontal (recorre x, la banda promedia filas); inplane = vertical (recorre y, la banda promedia columnas)
 LADOS_DEL_EJE = {"crossplane": ("izquierdo", "derecho"), "inplane": ("superior", "inferior")}     # (menor, mayor) a lo largo del eje
 LADOS_DE_LA_COINCIDENCIA = ("izquierdo", "derecho", "superior", "inferior")
 SIGNO_DEL_LADO = {"izquierdo": -1.0, "derecho": 1.0, "superior": -1.0, "inferior": 1.0}          # positivo hacia afuera: con x a la derecha e y hacia abajo, afuera es -x, +x, -y y +y
@@ -618,6 +632,21 @@ PARAMETROS_DE_LA_MEDIDA = {
 }
 PARAMETROS.update(copy.deepcopy(PARAMETROS_DE_LA_MEDIDA))
 VALORES_DE_LA_GEOMETRIA.update({nombre: copy.deepcopy(parametro["valor"]) for nombre, parametro in PARAMETROS_DE_LA_MEDIDA.items()})      # el diccionario plano crece solo: lleva TODOS los parámetros del análisis
+
+# OD.1: la base del análisis es un parámetro más (el número 41): viaja con cada análisis guardado y al reabrirlo (o al imprimirlo) se mide con ESA base aunque `BASE_POR_OMISION` cambie (la copia guardada
+# manda, DA-81). No la pide `analizar` por nombre: un registro guardado antes de OD.1 no la tiene y se mide como se midió, en valor de píxel.
+PARAMETROS_DE_LA_BASE = {
+    "base_de_la_medida": {
+        "valor": BASE_POR_OMISION, "unidad": "base (texto)",
+        "motivo": "La base en que se normaliza cada perfil antes de buscar sus bordes: «densidad óptica neta» (por omisión: log10(piso / valor), la netOD de Devic et al. 2004 con el piso como I0, normalizada a 0 en el piso y "
+                  "1 en la meseta; su altura media está en la media geométrica del piso y la meseta; la banda de 1 mm de cada perfil se promedia como la imagen ya convertida píxel a píxel, con la media de log10 por píxel) "
+                  "o «valor de píxel normalizado» ((piso - valor) / (piso - meseta), la base de antes, con la media aritmética). Se cambia en UNA "
+                  "línea, `BASE_POR_OMISION` de este archivo, y cada análisis guarda la que usó: reabrirlo o imprimirlo lo mide con ESA base aunque la constante cambie; uno guardado sin este parámetro se mide en valor de píxel. "
+                  "Medido el 21-10 en ocho escaneos: el verde en valor de píxel sale de +1.0 a +2.8 mm más ancho que el campo luminoso y en netOD de -0.6 a +1.0 mm (logs/OD/); el rojo a 800 UM está recortado por el "
+                  "escáner y en netOD es «no medible»."},
+}
+PARAMETROS.update(copy.deepcopy(PARAMETROS_DE_LA_BASE))
+VALORES_DE_LA_GEOMETRIA.update({nombre: copy.deepcopy(parametro["valor"]) for nombre, parametro in PARAMETROS_DE_LA_BASE.items()})
 CLAVES_QUE_PIDE_LA_MEDIDA = tuple(PARAMETROS_DE_LA_MEDIDA) + ("umbral_fondo", "margen_borde_mm", "delta_tinta", "contraste_minimo")      # lo que `medir_perfil` y `perfil_central` leen de `P`
 CLAVES_QUE_PIDE_ANALIZAR = CLAVES_QUE_PIDE_LA_MEDIDA + CLAVES_DE_LA_ESCALA
 
@@ -664,7 +693,8 @@ class PeliculaGirada:
 
 @dataclass(frozen=True, eq=False)
 class PerfilCentral:
-    """Un perfil: el promedio de una banda de `n_filas` filas (crossplane) o columnas (inplane) de una capa girada. `valores` (float64, uno por columna o fila de la capa, en niveles de 8 bits) vale NaN
+    """Un perfil: el promedio de una banda de `n_filas` filas (crossplane) o columnas (inplane) de una capa girada, en la base con que se pidió (`perfil_central(base=)`: aritmético en valor de píxel, la media de
+    log10 por píxel en netOD). `valores` (float64, uno por columna o fila de la capa, en niveles de 8 bits) vale NaN
     donde algún píxel de la banda no tiene dato o no es película, y hasta `margen_borde_mm` de ellos (el borde de la película no es película limpia). `desde_px`: la coordenada, en el marco girado, de
     `valores[0]` a lo largo del eje. `filas_px`: (primera, fin) de la banda perpendicular al eje, en el marco girado, `fin` exclusivo. `banda`: 0 es el perfil central; k, la banda k de un milímetro."""
     capa: str
@@ -757,7 +787,7 @@ class ResultadoPlacaMensual:
 
     `version`: `VERSION_ALGORITMO`. `estado`: «ok» si al menos una capa se midió por completo (sus dos perfiles) o el motivo por el que no se pudo medir ninguna (los puntos no forman el campo, no hay escala, el piso no es medible, o
     `MOTIVO_NINGUNA_CAPA`: el piso y la geometría son buenos pero ninguna capa quedó medida por completo); cada capa dice el suyo. `parametros`: copia de los `P` con que se
-    midió (se guarda con el análisis: al reabrir se recalcula con ESTOS, no con los de hoy). `base`: `BASE_VALOR_DE_PIXEL`. `tam_mm`: milímetros por píxel (None sin escala). `marcas`: los cinco puntos tal como
+    midió (se guarda con el análisis: al reabrir se recalcula con ESTOS, no con los de hoy; incluye `base_de_la_medida`). `base`: una de `BASES`, la base con que se midió (OD.1). `tam_mm`: milímetros por píxel (None sin escala). `marcas`: los cinco puntos tal como
     llegaron, en el orden en que llegaron, como datos (un par [x, y] o el diccionario de `MarcaRefinada.como_dict()`). `puntos`: su clasificación (`PuntosClasificados`). `geometria`: la de C.1 (`GeometriaLuz`).
     `piso`: el `Piso` de la UNICA llamada a `piso_de_pelicula` (todas las capas y el barrido de C.3 usan ese). `girada`: la película recortada y girada (None si no se midió). `capas`: {R, G, B, gris} ->
     `MedidaDeCapa`. `bordes_luz_px`: {crossplane, inplane} -> (menor, mayor) los bordes luminosos de las líneas centrales, en el marco girado (None si la línea no cruza el campo).
@@ -812,15 +842,38 @@ def _pedir(P, claves, para):
 
 
 def _exigir_la_base(base):
-    if base != BASE_VALOR_DE_PIXEL:
-        raise ValueError(f"La base de la medida es «{BASE_VALOR_DE_PIXEL}»; «{base}» no está implementada.")
+    if base not in BASES:
+        raise ValueError(f"La base de la medida es «{BASE_DENSIDAD_OPTICA}» o «{BASE_VALOR_DE_PIXEL}»; «{base}» no está implementada.")
 
 
 def normalizar(base, valores, piso, meseta):
-    """El valor de píxel normalizado entre el piso y la meseta: (piso - v) / (piso - meseta), 0 en el piso, 1 en la meseta y 0.5 en la altura media. Es la ÚNICA base (`BASE_VALOR_DE_PIXEL`,
-    decisión del 09-10): el netOD no se implementa. Cualquier otra base es `ValueError`."""
+    """Los niveles de 8 bits `valores` normalizados entre el piso (0) y la meseta (1) en la base pedida, la ÚNICA definición de la base del análisis (OD.1): en `BASE_VALOR_DE_PIXEL`,
+    (piso - v) / (piso - meseta) (0.5 en la media aritmética); en `BASE_DENSIDAD_OPTICA`, log10(piso / max(v, VP_MINIMO)) / log10(piso / max(meseta, VP_MINIMO)) (0.5 en la media geométrica;
+    monótona: a menor valor de píxel, mayor netOD). Un NaN sigue siendo NaN. Cualquier otra base es `ValueError`."""
     _exigir_la_base(base)
-    return (piso - np.asarray(valores, dtype=np.float64)) / (piso - meseta)
+    v = np.asarray(valores, dtype=np.float64)
+    if base == BASE_VALOR_DE_PIXEL:
+        return (piso - v) / (piso - meseta)
+    return np.log10(piso / np.maximum(v, VP_MINIMO)) / np.log10(piso / max(float(meseta), VP_MINIMO))
+
+
+def nivel_de_la_base(base, fraccion, piso, meseta):
+    """El nivel de 8 bits donde la señal normalizada vale `fraccion` (0 en el piso, 1 en la meseta): la altura media y los niveles de la penumbra, para dibujarlos y decirlos en niveles. En valor de pixel,
+    piso - fraccion · (piso - meseta); en netOD, piso · (meseta / piso)^fraccion (la media geométrica para 0.5). Es la inversa de `normalizar` en esa base."""
+    _exigir_la_base(base)
+    if base == BASE_VALOR_DE_PIXEL:
+        return piso - fraccion * (piso - meseta)
+    return piso * (max(float(meseta), VP_MINIMO) / piso) ** fraccion
+
+
+def valores_en_la_base(base, valores, piso):
+    """Los niveles de 8 bits `valores` en la unidad de la base, para DIBUJAR un perfil con la base con que se midió: en valor de píxel los mismos niveles; en netOD la densidad óptica neta absoluta
+    log10(piso / max(v, VP_MINIMO)) (0 en el piso; sin normalizar a la meseta). Acepta un arreglo o un escalar."""
+    _exigir_la_base(base)
+    v = np.asarray(valores, dtype=np.float64)
+    if base == BASE_VALOR_DE_PIXEL:
+        return v
+    return np.log10(float(piso) / np.maximum(v, VP_MINIMO))
 
 
 # ----------------------------------------------------------------------------- girar
@@ -886,14 +939,22 @@ def girar(pelicula, M, P, cruce):
 
 # ----------------------------------------------------------------------------- el perfil
 
-def perfil_central(capa, eje, P, banda=0):
+def perfil_central(capa, eje, P, banda=0, base=BASE_VALOR_DE_PIXEL):
     """El perfil de `capa` (una `CapaGirada`) por el cruce de diagonales -> `PerfilCentral`: la fila (crossplane) o la columna (inplane) que pasa por él en el marco girado, PROMEDIADA en una banda de
     `banda_perfil_mm` de ancho. La banda `banda` es la de las filas (columnas) cuyo centro cae en [cruce + (banda - 1/2) mm, cruce + (banda + 1/2) mm): las vecinas no se solapan ni dejan huecos y la 0
     es el perfil central. El crossplane recorre x y promedia filas, el inplane recorre y y promedia columnas, nunca cruzados. Un punto del perfil solo vale si TODAS las filas de la banda tienen ahí película
-    con dato y no está a menos de `margen_borde_mm` de lo que no lo es (el fleco del corte); el borde del arreglo cuenta como borde. `ValueError` si el eje no existe o la banda queda vacía o fuera del
-    arreglo."""
+    con dato y no está a menos de `margen_borde_mm` de lo que no lo es (el fleco del corte); el borde del arreglo cuenta como borde. `ValueError` si el eje no existe, la base no es una de `BASES` o la
+    banda queda vacía o fuera del arreglo.
+
+    CÓMO SE PROMEDIA LA BANDA SEGÚN LA BASE (OD.1, decisión OD1-REV-D1, opción B de Opus, vetable por el físico): `base`, una de `BASES`, dice cómo se promedian las filas para que la banda sea la de la
+    imagen que esa base mide. En `BASE_VALOR_DE_PIXEL` (por omisión, la conducta de siempre) es la media ARITMÉTICA de los niveles de 8 bits. En `BASE_DENSIDAD_OPTICA` es la de la imagen CONVERTIDA PÍXEL A
+    PÍXEL a densidad óptica: la media de log10(max(v, VP_MINIMO)) de las filas, devuelta a niveles de 8 bits (10 ** esa media: la media GEOMÉTRICA), de modo que log10(piso / valor del perfil) es el promedio de la
+    netOD de cada píxel de la banda (lo que `dibujar_perfil` traza) y una mota brillante dentro de la banda no la acorta más de lo que acorta a la imagen convertida (con el logaritmo del promedio LINEAL el azul
+    inplane de EPSON007 y de EPSON008.TIF salía casi 3 mm más angosto). El piso de VP_MINIMO se aplica POR PÍXEL, antes del logaritmo (un píxel en 0 no da infinito). La máscara de píxeles con película y dato, el
+    margen del borde y las filas de la banda son los mismos en las dos bases."""
     if eje not in EJES:
         raise ValueError(f"El eje es uno de {EJES}, no {eje!r}.")
+    _exigir_la_base(base)
     _pedir(P, ("banda_perfil_mm", "margen_borde_mm"), "`perfil_central`")
     ancho_px = P["banda_perfil_mm"] / capa.tam_mm
     if eje == "crossplane":
@@ -909,7 +970,10 @@ def perfil_central(capa, eje, P, banda=0):
         raise ValueError(f"La banda de {P['banda_perfil_mm']:g} mm no contiene el centro de ninguna fila con esta escala.")
     if a < 0 or b > datos.shape[0]:
         raise ValueError(f"La banda {banda} del perfil {eje} (de {primera} a {fin}) queda fuera de la película girada.")
-    valores = datos[a:b].mean(axis=0, dtype=np.float64)
+    if base == BASE_DENSIDAD_OPTICA:
+        valores = 10.0 ** np.log10(np.maximum(datos[a:b], VP_MINIMO), dtype=np.float64).mean(axis=0)
+    else:
+        valores = datos[a:b].mean(axis=0, dtype=np.float64)
     bueno = pelicula[a:b].all(axis=0) & validos[a:b].all(axis=0)
     radio = int(math.ceil(P["margen_borde_mm"] / capa.tam_mm))
     bueno = ndi.binary_erosion(bueno, structure=np.ones(2 * radio + 1, dtype=bool), border_value=0)
@@ -1009,7 +1073,10 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None)
     diagonales `centro_px`; sin los `excepcion_centro_mm` alrededor del RETÍCULO REFINADO `reticulo_px` (que no es dosis). MESETA: el nivel medio de esa zona, con la tinta rechazada como en A.2 (lo que baja
     de la mediana más de `delta_tinta`). Con una meseta que no es plana (la cúpula de las películas reales, de -2 a -5.7 % a 40 mm del centro) el 50 % de ESTA meseta no es el 50 % de la dosis
     del centro del campo: en el azul, la única capa lineal en la dosis, el FWHM sale más ancho unos 0.0225 mm por cada 1 % de cúpula, 0.13 mm con -5.7 % (C2-D15, medido contra el generador de PF.0). Es la
-    definición del plan y no un defecto de la medida; los 0.15 mm del protocolo contra la dosis valen con la meseta plana. BASE: el valor de píxel normalizado n = (piso - v) / (piso - meseta) (`normalizar`); la altura media es n = `altura_media`. BORDES: se buscan DESDE LA MESETA HACIA
+    definición del plan y no un defecto de la medida; los 0.15 mm del protocolo contra la dosis valen con la meseta plana (en netOD la meseta sigue siendo el nivel medio de la zona, no la media de las densidades). BASE
+    (OD.1): `base`, una de `BASES`, normaliza el perfil entre el piso (0) y la meseta (1) con `normalizar` (netOD: n = log10(piso / v) / log10(piso / meseta); valor de píxel: (piso - v) / (piso - meseta)); el `perfil` ya viene promediado en esa base (`perfil_central(base=)`: en netOD, la media de log10 por píxel de la banda); la altura media es
+    n = `altura_media` y los niveles de la altura media y de la penumbra, en niveles de 8 bits, salen de `nivel_de_la_base`. SOLO EN netOD, si más de `FRACCION_DE_RECORTE_MAXIMA` de las muestras de la zona central valen
+    `NIVEL_DE_RECORTE` niveles o menos, la meseta está recortada por el escáner (`MOTIVO_MESETA_RECORTADA`) y el perfil es «no medible». BORDES: se buscan DESDE LA MESETA HACIA
     AFUERA, el primer cruce al salir de la zona central (nunca el punto más cercano a la altura media de todo el perfil), con interpolación lineal subpíxel, sobre el perfil suavizado
     `suavizado_perfil_mm`. La penumbra de cada lado va del `penumbra_alta` al `penumbra_baja` de la señal; si el perfil llega al borde de la película antes de cruzar el segundo queda «incompleta» (None y el aviso),
     nunca un número inventado. Lo que no se puede medir NO lanza: la medida dice «no medible» con su motivo y trae lo que sí se midió (por ejemplo un solo borde). `ValueError` solo si la base no existe o a
@@ -1046,7 +1113,12 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None)
     datos.update(meseta=meseta, muestras_meseta=int(sin_tinta.sum()))
     if not contraste >= P["contraste_minimo"]:
         return _no_medible(perfil, centro, f"el piso no es más claro que la meseta en al menos {P['contraste_minimo']:g} niveles (piso {piso:.1f}, meseta {meseta:.1f})", **datos)
-    datos.update(altura_media=piso - P["altura_media"] * contraste, nivel_penumbra_alta=piso - P["penumbra_alta"] * contraste, nivel_penumbra_baja=piso - P["penumbra_baja"] * contraste)
+    if base == BASE_DENSIDAD_OPTICA:
+        recortada = float(np.mean(v[usables] <= NIVEL_DE_RECORTE))
+        if recortada > FRACCION_DE_RECORTE_MAXIMA:          # el escáner recortó la meseta (el rojo a 800 UM): el logaritmo de un valor recortado no es la densidad óptica y ninguna capa «con netOD» se inventa
+            return _no_medible(perfil, centro, f"{MOTIVO_MESETA_RECORTADA}: el {100 * recortada:.0f} % de la zona central de la meseta vale {NIVEL_DE_RECORTE:g} niveles o menos y la densidad óptica no existe", **datos)
+    datos.update(altura_media=nivel_de_la_base(base, P["altura_media"], piso, meseta), nivel_penumbra_alta=nivel_de_la_base(base, P["penumbra_alta"], piso, meseta),
+                 nivel_penumbra_baja=nivel_de_la_base(base, P["penumbra_baja"], piso, meseta))
     muestras = 2 * int(round((P["suavizado_perfil_mm"] / tam - 1) / 2)) + 1
     suave = _suavizar(v, max(muestras, 1))
     datos["suavizado"] = suave
@@ -1091,8 +1163,8 @@ def _sin_medir_la_capa(nombre, estado, tam_mm):
                         centro_radiacion_px=(None, None), radiacion_menos_luz_mm=(None, None), radiacion_menos_reticulo_mm=(None, None))
 
 
-def _medir_la_capa(girada, nombre, piso, geometria, luz, P):
-    """Las dos medidas de perfil de una capa, la coincidencia por lado y los tres centros. El nivel de piso es el de ESE `Piso`; si esa capa no tiene piso no se mide y se dice por qué."""
+def _medir_la_capa(girada, nombre, piso, geometria, luz, P, base=BASE_VALOR_DE_PIXEL):
+    """Las dos medidas de perfil de una capa, la coincidencia por lado y los tres centros, en la base `base`. El nivel de piso es el de ESE `Piso`; si esa capa no tiene piso no se mide y se dice por qué."""
     del_piso = piso.capas[nombre]
     if del_piso.estado != "ok" or del_piso.mediana is None:
         return _sin_medir_la_capa(nombre, del_piso.estado, girada.tam_mm)
@@ -1102,11 +1174,11 @@ def _medir_la_capa(girada, nombre, piso, geometria, luz, P):
     medidas = {}
     for i, eje in enumerate(EJES):
         try:
-            perfil = perfil_central(capa, eje, P)
+            perfil = perfil_central(capa, eje, P, base=base)
         except ValueError as motivo:
             medidas[eje] = MedidaDePerfil(estado=f"no medible: perfil {eje}: {motivo}", capa=nombre, eje=eje, tam_mm=girada.tam_mm, centro_px=float(cruce[i]), piso=float(del_piso.mediana))
             continue
-        medidas[eje] = medir_perfil(perfil, cruce[i], del_piso.mediana, BASE_VALOR_DE_PIXEL, P, luz[eje], reticulo[i])
+        medidas[eje] = medir_perfil(perfil, cruce[i], del_piso.mediana, base, P, luz[eje], reticulo[i])
     rad, luminoso = {}, {}
     for eje in EJES:
         for j, lado in enumerate(LADOS_DEL_EJE[eje]):
@@ -1144,11 +1216,14 @@ def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, re
 
     `pelicula`: la `Pelicula` de `leer_pelicula` (no se modifica y el resultado no la retiene). `puntos`: los cinco puntos en cualquier orden; cada uno un par (x, y), una `MarcaRefinada` o el diccionario de su
     `como_dict()` (`punto_de_medida`): reabrir un análisis guardado pasa los guardados, no se vuelve a refinar nada. `parametros`: los `P` con que se mide, que viajan con el resultado (al reabrir se recalcula con los
-    guardados, no con los de hoy). `modo_piso`, `punto_manual` y `referencia_virgen` pasan tal cual a `piso_de_pelicula` (A.3). Lo que no se puede medir NO lanza: el resultado y cada capa dicen «no medible»
+    guardados, no con los de hoy); la BASE sale de `P["base_de_la_medida"]` (OD.1) y, si el registro no la trae (uno guardado antes de OD.1), es el valor de píxel: se mide como se midió.
+    `modo_piso`, `punto_manual` y `referencia_virgen` pasan tal cual a `piso_de_pelicula` (A.3): sin `modo_piso`, la regla de `modo_efectivo` decide (la película virgen si hay referencia y las esquinas si no). Lo que no se puede medir NO lanza: el resultado y cada capa dicen «no medible»
     con su motivo; los bordes luminosos y luz - retículo, que no dependen de la película, se entregan siempre que la geometría sea buena. La raíz es «ok» si al menos una capa se midió
     por completo (`MOTIVO_NINGUNA_CAPA` si ninguna). `ValueError` solo si los argumentos tienen una forma equivocada (no son cinco puntos, a `P` le falta un parámetro, el modo no existe)."""
     P = parametros
     _pedir(P, CLAVES_QUE_PIDE_ANALIZAR, "`analizar`")
+    base = P.get("base_de_la_medida", BASE_VALOR_DE_PIXEL)
+    _exigir_la_base(base)
     try:
         lista = list(puntos)
     except TypeError:
@@ -1157,9 +1232,10 @@ def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, re
     tam_mm = escala_mm(getattr(pelicula, "dpi", None), P)
     marcas = tuple(_marca_como_dato(m) for m in lista)
     usados = copy.deepcopy(dict(P))
+    usados.setdefault("base_de_la_medida", base)              # los parámetros que viajan dicen la base con que SE MIDIÓ (un registro de antes de OD.1 no la traía)
 
     def sin_medir(estado, **extra):
-        return ResultadoPlacaMensual(version=VERSION_ALGORITMO, estado=estado, parametros=usados, base=BASE_VALOR_DE_PIXEL, tam_mm=tam_mm, marcas=marcas, puntos=extra.get("puntos"),
+        return ResultadoPlacaMensual(version=VERSION_ALGORITMO, estado=estado, parametros=usados, base=base, tam_mm=tam_mm, marcas=marcas, puntos=extra.get("puntos"),
                                      geometria=extra.get("geometria"), piso=extra.get("piso"), girada=None, capas={n: _sin_medir_la_capa(n, estado, tam_mm) for n in CAPAS_DEL_PISO},
                                      bordes_luz_px=extra.get("bordes_luz_px") or {eje: None for eje in EJES}, luz_menos_reticulo_mm=extra.get("luz_menos_reticulo_mm"))
 
@@ -1173,9 +1249,9 @@ def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, re
     if piso.estado != "ok":
         return sin_medir(piso.estado, puntos=clasificados, geometria=geometria, piso=piso, bordes_luz_px=luz, luz_menos_reticulo_mm=luz_menos_reticulo)
     girada = girar(pelicula, geometria.matriz_de_giro, P, geometria.cruce)
-    capas = {nombre: _medir_la_capa(girada, nombre, piso, geometria, luz, P) for nombre in CAPAS_DEL_PISO}
+    capas = {nombre: _medir_la_capa(girada, nombre, piso, geometria, luz, P, base) for nombre in CAPAS_DEL_PISO}
     estado = "ok" if any(medida.ok for medida in capas.values()) else MOTIVO_NINGUNA_CAPA
-    return ResultadoPlacaMensual(version=VERSION_ALGORITMO, estado=estado, parametros=usados, base=BASE_VALOR_DE_PIXEL, tam_mm=tam_mm, marcas=marcas, puntos=clasificados, geometria=geometria,
+    return ResultadoPlacaMensual(version=VERSION_ALGORITMO, estado=estado, parametros=usados, base=base, tam_mm=tam_mm, marcas=marcas, puntos=clasificados, geometria=geometria,
                                  piso=piso, girada=girada, capas=capas, bordes_luz_px=luz, luz_menos_reticulo_mm=luz_menos_reticulo)
 
 
@@ -1358,11 +1434,11 @@ def _banda_del_barrido(resultado, capa, eje, i, k, cruce_luz, mediana):
     girada = resultado.girada
     linea = cruce_luz[1 - i] + k * (P["banda_perfil_mm"] / girada.tam_mm)
     try:
-        perfil = perfil_central(capa, eje, P, banda=k)
+        perfil = perfil_central(capa, eje, P, banda=k, base=resultado.base)
     except ValueError as motivo:
         medida = MedidaDePerfil(estado=f"no medible: perfil {eje}: {motivo}", capa=capa.nombre, eje=eje, tam_mm=girada.tam_mm, centro_px=float(girada.cruce[i]), piso=float(mediana))
     else:
-        medida = medir_perfil(perfil, girada.cruce[i], mediana, BASE_VALOR_DE_PIXEL, P, bordes_luz(eje, resultado.geometria.esquinas_giradas, linea_px=linea), resultado.geometria.reticulo_girado[i])
+        medida = medir_perfil(perfil, girada.cruce[i], mediana, resultado.base, P, bordes_luz(eje, resultado.geometria.esquinas_giradas, linea_px=linea), resultado.geometria.reticulo_girado[i])
     return BandaDelBarrido(k=k, posicion_mm=float(k * P["banda_perfil_mm"]), linea_px=float(linea), medida=medida)
 
 
