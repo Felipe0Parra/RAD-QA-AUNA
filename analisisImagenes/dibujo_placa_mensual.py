@@ -11,7 +11,7 @@ exclusión del retículo, los bordes de radiación y los bordes luminosos de esa
 dice dónde se ve cada uno de los 41 parámetros del análisis (un trazo, una etiqueta o una frase del pie) y una prueba lo deriva del código del motor por AST.
 
 OD.1 (DA-87): la BASE del análisis (`motor.BASE_POR_OMISION`: la densidad óptica neta o el valor de píxel normalizado) es un parámetro más que viaja con cada análisis; los perfiles se dibujan en la unidad de
-esa base (`motor.valores_en_la_base`), la pestaña de las capas se acondiciona con ella (`motor.normalizar`) y la ventana dice cuál es (`texto_de_la_base`). Ningún dibujo escribe el nombre de una base: sale del motor.
+esa base (`motor.valores_en_la_base`), la pestaña de las capas se pinta en su unidad desde CD.1 (`capa_acondicionada`: la densidad óptica neta de cada píxel, o el valor de píxel en un registro medido en esa base, con una escala absoluta que va de 0 a un tope que dice el título) y la ventana dice cuál es (`texto_de_la_base`). Ningún dibujo escribe el nombre de una base: sale del motor.
 
 Marcos. Los dibujos de la pestaña 1 (la imagen) están en el marco de la IMAGEN, el que el físico ve y en el que marca; los de las pestañas 2 a 5 en el marco GIRADO que usa el motor (la película recortada
 y girada hasta que los ejes del campo quedan horizontal y vertical). `a_imagen(matriz, puntos)` es la inversa de la matriz de giro del motor y lleva un trazo del marco girado a la imagen.
@@ -20,6 +20,7 @@ Todo está en píxeles del marco que dice cada función, salvo lo que su nombre 
 (un menú, una frase sin «capa») sale de `NOMBRE_DE_CAPA` y, en una frase con «capa», de `ADJETIVO_DE_LA_CAPA` (B.6, R1-PROD-01)."""
 import math
 import textwrap
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -106,6 +107,13 @@ TRAZO_DE_PARAMETRO = {
 }
 LARGO_DEL_PIE = 220                    # caracteres por línea del pie de parámetros fijos
 ETIQUETA_DEL_EJE_Y = {motor.BASE_DENSIDAD_OPTICA: f"{motor.BASE_DENSIDAD_OPTICA} [1]", motor.BASE_VALOR_DE_PIXEL: "valor de píxel [nivel]"}      # OD.1: lo que dice el eje vertical de un perfil en cada base
+# CD.1: la ESCALA de cada capa de la pestaña 2. Son constantes del DIBUJO, no parámetros del análisis: no deciden ningún número medido ni viajan con lo guardado; el título de cada capa las dice.
+FACTOR_DEL_TOPE = 1.1                  # el tope de una capa con meseta es 1.1 veces la densidad óptica neta de su meseta: lo que pasa de la meseta se ve sin saturarlo todo
+PERCENTIL_DEL_TOPE = 99.5              # el tope de una capa sin meseta válida (no medida, recortada por el escáner o no más oscura que el piso) es este percentil de su densidad óptica neta
+TOPE_EN_NIVELES = 255.0                # el valor de píxel (un registro medido en esa base, o una capa sin piso) se pinta de 0 a 255 [nivel]
+TOPE_SIN_SENAL = 1.0                   # el tope cuando ningún píxel de la capa es más oscuro que el piso (el percentil no es positivo): la escala no puede tener ancho cero
+RECORTADA_POR_EL_ESCANER = "recortada por el escáner"
+ANCHO_DEL_TITULO_DE_LA_CAPA = 52       # caracteres por renglón del título de cada capa: las tres van lado a lado y un título de un solo renglón invadía el de la vecina
 
 
 # ----------------------------------------------------------------------------------------------------- textos y números (puros)
@@ -637,27 +645,81 @@ def colorear(normalizada):
     return colormaps["jet"](np.clip(normalizada, 0.0, 1.0), bytes=True)
 
 
+@dataclass(frozen=True, eq=False)
+class CapaEnUnidades:
+    """CD.1: una capa de la película girada en la UNIDAD de la base del análisis, lista para pintarla en la pestaña 2. `valores`: float32 (alto, ancho), la densidad óptica neta de cada píxel
+    (`motor.valores_en_la_base`, sin normalizar a la meseta y SIN RECORTAR: la negativa, ruido bajo el piso, se conserva y la recorta `colorear`) o, en valor de píxel o sin piso, sus niveles; NaN donde la
+    película girada no tiene dato (transparente). `tope`: el máximo de la escala; el mínimo es siempre 0 (el piso en densidad óptica neta, el negro en niveles). `unidad`: el rótulo de la barra
+    (`ETIQUETA_DEL_EJE_Y`). `texto`: lo que dice el título tras «Capa <color>: » (la escala y la meseta, o por qué la escala no sale de la meseta). `meseta`: la de la capa en la unidad de `valores` cuando la escala sale de ella
+    (netOD) y, en un registro medido en valor de píxel, la de sus perfiles en niveles; None si ningún perfil la midió o si la escala no sale de ella (recortada por el escáner, no más oscura que el piso) y siempre None
+    en una capa de netOD sin piso: sin piso no hay densidad óptica, la capa se pinta en niveles y su meseta no se reporta aunque sus perfiles la hayan medido. `motivo`: por qué la escala no sale de la
+    meseta (None si sale de ella)."""
+    valores: np.ndarray = field(repr=False)
+    tope: float
+    unidad: str
+    texto: str
+    meseta: float | None = None
+    motivo: str | None = None
+
+
 def capa_acondicionada(resultado, capa):
-    """(arreglo, texto, meseta): la capa girada normalizada entre su piso y su meseta (0 en el piso, 1 en la meseta: `motor.normalizar`) en la BASE del análisis (OD.1: `resultado.base`; la densidad óptica neta
-    por omisión, que es la imagen «con la densidad óptica aplicada» que el físico pidió ver) para dibujarla, el texto que lo dice y la meseta usada. La meseta es el promedio
-    de las de sus dos perfiles (o la del que la tiene). Lo que no tiene dato (lo que el giro dejó fuera de la película) queda NaN. Si la capa no tiene piso o ninguno de sus perfiles tiene meseta no se puede
-    acondicionar: el arreglo es la capa tal cual dividida entre 255, el texto dice por qué y la meseta es None."""
+    """CD.1 (el físico: «dejé de normalizar la imagen, para crear un rango absoluto»): la capa girada en la UNIDAD de la base del análisis y su escala -> `CapaEnUnidades`. Ya no se normaliza entre el piso
+    y la meseta (`motor.normalizar` no se usa aquí): la meseta solo fija el tope. La meseta de una capa es el promedio de las de sus dos perfiles (o la del que la tiene), la que dibuja la pestaña 3.
+    - Densidad óptica neta (la base por omisión) con piso: la netOD de cada píxel; la escala va de 0 (el piso) a `FACTOR_DEL_TOPE` veces la netOD de su meseta. Sin meseta válida (ningún perfil la midió, la
+      meseta está recortada por el escáner —`motor.MOTIVO_MESETA_RECORTADA` en el estado de cualquiera de sus dos perfiles: su netOD no existe— o no es más oscura que el piso) va de 0 a su percentil
+      `PERCENTIL_DEL_TOPE`, y el texto dice por qué; si tampoco ese es positivo, de 0 a `TOPE_SIN_SENAL`.
+    - Densidad óptica neta sin piso (esa capa no tiene piso): sin piso no hay densidad óptica; se pinta su valor de píxel de 0 a 255 y el texto lo dice.
+    - Valor de píxel (un registro medido antes de OD.1): sus niveles de 0 a 255.
+    Lo que la película girada no tiene (lo que el giro dejó fuera) queda NaN: transparente."""
     girada = resultado.girada
-    datos = girada.capas[capa]
     m = resultado.capas[capa]
     mesetas = [p.meseta for p in (m.crossplane, m.inplane) if p.meseta is not None]
-    if m.piso is None or not mesetas:
+    meseta_en_niveles = float(np.mean(mesetas)) if mesetas else None
+    en_niveles = resultado.base == motor.BASE_VALOR_DE_PIXEL or m.piso is None
+    if en_niveles:
+        valores = np.array(girada.capas[capa], dtype=np.float32)
+    else:
+        valores = motor.valores_en_la_base(resultado.base, girada.capas[capa], m.piso).astype(np.float32)
+    valores[~girada.validos] = np.nan
+    if en_niveles:
+        escala = "valor de píxel de 0 a 255 [nivel]"
+        unidad = ETIQUETA_DEL_EJE_Y[motor.BASE_VALOR_DE_PIXEL]
+        if resultado.base != motor.BASE_VALOR_DE_PIXEL:
+            motivo = f"sin piso no hay densidad óptica: {m.estado}"
+            return CapaEnUnidades(valores, TOPE_EN_NIVELES, unidad, f"{escala}; {motivo}", None, motivo)
+        if m.piso is None or meseta_en_niveles is None:
+            motivo = m.estado if m.estado != "ok" else "la capa no tiene meseta medida"
+            return CapaEnUnidades(valores, TOPE_EN_NIVELES, unidad, f"{escala}; {motivo}", meseta_en_niveles, motivo)
+        return CapaEnUnidades(valores, TOPE_EN_NIVELES, unidad, f"{escala}; piso {numero(m.piso, 1)} y meseta {numero(meseta_en_niveles, 1)} [nivel]", meseta_en_niveles, None)
+    unidad = ETIQUETA_DEL_EJE_Y[resultado.base]
+    recortada = any(motor.MOTIVO_MESETA_RECORTADA in p.estado for p in (m.crossplane, m.inplane))
+    meseta = None if meseta_en_niveles is None else float(motor.valores_en_la_base(resultado.base, meseta_en_niveles, m.piso))
+    if recortada:
+        motivo = RECORTADA_POR_EL_ESCANER
+    elif meseta is None:
         motivo = m.estado if m.estado != "ok" else "la capa no tiene meseta medida"
-        return np.asarray(datos, dtype=np.float32) / np.float32(255.0), f"sin acondicionar (0 a 255): {motivo}", None
-    meseta = float(np.mean(mesetas))
-    normalizada = motor.normalizar(resultado.base, datos, m.piso, meseta).astype(np.float32)
-    normalizada[~girada.validos] = np.nan
-    return normalizada, f"0 es el piso ({numero(m.piso, 1)}) y 1 la meseta ({numero(meseta, 1)}); base: {resultado.base}", meseta
+    elif not (math.isfinite(meseta) and meseta > 0):
+        motivo = "la meseta no es más oscura que el piso"
+    else:
+        tope = FACTOR_DEL_TOPE * meseta
+        return CapaEnUnidades(valores, tope, unidad, f"de 0 a {numero(tope)} [1]: {FACTOR_DEL_TOPE:g} veces su meseta, {numero(meseta)} [1]", meseta, None)
+    finitos = valores[np.isfinite(valores)]
+    tope = float(np.percentile(finitos, PERCENTIL_DEL_TOPE)) if finitos.size else math.nan
+    if not (math.isfinite(tope) and tope > 0):
+        return CapaEnUnidades(valores, TOPE_SIN_SENAL, unidad, f"{motivo}; de 0 a {TOPE_SIN_SENAL:g} [1]: ningún píxel es más oscuro que el piso", None, motivo)
+    return CapaEnUnidades(valores, tope, unidad, f"{motivo}; de 0 a {numero(tope)} [1]: el percentil {PERCENTIL_DEL_TOPE:g} de la capa", None, motivo)
+
+
+def titulo_de_la_capa(capa, texto):
+    """CD.1 (CD1-D8 y CD1-M4): el título de una capa de la pestaña 2, «Capa <color>: <texto>» partido en renglones de `ANCHO_DEL_TITULO_DE_LA_CAPA` caracteres para que las tres no se pisen. El espacio antes de cada unidad
+    (« [1]», « [nivel]») no se separa: un renglón nunca empieza con una unidad que se quedó sin su número. `texto` (el de `CapaEnUnidades`) no cambia: el espacio de no separación es solo del título."""
+    return textwrap.fill(f"Capa {ADJETIVO_DE_LA_CAPA[capa]}: {texto}".replace(" [", "\u00a0["), ANCHO_DEL_TITULO_DE_LA_CAPA)
 
 
 def dibujar_capas(figura, resultado):
-    """La pestaña 2: las tres capas R, G y B de la película girada, cada una acondicionada (normalizada entre su piso y su meseta) en `jet` con su barra de color aparte; encima, la cruz de línea punteada blanca por el
-    cruce de diagonales, la cuadrícula, el recuadro del campo luminoso (en el marco girado) y la región del piso. Devuelve {capa: eje}. Sin película girada dice por qué."""
+    """La pestaña 2: las tres capas R, G y B de la película girada, cada una en la unidad de la base del análisis (CD.1, `capa_acondicionada`: la densidad óptica neta de cada píxel, de 0 al tope de esa capa)
+    en `jet` con su barra de color aparte, en esa unidad; encima, la cruz de línea punteada blanca por el cruce de diagonales, la cuadrícula, el recuadro del campo luminoso (en el marco girado) y la región del
+    piso. Devuelve {capa: eje}. Sin película girada dice por qué."""
     from matplotlib import cm
     from matplotlib.colors import Normalize
     if resultado.girada is None:
@@ -670,9 +732,9 @@ def dibujar_capas(figura, resultado):
     ejes = figura.subplots(1, len(CAPAS))
     salida = {}
     for ax, capa in zip(ejes, CAPAS):
-        normalizada, texto, meseta = capa_acondicionada(resultado, capa)
-        alto, ancho = normalizada.shape
-        ax.imshow(colorear(normalizada), extent=(ox - 0.5, ox + ancho - 0.5, oy + alto - 0.5, oy - 0.5), interpolation="nearest", gid="capas:imagen")
+        en_unidades = capa_acondicionada(resultado, capa)
+        alto, ancho = en_unidades.valores.shape
+        ax.imshow(colorear(en_unidades.valores / np.float32(en_unidades.tope)), extent=(ox - 0.5, ox + ancho - 0.5, oy + alto - 0.5, oy - 0.5), interpolation="nearest", gid="capas:imagen")
         cx, cy = girada.cruce
         ax.axvline(cx, color="white", ls=":", lw=1.2, gid="capas:cruz_vertical", label="_cruz")
         ax.axhline(cy, color="white", ls=":", lw=1.2, gid="capas:cruz_horizontal", label="_cruz")
@@ -683,11 +745,11 @@ def dibujar_capas(figura, resultado):
         dibujar_region_del_piso(ax, resultado, marco="girado")
         ax.set_xlim(ox - 0.5, ox + ancho - 0.5)
         ax.set_ylim(oy + alto - 0.5, oy - 0.5)
-        ax.set_title(f"Capa {ADJETIVO_DE_LA_CAPA[capa]}: {texto}", fontsize=8)
+        ax.set_title(titulo_de_la_capa(capa, en_unidades.texto), fontsize=8)
         ax.set_xlabel("columna de la película girada [px]")
         ax.set_ylabel("fila de la película girada [px]")
-        barra = figura.colorbar(cm.ScalarMappable(norm=Normalize(0.0, 1.0), cmap="jet"), ax=ax, location="bottom", shrink=0.9, pad=0.12)
-        barra.set_label("normalizada: piso 0, meseta 1" if meseta is not None else "nivel de la capa entre 255")
+        barra = figura.colorbar(cm.ScalarMappable(norm=Normalize(0.0, en_unidades.tope), cmap="jet"), ax=ax, location="bottom", shrink=0.9, pad=0.12)
+        barra.set_label(en_unidades.unidad)
         salida[capa] = ax
     return salida
 

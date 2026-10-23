@@ -1625,17 +1625,24 @@ class TestLaVentana:
         assert f"base de la medida: {BASE_VP}" in v.pie_de_parametros.text()
         assert v.etiqueta_piso.text().startswith(f"Base de la medida: {BASE_VP}")
 
-    def test_la_pestana_de_las_capas_se_acondiciona_en_la_base_del_analisis(self, analisis_od):
+    def test_la_pestana_de_las_capas_se_pinta_en_la_netod_absoluta_del_analisis(self, analisis_od):
+        # CD.1 (23-10, clase b; pedido del fisico: «dejé de normalizar la imagen, para crear un rango absoluto»): antes la pestaña normalizaba la netOD entre el piso y la meseta (de 0 a 1); ahora pinta la netOD
+        # ABSOLUTA de cada pixel, sin dividir entre la de la meseta, y la escala va de 0 (el piso) a 1.1 veces la netOD de la meseta de esa capa (el promedio de las de sus dos perfiles). El motivo del cambio de
+        # las aserciones: la escala y el texto de la capa ya no hablan de normalizar. Su prueba completa (diez peliculas reales, la virgen, la sintetica y los casos construidos) es `test_cd1_capas_en_unidades_absolutas.py`.
         dib = _dib()
         for capa in ("G", "B"):
-            matriz, texto, meseta = dib.capa_acondicionada(analisis_od, capa)
-            piso = analisis_od.capas[capa].piso
+            c = dib.capa_acondicionada(analisis_od, capa)
+            m = analisis_od.capas[capa]
+            piso = m.piso
+            meseta = float(np.mean([m.crossplane.meseta, m.inplane.meseta]))
             girada = analisis_od.girada
-            esperado = np.log10(piso / np.maximum(girada.capas[capa].astype(np.float64), VP_MINIMO)) / od(piso, meseta)
+            esperado = np.log10(piso / np.maximum(girada.capas[capa].astype(np.float64), VP_MINIMO))
             esperado[~girada.validos] = np.nan
             visibles = np.isfinite(esperado)
-            assert np.allclose(matriz[visibles], esperado[visibles], atol=2e-5), capa
-            assert "0 es el piso" in texto and BASE_OD in texto
+            assert np.allclose(c.valores[visibles], esperado[visibles], atol=2e-6, rtol=0), capa
+            assert np.array_equal(np.isnan(c.valores), ~girada.validos), capa
+            assert c.tope == pytest.approx(1.1 * od(piso, meseta), rel=1e-9) and c.unidad == f"{BASE_OD} [1]", capa
+            assert c.texto == f"de 0 a {c.tope:.3f} [1]: 1.1 veces su meseta, {od(piso, meseta):.3f} [1]", capa
 
     def test_el_pie_de_parametros_no_falla_con_parametros_de_antes_de_od1(self):
         dib, pm = _dib(), _pm()

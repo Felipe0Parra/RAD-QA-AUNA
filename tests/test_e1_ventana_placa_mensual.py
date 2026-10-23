@@ -40,6 +40,7 @@ import dataclasses
 import math
 import re
 import shutil
+import textwrap
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -785,30 +786,32 @@ class TestPestana2Capas:
         f = solo_lectura.v._fig_capas
         assert len(f.axes) == 6
         assert [e.get_title().split(":")[0] for e in f.axes[:3]] == ["Capa roja", "Capa verde", "Capa azul"]
-        assert [e.get_label() for e in f.axes[3:]] == ["<colorbar>"] * 3 and all(e.get_xlabel() == "normalizada: piso 0, meseta 1" for e in f.axes[3:])
+        # CD.1 (23-10, clase b; pedido del fisico: «dejé de normalizar la imagen, para crear un rango absoluto»): la barra ya no es la normalizada de 0 a 1 sino la unidad de la base del analisis. Esta ventana mide
+        # en valor de pixel (el fixture de E.1), asi que dice «valor de píxel [nivel]» y va de 0 a 255; la netOD la fijan `test_cd1_capas_en_unidades_absolutas.py` y `test_od1_densidad_optica.py`.
+        assert [e.get_label() for e in f.axes[3:]] == ["<colorbar>"] * 3 and all(e.get_xlabel() == "valor de píxel [nivel]" and tuple(e.get_xlim()) == (0.0, 255.0) for e in f.axes[3:])
 
     @pytest.mark.parametrize("k,capa", [(0, "R"), (1, "G"), (2, "B")])
-    def test_cada_capa_esta_acondicionada_con_su_piso_y_su_meseta_y_en_jet_uint8(self, solo_lectura, directo, k, capa):
+    def test_cada_capa_se_pinta_en_su_unidad_y_en_jet_uint8(self, solo_lectura, directo, k, capa):
+        # CD.1 (23-10, clase b): antes se pintaba normalizada entre el piso y la meseta; ahora se pinta en la unidad de la base de este analisis (valor de pixel: los niveles, de 0 a 255) con NaN fuera de la pelicula.
         r = directo.resultado
         imagen = por_gid(solo_lectura.v._fig_capas.axes[k], "capas:imagen")[0]
         arreglo = np.asarray(imagen.get_array())
         assert arreglo.dtype == np.uint8 and arreglo.shape == r.girada.capas[capa].shape + (4,), "RGBA uint8 con el mapa de color ya aplicado: una imagen 2D con mapa de color pedia 2 GB"
-        m = r.capas[capa]
-        meseta = float(np.mean([m.crossplane.meseta, m.inplane.meseta]))
-        normalizada = pm().normalizar(pm().BASE_VALOR_DE_PIXEL, r.girada.capas[capa], m.piso, meseta).astype(np.float32)
-        normalizada[~r.girada.validos] = np.nan
-        assert np.array_equal(arreglo, dibujo_mod().colorear(normalizada))
+        niveles = np.array(r.girada.capas[capa], dtype=np.float32)
+        niveles[~r.girada.validos] = np.nan
+        assert np.array_equal(arreglo, dibujo_mod().colorear(niveles / np.float32(255.0)))
         assert imagen.get_interpolation() == "nearest"
         ox, oy = r.girada.origen
-        alto, ancho = normalizada.shape
+        alto, ancho = niveles.shape
         assert tuple(map(float, imagen.get_extent())) == (ox - 0.5, ox + ancho - 0.5, oy + alto - 0.5, oy - 0.5)
 
     @pytest.mark.parametrize("k,capa", [(0, "R"), (1, "G"), (2, "B")])
-    def test_el_titulo_dice_el_piso_y_la_meseta_con_que_se_normalizo(self, solo_lectura, directo, k, capa):
+    def test_el_titulo_dice_la_escala_el_piso_y_la_meseta(self, solo_lectura, directo, k, capa):
         m = directo.resultado.capas[capa]
         meseta = float(np.mean([m.crossplane.meseta, m.inplane.meseta]))
-        # OD.1 (21-10): el titulo dice ademas la base con que se acondiciono la capa («; base: ...»: la que dice el motor).
-        assert solo_lectura.v._fig_capas.axes[k].get_title() == f"Capa {ADJETIVO[capa]}: 0 es el piso ({m.piso:.1f}) y 1 la meseta ({meseta:.1f}); base: {directo.resultado.base}"
+        # CD.1 (23-10, clase b): el titulo ya no dice que el cero es el piso y el uno la meseta (ni la base, que OD.1 le sumaba): dice la escala de la capa, su piso y su meseta en niveles, partido en renglones de 52 caracteres.
+        esperado = f"Capa {ADJETIVO[capa]}: valor de píxel de 0 a 255 [nivel]; piso {m.piso:.1f} y meseta {meseta:.1f} [nivel]"
+        assert solo_lectura.v._fig_capas.axes[k].get_title() == textwrap.fill(esperado.replace(" [", "\u00a0["), 52)      # CD1-M4: el espacio antes de cada unidad (« [nivel]») es de no separacion
 
     def test_la_cruz_punteada_blanca_pasa_por_el_cruce_de_diagonales_y_hay_cuadricula(self, solo_lectura, directo):
         cx, cy = directo.resultado.girada.cruce
@@ -1162,20 +1165,23 @@ class TestLasFuncionesPuras:
             assert d.zona_central(directo.resultado, sin_region) is None, eje
         assert d.zona_central(directo.resultado, b) == (tuple(b.ejes["inplane"].zona_px), tuple(b.ejes["crossplane"].zona_px)), "compuerta: con el barrido entero la zona esta"
 
-    def test_una_capa_sin_piso_o_sin_meseta_no_se_acondiciona_y_el_texto_dice_por_que(self, directo):
+    def test_en_valor_de_pixel_una_capa_sin_piso_o_sin_meseta_se_pinta_en_niveles_y_dice_por_que(self, directo):
+        # CD.1 (23-10, clase b): ya no hay una capa que se deje tal cual dividida entre 255: en valor de pixel (la base de E.1) toda capa se pinta en niveles de 0 a 255 y su texto dice el piso y la meseta
+        # o por que faltan (`CapaEnUnidades`: el arreglo en niveles, el tope 255, la unidad, el texto).
         d, r = dibujo_mod(), directo.resultado
         capa = r.capas["R"]
 
         def con(**cambios):
             return dataclasses.replace(r, capas={**r.capas, "R": dataclasses.replace(capa, **cambios)})
 
-        arreglo, texto, meseta = d.capa_acondicionada(con(piso=None, estado="no medible: no hay piso"), "R")
-        assert meseta is None and texto == "sin acondicionar (0 a 255): no medible: no hay piso" and arreglo.dtype == np.float32 and 0.0 <= np.nanmin(arreglo) and np.nanmax(arreglo) <= 1.0
+        c = d.capa_acondicionada(con(piso=None, estado="no medible: no hay piso"), "R")
+        assert c.texto == "valor de píxel de 0 a 255 [nivel]; no medible: no hay piso" and c.tope == 255.0 and c.unidad == "valor de píxel [nivel]"
+        assert c.valores.dtype == np.float32 and 0.0 <= np.nanmin(c.valores) and np.nanmax(c.valores) <= 255.0 and np.nanmax(c.valores) > 1.0
         sin_mesetas = con(crossplane=dataclasses.replace(capa.crossplane, meseta=None), inplane=dataclasses.replace(capa.inplane, meseta=None))
-        arreglo, texto, meseta = d.capa_acondicionada(sin_mesetas, "R")
-        assert meseta is None and texto == "sin acondicionar (0 a 255): la capa no tiene meseta medida"
+        c = d.capa_acondicionada(sin_mesetas, "R")
+        assert c.meseta is None and c.texto == "valor de píxel de 0 a 255 [nivel]; la capa no tiene meseta medida" and c.tope == 255.0 and c.unidad == "valor de píxel [nivel]"
         normal = d.capa_acondicionada(r, "R")
-        assert normal[2] is not None and normal[1].startswith("0 es el piso"), "compuerta: la capa entera si se acondiciona"
+        assert normal.meseta is not None and normal.texto.startswith("valor de píxel de 0 a 255 [nivel]; piso "), "compuerta: la capa entera dice su piso y su meseta"
 
     def test_el_barrido_de_una_capa_sin_bandas_no_dibuja_esa_capa_y_sigue_con_las_otras(self, directo):
         b = directo.barrido
