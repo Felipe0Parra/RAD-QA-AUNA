@@ -1803,7 +1803,9 @@ class TestCadaManejadorEstaProtegido:
             raise RuntimeError("fallo de prueba")
 
         if que == "seleccionar":
-            monkeypatch.setattr(motor, "leer_imagen", revienta)
+            # B.8 (clase b): la pagina ya no lee con `motor.leer_imagen` sino con su `leer_para_mostrar` (que decodifica UNA vez y se queda con la Pelicula para mostrar el color); el contrato de la prueba
+            # (un error inesperado al leer se avisa con el titulo del manejador y no escapa) es el mismo, y el punto donde se inyecta el error es el lector de la pagina.
+            monkeypatch.setattr(pagina_mod, "leer_para_mostrar", revienta)
             _cargar(p, dialogos, archivo_braqui)
         elif que == "recalcular":
             monkeypatch.setattr(p, "_descartar_resultado", revienta)

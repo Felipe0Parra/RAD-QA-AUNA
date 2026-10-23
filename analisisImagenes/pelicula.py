@@ -21,6 +21,10 @@ trae alfa) sale de Pillow, que NO lee los 16 bits (abre un TIFF RGBA de 16 bits 
     análisis los trata como el marco del escáner. Un alfa de máximo - 1 NO es opaco. Ya no se rechaza la imagen (antes: `ValueError`): si la transparencia toca lo que
     se mide, el análisis dice "no medible" con su motivo. Sin alfa, `validos` es todo True.
 
+LA IMAGEN A COLOR (B.8, DA-88). `imagen_rgb(pelicula)` es la película como RGB `uint8` en su color original, solo para MOSTRARLA: la usan la ventana del análisis mensual y la página de la posición inicial
+de braquiterapia (una operación, una definición). En 8 bits son los mismos valores del archivo y en 16 los niveles de 8 bits redondeados de cada capa. Ningún análisis mide sobre ella: el motor sigue
+midiendo sobre el gris.
+
 EL PISO (A.2, 12-10; A.3, 13-10). `piso_de_pelicula(pelicula, campo_luz, P, punto_manual=None, modo=None, referencia_virgen=None)` dice cuál es el nivel de la película FUERA del campo luminoso, de
 dónde lo sacó y a qué distancia del campo: el 50 % del borde de radiación es el 50 % entre ese piso y la meseta, así que de él depende el FWHM. Una sola función para las cuatro capas (R, G, B
 y el gris). Se llama «piso» y no «película virgen»: la película de fuera del campo recibe dosis periférica y se sigue aclarando con la distancia (R7, H18), por eso se toma LO MÁS LEJOS POSIBLE
@@ -339,6 +343,19 @@ def leer_pelicula(datos):
             raise ValueError(f"La imagen tiene {canales} canales: solo se leen imagenes en grises, RGB o RGBA.")
     return Pelicula(bgr, gris, alfa, maximo, dpi, fecha_escaneo, formato)
 
+
+# B.8 (DA-88): la película a COLOR para mostrarla. Vivió en `dibujo_placa_mensual.py` (E.1) y pasa aquí con el MISMO cuerpo porque la usan las dos ventanas (la del análisis mensual y la página de la posición
+# inicial de braquiterapia): una operación, una definición. `dibujo_placa_mensual` la re-exporta con el mismo nombre.
+def imagen_rgb(pelicula):
+    """La película como RGB uint8 (alto, ancho, 3) para mostrarla en su color original. En 8 bits son los mismos valores del archivo (el color BGR de OpenCV puesto en orden R, G, B, una sola copia); en 16 bits,
+    los niveles de 8 bits redondeados de cada capa (así se muestra la de 16 bits, A.1). Un RGB uint8 con `nearest` cuesta 101 MB para una página del escáner (6600 x 5100); un gris 2D con mapa de color, 2 GB."""
+    if pelicula.bits == 8:
+        _gris, bgr = pelicula.en_bgr()
+        return np.ascontiguousarray(bgr[:, :, ::-1])
+    rgb = np.empty(pelicula.validos.shape + (3,), np.uint8)
+    for k, capa in enumerate(CAPAS):
+        rgb[:, :, k] = np.clip(np.rint(getattr(pelicula, capa)), 0, 255)
+    return rgb
 
 
 # ============================================================================= A.2: el piso (nivel de la película fuera del campo luminoso) y A.3: por esquinas, con modos y película virgen

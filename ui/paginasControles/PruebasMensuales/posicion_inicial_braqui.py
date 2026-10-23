@@ -67,6 +67,10 @@ de los tres perfiles (el zoom que el físico haya hecho en una gráfica se conse
 B7-C1 (ronda 1 de revisión, 17-10): CON UN REGISTRO GUARDADO O ABIERTO la capa que la pantalla reporta es la que GUARDÓ ese registro (`_capa_que_se_reporta`; ninguna si el registro no guardó capa) y el menú queda FIJO,
 como Guardar (`_estado` es la única definición de cuándo se bloquea): lo que dicen los recuadros y los títulos no puede contradecir lo guardado, la columna «Capa» ni el PDF. Para reportar otra capa, Recalcular.
 
+B.8 (23-10, DP-157, DA-88): la pestaña «Imagen», donde el físico marca los dos puntos, muestra la película A COLOR, la original, al cargarla y al abrir un registro: `imagen_rgb` (la misma definición que usa la ventana del
+análisis mensual) sobre la `Pelicula` que `leer_para_mostrar` lee UNA sola vez (su gris, su dpi y su fecha son los de `motor.leer_imagen`, bit a bit). `_instalar_imagen` la recibe además del gris y la página NO la guarda:
+al eje solo va el RGB `uint8`. Es lo que se mira para marcar: el análisis sigue midiendo sobre el gris y los dos puntos se dibujan encima, igual.
+
 Lo que deja preparado: `abrir_registro(id) -> bool` y `refrescar()` públicos (PI.6 y el visor), `pestanas` con la imagen
 sintética como cuarta (su reinicio vive dentro de `_restablecer_estado`), las propiedades `estado` y `puntos`; ninguna
 señal."""
@@ -97,7 +101,7 @@ from analisisImagenes.dibujo_posicion_inicial import (  # noqa: F401
 )
 # B.7 (DP-157, DA-85): las capas, el color de cada una para un MENU (`NOMBRE_DE_CAPA`: rojo, verde, azul), el adjetivo que concuerda con «capa» para toda FRASE (`ADJETIVO_DE_LA_CAPA`: «capa roja») y la capa con
 # que arranca el menu (`CAPA_POR_OMISION`, que SOLO se lee para poner el menu en su valor inicial: ningun PDF ni el servicio la leen).
-from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, CAPA_POR_OMISION, CAPAS, NOMBRE_DE_CAPA
+from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, CAPA_POR_OMISION, CAPAS, NOMBRE_DE_CAPA, imagen_rgb, leer_pelicula   # B.8: la película a color y su lector (el MISMO que usa `motor.leer_imagen`)
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from services import posicion_inicial_braqui as svc
 from services.audit_minimo import usuario_actual
@@ -200,6 +204,14 @@ def _tolerancia(valor):
 def _motivo_de_estado(estado):
     """'la mancha se sale de la zona marcada' de 'no medible: la mancha se sale de la zona marcada'."""
     return estado.split(":", 1)[1].strip() if ":" in estado else estado
+
+
+def leer_para_mostrar(datos):
+    """(pelicula, gris, dpi, fecha) de los BYTES de una imagen (B.8, DA-88). El gris, el dpi y la fecha del escaneo son EXACTAMENTE los que da `motor.leer_imagen` (bit a bit, mismo tipo: la prueba de B.8 lo fija) y la
+    `Pelicula` que ese lector descarta se queda para mostrar la imagen a COLOR sin decodificarla dos veces. Quien la recibe la usa y la suelta: la página no la guarda (una página entera del escáner, en
+    float32, ocupa unos 540 MB; al eje solo va el RGB `uint8`). `ValueError` si el formato no se reconoce, como `motor.leer_imagen`."""
+    pelicula = leer_pelicula(datos)
+    return pelicula, pelicula.en_bgr()[0], pelicula.dpi, pelicula.fecha_escaneo
 
 
 def formato_de_la_imagen(datos, nombre):
@@ -1065,7 +1077,7 @@ class PosicionInicialBraqui(QWidget):
         try:
             with open(ruta, "rb") as archivo:
                 datos = archivo.read()
-            gris, _color, dpi, fecha = motor.leer_imagen(datos)
+            pelicula, gris, dpi, fecha = leer_para_mostrar(datos)
             origen_fecha = "fecha del escaneo"
             if fecha is None:
                 fecha = date.fromtimestamp(os.path.getmtime(ruta))
@@ -1073,14 +1085,16 @@ class PosicionInicialBraqui(QWidget):
         except (OSError, ValueError) as error:
             QMessageBox.warning(self, "Seleccionar imagen", f"No se pudo leer la imagen: {error}")
             return
-        self._instalar_imagen(datos, os.path.basename(ruta), gris, dpi, fecha, origen_fecha)
+        self._instalar_imagen(datos, os.path.basename(ruta), gris, dpi, fecha, origen_fecha, pelicula)
         self._aplicar_dd7(fecha)
 
-    def _instalar_imagen(self, datos, nombre, gris, dpi, fecha, origen_fecha):
+    def _instalar_imagen(self, datos, nombre, gris, dpi, fecha, origen_fecha, pelicula=None):
         """Descarta todo lo de la imagen anterior (resultado, puntos, marcas, registro abierto, herramientas) y muestra la
-        nueva como RGB uint8 con `nearest` (ver el docstring del módulo): la de 16 bits llega en float32 de 0 a 255 y se muestra con sus
-        niveles de 8 bits redondeados (A.1), como ya se muestra la de 8 (un RGB float32 de 0 a 255 sale casi todo blanco en `imshow`).
-        `fecha` es la que propone el cambio de fuente y solo se muestra: no se guarda."""
+        nueva como RGB uint8 con `nearest` (ver el docstring del módulo) y A COLOR, la original (B.8, DA-88): `imagen_rgb(pelicula)`, la misma
+        definición que usa la ventana del mensual (la de 16 bits, con sus niveles de 8 bits redondeados, A.1; un RGB float32 de 0 a 255 sale casi todo
+        blanco en `imshow`). `pelicula` es la `Pelicula` de los mismos bytes (`leer_para_mostrar`: se decodifica una sola vez) y NO se guarda en la página;
+        el análisis sigue midiendo sobre el gris (`gris`, que aquí solo da la forma). Sin ella (`None`, ningún llamador de hoy) se muestra el gris en los
+        tres canales, como antes de B.8. `fecha` es la que propone el cambio de fuente y solo se muestra: no se guarda."""
         self._descartar_resultado()
         self._descartar_puntos()
         self._registro_abierto = None
@@ -1090,8 +1104,12 @@ class PosicionInicialBraqui(QWidget):
         self._fecha_escaneo = fecha
         self._origen_fecha = origen_fecha
         self.eje_imagen.clear()
-        gris8 = gris if gris.dtype == np.uint8 else np.clip(np.rint(gris), 0, 255).astype(np.uint8)
-        self.eje_imagen.imshow(np.dstack([gris8, gris8, gris8]), interpolation="nearest")
+        if pelicula is None:
+            gris8 = gris if gris.dtype == np.uint8 else np.clip(np.rint(gris), 0, 255).astype(np.uint8)
+            rgb = np.dstack([gris8, gris8, gris8])
+        else:
+            rgb = imagen_rgb(pelicula)
+        self.eje_imagen.imshow(rgb, interpolation="nearest")
         self._rotular_eje_imagen()
         self.barra_imagen.update()
         self.nombre_archivo.setText(nombre)
@@ -1316,7 +1334,7 @@ class PosicionInicialBraqui(QWidget):
             QMessageBox.warning(self, "Abrir", "El registro ya no existe.")
             return False
         try:
-            gris, _color, dpi, _fecha = motor.leer_imagen(registro["imagen"])
+            pelicula, gris, dpi, _fecha = leer_para_mostrar(registro["imagen"])
             puntos = [tuple(float(v) for v in par) for par in json.loads(registro["puntos"])]
             parametros = json.loads(registro["parametros"])
             capa = svc.capa_del_registro(registro)           # B.7: la capa que guardó el registro (un valor dañado es un `PosicionInicialError`: se avisa ANTES de tocar la página)
@@ -1327,7 +1345,7 @@ class PosicionInicialBraqui(QWidget):
         if resultado is None:
             return False
         try:
-            self._instalar_imagen(registro["imagen"], registro["imagen_nombre"] or "", gris, dpi, None, None)
+            self._instalar_imagen(registro["imagen"], registro["imagen_nombre"] or "", gris, dpi, None, None, pelicula)
             for punto in puntos:
                 self._marcar(punto)
             self._puntos = list(puntos)

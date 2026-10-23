@@ -154,8 +154,9 @@ class TestLaVentanaNoOfreceGuardarUnaCapaNoMedible:
         elegir_capa(v, "R")
         filas = {(f[0], f[1]): f for f in texto_de_la_tabla(v.tabla_perfiles)}
         cruzada, interna = filas[("Capa roja", "crossplane")], filas[("Capa roja", "inplane")]
-        assert cruzada[2].startswith("no medible: perfil crossplane: no se encuentra el borde derecho") and cruzada[3] == "sin dato"
-        assert interna[2] == "ok" and interna[3] != "sin dato", "el eje que si cruzo el 50 % se sigue viendo"
+        # B.8 (DA-88, clase b): el FWHM que no se midio se dice «no medible» (antes «sin dato»); el eje que si se midio sigue sin decirlo.
+        assert cruzada[2].startswith("no medible: perfil crossplane: no se encuentra el borde derecho") and cruzada[3] == "no medible"
+        assert interna[2] == "ok" and interna[3] != "no medible", "el eje que si cruzo el 50 % se sigue viendo"
         assert cruzada[11] == interna[11] == "no se guarda: no es medible", "la fila de la capa elegida dice que NO se guarda, nunca «se guarda» (corolario 6)"
         assert all(f[11] == "" for k, f in filas.items() if k[0] != "Capa roja")
         assert v.nota_pestana1.text() == escenas[53.0].motivos["R"], "la nota de la pestana 1 es, en vez de la frase de siempre, el texto del servicio tal cual"

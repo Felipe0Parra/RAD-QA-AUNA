@@ -24,7 +24,7 @@ import textwrap
 import numpy as np
 
 from analisisImagenes import placa_mensual as motor
-from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, CAPAS, NOMBRE_DE_CAPA
+from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, CAPAS, NOMBRE_DE_CAPA, imagen_rgb  # noqa: F401  (B.8: `imagen_rgb` vive en `pelicula.py`, la comparten esta ventana y la página de la posición inicial; se re-exporta con el mismo nombre)
 
 # ----------------------------------------------------------------------------------------------------- constantes
 TINTA = "#0b0b0b"
@@ -47,8 +47,7 @@ ANCHO_DE_LA_LEYENDA = 34               # caracteres por línea de una etiqueta d
 _ESQUINA = {"UL": "superior izquierda", "UR": "superior derecha", "DR": "inferior derecha", "DL": "inferior izquierda"}
 LADOS_DE_CADA_EJE = {"crossplane": ("izquierdo", "derecho"), "inplane": ("superior", "inferior")}
 NOMBRE_DEL_EJE = {"crossplane": "crossplane", "inplane": "inplane"}
-SIN_DATO = "sin dato"
-NO_MEDIBLE = "no medible"
+NO_MEDIBLE = "no medible"                # lo que dice la ventana de todo valor que no se midió (B.8, DA-88: antes «sin dato»)
 PREFIJO_DE_LA_REGLA = "No se puede guardar: "
 TEXTO_DEL_FACTOR = f"desviaciones × {FACTOR_DE_AMPLIACION}"
 
@@ -133,9 +132,9 @@ def texto_de_la_base(base):
 
 
 def numero(valor, decimales=3, con_signo=False):
-    """El número con sus decimales y nunca '-0.000' (lo que redondea a cero no tiene signo); `SIN_DATO` si falta."""
+    """El número con sus decimales y nunca '-0.000' (lo que redondea a cero no tiene signo); `NO_MEDIBLE` si falta (el valor no se midió)."""
     if valor is None:
-        return SIN_DATO
+        return NO_MEDIBLE
     texto = f"{float(valor):{'+' if con_signo else ''}.{decimales}f}"
     if float(texto) == 0:
         texto = texto.lstrip("+-")
@@ -153,9 +152,9 @@ def con_punto_final(texto):
 
 
 def _par(valor, decimales=3):
-    """'(x; y)' de un par de milímetros, o `SIN_DATO` si falta alguno."""
+    """'(x; y)' de un par de milímetros, o `NO_MEDIBLE` si falta alguno (no se midió)."""
     if valor is None or any(v is None for v in valor):
-        return SIN_DATO
+        return NO_MEDIBLE
     return f"{numero(valor[0], decimales, True)}; {numero(valor[1], decimales, True)}"
 
 
@@ -376,18 +375,6 @@ def _rectangulo(x0, x1, y0, y1):
 
 def _cerrado(puntos):
     return list(puntos) + [puntos[0]]
-
-
-def imagen_rgb(pelicula):
-    """La película como RGB uint8 (alto, ancho, 3) para mostrarla en su color original. En 8 bits son los mismos valores del archivo (el color BGR de OpenCV puesto en orden R, G, B, una sola copia); en 16 bits,
-    los niveles de 8 bits redondeados de cada capa (así se muestra la de 16 bits, A.1). Un RGB uint8 con `nearest` cuesta 101 MB para una página del escáner (6600 x 5100); un gris 2D con mapa de color, 2 GB."""
-    if pelicula.bits == 8:
-        _gris, bgr = pelicula.en_bgr()
-        return np.ascontiguousarray(bgr[:, :, ::-1])
-    rgb = np.empty(pelicula.validos.shape + (3,), np.uint8)
-    for k, capa in enumerate(CAPAS):
-        rgb[:, :, k] = np.clip(np.rint(getattr(pelicula, capa)), 0, 255)
-    return rgb
 
 
 # ----------------------------------------------------------------------------------------------------- la pestaña 1: la imagen
@@ -834,10 +821,25 @@ RESULTADO_EN_PALABRAS = {"ok": "pasa", "aviso": "aviso", "rechazo": "rechazo"}
 ORIENTACIONES_DE_LA_VIRGEN = ("misma que la película irradiada", "girada")
 
 
+def _palabra_del_estado(estado):
+    """La palabra con que empieza un estado, la que está antes de los dos puntos: «no válida» de «no válida: fuera del rango esperado...»."""
+    return estado.split(":", 1)[0].strip()
+
+
 def filas_de_la_virgen(referencia):
     """Las filas del valor de la película virgen por capa (R, G, B y el gris, cada una por separado): su nivel (el VALOR del piso, la media de la zona medida sin lo que se aparta de ella: OD.1), los
-    píxeles en que se basa y su dispersión."""
-    return [(nombre_de_la_capa(capa), numero(referencia.valor(capa), 1), str(referencia.capas[capa].n), numero(referencia.capas[capa].iqr, 1)) for capa in (*CAPAS, "gris")]
+    píxeles en que se basa y su dispersión. Una referencia RECHAZADA no trae ninguna cifra a propósito (`_virgen_cerrar` las descarta para que nadie use una referencia que no sirve) aunque la película
+    sí se midió: el resumen del cuadro cita sus cifras y la tabla de uniformidad muestra su centro. Ahí cada capa dice, en el valor, los píxeles y la dispersión, la palabra de su propio estado
+    («no válida») y no «no medible», que diría que la película no se pudo medir (B.8, B8-R1-01)."""
+    filas = []
+    for capa in (*CAPAS, "gris"):
+        c = referencia.capas[capa]
+        if c.estado == "ok":
+            filas.append((nombre_de_la_capa(capa), numero(referencia.valor(capa), 1), str(c.n), numero(c.iqr, 1)))
+        else:
+            palabra = _palabra_del_estado(c.estado)
+            filas.append((nombre_de_la_capa(capa), palabra, palabra, palabra))
+    return filas
 
 
 def filas_de_la_uniformidad(referencia):

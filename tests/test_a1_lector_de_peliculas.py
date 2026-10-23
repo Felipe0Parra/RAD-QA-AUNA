@@ -1289,9 +1289,11 @@ class TestLaPaginaMuestraLos16BitsEnUint8:
         assert p.estado == "imagen" and not dialogos.de("warning")
         mostrada = p.eje_imagen.images[0].get_array()
         assert mostrada.dtype == np.uint8 and mostrada.shape == (672, 1156, 3), "un RGB en float32 de 0 a 255 sale casi todo blanco en imshow"
-        bgr16 = np.ascontiguousarray(base[:, :, ::-1])
-        esperado = np.clip(np.rint(cv2.cvtColor(bgr16, cv2.COLOR_BGR2GRAY).astype(np.float64) * 255.0 / 65535.0), 0, 255).astype(np.uint8)
-        assert np.array_equal(mostrada[:, :, 0], esperado) and np.array_equal(mostrada[:, :, 1], esperado) and np.array_equal(mostrada[:, :, 2], esperado)
+        # B.8 (DA-88, clase b): la pestana «Imagen» muestra la pelicula A COLOR, la original: cada canal es el nivel de 8 bits REDONDEADO de esa capa de 16 bits (antes esta prueba fijaba el GRIS de 16 bits
+        # redondeado en los tres canales, que es lo que el fisico pidio cambiar). Lo demas (uint8, la forma, `nearest`) no cambia.
+        esperado = np.clip(np.rint(base.astype(np.float64) * 255.0 / 65535.0), 0, 255).astype(np.uint8)
+        assert np.array_equal(mostrada, esperado)
+        assert not (np.array_equal(mostrada[:, :, 0], mostrada[:, :, 1]) and np.array_equal(mostrada[:, :, 1], mostrada[:, :, 2])), "la imagen no se ve en gris"
         assert p.eje_imagen.images[0].get_interpolation() == "nearest"
 
     def test_b_la_pagina_analiza_la_de_16_bits_igual_que_el_servicio(self, fabrica, dialogos, placa, rgb, tmp_path):

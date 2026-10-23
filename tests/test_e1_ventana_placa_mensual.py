@@ -1135,7 +1135,8 @@ class TestLasFuncionesPuras:
 
     def test_numero_nunca_escribe_un_cero_con_signo(self):
         d = dibujo_mod()
-        assert d.numero(None) == "sin dato" and d.numero(0.0004, 3, True) == "0.000" and d.numero(-0.0004, 3, True) == "0.000" and d.numero(-0.0006, 3, True) == "-0.001"
+        # B.8 (DA-88, clase b): lo que no se midio se dice «no medible»; esta asercion decia «sin dato» (el fisico decidio la palabra el 22-10). Lo demas de la prueba no cambia.
+        assert d.numero(None) == "no medible" and d.numero(0.0004, 3, True) == "0.000" and d.numero(-0.0004, 3, True) == "0.000" and d.numero(-0.0006, 3, True) == "-0.001"
         assert d.numero(1.23456, 2) == "1.23" and d.numero(5, 3, True) == "+5.000" and d.numero(-5, 3, True) == "-5.000" and d.numero(-0.0004, 3) == "0.000"
 
     def test_colorear_es_el_mapa_jet_en_rgba_uint8_y_un_nan_queda_transparente(self):
