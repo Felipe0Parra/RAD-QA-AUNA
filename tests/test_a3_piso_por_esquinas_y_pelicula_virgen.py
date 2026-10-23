@@ -1145,6 +1145,42 @@ class TestLaPeliculaVirgen:
         primero = next(p for p in ref.pruebas if p.resultado == "rechazo")
         assert ref.estado == _pel().PREFIJO_NO_VALIDA + primero.texto and primero.nombre == "rango"
 
+    def test_g_con_dos_rechazos_el_estado_es_el_del_primero_y_no_el_del_ultimo(self):
+        """HERR.1b (RJ108): con DOS rechazos a la vez, el estado de la referencia es «no válida: » más el texto del PRIMERO (lo que promete el docstring de `_virgen_cerrar`) y ninguna capa trae número. Desde OD.1 (DA-87, OD1-D14) la película irradiada de la prueba de arriba se rechaza por UN solo motivo, el rango, y con uno solo el primero y el último son el mismo: la mutación
+        RJ108 («rechazos[0]» por «rechazos[-1]») sobrevivía a todas las pruebas de ff4c1b5. Aquí la MISMA película se mide con `bloques_minimos_virgen` = 10**6: no caben los bloques de C5 y C5 rechaza
+        DESPUÉS del rango (la única pareja de rechazos que puede darse en una medición). La premisa se comprueba primero: si un cambio deja un solo rechazo, la prueba lo dice y no pasa en vacío.
+        Esa pareja real no basta sola (revisión de HERR.1b, HERR1b-REV-01 y -02): el texto del rango es a la vez el primero en orden alfabético y el más largo, así que ordenar los textos o tomar el más largo darían el mismo estado, y `valor()` solo lee la media,
+        no la mediana, el n ni el IQR que muestra la tabla de la ventana. Por eso la regla se prueba además SOLA: `_virgen_cerrar` con tres rechazos a mano (antes de OD.1 esta película daba tres) cuyo primero no es ningún extremo del orden alfabético ni del largo,
+        con valores y medias presentes, y las capas de una referencia rechazada se comparan enteras con la capa vacía."""
+        irradiada = A2._sint("B", 0.0)
+        ref = _medir_virgen(gen.codificar(np.array(irradiada.img), "tiff", 600), P=_P(bloques_minimos_virgen=10 ** 6))
+        rechazos = [p for p in ref.pruebas if p.resultado == "rechazo"]
+        # la premisa: dos rechazos, en este orden y con textos distintos (sin ella la prueba no distingue el primero del ultimo)
+        assert [p.nombre for p in rechazos] == ["rango", "C5 uniformidad"], (
+            "la prueba necesita DOS rechazos, el rango y C5 sin bloques suficientes; hay: " + repr([(p.nombre, p.texto[:70]) for p in rechazos]))
+        primero, ultimo = rechazos[0], rechazos[-1]
+        assert "fuera del rango esperado de una película sin irradiar" in primero.texto and "no caben" in ultimo.texto and primero.texto != ultimo.texto, (primero.texto, ultimo.texto)
+        # lo que se prueba: el estado es el del PRIMERO, y solo el del primero
+        prefijo = _pel().PREFIJO_NO_VALIDA
+        assert ref.estado == prefijo + primero.texto, ref.estado
+        assert ref.estado != prefijo + ultimo.texto and ultimo.texto not in ref.estado, ref.estado
+        # cada capa dice lo mismo y NO trae ninguna cifra (ni la media que da `valor`, ni la mediana, el n o el IQR que muestra la tabla de la ventana): es la capa vacia con ese estado; una referencia rechazada no tiene region
+        vacia = _pel().CapaDelPiso
+        assert all(ref.capas[c] == vacia(c, ref.estado) for c in CAPAS), {c: ref.capas[c] for c in CAPAS}
+        assert ref.region is None, ref.region
+        # la regla SOLA, con tres rechazos que ninguna medicion real da juntos: el primero de la lista queda en el medio del orden alfabetico y del largo, asi que ni ordenar los textos, ni tomar el mas largo o el mas corto,
+        # ni el ultimo, ni el segundo dan su estado; antes del primero van un "ok" y un aviso (como en la lista real) y no cuentan; con valores y medias presentes, un rechazo gana y no deja cifras
+        prueba = _pel().PruebaDeLaVirgen
+        a_mano = (prueba("C1 cadena", "ok", "una cadena de captura sin reparos"), prueba("C3 recorte", "aviso", "un aviso antes del primer rechazo"), prueba("rango", "rechazo", "m: el primero de la lista"),
+                  prueba("C5 uniformidad", "rechazo", "z: el segundo, y el mas largo de los tres rechazos"), prueba("C7 rayas", "rechazo", "a: el ultimo"))
+        textos = [p.texto for p in a_mano if p.resultado == "rechazo"]
+        assert len(set(textos)) == 3 and textos[0] not in (min(textos), max(textos), min(textos, key=len), max(textos, key=len)), (
+            "la prueba necesita tres rechazos distintos con el primero en el medio del orden alfabetico y del largo: " + repr(textos))
+        directo = _pel()._virgen_cerrar(a_mano, {}, {}, {c: (100.0, 25, 2.0) for c in CAPAS}, {"caja": [0, 0, 1, 1]}, {c: 101.0 for c in CAPAS})
+        assert directo.estado == prefijo + textos[0], directo.estado
+        assert all(directo.capas[c] == vacia(c, directo.estado) for c in CAPAS), {c: directo.capas[c] for c in CAPAS}
+        assert directo.region is None, directo.region
+
     def test_g_una_zona_irradiada_avisa_por_uniformidad_y_no_se_rechaza(self):
         img = _virgen_arreglo("A").astype(np.float32)
         h, w = img.shape[:2]
