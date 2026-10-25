@@ -23,6 +23,11 @@ renglon que invade al de la vecina, el modulo llama a `motor.normalizar`, la ven
 (arreglo, texto, meseta)); ninguno por otra causa. Los 31 que pasan son controles de lo que CD.1 NO cambia: la firma de `dibujar_capas` y la ventana que la llama, que `matplotlib` entra solo en `colorear` y
 `dibujar_capas`, y que la netOD negativa ya salia con el color del cero y lo que no es pelicula ya salia transparente en las capas acondicionadas (lo que CD.1 mueve es DONDE se recorta la negativa: del dato al color).
 
+NOTA CD.1b (a8d4dee + CD.1b; P17 de la curva, DA-90): la escala de lo que el DIBUJO pinta dejo de ser el tope PROPIO de cada capa y paso a ser el COMUN de las tres (el mayor de los topes de las capas no recortadas
+por el escaner, en la unidad de la base: `escala_comun_esperada`, el oraculo escrito mas abajo). Ocho pruebas de este archivo fijaban el tope propio EN EL DIBUJO (la barra, lo pintado y el titulo) y se actualizaron, cada una
+con su motivo en su docstring o en un comentario (clase b del censo): el resto de las aserciones, todas las de `capa_acondicionada` (que sigue dando el tope PROPIO: es la entrada de la regla comun), no cambian.
+La regla comun, sus escenas y la ventana tienen su propia prueba: `test_cd1b_escala_comun_de_las_capas.py`.
+
 Importa la produccion POR PRUEBA (`_dib()`, `_pm()`...): en HEAD el archivo se recoge entero y cada prueba cae con su razon (la API que no existe o la asercion que HEAD desmiente), no con un error de coleccion que las
 tapa a todas. Trampa 2 (todo `QMessageBox` se parcha: la fixture `dialogos`), Trampa 9 (la ventana se cierra con la receta completa: `fabrica`), Trampa 10 (ningun `lru_cache` ni cache de modulo: cada escena es una
 fixture de modulo que se suelta al terminar su turno; las peliculas se leen de `_corpus.pelicula(clave)`; los skips son los de siempre, HI-0, y solo si la pelicula real no esta).
@@ -101,6 +106,7 @@ CONSTRUIDAS_OD = ("construida_sin_piso", "construida_sin_meseta", "construida_ok
                   "construida_ningun_pixel_mas_oscuro", "construida_otra_falla_en_el_crossplane_y_el_inplane_recortado", "construida_solo_el_inplane_con_meseta",
                   "construida_solo_el_crossplane_con_meseta")
 CONSTRUIDAS_VP = ("construida_valor_de_pixel_sin_piso", "construida_valor_de_pixel_sin_mesetas")
+ESCENAS_DE_LA_ESCALA_COMUN = ("construida_roja_no_recortada_manda", "construida_dos_recortadas_y_una_sin_senal", "construida_ninguna_capa_con_senal")      # CD.1b (R1-AMB-01): solo las recorre su prueba
 EN_NETOD = REALES + (VIRGEN, SINT_OD) + CONSTRUIDAS_OD
 EN_VALOR_DE_PIXEL = (SINT_VP,) + CONSTRUIDAS_VP
 ESCENAS = EN_NETOD + EN_VALOR_DE_PIXEL
@@ -194,6 +200,30 @@ def _construida(nombre, base_netod, base_pixel):
         # el espejo: el inplane sin meseta y el crossplane con la cuarta parte del piso (netOD log10(4)), distinta de la del caso anterior
         sin_inplane = "no medible: perfil inplane: la zona central de la meseta no está sobre la película"
         return _con_la_capa(r, "G", inplane=dataclasses.replace(G.inplane, meseta=None, estado=sin_inplane), crossplane=dataclasses.replace(G.crossplane, meseta=0.25 * float(G.piso)), estado=sin_inplane)
+    if nombre in ESCENAS_DE_LA_ESCALA_COMUN:
+        # CD.1b, correccion de la ronda 1 (R1-AMB-01): las escenas DIBUJADAS cuya escala comun no es la de una verde o una azul con señal bajo una roja recortada (las diez reales). Solo las usa
+        # `test_cd1b_escala_comun_de_las_capas.py`; no estan en CONSTRUIDAS_OD, asi que las pruebas de CD.1 no las recorren.
+        g = r.girada
+        sin_mesetas = lambda capa: dict(crossplane=dataclasses.replace(r.capas[capa].crossplane, meseta=None, estado=estado_sin_meseta),
+                                        inplane=dataclasses.replace(r.capas[capa].inplane, meseta=None, estado=estado_sin_meseta), estado=estado_sin_meseta)
+        if nombre == "construida_roja_no_recortada_manda":
+            # la roja SIN recortar, con una meseta de netOD 1.0 (la decima parte de su piso): su tope, 1.1, es mayor que el 0.797 de la verde y fija la escala de las tres (una roja asi no existe en las diez reales)
+            R = r.capas["R"]
+            oscura = float(R.piso) / 10.0
+            return _con_la_capa(r, "R", estado="ok", crossplane=dataclasses.replace(R.crossplane, meseta=oscura, estado="ok"), inplane=dataclasses.replace(R.inplane, meseta=oscura, estado="ok"))
+        if nombre == "construida_dos_recortadas_y_una_sin_senal":
+            # NINGUNA capa de nivel 0 (CD1b-D6): la roja real (recortada), la verde recortada solo en su inplane y la azul entera mas clara que su piso (sin ningun pixel mas oscuro): manda la mayor de las dos recortadas
+            estado_g = f"no medible: perfil inplane: {pm.MOTIVO_MESETA_RECORTADA}: el 90 % de la zona central de la meseta vale 1.5 niveles o menos y la densidad óptica no existe"
+            clara = dict(g.capas)
+            clara["B"] = np.full_like(g.capas["B"], 250.0)
+            r2 = _con_la_capa(r, "G", inplane=dataclasses.replace(G.inplane, estado=estado_g), estado=estado_g)
+            return dataclasses.replace(_con_la_capa(r2, "B", **sin_mesetas("B")), girada=dataclasses.replace(g, capas=clara))
+        assert nombre == "construida_ninguna_capa_con_senal", nombre
+        # las tres enteras mas claras que su piso y sin meseta (la roja deja de estar recortada: su estado y el de sus dos perfiles dicen lo mismo que los de las otras): el comun es TOPE_SIN_SENAL
+        r3 = r
+        for capa in CAPAS:
+            r3 = _con_la_capa(r3, capa, **sin_mesetas(capa))
+        return dataclasses.replace(r3, girada=dataclasses.replace(g, capas={**g.capas, **{capa: np.full_like(g.capas[capa], 250.0) for capa in CAPAS}}))
     assert nombre == "construida_ningun_pixel_mas_oscuro", nombre
     # la capa verde entera mas clara que su piso y sin meseta: ningun pixel tiene netOD positiva
     g = r.girada
@@ -213,6 +243,10 @@ class Escena:
         if capa not in self._esperado:
             self._esperado[capa] = esperado(self.resultado, capa)
         return self._esperado[capa]
+
+    def escala(self):
+        """CD.1b: la escala comun esperada de las tres capas (`escala_comun_esperada`), o None."""
+        return escala_comun_esperada(self.resultado, {capa: self.esperado(capa) for capa in CAPAS})
 
     def soltar(self):
         self.resultado = self.figura = None
@@ -324,6 +358,46 @@ def pintado(figura, k):
     return np.asarray(por_gid(figura.axes[k], "capas:imagen")[0].get_array())
 
 
+# --- CD.1b (P17, 23-10): la escala COMUN de las tres capas, escrita AQUI como el oraculo de lo pintado, de la barra y del titulo. Parte de lo que dice `esperado(...)` de cada capa (la regla de CD.1, que no
+# cambia) y nunca importa las funciones de la produccion: los niveles de preferencia, el origen y los textos estan escritos a mano. La usan las pruebas de CD.1 que fijan lo que el DIBUJO pinta (su motivo: el dibujo
+# ya no pinta cada capa con su tope propio, sino con el comun) y `test_cd1b_escala_comun_de_las_capas.py`.
+ORIGEN_ESPERADO = {0: "la mayor de las no recortadas", 1: "la mayor de las recortadas por el escáner: no hay capa sin recortar", 2: "ningún píxel es más oscuro que el piso"}
+FINAL_DEL_TEXTO_SIN_SENAL = "ningún píxel es más oscuro que el piso"             # como termina el texto de CD.1 de una capa sin ningun pixel mas oscuro que el piso
+
+
+def nivel_esperado(esp):
+    """0: el tope de la capa sale de su pelicula y no esta recortada por el escaner (con su meseta o con su percentil); 1: esta recortada por el escaner; 2: ningun pixel mas oscuro que el piso (el tope 1 no sale de
+    la pelicula). La capa sin señal se reconoce aqui por lo que dice su texto, no por su tope."""
+    if esp.texto.endswith(FINAL_DEL_TEXTO_SIN_SENAL):
+        return 2
+    return 1 if esp.motivo == RECORTADA else 0
+
+
+def escala_comun_esperada(r, esps):
+    """`esps`: {capa: esperado(r, capa)}. La escala comun de las capas que estan en la unidad de la base: el MAYOR de los topes de las del MENOR nivel presente (CD1b-D1, D2, D3 y D6); None si ninguna lo esta."""
+    unidad = UNIDAD_OD if r.base == BASE_OD else UNIDAD_VP
+    candidatas = [c for c in CAPAS if esps[c].unidad == unidad]
+    if not candidatas:
+        return None
+    nivel = min(nivel_esperado(esps[c]) for c in candidatas)
+    entre = [c for c in candidatas if nivel_esperado(esps[c]) == nivel]
+    tope = max(esps[c].tope for c in entre)
+    return types.SimpleNamespace(tope=tope, unidad=unidad, capa=next(c for c in entre if esps[c].tope == tope), nivel=nivel)
+
+
+def tope_comun_esperado(escala, esp):
+    """Con que tope se pinta la capa y va su barra: el comun si esta en su unidad; si no, el suyo."""
+    return escala.tope if escala is not None and esp.unidad == escala.unidad else esp.tope
+
+
+def texto_comun_esperado(escala, esp):
+    """Lo que dice el titulo de la capa tras «Capa <color>: »: el texto de CD.1 si no se pinta con la escala comun o si el analisis esta en valor de pixel; si no, lo suyo (su meseta, o su motivo) y la escala comun."""
+    if escala is None or esp.unidad != escala.unidad or escala.unidad == UNIDAD_VP:
+        return esp.texto
+    propio = f"meseta {esp.meseta:.3f} [1]" if esp.motivo is None else esp.motivo
+    return f"{propio}; escala común de 0 a {escala.tope:.3f} [1], {ORIGEN_ESPERADO[escala.nivel]}"
+
+
 # ===================================================================================================== (a) y (b) la regla de la escala
 
 class TestElArregloYLaEscalaSonLosDeLaRegla:
@@ -360,8 +434,10 @@ class TestElArregloYLaEscalaSonLosDeLaRegla:
 
     @todas
     def test_lo_pintado_es_el_mapa_jet_de_los_valores_entre_cero_y_el_tope(self, escena):
-        """Lo que `dibujar_capas` puso en el eje es `jet(valores / tope)` en RGBA uint8, pixel a pixel, con la extension y la interpolacion de siempre."""
+        """Lo que `dibujar_capas` puso en el eje es `jet(valores / tope)` en RGBA uint8, pixel a pixel, con la extension y la interpolacion de siempre. CD.1b (motivo del cambio de esta prueba, clase b): el tope
+        con que se lleva a 0-1 ya no es el PROPIO de cada capa sino el COMUN de las tres (`escala_comun_esperada`; la capa en otra unidad conserva el suyo)."""
         r = escena.resultado
+        esc = escena.escala()
         ox, oy = r.girada.origen
         for k, capa in enumerate(CAPAS):
             esp = escena.esperado(capa)
@@ -369,26 +445,31 @@ class TestElArregloYLaEscalaSonLosDeLaRegla:
             arreglo = np.asarray(imagen.get_array())
             alto, ancho = esp.valores.shape
             assert arreglo.dtype == np.uint8 and arreglo.shape == (alto, ancho, 4), "RGBA uint8 con el mapa de color ya aplicado: una imagen 2D con mapa de color pedia 2 GB"
-            assert np.array_equal(arreglo, jet(esp.valores / np.float32(esp.tope))), f"{capa}: lo pintado no es jet(valores / tope)"
+            assert np.array_equal(arreglo, jet(esp.valores / np.float32(tope_comun_esperado(esc, esp)))), f"{capa}: lo pintado no es jet(valores / tope)"
             assert imagen.get_interpolation() == "nearest" and tuple(map(float, imagen.get_extent())) == (ox - 0.5, ox + ancho - 0.5, oy + alto - 0.5, oy - 0.5)
 
     @todas
     def test_la_barra_dice_su_unidad_y_va_de_cero_al_tope(self, escena):
+        """CD.1b (motivo del cambio, clase b): el tope de la barra es el COMUN de las tres capas (el de la capa en otra unidad, el suyo)."""
+        esc = escena.escala()
         assert len(escena.figura.axes) == 6 and [e.get_label() for e in escena.figura.axes[3:]] == ["<colorbar>"] * 3
         for k, capa in enumerate(CAPAS):
             esp = escena.esperado(capa)
             barra = escena.figura.axes[3 + k]
             assert barra.get_xlabel() == esp.unidad, (capa, barra.get_xlabel())
-            assert tuple(float(v) for v in barra.get_xlim()) == (0.0, pytest.approx(esp.tope, rel=1e-9)), (capa, barra.get_xlim())
+            assert tuple(float(v) for v in barra.get_xlim()) == (0.0, pytest.approx(tope_comun_esperado(esc, esp), rel=1e-9)), (capa, barra.get_xlim())
 
     @todas
     def test_el_titulo_de_cada_capa_es_el_texto_de_su_escala_partido_en_renglones_de_52_caracteres(self, escena):
+        """CD.1b (motivo del cambio, clase b): el texto de la escala que dice el titulo es el de la escala COMUN (`texto_comun_esperado`: su meseta, o por que no la tiene, y de 0 a cuanto y de que capas sale la
+        escala comun); en valor de pixel o en una capa en otra unidad es el de CD.1 tal cual."""
+        esc = escena.escala()
         for k, capa in enumerate(CAPAS):
-            esp = escena.esperado(capa)
+            texto = texto_comun_esperado(esc, escena.esperado(capa))
             titulo = escena.figura.axes[k].get_title()
-            assert titulo == titulo_esperado(capa, esp.texto), (capa, titulo)
+            assert titulo == titulo_esperado(capa, texto), (capa, titulo)
             assert all(len(renglon) <= ANCHO_DEL_TITULO for renglon in titulo.split("\n")), (capa, titulo)
-            assert " ".join(titulo.split("\n")).replace(NBSP, " ") == f"Capa {ADJETIVO[capa]}: {esp.texto}", (capa, "partir el titulo no pierde ni agrega nada")
+            assert " ".join(titulo.split("\n")).replace(NBSP, " ") == f"Capa {ADJETIVO[capa]}: {texto}", (capa, "partir el titulo no pierde ni agrega nada")
             assert not titulo.endswith(".") and sin_simbolos(titulo), (capa, "sin punto final ni simbolos de correcto o incorrecto (DA-18)")
 
     @todas
@@ -518,7 +599,7 @@ class TestLaEscalaContraVerdadConocida:
         c = _dib().capa_acondicionada(r, "R")
         assert c.motivo == RECORTADA and c.meseta is None and c.texto.startswith("recortada por el escáner; de 0 a ")
         assert c.tope == pytest.approx(math.log10(float(m.piso) / VP_MINIMO), abs=1e-6)
-        assert escena.figura.axes[0].get_title().replace("\n", " ").replace(NBSP, " ").startswith("Capa roja: recortada por el escáner; de 0 a "), "el titulo lo dice (sin importar donde se parte el renglon)"
+        assert escena.figura.axes[0].get_title().replace("\n", " ").replace(NBSP, " ").startswith("Capa roja: recortada por el escáner; escala común de 0 a "), "el titulo lo dice (sin importar donde se parte el renglon); CD.1b: la escala que dice es la comun, su tope propio (hasta el negro) es el de `capa_acondicionada`"
 
 
 # ===================================================================================================== los casos que una pelicula real no da (los textos, escritos a mano)
@@ -574,7 +655,10 @@ class TestLosCasosQueUnaPeliculaRealNoDa:
         c = _dib().capa_acondicionada(r, "G")
         assert c.texto.startswith("recortada por el escáner; de 0 a ") and c.motivo == RECORTADA and c.meseta is None
         assert c.tope == pytest.approx(0.860, abs=1e-3), "el percentil 99.5 de la capa, no 1.1 veces la netOD de una meseta recortada"
-        assert tuple(float(v) for v in escena.figura.axes[4].get_xlim()) == (0.0, pytest.approx(c.tope, rel=1e-9))
+        # CD.1b (motivo del cambio, clase b): la barra de la verde va de 0 al tope COMUN y no al suyo: la roja y la verde estan recortadas y la unica no recortada es la azul (0.349); si la verde se tomara por no
+        # recortada su percentil (0.860) mandaria sobre las tres, que es lo que esta prueba vigila en el tope propio y aqui, en la escala comun
+        assert tuple(float(v) for v in escena.figura.axes[4].get_xlim()) == (0.0, pytest.approx(tope_comun_esperado(escena.escala(), escena.esperado("G")), rel=1e-9))
+        assert escena.escala().capa == "B" and escena.escala().tope == pytest.approx(0.349, abs=1.5e-3)
 
     @pytest.mark.parametrize("escena, meseta, tope, texto", [
         ("construida_solo_el_inplane_con_meseta", math.log10(2.0), 1.1 * math.log10(2.0), "de 0 a 0.331 [1]: 1.1 veces su meseta, 0.301 [1]"),
@@ -589,14 +673,20 @@ class TestLosCasosQueUnaPeliculaRealNoDa:
         c = _dib().capa_acondicionada(escena.resultado, "G")
         assert c.meseta == pytest.approx(meseta, rel=1e-9) and c.tope == pytest.approx(tope, rel=1e-9) and c.motivo is None
         assert c.texto == texto and c.unidad == UNIDAD_OD
-        assert tuple(float(v) for v in escena.figura.axes[4].get_xlim()) == (0.0, pytest.approx(tope, rel=1e-9))
+        # CD.1b (motivo del cambio, clase b): la barra de la verde va de 0 al tope COMUN (el mayor de las no recortadas: su 0.331 o su 0.662 contra el 0.349 de la azul); su tope propio (arriba) no cambia
+        comun = max(tope, 0.349)
+        assert tuple(float(v) for v in escena.figura.axes[4].get_xlim()) == (0.0, pytest.approx(comun, abs=1.5e-3))
+        assert escena.escala().tope == pytest.approx(comun, abs=1.5e-3)
 
     @pytest.mark.parametrize("escena", ["construida_ningun_pixel_mas_oscuro"], indirect=True)
     def test_sin_ningun_pixel_mas_oscuro_que_el_piso_la_escala_va_de_0_a_1_y_no_tiene_ancho_cero(self, escena):
         c = _dib().capa_acondicionada(escena.resultado, "G")
         assert float(np.nanmax(c.valores)) < 0, "compuerta: ningun pixel es mas oscuro que el piso"
         assert c.tope == 1.0 and c.texto.endswith("; de 0 a 1 [1]: ningún píxel es más oscuro que el piso") and c.meseta is None
-        assert tuple(float(v) for v in escena.figura.axes[4].get_xlim()) == (0.0, 1.0)
+        # CD.1b (motivo del cambio, clase b; CD1b-D2): el tope 1 de la capa sin señal es el SUYO (la escala no tiene ancho cero); la barra de la verde va de 0 al tope COMUN: mientras la azul tenga un tope que sale de su
+        # pelicula (0.349) el 1 no manda. Con las tres sin señal la comun si es 1 (escena S7 de `test_cd1b_escala_comun_de_las_capas.py`)
+        assert tuple(float(v) for v in escena.figura.axes[4].get_xlim()) == (0.0, pytest.approx(0.349, abs=1.5e-3))
+        assert escena.escala().capa == "B" and escena.escala().nivel == 0
         assert (pintado(escena.figura, 1)[escena.resultado.girada.validos] == [0, 0, 127, 255]).all(), "todo lo que es pelicula sale con el color del cero"
 
     @pytest.mark.parametrize("escena", ["construida_valor_de_pixel_sin_piso"], indirect=True)
@@ -681,12 +771,15 @@ class TestLaVentana:
         """La pestaña 2 de la ventana es la regla aplicada a su resultado: unidad y limites de cada barra, titulo y lo pintado."""
         figura = v._fig_capas
         assert len(figura.axes) == 6
+        esps = {capa: esperado(r, capa) for capa in CAPAS}
+        esc = escala_comun_esperada(r, esps)                 # CD.1b (motivo del cambio, clase b): la ventana pinta con la escala COMUN de las tres capas y no con el tope propio de cada una
         for k, capa in enumerate(CAPAS):
-            esp = esperado(r, capa)
+            esp = esps[capa]
+            tope = tope_comun_esperado(esc, esp)
             barra = figura.axes[3 + k]
-            assert barra.get_xlabel() == esp.unidad and tuple(float(x) for x in barra.get_xlim()) == (0.0, pytest.approx(esp.tope, rel=1e-9)), (capa, barra.get_xlabel(), barra.get_xlim())
-            assert figura.axes[k].get_title() == titulo_esperado(capa, esp.texto), capa
-            assert np.array_equal(pintado(figura, k), jet(esp.valores / np.float32(esp.tope))), capa
+            assert barra.get_xlabel() == esp.unidad and tuple(float(x) for x in barra.get_xlim()) == (0.0, pytest.approx(tope, rel=1e-9)), (capa, barra.get_xlabel(), barra.get_xlim())
+            assert figura.axes[k].get_title() == titulo_esperado(capa, texto_comun_esperado(esc, esp)), capa
+            assert np.array_equal(pintado(figura, k), jet(esp.valores / np.float32(tope))), capa
         assert v.nota_pestana2.text() == "", "CD1-D10: la ventana no agrega nota a la pestaña 2"
 
     def test_la_ventana_pinta_la_pestana_de_las_capas_en_la_netod_absoluta_del_analisis(self, fabrica, dialogos, archivo_placa, clics):

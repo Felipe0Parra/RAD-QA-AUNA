@@ -11,7 +11,7 @@ exclusión del retículo, los bordes de radiación y los bordes luminosos de esa
 dice dónde se ve cada uno de los 41 parámetros del análisis (un trazo, una etiqueta o una frase del pie) y una prueba lo deriva del código del motor por AST.
 
 OD.1 (DA-87): la BASE del análisis (`motor.BASE_POR_OMISION`: la densidad óptica neta o el valor de píxel normalizado) es un parámetro más que viaja con cada análisis; los perfiles se dibujan en la unidad de
-esa base (`motor.valores_en_la_base`), la pestaña de las capas se pinta en su unidad desde CD.1 (`capa_acondicionada`: la densidad óptica neta de cada píxel, o el valor de píxel en un registro medido en esa base, con una escala absoluta que va de 0 a un tope que dice el título) y la ventana dice cuál es (`texto_de_la_base`). Ningún dibujo escribe el nombre de una base: sale del motor.
+esa base (`motor.valores_en_la_base`), la pestaña de las capas se pinta en su unidad desde CD.1 (`capa_acondicionada`: la densidad óptica neta de cada píxel, o el valor de píxel en un registro medido en esa base, con una escala absoluta que va de 0 a un tope que dice el título, el mismo para las tres capas desde CD.1b: `escala_de_las_capas`) y la ventana dice cuál es (`texto_de_la_base`). Ningún dibujo escribe el nombre de una base: sale del motor.
 
 Marcos. Los dibujos de la pestaña 1 (la imagen) están en el marco de la IMAGEN, el que el físico ve y en el que marca; los de las pestañas 2 a 5 en el marco GIRADO que usa el motor (la película recortada
 y girada hasta que los ejes del campo quedan horizontal y vertical). `a_imagen(matriz, puntos)` es la inversa de la matriz de giro del motor y lleva un trazo del marco girado a la imagen.
@@ -716,8 +716,66 @@ def titulo_de_la_capa(capa, texto):
     return textwrap.fill(f"Capa {ADJETIVO_DE_LA_CAPA[capa]}: {texto}".replace(" [", "\u00a0["), ANCHO_DEL_TITULO_DE_LA_CAPA)
 
 
+@dataclass(frozen=True)
+class EscalaDeLasCapas:
+    """CD.1b (P17; el físico, 23-10: «Me gustaria que la escala sea la misma en todos los 3 graficos, pues la absoluta completa, para observar mas facilmente la diferencia de densidad optica entre las
+    capas», y ~13:00, entre las dos lecturas, la segunda: el mayor de las NO recortadas): la escala COMÚN de las capas de la pestaña 2. `tope`: su máximo (el mínimo es siempre 0); `unidad`: el rótulo de
+    su barra, el de la base del análisis (`ETIQUETA_DEL_EJE_Y`); `capa`: la capa cuyo tope es el común (la primera de `CAPAS` si empatan); `origen`: de qué capas salió, uno de `ORIGENES_DE_LA_ESCALA`."""
+    tope: float
+    unidad: str
+    capa: str
+    origen: str
+
+
+ORIGENES_DE_LA_ESCALA = ("no_recortadas", "recortadas", "sin_senal")      # el orden es el de la preferencia (CD1b-D1, D2 y D6): solo si no hay capas del primero se usa el siguiente
+
+
+def _sin_senal(en_unidades):
+    """La capa no tiene ningún píxel más oscuro que el piso: su tope (`TOPE_SIN_SENAL`) no sale de la película, solo evita una escala de ancho cero."""
+    return en_unidades.meseta is None and en_unidades.motivo is not None and en_unidades.tope == TOPE_SIN_SENAL
+
+
+def _nivel_de_la_capa(en_unidades):
+    """0 si el tope de la capa sale de su película y la capa no está recortada por el escáner (con su meseta, o su percentil si no la tiene); 1 si está recortada por el escáner y su tope sale de su percentil;
+    2 si no tiene ningún píxel más oscuro que el piso (su tope no sale de la película)."""
+    if _sin_senal(en_unidades):
+        return 2
+    return 1 if en_unidades.motivo == RECORTADA_POR_EL_ESCANER else 0
+
+
+def escala_de_las_capas(resultado, capas):
+    """CD.1b: la ÚNICA regla de la escala común de la pestaña 2 -> `EscalaDeLasCapas` o None. `capas`: {capa: CapaEnUnidades} (las de `capa_acondicionada`, cuya regla de cada tope no cambia). Solo entran las capas
+    que están en la unidad de la base del análisis (una capa en otra unidad —en densidad óptica, la que no tiene piso: se pinta en niveles— conserva su escala de 0 a 255: CD1b-D3); sin ninguna, None.
+    El tope común es el MAYOR de los topes de las capas NO recortadas por el escáner (CD1b-D1, la lectura del físico): la capa recortada se pinta contra él y satura. Con una sola capa no recortada, su
+    tope es el común. Sin ninguna (CD1b-D6, el mismo criterio de CD1b-D2: un tope que sale de menos película solo se usa si no hay otro), el mayor de los topes de las recortadas (su percentil), y si tampoco
+    (ningún píxel de ninguna capa es más oscuro que el piso), `TOPE_SIN_SENAL`. Con un empate gana la primera de `CAPAS` (R, G, B), sea cual sea el orden del diccionario: se recorre `CAPAS`, no `capas`."""
+    unidad = ETIQUETA_DEL_EJE_Y[resultado.base]
+    en_la_base = [(capa, capas[capa]) for capa in CAPAS if capa in capas and capas[capa].unidad == unidad]
+    if not en_la_base:
+        return None
+    nivel = min(_nivel_de_la_capa(c) for _, c in en_la_base)
+    capa, c = max(((capa, c) for capa, c in en_la_base if _nivel_de_la_capa(c) == nivel), key=lambda par: par[1].tope)
+    return EscalaDeLasCapas(c.tope, unidad, capa, ORIGENES_DE_LA_ESCALA[nivel])
+
+
+def tope_en_la_escala_comun(en_unidades, escala):
+    """CD.1b: el tope con que se PINTA una capa y va su barra: el común si la capa está en su unidad; si no (otra unidad, o sin escala común), el suyo de CD.1."""
+    return escala.tope if escala is not None and en_unidades.unidad == escala.unidad else en_unidades.tope
+
+
+def texto_en_la_escala_comun(capa, en_unidades, escala):
+    """CD.1b (CD1b-D4): lo que dice el título de una capa tras «Capa <color>: »: lo suyo (su meseta, o por qué su escala no sale de ella; la recortada sigue diciendo «recortada por el escáner») y la escala
+    común, de 0 a cuánto y de qué capas sale. Una capa que no se pinta con la escala común, o un análisis en valor de píxel (las tres ya van de 0 a 255), dice su texto de CD.1 tal cual."""
+    if escala is None or en_unidades.unidad != escala.unidad or escala.unidad == ETIQUETA_DEL_EJE_Y[motor.BASE_VALOR_DE_PIXEL]:
+        return en_unidades.texto
+    propio = f"meseta {numero(en_unidades.meseta)} [1]" if en_unidades.motivo is None else en_unidades.motivo
+    origen = {"no_recortadas": "la mayor de las no recortadas", "recortadas": "la mayor de las recortadas por el escáner: no hay capa sin recortar",
+              "sin_senal": "ningún píxel es más oscuro que el piso"}[escala.origen]
+    return f"{propio}; escala común de 0 a {numero(escala.tope)} [1], {origen}"
+
+
 def dibujar_capas(figura, resultado):
-    """La pestaña 2: las tres capas R, G y B de la película girada, cada una en la unidad de la base del análisis (CD.1, `capa_acondicionada`: la densidad óptica neta de cada píxel, de 0 al tope de esa capa)
+    """La pestaña 2: las tres capas R, G y B de la película girada, cada una en la unidad de la base del análisis (CD.1, `capa_acondicionada`: la densidad óptica neta de cada píxel) con la escala COMÚN de las tres (CD.1b, `escala_de_las_capas`: de 0 al mayor de los topes de las no recortadas por el escáner; la recortada satura)
     en `jet` con su barra de color aparte, en esa unidad; encima, la cruz de línea punteada blanca por el cruce de diagonales, la cuadrícula, el recuadro del campo luminoso (en el marco girado) y la región del
     piso. Devuelve {capa: eje}. Sin película girada dice por qué."""
     from matplotlib import cm
@@ -730,11 +788,14 @@ def dibujar_capas(figura, resultado):
     girada = resultado.girada
     ox, oy = girada.origen
     ejes = figura.subplots(1, len(CAPAS))
+    capas = {capa: capa_acondicionada(resultado, capa) for capa in CAPAS}
+    escala = escala_de_las_capas(resultado, capas)
     salida = {}
     for ax, capa in zip(ejes, CAPAS):
-        en_unidades = capa_acondicionada(resultado, capa)
+        en_unidades = capas[capa]
+        tope = tope_en_la_escala_comun(en_unidades, escala)
         alto, ancho = en_unidades.valores.shape
-        ax.imshow(colorear(en_unidades.valores / np.float32(en_unidades.tope)), extent=(ox - 0.5, ox + ancho - 0.5, oy + alto - 0.5, oy - 0.5), interpolation="nearest", gid="capas:imagen")
+        ax.imshow(colorear(en_unidades.valores / np.float32(tope)), extent=(ox - 0.5, ox + ancho - 0.5, oy + alto - 0.5, oy - 0.5), interpolation="nearest", gid="capas:imagen")
         cx, cy = girada.cruce
         ax.axvline(cx, color="white", ls=":", lw=1.2, gid="capas:cruz_vertical", label="_cruz")
         ax.axhline(cy, color="white", ls=":", lw=1.2, gid="capas:cruz_horizontal", label="_cruz")
@@ -745,10 +806,10 @@ def dibujar_capas(figura, resultado):
         dibujar_region_del_piso(ax, resultado, marco="girado")
         ax.set_xlim(ox - 0.5, ox + ancho - 0.5)
         ax.set_ylim(oy + alto - 0.5, oy - 0.5)
-        ax.set_title(titulo_de_la_capa(capa, en_unidades.texto), fontsize=8)
+        ax.set_title(titulo_de_la_capa(capa, texto_en_la_escala_comun(capa, en_unidades, escala)), fontsize=8)
         ax.set_xlabel("columna de la película girada [px]")
         ax.set_ylabel("fila de la película girada [px]")
-        barra = figura.colorbar(cm.ScalarMappable(norm=Normalize(0.0, en_unidades.tope), cmap="jet"), ax=ax, location="bottom", shrink=0.9, pad=0.12)
+        barra = figura.colorbar(cm.ScalarMappable(norm=Normalize(0.0, tope), cmap="jet"), ax=ax, location="bottom", shrink=0.9, pad=0.12)
         barra.set_label(en_unidades.unidad)
         salida[capa] = ax
     return salida
