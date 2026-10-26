@@ -119,7 +119,7 @@ def _es_produccion(origen):
 # juzgarlos por su contenido real. Heredarlos sería anular el frente
 # dinámico justo donde aporta.
 SITIOS_CENSALES_PERMITIDOS = {
-    ("data/ManejoDatos/load.py", 2947):  # GI.3 (07-10)
+    ("data/ManejoDatos/load.py", 2648):  # GI.3 (07-10); G.1 (26-10): 2947->2648
         "GI.3: «Ver tabla» de las hijas de TAC (`_mostrar_tabla_generica`) une la hija con `pruebas` por `id_prueba` y filtra por sesión: el interceptor ve `pruebas` "
         "sin el tipo en el WHERE («clave de bloque incompleta»), pero el tipo lo fija la hija (`config['tabla']` solo tiene pruebas de su tipo). `activo` de la hija "
         "y de `pruebas` se filtra a mano (`filtro_t`/`filtro_p`; ES1 lo declara en test_le4). Hasta GI.3 ninguna prueba ejercitaba este sitio en tiempo de "
@@ -202,13 +202,13 @@ SITIOS_CENSALES_PERMITIDOS = {
     # completa/agregación (`load.py:3038`/`3890`, ver
     # SITIOS_CLAVE_INCOMPLETA_PERMITIDOS en test_le4). RT1 los ve porque los
     # tests ejercitan de verdad `mostrar_controles_img*`/`mostrar_controles_tac`.
-    ("data/ManejoDatos/load.py", 1936):  # FS.1 (06-10): 1931->1936
+    ("data/ManejoDatos/load.py", 1637):  # FS.1 (06-10): 1931->1936; G.1 (26-10): 1936->1637
         "mostrar_controles_imgIX_anual -- COUNT(p.id_prueba) GROUP BY c.id: "
         "cuenta TODAS las pruebas de la sesión, no elige una.",
-    ("data/ManejoDatos/load.py", 1970):  # FS.1 (06-10): 1965->1970
+    ("data/ManejoDatos/load.py", 1671):  # FS.1 (06-10): 1965->1970; G.1 (26-10): 1970->1671
         "mostrar_controles_imgIX_anual -- MAX/MIN GROUP BY c.id: agregación "
         "sobre todas las pruebas de la sesión.",
-    ("data/ManejoDatos/load.py", 2125):  # FS.1 (06-10): 2120->2125
+    ("data/ManejoDatos/load.py", 1826):  # FS.1 (06-10): 2120->2125; G.1 (26-10): 2125->1826
         "mostrar_controles_imgIX -- gemelo mensual del COUNT anterior.",
     # CORRECCIÓN 01-09 (A9/A10/A11, PLAN_FUGA_CONEXIONES_01-09.md §9): las
     # tres entradas de esta familia (2119/2515/2715) se retiraron por error
@@ -227,19 +227,19 @@ SITIOS_CENSALES_PERMITIDOS = {
     # estas líneas). test_rt1_no_hereda_los_sitios_opacos_de_es1 permite
     # este solape puntual porque está documentado como independiente, no
     # heredado -- ver EXCEPCIONES_INDEPENDIENTES en test_rt1_interceptor_sql.py.
-    ("data/ManejoDatos/load.py", 2173):  # FS.1 (06-10): 2168->2173
+    ("data/ManejoDatos/load.py", 1874):  # FS.1 (06-10): 2168->2173; G.1 (26-10): 2173->1874
         "mostrar_controles_imgIX -- gemelo mensual del MAX/MIN anterior.",
-    ("data/ManejoDatos/load.py", 2330):  # FS.1 (06-10): 2325->2330
+    ("data/ManejoDatos/load.py", 2031):  # FS.1 (06-10): 2325->2330; G.1 (26-10): 2330->2031
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del COUNT.",
-    ("data/ManejoDatos/load.py", 2364):  # FS.1 (06-10): 2359->2364
+    ("data/ManejoDatos/load.py", 2065):  # FS.1 (06-10): 2359->2364; G.1 (26-10): 2364->2065
         "mostrar_controles_imgHC_anual -- gemelo Halcyon del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2521):  # FS.1 (06-10): 2516->2521
+    ("data/ManejoDatos/load.py", 2222):  # FS.1 (06-10): 2516->2521; G.1 (26-10): 2521->2222
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del COUNT.",
-    ("data/ManejoDatos/load.py", 2569):  # FS.1 (06-10): 2564->2569
+    ("data/ManejoDatos/load.py", 2270):  # FS.1 (06-10): 2564->2569; G.1 (26-10): 2569->2270
         "mostrar_controles_imgHC -- gemelo Halcyon mensual del MAX/MIN.",
-    ("data/ManejoDatos/load.py", 2721):  # FS.1 (06-10): 2716->2721
+    ("data/ManejoDatos/load.py", 2422):  # FS.1 (06-10): 2716->2721; G.1 (26-10): 2721->2422
         "mostrar_controles_tac -- gemelo TAC del COUNT.",
-    ("data/ManejoDatos/load.py", 2769):  # FS.1 (06-10): 2764->2769
+    ("data/ManejoDatos/load.py", 2470):  # FS.1 (06-10): 2764->2769; G.1 (26-10): 2769->2470
         "mostrar_controles_tac -- gemelo TAC del MAX/MIN.",
     ("scripts/observador_contrato.py", 158):
         "_censo_y_vigente -- COUNT(*) sobre TODA la tabla (censo total, sin "

@@ -354,9 +354,9 @@ def reemplazar_bloque(cursor, tabla, clave, sql_insert, filas, usuario,
         auditar: `False` cuando esta llamada es solo UNA pieza de una
             acción real más grande que otro punto del código ya audita una
             vez por todas sus piezas (A6.3: "una acción, una fila", el
-            mismo criterio que ya usan `guardar_analisis_e_imagen` o
+            mismo criterio que usaba `guardar_analisis_e_imagen` (G.1) o
             `guardar_prueba_completa_catphan`). P.ej. `guardar_analisis_
-            placa600` (EB2a) llama a `reemplazar_bloque` tres veces
+            placa600` (EB2a; las dos retiradas en G.1) llamaba a `reemplazar_bloque` tres veces
             (franjas/verificaciones/correcciones) para UN solo clic --
             auditar las tres sería 3 filas por 1 acción.
 

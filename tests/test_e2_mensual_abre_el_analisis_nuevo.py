@@ -543,20 +543,28 @@ class TestLaSeccion:
         assert not _de(con_imagen, "boton_imagen_guardada").isHidden()
         assert _de(con_imagen, "linea_analisis_placa").text() == TEXTO_I
 
-    def test_no_hay_camino_al_analisis_viejo(self, paginas, familia, tmp_path, monkeypatch, placa):
-        """Un clic programatico en el boton oculto «Seleccionar Imagen» y despues en «Aceptar» NO llaman a `PruebaMensual600.analizar_imagen` (un espia en la CLASE, antes de construir la pagina). En HEAD
-        el cargador se construia con `analisis=True`: el segundo clic llamaba una vez."""
+    def test_no_hay_camino_al_analisis_viejo(self, paginas, familia, tmp_path, monkeypatch, placa, capsys):
+        """G.1 (26-10; antes, con el metodo aun vivo, un espia en la clase): `PruebaMensual600` YA NO TIENE `analizar_imagen` (ni en su `__dict__` ni heredado: la garantia es mas fuerte que la de un espia, que
+        `monkeypatch.setattr` ni siquiera podria poner). Con la pagina construida «Aceptar» no tiene receptores; un clic programatico en el boton oculto «Seleccionar Imagen» le conecta SOLO el `print` del
+        cargador sin analisis (1 receptor) y dos clics en «Aceptar» no corren ningun analisis (la salida no dice «Analisis de imagen activado» ni «Analizando imagen») ni lanzan excepciones de slots
+        (la fixture autouse). En HEAD el metodo existia."""
         from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
-        llamadas = []
-        monkeypatch.setattr(PruebaMensual600, "analizar_imagen", lambda self, *a, **k: llamadas.append(1))
+        assert "analizar_imagen" not in PruebaMensual600.__dict__
+        assert not hasattr(PruebaMensual600, "analizar_imagen")
         archivo = tmp_path / "placa.png"
         archivo.write_bytes(placa.datos)
         monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: (str(archivo), "")))
         pagina = paginas(familia)
+        assert pagina.boton_aceptar.receivers(pagina.boton_aceptar.clicked) == 0
+        capsys.readouterr()
         pagina.boton_subir.click()
+        assert pagina.boton_aceptar.receivers(pagina.boton_aceptar.clicked) == 1, "solo el print del cargador sin analisis"
+        capsys.readouterr()
         pagina.boton_aceptar.click()
         pagina.boton_aceptar.click()
-        assert llamadas == []
+        salida = capsys.readouterr().out
+        assert salida.count("Archivo: ") == 2, salida
+        assert "Analisis de imagen activado" not in salida and "Analizando imagen" not in salida, salida
 
 
 def test_el_cargador_se_construye_sin_analisis_y_ya_no_se_conecta_aceptar_a_subirlisto():
@@ -1076,13 +1084,25 @@ def _sitios_del_cargador(clase, cargador_compartido, arboles):
     return sitios
 
 
-def _clases_que_violan(clases, cargador_compartido, analisis_viejo):
-    """Las clases con el cargador compartido en `analisis` verdadero cuyo `analizar_imagen` RESUELTO es el del 600 (el viejo)."""
+def _es_el_analisis_viejo(funcion):
+    """G.1 (26-10): un `analizar_imagen` DEFINIDO en `seiscientos_mensual.py`, juzgado por el ARCHIVO de la funcion y no por el objeto: tras G.1 `PruebaMensual600` ya no tiene ninguno (no hay objeto que
+    comparar), y por archivo se caza tambien a quien vuelva a definir uno en ese archivo, sea en el 600 o en una subclase suya."""
+    if funcion is None:
+        return False
+    funcion = getattr(funcion, "__wrapped__", funcion)
+    try:
+        return Path(inspect.getsourcefile(funcion) or "").name == "seiscientos_mensual.py"
+    except TypeError:
+        return False
+
+
+def _clases_que_violan(clases, cargador_compartido, es_viejo):
+    """Las clases con el cargador compartido en `analisis` verdadero cuyo `analizar_imagen` RESUELTO es uno de `seiscientos_mensual.py` (`es_viejo(funcion)`)."""
     arboles, violan = {}, []
     for clase in clases:
         sitios = _sitios_del_cargador(clase, cargador_compartido, arboles)
         _, analizar = _resuelto(clase, "analizar_imagen")
-        if any(analisis for *_, analisis in sitios) and analizar is analisis_viejo:
+        if any(analisis for *_, analisis in sitios) and es_viejo(analizar):
             violan.append(f"{clase.__module__}.{clase.__qualname__}")
     return violan
 
@@ -1093,7 +1113,7 @@ def la_ui(app):
     from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
     from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
     clases = [c for c in _subclases(PruebaBasico) if c.__module__.startswith("ui.")]
-    return SimpleNamespace(importados=importados, fallidos=fallidos, clases=clases, cargador=PruebaBasico.__dict__["imagenUpLoader"], viejo=PruebaMensual600.__dict__["analizar_imagen"],
+    return SimpleNamespace(importados=importados, fallidos=fallidos, clases=clases, cargador=PruebaBasico.__dict__["imagenUpLoader"], es_viejo=_es_el_analisis_viejo,
                            PruebaBasico=PruebaBasico, PruebaMensual600=PruebaMensual600)
 
 
@@ -1102,7 +1122,7 @@ class TestNingunaPantallaLlegaAlAnalisisViejo:
         """Por AST y por MRO: el 600, el iX y (por heredar el metodo sin llamarlo) el mensual del Halcyon violaban en HEAD; con E.2, ninguna."""
         assert not la_ui.fallidos, la_ui.fallidos
         assert len(la_ui.importados) >= 25
-        assert _clases_que_violan(la_ui.clases, la_ui.cargador, la_ui.viejo) == []
+        assert _clases_que_violan(la_ui.clases, la_ui.cargador, la_ui.es_viejo) == []
 
     def test_no_es_vacua_hay_al_menos_cuatro_sitios_del_cargador_compartido(self, la_ui):
         """Sin sitios el detector pasaria siempre: hoy `halcyon_anual.py`, `braquiterapia.py`, `seiscientos_mensual.py` y `equipos.py` construyen el cargador compartido."""
@@ -1113,35 +1133,60 @@ class TestNingunaPantallaLlegaAlAnalisisViejo:
         assert {"halcyon_anual.py", "braquiterapia.py", "seiscientos_mensual.py", "equipos.py"} <= archivos, archivos
 
     def test_el_detector_caza_una_intrusa_y_deja_pasar_la_que_no_analiza(self, la_ui, tmp_path):
-        """Control del detector: una pantalla que hereda del 600 y construye el cargador sin argumento, o con `True` posicional, se caza; la de `analisis=False`, no. (El AST necesita el archivo.)"""
-        archivo = tmp_path / "intrusas_e2.py"
+        """Control del detector (G.1: por ARCHIVO, ya no por objeto): una pantalla que hereda un `analizar_imagen` definido en un archivo llamado `seiscientos_mensual.py` (aqui uno de `tmp_path`, porque el real ya
+        no lo tiene) y construye el cargador sin argumento, o con `True` posicional, o con una variable, se caza; la de `analisis=False`, no; y una que construye el cargador con analisis verdadero pero
+        resuelve el `analizar_imagen` de OTRO archivo (como braqui y el anual del Halcyon), tampoco. (El AST necesita el archivo.)"""
+        carpeta = tmp_path / "viejo"
+        carpeta.mkdir()
+        archivo = carpeta / "seiscientos_mensual.py"
         archivo.write_text(textwrap.dedent("""
-            from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
+            from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
 
-            class IntrusaConAnalisis(PruebaMensual600):
+            class Viejo(PruebaBasico):
+                def analizar_imagen(self):
+                    return "el viejo, otra vez"
+
+            class IntrusaConAnalisis(Viejo):
                 def seccion(self):
                     return self.imagenUpLoader()
 
-            class IntrusaPosicional(PruebaMensual600):
+            class IntrusaPosicional(Viejo):
                 def seccion(self):
                     return self.imagenUpLoader(True)
 
-            class IntrusaPorVariable(PruebaMensual600):
+            class IntrusaPorVariable(Viejo):
                 def seccion(self):
                     bandera = True
                     return self.imagenUpLoader(analisis=bandera)
 
-            class IntrusaSinAnalisis(PruebaMensual600):
+            class IntrusaSinAnalisis(Viejo):
                 def _configurar_elementos_adicionales(self):
                     return self.imagenUpLoader(analisis=False)
         """), encoding="utf-8")
-        spec = importlib.util.spec_from_file_location("intrusas_e2", archivo)
-        modulo = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(modulo)
+        otra = tmp_path / "otra_pantalla.py"
+        otra.write_text(textwrap.dedent("""
+            from ui.paginasControles.PruebasDiarias.PruebasDiarias import PruebaBasico
+
+            class ConElSuyo(PruebaBasico):
+                def analizar_imagen(self):
+                    return "el de otra pantalla"
+
+                def seccion(self):
+                    return self.imagenUpLoader()
+        """), encoding="utf-8")
+        cargados = []
         try:
-            violan = _clases_que_violan([modulo.IntrusaConAnalisis, modulo.IntrusaPosicional, modulo.IntrusaPorVariable, modulo.IntrusaSinAnalisis], la_ui.cargador, la_ui.viejo)
+            for nombre, ruta in (("intrusas_e2", archivo), ("otra_pantalla_e2", otra)):
+                spec = importlib.util.spec_from_file_location(nombre, ruta)
+                modulo = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(modulo)
+                cargados.append((nombre, modulo))
+            intrusas, otra_pantalla = cargados[0][1], cargados[1][1]
+            violan = _clases_que_violan([intrusas.IntrusaConAnalisis, intrusas.IntrusaPosicional, intrusas.IntrusaPorVariable, intrusas.IntrusaSinAnalisis, otra_pantalla.ConElSuyo],
+                                        la_ui.cargador, la_ui.es_viejo)
         finally:
-            sys.modules.pop("intrusas_e2", None)
+            for nombre, _ in cargados:
+                sys.modules.pop(nombre, None)
         assert sorted(v.split(".")[-1] for v in violan) == ["IntrusaConAnalisis", "IntrusaPorVariable", "IntrusaPosicional"]
 
 

@@ -103,7 +103,7 @@ ARCHIVOS_VIGILADOS = {
     BLOQUE_PDF: ("el bloque de los dos PDF (B.6): compone la figura y arma las filas y las tablas", 4),
     CARGA_DE_LA_PRUEBA: ("el guardado del mensual: el único `INSERT INTO CondicionesMedicion` que nombra `desplazamiento_ini`", 60),
     "data/ManejoDatos/conection.py": ("la definición de la tabla (nombra la columna y trae `ON UPDATE`: no es una escritura)", 30),
-    "analisisImagenes/Analisis_PlacaRC.py": ("la excepción declarada de DP-141 (lee `info['dpi']`)", 20),
+    "analisisImagenes/Analisis_PlacaRC.py": ("la excepción declarada de DP-141 (lee `info['dpi']`)", 5),   # G.1 (26-10): 20 -> 5; el archivo pasa de 24 funciones a las 10 que alcanza `analizar_lineas` (la regla de este diccionario: la mitad de lo que hay)
 }
 
 

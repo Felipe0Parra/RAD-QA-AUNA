@@ -302,14 +302,9 @@ ALLOWLIST = {
     ("ui/paginasControles/PruebasMensuales/ix_mensual.py",
      "PruebaMensualIX.guardar_control_conos"):
         "audita-el-llamador:ui/paginasControles/PruebasMensuales/ix_mensual.py::PruebaMensualIX.guardar_todo_ix",
-    # guardar_analisis_placa600 y crear_algo: mismo botón "Guardar análisis"
-    # (antes 2 conexiones .clicked independientes -- habría dado 2 filas por
-    # 1 click). Unificadas en guardar_analisis_e_imagen, que llama a ambas
-    # (transitivamente, vía guardar_analsis/dbImagen) y audita una vez.
-    ("data/ManejoDatos/load.py", "guardar_analisis_placa600"):
-        "audita-el-llamador:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600.guardar_analisis_e_imagen",
-    ("data/ManejoDatos/load.py", "crear_algo"):
-        "audita-el-llamador:ui/paginasControles/PruebasMensuales/seiscientos_mensual.py::PruebaMensual600.guardar_analisis_e_imagen",
+    # G.1 (26-10-2026): salen las entradas de `guardar_analisis_placa600` y `crear_algo` (mismo boton «Guardar analisis» del analisis mensual VIEJO, que audita-el-llamador
+    # `PruebaMensual600.guardar_analisis_e_imagen`): las tres funciones se retiraron. El guardado nuevo (D.1, `services/placa_mensual.py::guardar`) escribe su fila de auditoria dentro
+    # de la misma transaccion y no necesita entrada (usa `reemplazar_bloque`, que el tripwire reconoce).
     # loadtablacomplex: A6.4 cerró los 2 guardar_todas_fse que faltaban --
     # sus 7 call-sites reales ahora auditan los 4: fieldSize->subir_tabla
     # (from_range=3, ya de antes), _subir_tabla_optimizada (A6.3, cubre las

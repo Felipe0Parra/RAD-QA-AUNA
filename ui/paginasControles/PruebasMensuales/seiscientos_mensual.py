@@ -15,7 +15,6 @@ from data.ManejoDatos.conection import Conexion
 from data.ManejoDatos.Tablas_Anuales.tablas_anuales import mostrar_controles_anuales
 import os, traceback, sqlite3
 from functools import lru_cache
-from analisisImagenes.Analisis_PlacaCuadrada import analizar_cuadrado2,  generar_reporte_completo
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from matplotlib.figure import Figure
 from ui.paginasGuia.dialogs import DialogCalculadoraDosis
@@ -57,7 +56,6 @@ import numpy as np
 # services/db_pool.py. Se re-exporta el nombre para no cambiar ningún
 # call-site ni ningún import existente (~11 en este archivo, más tests).
 from services.db_pool import DatabaseManager
-from services.conexiones_qt import conectar_unico
 
 # Clase principal para el control mensual del Clinac 600
 class PruebaMensual600(PruebaBasico):
@@ -2792,10 +2790,6 @@ class PruebaMensual600(PruebaBasico):
             del self.dynamic_tabs[tab_text]
         self.tab_widget.removeTab(index)
 
-    def limpiar_canvas(self, canvas):
-        canvas.figure.clf()
-        canvas.draw()
-
     def setupTap1(self):
         # Combo de selección de gráfica
         self.graficar = QComboBox()
@@ -2823,21 +2817,6 @@ class PruebaMensual600(PruebaBasico):
         splitter.setSizes([400, 200])  # Altura inicial
 
         #------------------------------------------------------
-        #        Botones de navegación entre graficas
-        #------------------------------------------------------
-        self.boton_anterior = QPushButton("Anterior")
-        self.boton_siguiente = QPushButton("Siguiente")
-        self.boton_anterior.setEnabled(False)
-        self.boton_siguiente.setEnabled(False)
-
-        botones_layout = QHBoxLayout()
-        botones_layout.addWidget(self.boton_anterior)
-        botones_layout.addWidget(self.boton_siguiente)
-
-        self.boton_anterior.hide()
-        self.boton_siguiente.hide()
-
-        #------------------------------------------------------
         #        Botones para la barra de herramientas
         #------------------------------------------------------
         self.btn_delete = QPushButton('Eliminar')
@@ -2861,290 +2840,15 @@ class PruebaMensual600(PruebaBasico):
         # Layout principal de la pestaña
         layout_tab = QVBoxLayout()
         layout_tab.addWidget(splitter)
-        layout_tab.addLayout(botones_layout)   # Contiene los botones de navegacion entre graficas del analisis de imagen
         layout_tab.addLayout(edit_table_tools) # Contiene los botones de barra de herramientas
 
         self.tab1.setLayout(layout_tab)
-
-        # Estado de navegación
-        self.lista_graficas = []
-        self.grafica_actual = 0
-
-        self.boton_anterior.clicked.connect(self.mostrar_grafica_anterior)
-        self.boton_siguiente.clicked.connect(self.mostrar_grafica_siguiente)
 
         # Mostrar tabla correcta según el tipo de control
         if hasattr(self, 'anual') and self.anual:
             mostrar_controles_anuales(self, self.tabla, equipo_filtrar=self.equipo_f)
         else:
             mostrar_controles_mensuales(self, self.tabla, equipo_filtrar=self.equipo_f)
-
-    def analizar_imagen(self):
-        self.boton_siguiente.show()
-        self.boton_anterior.show()
-
-        print("Analizando imagen...")
-        try:
-            if not self.imagen_path:
-                QMessageBox.warning(self, "Advertencia", "Primero selecciona una imagen.")
-                return
-
-            # IM3 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM3, [[DA-65]]): el
-            # resultado anterior se DESCARTA antes de intentar el análisis
-            # nuevo. Sin esto, un análisis que falla (el `except` de abajo lo
-            # atrapa con un `print`, sin diálogo -- patrón H3, y IMG-1/DPI lo
-            # dispara de verdad) dejaba vivo el `self.res` del análisis
-            # ANTERIOR: el botón "Guardar" seguía habilitado y persistía el
-            # análisis de OTRA imagen contra la imagen nueva. Corrupción
-            # silenciosa, no una molestia de interfaz.
-            self.res = None
-            if hasattr(self, 'guardar_analisis') and self.guardar_analisis is not None:
-                self.guardar_analisis.setEnabled(False)
-
-            if not hasattr(self, 'guardar_analisis') or self.guardar_analisis is None:
-                self.guardar_analisis = QPushButton("Guardar")
-                self.guardar_analisis.setFixedSize(80, 35)
-                # IM3: nace deshabilitado -- se crea ANTES de que
-                # `analizar_cuadrado2` corra, así que en este punto todavía no
-                # se sabe si habrá algo que guardar.
-                self.guardar_analisis.setEnabled(False)
-                self.botones_layout.addWidget(self.guardar_analisis)
-
-            # UX1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-UX1, [[DA-51]]/[[DA-70]]):
-            # indicador estático + cursor de espera mientras corre
-            # `analizar_cuadrado2` -- es síncrono y bloquea el hilo de la GUI,
-            # así que sin esto la app parece congelada durante el análisis.
-            # Puesto DESPUÉS de la guarda de `imagen_path` de arriba (V8): ese
-            # camino no corre ningún cómputo, no necesita cursor de espera.
-            #
-            # V6: el indicador va en `self.botones_layout` (el mismo de
-            # `imagenUpLoader`, PruebasDiarias.py), NO en `self.col2` --
-            # `mostrar_resultados_AnalisisImagen` hace `deleteLater()` sobre
-            # todo widget de `col2` que no sea canvas/toolbar/graficar, en
-            # CADA análisis; puesto ahí, el segundo análisis reventaría con
-            # `RuntimeError: wrapped C/C++ object of type QLabel has been
-            # deleted` sobre esta misma referencia.
-            if not hasattr(self, 'indicador_analizando') or self.indicador_analizando is None:
-                self.indicador_analizando = QLabel("Analizando la imagen...")
-                self.botones_layout.addWidget(self.indicador_analizando)
-            self.indicador_analizando.show()
-            # V7: Qt ENCOLA el repintado -- sin forzarlo aquí, el indicador no
-            # se pintaría hasta que el bucle de eventos vuelva a girar, que es
-            # justo lo que `analizar_cuadrado2` bloquea (aparecería después
-            # del análisis, o nunca). `repaint()` y no `processEvents()`: este
-            # último reentraría en el bucle y dejaría procesar OTROS clics a
-            # mitad del análisis -- justo lo que UX1 existe para impedir.
-            self.indicador_analizando.repaint()
-
-            QApplication.setOverrideCursor(Qt.WaitCursor)
-            try:
-                self.res = analizar_cuadrado2(
-                    imagen_path=self.imagen_path,
-                    filtro=None,
-                    mostrar=True,
-                    canvas=self.canvas
-                )
-            finally:
-                # V8: SIEMPRE se restaura, incluso si `analizar_cuadrado2`
-                # lanza -- IMG-1 (DPI fuera de 200/300/600) lo dispara de
-                # verdad hoy. Sin este `finally` el cursor de espera quedaría
-                # PERMANENTE, un síntoma peor que el que UX1 viene a resolver.
-                QApplication.restoreOverrideCursor()
-                self.indicador_analizando.hide()
-
-            # IM3: solo aquí, con el análisis ya devuelto, hay algo que
-            # guardar. Si `analizar_cuadrado2` lanzó, esta línea no se alcanza
-            # y el botón queda deshabilitado con `self.res` en None.
-            self.guardar_analisis.setEnabled(True)
-
-            self.lista_graficas = self.res.get("graficas", [])
-            self.grafica_actual = 0
-
-            if self.lista_graficas:
-                self.boton_siguiente.setEnabled(True)
-                self.boton_anterior.setEnabled(False)
-                self.mostrar_grafica_actual()
-
-            resultado = generar_reporte_completo(self.res)
-            self.mostrar_resultados_AnalisisImagen(resultado)
-
-            if not hasattr(self, 'toolbar') or self.toolbar is None:
-                mpl = get_matplotlib_components()
-                NavigationToolbar = mpl['NavigationToolbar']
-                self.toolbar = NavigationToolbar(self.canvas, self)
-                self.col2.addWidget(self.toolbar)
-            else:
-                if self.col2.indexOf(self.toolbar) == -1:
-                    self.col2.addWidget(self.toolbar)
-        except Exception as e:
-            print("Error al subir o al analizar imagen: ",e)
-            # IM3: el aviso es parte de la misma corrección, no un extra. Sin
-            # él, `self.res = None` + botón deshabilitado dejarían al físico
-            # ante una pantalla que no hace nada y un "Guardar" que no
-            # responde, sin decirle por qué -- se cambiaría un fallo
-            # silencioso por otro. Con el aviso, el análisis fallido es
-            # visible y la imposibilidad de guardar queda explicada.
-            # NO arregla la causa (IMG-1/DPI sigue viva, va al plan de
-            # imágenes): hace que se note en vez de guardar datos de otra
-            # imagen.
-            QMessageBox.warning(
-                self, "No se pudo analizar la imagen",
-                f"El análisis de la placa no se completó, así que no hay "
-                f"resultados que guardar.\n\nDetalle: {e}")
-
-    def mostrar_resultados_AnalisisImagen(self, texto_lines):
-        toolbar = getattr(self, 'toolbar', None)
-
-        # Limpiar widgets extra
-        for i in reversed(range(self.col2.count())):
-            item = self.col2.itemAt(i)
-            if item is None:
-                continue
-            widget = item.widget()
-            if widget is not None and widget not in (self.canvas, toolbar, self.graficar):
-                self.col2.removeWidget(widget)
-                widget.deleteLater()
-
-        # QLabel con el reporte
-        label = QLabel()
-        label.setTextFormat(Qt.RichText)
-        label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        label.setWordWrap(True)
-        label.setText(texto_lines)
-        label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        label.setStyleSheet("padding: 5px;")
-
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setWidget(label)
-        scroll_area.setMinimumHeight(50)
-        scroll_area.setStyleSheet("border: 1px solid #ccc;")
-
-        self.resultado_scroll = scroll_area
-
-        if not hasattr(self, 'toolbar') or self.toolbar is None:
-            mpl = get_matplotlib_components()
-            NavigationToolbar = mpl['NavigationToolbar']
-            self.toolbar = NavigationToolbar(self.canvas, self)
-            for action in self.toolbar.actions():
-                if action.text() in ['Customize', 'Subplots']:
-                    self.toolbar.removeAction(action)
-            self.toolbar.setFixedHeight(25)
-            self.toolbar.setStyleSheet("padding: 0px; margin: 0px;")
-
-        for widget in (self.toolbar, scroll_area, self.canvas):
-            if widget is not None and self.col2.indexOf(widget) == -1:
-                self.col2.addWidget(widget)
-        self.toolbar.show()
-        self.toolbar.update()
-        self.canvas.setVisible(True)
-        self.canvas.show()
-        self.canvas.update()
-
-        if hasattr(self, 'guardar_analisis') and self.guardar_analisis is not None:
-            # A6.3 (PLAN_AUDITORIA_DOS_EJES_21-07.md §10.7): antes eran 2
-            # conexiones independientes al mismo click (análisis de placa +
-            # imagen) -- auditar cada una por separado habría dejado 2 filas
-            # para 1 acción real. Un solo handler que hace ambas cosas y
-            # audita una vez.
-            # SN1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-SN1): este método
-            # corre una vez POR CADA análisis de imagen, no solo al
-            # construir el formulario -- `connect` sin desconectar antes
-            # acumulaba una conexión por análisis (N análisis + 1 clic en
-            # "Guardar" = N guardados y N filas de auditoría).
-            conectar_unico(self.guardar_analisis.clicked, self.guardar_analisis_e_imagen)
-
-    def guardar_analsis(self):
-            """IM5: propaga si el guardado de los valores calculados salió
-            bien, para que el llamador no guarde la imagen sin ellos."""
-            return guardar_analisis_placa600(self.ref, self.res)
-
-    def guardar_analisis_e_imagen(self):
-        """A6.3: acción real del botón "Guardar análisis" -- análisis de
-        placa (`guardar_analisis_placa600`) e imagen (`crear_algo`, vía
-        `dbImagen`), 1 fila de auditoría para las dos.
-
-        IM2 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM2): el detalle dice ahora
-        QUÉ imagen se guardó (nombre y tamaño), no solo que se guardó --
-        `dbImagen` devuelve esa metadata desde `crear_algo`. Si la imagen no
-        se guardó (ruta ilegible, o ninguna seleccionada) el detalle lo dice
-        explícitamente en vez de afirmar "+ imagen" en falso: una fila de
-        auditoría que miente sobre lo que pasó es peor que una que no
-        existe.
-
-        La fila sigue escribiéndose en su propia transacción, aparte de las
-        de la placa y la imagen ([[DP-43]], [[DA-64]]) -- unificarlas exige
-        reestructurar la frontera UI/servicio, que [[DA-58]] ya declinó.
-
-        IM5 (Fase 6): **la imagen NO se guarda si sus valores calculados no
-        se guardaron**. Antes, `guardar_analisis_placa600` se tragaba su
-        propia excepción (rollback + aviso) y devolvía `None` sin
-        distinguirse de un guardado bueno, así que esta función seguía
-        adelante y guardaba la imagen igual -- dejando una imagen huérfana,
-        sin los valores que la explican. Es lo que se ve en `ref=1` y `ref=5`
-        de producción: imagen presente, **0 filas** en `analisis_placa_*`.
-        La imagen y sus valores son un solo dato: o entran los dos, o
-        ninguno.
-
-        Y **un solo aviso al final**, que dice QUÉ se guardó. Antes eran dos
-        popups vagos ("Datos guardados correctamente" + "Se guardó la
-        imagen"), ninguno de los cuales decía qué. Sin símbolos ([[DA-18]]).
-        """
-        valores_guardados = self.guardar_analsis()
-
-        if not valores_guardados:
-            # `guardar_analisis_placa600` ya mostró el motivo del fallo. Aquí
-            # solo se explica la CONSECUENCIA, que es lo que el físico
-            # necesita saber para decidir qué hacer.
-            QMessageBox.warning(
-                self, "No se guardó nada",
-                "No se pudieron guardar los resultados del análisis, así que "
-                "la imagen tampoco se guardó: las dos cosas se guardan "
-                "juntas o no se guarda ninguna.\n\n"
-                "El registro anterior de este control quedó intacto.")
-            _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
-                                 "analisis_placa600", ref=self.ref,
-                                 detalle="intento fallido -- no se guardó "
-                                         "el análisis ni la imagen")
-            return
-
-        imagen_guardada = self.dbImagen(self.ref, self.imagen_path)
-        if imagen_guardada:
-            nombre, tam = imagen_guardada
-            detalle = f"análisis de placa + imagen ({nombre}, {tam} bytes)"
-            aviso = (f"Se guardaron los resultados del análisis y la imagen "
-                     f"'{nombre}' ({tam} bytes).\n\n"
-                     f"La versión anterior de este control queda guardada y "
-                     f"se puede consultar.")
-        else:
-            detalle = "análisis de placa (sin imagen)"
-            aviso = ("Se guardaron los resultados del análisis, pero la "
-                     "imagen no se guardó.\n\n"
-                     "Los resultados quedaron registrados; si necesita la "
-                     "imagen, vuelva a seleccionarla y guarde otra vez.")
-        _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
-                             "analisis_placa600", ref=self.ref,
-                             detalle=detalle)
-        QMessageBox.information(self, "Guardado", aviso)
-
-    def mostrar_grafica_actual(self):
-        if self.lista_graficas:
-            self.limpiar_canvas(self.canvas)
-            self.lista_graficas[self.grafica_actual](self.canvas)
-            self.canvas.draw()
-
-        self.boton_anterior.setEnabled(self.grafica_actual > 0)
-        self.boton_siguiente.setEnabled(self.grafica_actual < len(self.lista_graficas) - 1)
-
-    def mostrar_grafica_anterior(self):
-        if self.grafica_actual > 0:
-            self.grafica_actual -= 1
-            self.mostrar_grafica_actual()
-
-    def mostrar_grafica_siguiente(self):
-        if self.grafica_actual < len(self.lista_graficas) - 1:
-            self.grafica_actual += 1
-            self.mostrar_grafica_actual()
 
     def conectarDB(self, comboequipo):
         series = []
@@ -3302,15 +3006,6 @@ class PruebaMensual600(PruebaBasico):
         self.btn_delete.clicked.connect(lambda: verificar_eliminar(self, self.tabla, "controles", self.ref))
         self.table = self.tabla
         self.search_bar.textChanged.connect(self.filtrarTabla)
-
-    def dbImagen(self, ref, imagen):
-        """IM2: propaga el retorno de `crear_algo` -- `(nombre, bytes)` de la
-        imagen guardada, o `None` si no se guardó -- para que
-        `guardar_analisis_e_imagen` pueda decirlo en su fila de auditoría."""
-        self.boton_aceptar.hide()
-        self.boton_cancel.hide()
-        #print(ref)
-        return crear_algo(self, ref, imagen)
 
     def createTab(self, text):
         print(f'\nEntro a createTab con {text} en la clase {self.__class__.__name__}')

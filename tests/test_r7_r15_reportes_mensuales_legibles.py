@@ -11,10 +11,14 @@ actividad de braqui dice "Actividad medida" (no "calculada"), las tres
 actividades en `[Ci]` (no `(U)`/`(GBq)`), y dos discrepancias CON signo,
 cada una diciendo contra quién se calcula.
 
-R11 dice la convención del eje en el ENCABEZADO de la tabla de análisis,
+R11 dijo la convención del eje en el ENCABEZADO de la tabla de análisis,
 en vez de dibujarla sobre la placa -- decisión del físico (09-09): la
 película es evidencia y superponerle cualquier cosa la vuelve un poco
-menos evidencia. R12 (publicar el desfase con signo) queda DIFERIDA: al
+menos evidencia. G.1 (26-10-2026, G1-D3, DA-89): esa tabla y su nota salieron del PDF desde F.1
+(la tabla vieja ya no se imprime) y G.1 retira `_crear_tabla_analisis_imagen` y
+`ENCABEZADO_ANALISIS_IMAGEN`; las 6 pruebas de `TestR11NotaDeConvencionDeEjes`
+salen con ellas (motivo de cada una: `logs/G1/pruebas_retiradas.md` del anexo).
+R12 (publicar el desfase con signo) queda DIFERIDA: al
 preparar la nota se midió que `analisis_placa_correcciones.delta_x/
 delta_y` NO es el desfase del campo sino la corrección de FORMA por
 vértice (suman cero en los 10 controles reales), y el desfase de verdad
@@ -31,8 +35,7 @@ import data.ManejoDatos.load  # noqa: F401 -- rompe el mismo ciclo de siempre
 from models.PDF.pdf import generar_reporte_pdf_multitabla_mensual
 from models.PDF.Mensuales.reportes_mensuales import (
     _crear_tabla_preguntas, _crear_tabla_dosimetria, _crear_tabla_dosimetria_ix,
-    _crear_tabla_resultados_actividad, _no_aplica_si_vacio,
-    _crear_tabla_analisis_imagen, ENCABEZADO_ANALISIS_IMAGEN)
+    _crear_tabla_resultados_actividad, _no_aplica_si_vacio)
 
 
 def _codigo_sin_comentarios(ruta):
@@ -235,104 +238,6 @@ class TestR9DosimetriaUnidadesYR14Tolerancias:
             assert "_no_aplica_si_vacio" in f
             assert "[cGy/UM]" in f  # B.1 (10-09): revierte R9, ver más arriba
             assert "[1]" in f
-
-
-# ---------------------------------------------------------------------
-# R11 -- la convención del eje, DICHA en el encabezado (no dibujada).
-# ---------------------------------------------------------------------
-class TestR11NotaDeConvencionDeEjes:
-    FRANJAS = {'analisis_placa_franjas': [
-        {'franja': 'Franja 1', 'ancho_media_h': 101.544, 'ancho_media_v': 101.262,
-         'penumbra_izq_h': 5.894, 'penumbra_izq_v': 4.364,
-         'penumbra_der_h': 5.494, 'penumbra_der_v': 4.311,
-         'diferencia_arriba_izq': 0.066, 'diferencia_arriba_der': 0.127,
-         'diferencia_abajo_izq': 0.310, 'diferencia_abajo_der': 0.274},
-    ]}
-
-    def test_el_encabezado_dice_hacia_donde_crece_el_eje_y(self, app):
-        df = _crear_tabla_analisis_imagen(self.FRANJAS)
-        assert df.columns[0] == ENCABEZADO_ANALISIS_IMAGEN
-        assert "ABAJO" in df.columns[0]
-        assert "eje Y" in df.columns[0]
-
-    def test_la_nota_NO_afirma_un_origen(self, app):
-        """El origen (`centro_teorico`) no se persiste, y los `delta_*` que
-        el PDF podría publicar se miden cada uno contra su propio vértice
-        ideal -- afirmar un origen común sería falso (§0.8, corrección)."""
-        encabezado = ENCABEZADO_ANALISIS_IMAGEN.lower()
-        assert "origen" not in encabezado
-        assert "centro" not in encabezado
-
-    def test_no_anade_ninguna_fila(self, app):
-        """La nota va en una fila que YA existe: el conteo de filas de la
-        tabla no cambia, así que no puede empujar una página."""
-        df = _crear_tabla_analisis_imagen(self.FRANJAS)
-        # 1 encabezado de columnas + 10 características (los 10 `getter`).
-        assert len(df) == 11
-
-    def test_la_convencion_que_la_nota_declara_es_la_que_el_codigo_calcula(self):
-        """El test que hace VERDADERA a la nota, no solo presente.
-
-        Si alguien invierte la resta de `delta_cruz_y` (pasa a
-        `centro_teorico[1] - cruz[1]`), el eje Y deja de crecer hacia
-        abajo y la nota queda mintiendo. Este test se pone rojo ANTES de
-        que eso llegue a un documento firmado. Se lee por AST el archivo
-        de análisis -- que este plan NO edita (zona roja): solo lo
-        observa."""
-        import ast
-        arbol = ast.parse(
-            open("analisisImagenes/Analisis_PlacaRC.py", encoding="utf-8").read())
-
-        def _es_indice_1_de(nodo, nombre):
-            return (isinstance(nodo, ast.Subscript)
-                    and isinstance(nodo.value, ast.Name) and nodo.value.id == nombre
-                    and isinstance(nodo.slice, ast.Constant) and nodo.slice.value == 1)
-
-        restas = []
-        for nodo in ast.walk(arbol):
-            if not (isinstance(nodo, ast.Assign) and len(nodo.targets) == 1):
-                continue
-            destino = nodo.targets[0]
-            if not (isinstance(destino, ast.Name) and destino.id == "delta_cruz_y"):
-                continue
-            # delta_cruz_y = (cruz[1] - centro_teorico[1]) * ... * ...
-            expr = nodo.value
-            while isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Mult):
-                expr = expr.left
-            assert isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Sub), (
-                "delta_cruz_y ya no es una resta -- la nota del encabezado "
-                "afirma un sentido de eje que quizá ya no sea cierto")
-            restas.append((expr.left, expr.right))
-
-        assert restas, (
-            "no se encontró `delta_cruz_y` en Analisis_PlacaRC.py -- si se "
-            "renombró o se movió, hay que revisar si la nota del encabezado "
-            "sigue siendo verdad antes de dejarla en el PDF")
-        for izquierda, derecha in restas:
-            assert _es_indice_1_de(izquierda, "cruz"), (
-                "la resta de delta_cruz_y cambió de orden: la nota dice que "
-                "el eje Y crece hacia ABAJO porque se calcula "
-                "`cruz[1] - centro_teorico[1]` (coordenadas de imagen). Si "
-                "ahora es al revés, la nota del PDF quedó FALSA")
-            assert _es_indice_1_de(derecha, "centro_teorico")
-
-    def test_la_nota_no_alcanza_a_braqui_ni_a_halcyon(self):
-        """`analisis_imagen` solo está en el `orden_tablas` de 600/iX --
-        el diario de braqui (R6) no publica ninguna cifra con signo, y el
-        mensual de Halcyon no lleva esta tabla."""
-        fuente = open("models/PDF/pdf.py", encoding="utf-8").read()
-        rama_halcyon = fuente[fuente.index("if maquina == 'Halcyon' and not sistema_imagenes"):]
-        rama_halcyon = rama_halcyon[:rama_halcyon.index("elif")]
-        assert "analisis_imagen" not in rama_halcyon
-
-    def test_la_imagen_no_se_toca_en_ningun_punto(self):
-        """La decisión del físico: la película es evidencia. R11 no dibuja
-        sobre el BLOB, ni sobre una copia, ni al componer."""
-        import inspect
-        from models.PDF.Mensuales import reportes_mensuales as rm
-        fuente = inspect.getsource(rm._crear_tabla_analisis_imagen)
-        for prohibido in ("QPixmap", "QPainter", "drawImage", "drawLine", "ImageDraw"):
-            assert prohibido not in fuente
 
 
 # ---------------------------------------------------------------------

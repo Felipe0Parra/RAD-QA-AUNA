@@ -7,6 +7,13 @@ casos inventados.
 Cada clase reproduce el rojo-antes-que-verde de su tarea: la forma exacta
 del defecto medido en la BD real, con el número de filas y el valor
 esperado tomados directamente de esa medición.
+
+G.1 (26-10-2026): `TestRP3ImagenNoSeReescribeEnFilasAnuladas` (1 caso)
+salió con `crear_algo`, la función que fijaba (el análisis mensual viejo se
+retira): ya no existe una escritura de la imagen que pudiera pisar filas
+anuladas, y el tripwire de G.1 (`test_g1_analisis_viejo_retirado.py`) impide
+que vuelva a haberla. Motivo del retiro: `logs/G1/pruebas_retiradas.md` del
+anexo. RP1 y RP2 siguen aquí.
 """
 import os
 import sqlite3
@@ -15,11 +22,11 @@ from datetime import datetime
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PyQt5.QtWidgets import QApplication, QTableWidget, QMessageBox, QWidget
+from PyQt5.QtWidgets import QApplication, QTableWidget, QMessageBox
 
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
-from data.ManejoDatos.load import mostrar_controles_mensuales, crear_algo
+from data.ManejoDatos.load import mostrar_controles_mensuales
 import data.ManejoDatos.Tablas_Anuales.tablas_anuales as tablas_anuales_mod
 from data.ManejoDatos.Tablas_Anuales.tablas_anuales import mostrar_tabla_equipos_anual
 
@@ -195,79 +202,3 @@ class TestRP2EquiposAnualSoloMuestraLoVigente:
         assert series == {"152342", "1069", "B091982"}, (
             f"las series mostradas deben ser las VIGENTES (N31010/1825 es "
             f"histórica y no debe aparecer): {series}")
-
-
-class TestRP3ImagenNoSeReescribeEnFilasAnuladas:
-    """crear_algo: la imagen nueva debe tocar SOLO el bloque vigente -- antes
-    de RP3, el UPDATE sin filtro escribía la imagen nueva en TODAS las filas
-    del ref, incluidas las anuladas, reescribiendo un snapshot histórico que
-    debía quedar fijo.
-
-    IM1 (PLAN_CONTRATO_COMPLETO_19-08.md §6-IM1, Fase 6, 25-08) cambió el
-    MECANISMO sin tocar esa garantía: `crear_algo` ya no hace `UPDATE` en
-    sitio, compone un bloque nuevo y lo reemplaza con `reemplazar_bloque`
-    (EB1). Lo que cambia aquí es el CONTEO de filas -- cada guardado de
-    imagen deja ahora su propia generación anulada en vez de pisar la
-    vigente, así que tras dos imágenes hay 3 filas donde antes había 2. La
-    afirmación de fondo es la misma y sigue siendo la que importa: **ninguna
-    fila anulada lleva jamás la imagen nueva**."""
-
-    def _pelado(self):
-        obj = QWidget.__new__(QWidget)
-        QWidget.__init__(obj)
-        return obj
-
-    def test_la_fila_anulada_conserva_su_propia_imagen(
-            self, app, bd_temporal, monkeypatch, tmp_path):
-        _sin_avisos(monkeypatch)
-        _crear_control(bd_temporal, 952)
-
-        imagen1 = tmp_path / "imagen1.png"
-        imagen1.write_bytes(b"contenido de la PRIMERA imagen")
-        imagen2 = tmp_path / "imagen2.png"
-        imagen2.write_bytes(b"contenido de la SEGUNDA imagen, distinta")
-
-        # 1. Sube la primera imagen (INSERT, no hay fila previa)
-        obj1 = self._pelado()
-        obj1.imagen_path = str(imagen1)
-        crear_algo(obj1, 952, None)
-
-        # 2. Guardar texto de aspectos mecánicos anula+inserta -- deja una
-        # fila histórica (con imagen1) y una vigente (hereda imagen1 por
-        # PR1). Se simula directamente para no depender de widgets reales.
-        con = sqlite3.connect(bd_temporal)
-        con.execute("UPDATE preguntas SET activo = 0 WHERE ref = 952 AND activo = 1")
-        con.execute(
-            "INSERT INTO preguntas (ref, iso_mec, imagen, activo) "
-            "SELECT ref, 0.85, imagen, 1 FROM preguntas WHERE ref = 952 AND activo = 0")
-        con.commit()
-        con.close()
-
-        # 3. Sube una SEGUNDA imagen -- debe quedar SOLO en el bloque
-        # vigente nuevo. Antes de RP3 (UPDATE sin filtro de activo) habría
-        # escrito imagen2 en TODAS las filas del ref.
-        obj2 = self._pelado()
-        obj2.imagen_path = str(imagen2)
-        crear_algo(obj2, 952, None)
-
-        con = sqlite3.connect(bd_temporal)
-        filas = con.execute(
-            "SELECT activo, imagen FROM preguntas WHERE ref = 952 ORDER BY rowid").fetchall()
-        con.close()
-
-        # IM1: 3 filas, no 2 -- la primera anulada en el paso 2, la segunda
-        # anulada por el propio `crear_algo` de este paso, y la vigente
-        # nueva. Antes de IM1 el guardado de la imagen pisaba la vigente en
-        # sitio y no dejaba generación.
-        assert len(filas) == 3, filas
-        historicas = [f for f in filas if f[0] == 0]
-        vigente = [f for f in filas if f[0] == 1]
-        assert len(historicas) == 2 and len(vigente) == 1, filas
-
-        for h in historicas:
-            assert bytes(h[1]) == b"contenido de la PRIMERA imagen", (
-                "cada fila histórica (superada) debía conservar SU propia "
-                "imagen -- si esto falla, el guardado de la imagen volvió a "
-                "escribir sobre filas anuladas")
-        assert bytes(vigente[0][1]) == b"contenido de la SEGUNDA imagen, distinta", (
-            "el bloque vigente sí debe llevar la imagen nueva")

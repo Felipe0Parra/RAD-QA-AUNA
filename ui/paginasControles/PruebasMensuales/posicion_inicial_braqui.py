@@ -529,7 +529,7 @@ def _nuevo_lienzo(mpl, alto_minimo=None):
 
 
 def _recuadro():
-    """El aspecto del recuadro de resultado de `mostrar_resultados_AnalisisImagen` (texto con borde y relleno), sin reutilizar
+    """El aspecto del recuadro de resultado de `mostrar_resultados_AnalisisImagen` (retirada en G.1; texto con borde y relleno), sin reutilizar
     esa función: ella borra a sus hermanos con `deleteLater` (V6 y DA-71)."""
     recuadro = QLabel()
     recuadro.setTextFormat(Qt.PlainText)

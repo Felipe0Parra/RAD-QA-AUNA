@@ -29,8 +29,8 @@ riesgo real) sino "¿esta subclase/hoja de Excel creó este widget opcional?"
 funciones se conecta a una señal repetible, el censo de llamadores de este
 archivo NO lo detecta solo: hace falta releer el `motivo` de esa entrada.
 
-Sitio(s) donde SÍ aplica -- ninguno hoy (SN1 ya lo corrigió con
-`conectar_unico`, que este test verifica que se siga usando ahí).
+Sitio(s) donde SÍ aplica -- ninguno hoy (SN1 lo corrigió con `conectar_unico`;
+G.1 lo retiró con su único llamador, `mostrar_resultados_AnalisisImagen`).
 """
 import ast
 import sys
@@ -198,9 +198,9 @@ def test_ningun_sitio_sin_revisar_conecta_bajo_guarda_hasattr():
     ]
     assert not sin_revisar, (
         "Sitio(s) nuevo(s) que conectan una señal bajo `hasattr(self, ...)` "
-        "sin pasar por conectar_unico() -- riesgo de acumular conexiones si "
+        "sin revisar -- riesgo de acumular conexiones si "
         "la función que los contiene puede correr más de una vez (el "
         "defecto de SN1). Revisa si la función es de construcción única "
         "(añádela a SITIOS_UNA_VEZ_REVISADOS con el motivo) o si hace falta "
-        "conectar_unico() ahí:\n" + "\n".join(sin_revisar)
+        "conectarla una sola vez ahí (crea el widget y conecta bajo `if not hasattr(...)`):\n" + "\n".join(sin_revisar)
     )

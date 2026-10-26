@@ -68,7 +68,8 @@ PAGINAS_SIN_ANALISIS = ["equipos", "sin_analisis"]   # las que crean el cargador
 
 
 class PantallaMinima(PruebaBasico):
-    """La subclase minima de `PruebaBasico`, cableada como el mensual del 600/iX (seiscientos_mensual.py:984-985): `imagenUpLoader()` y `boton_aceptar.clicked -> subirlisto`.
+    """La subclase minima de `PruebaBasico`, cableada como estaba el mensual del 600/iX (seiscientos_mensual.py:984-985) hasta E.2, en `b29784d` (G.1, 26-10: esa cableada ya no existe en el mensual; la subclase sigue
+    sirviendo de ejemplo del cargador compartido con `analisis` verdadero): `imagenUpLoader()` y `boton_aceptar.clicked -> subirlisto`.
     No construye el `__init__` pesado de `PruebaBasico` (nada de base de datos)."""
 
     def __init__(self):

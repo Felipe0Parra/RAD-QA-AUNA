@@ -7,8 +7,8 @@ TABLAS_ANULABLES and "activo" in columnas_reales_tabla`).
 `preguntas` tiene una particularidad que ninguna otra tabla del bloque
 comparte: su última columna real, `imagen` (BLOB), queda FUERA de
 `columnas_lista` -- `encontrar_columnas(..., delete=1)` la recorta a
-propósito porque se guarda por su propio camino (`crear_algo`/`dbImagen`,
-el botón "Guardar análisis"), no por el guardado de texto de aspectos
+propósito porque se guardaba por su propio camino (`crear_algo`/`dbImagen`,
+el botón "Guardar análisis"; retirados en G.1, 26-10), no por el guardado de texto de aspectos
 mecánicos. Componer el bloque nuevo solo con `columnas_lista` (como hacía
 la primera versión de DO1) perdería esa columna en cada bloque NUEVO: una
 fila insertada sin especificarla queda NULL, orfanando en silencio
@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import QApplication, QLineEdit, QMessageBox, QWidget
 
 import data.ManejoDatos.conection as conection_mod
 from data.ManejoDatos.conection import Conexion
-from data.ManejoDatos.load import subirlineasmensuales, crear_algo
+from data.ManejoDatos.load import subirlineasmensuales
 from scripts.indices_bloque_qc import crear_indices, nombre_indice
 from services.anulacion import TABLAS_ANULABLES
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import (
@@ -184,7 +184,7 @@ class TestPR2GuardadoAnulaEInserta:
 class TestPR1ImagenSobreviveAlReemplazoDeBloque:
     """El hallazgo específico de PR1: `imagen` queda fuera de
     `columnas_lista` (recortada por `encontrar_columnas(delete=1)`) porque
-    se guarda por su propio camino (`crear_algo`, el botón "Guardar
+    se guardaba por su propio camino (`crear_algo`, retirado en G.1; el botón "Guardar
     análisis"). Un resave de texto NO debe orfanarla."""
 
     def test_resave_de_texto_no_orfana_la_imagen(
@@ -196,12 +196,15 @@ class TestPR1ImagenSobreviveAlReemplazoDeBloque:
         ruta_imagen = tmp_path / "analisis.png"
         ruta_imagen.write_bytes(imagen_bytes)
 
-        # 1. El físico sube la imagen del análisis (crear_algo/dbImagen,
-        # camino real de "Guardar análisis" -- INSERT porque no hay fila
-        # previa para este ref).
-        obj_imagen = _pelado_preguntas()
-        obj_imagen.imagen_path = str(ruta_imagen)
-        crear_algo(obj_imagen, 952, None)
+        # 1. El físico sube la imagen del análisis. G.1 (26-10): `crear_algo`/
+        # `dbImagen` (el camino del análisis viejo) ya no existen; la fila
+        # vigente con su imagen -- la forma que dejaba, y la que hoy dejan
+        # los 10 controles reales con imagen -- se siembra con un INSERT
+        # directo (no hay fila previa para este ref).
+        con = sqlite3.connect(bd_temporal)
+        con.execute("INSERT INTO preguntas (ref, imagen, activo) VALUES (952, ?, 1)", (imagen_bytes,))
+        con.commit()
+        con.close()
 
         filas_tras_imagen = _filas_preguntas(bd_temporal, 952)
         assert len(filas_tras_imagen) == 1

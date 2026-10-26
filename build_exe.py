@@ -21,7 +21,6 @@ hidden_imports = [
 
     # ANALISIS
     "analisisImagenes.Analisis_Catphan_TAC",
-    "analisisImagenes.Analisis_PlacaCuadrada",
     "analisisImagenes.Analisis_PlacaRC",
     "analisisImagenes.ActividadFuente",
     "analisisImagenes.catphan.motor",

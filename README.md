@@ -95,7 +95,6 @@ Controles/
 ├── analisisImagenes/                # 🔬 PROCESAMIENTO Y ANÁLISIS
 │   ├── ActividadFuente.py           # Cálculo de actividad de fuentes
 │   ├── Analisis_PlacaRC.py          # Análisis de películas (líneas, campos)
-│   ├── Analisis_PlacaCuadrada.py    # Análisis de campos cuadrados
 │   └── Analisis_Catphan_TAC.py      # ⭐ Análisis completo CatPhan
 │
 ├── data/                            # 💾 GESTIÓN DE DATOS
@@ -254,8 +253,6 @@ pero contiene funciones que pueden ser usadas en todas las pruebas
 |             Función               |                   Uso                           |               Retorna             |
 |-----------------------------------|-------------------------------------------------|-----------------------------------|
 | `analizar_lineas(imagen, ...)`    | Detecta líneas en películas, calcula distancias | HTML con tabla de resultados      |
-| `analizar_cuadrado(imagen, ...)`  | Analiza campos cuadrados (simetría, penumbra) | Diccionario con perfiles y métricas |
-| `detectar_contornos(imagen, ...)` | Encuentra cruces y esquinas en películas | Imagen procesada y contornos |
 
 ---
 

@@ -277,10 +277,6 @@ SITIOS_LECTURA_REVISADOS = {
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("data/ManejoDatos/load.py", "abrir_pelicula"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("data/ManejoDatos/load.py", "mostrar_analisis_franjas"):
-        "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("data/ManejoDatos/load.py", "mostrar_analisis_img"):
-        "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("data/ManejoDatos/load.py", "mostrar_controles_imgHC_anual"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("data/ManejoDatos/load.py", "mostrar_controles_imgIX_anual"):
@@ -313,8 +309,6 @@ SITIOS_LECTURA_REVISADOS = {
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("data/ManejoDatos/load.py", "mostrar_tam_campos_HC"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
-    ("data/ManejoDatos/load.py", "mostrar_veri_corr"):
-        "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
     ("models/PDF/pdf.py", "_leer_datos_starshot_db"):
         "solo lee; cierra fuera de un `finally` TENIENDO `except` -- el camino de excepcion se traga el fallo y salta el close",
     # PI.9 (05-10): retiradas con PosicionamientoInicial (reemplazo completo, DP-139) las dos entradas de su clase en braquiterapia.py,
@@ -330,6 +324,8 @@ SITIOS_LECTURA_REVISADOS = {
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
     ("ui/paginasGuia/equipos.py", "cargartabla"):
         "solo lee; cierra fuera de un `finally`, sin `except` -- la excepcion sube al llamador y salta el close",
+    # G.1 (26-10-2026): retiradas con el analisis mensual VIEJO (sus «Ver tabla», DA-89) las tres entradas de `load.py`: `mostrar_analisis_franjas`, `mostrar_analisis_img` y `mostrar_veri_corr`
+    # (la regla de drenaje de DP-77, aplicada por una tarea que ya tenia sus pruebas): la lista de DP-77 encoge 41 -> 38.
 }
 
 

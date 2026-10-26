@@ -181,7 +181,6 @@ def test_conjunto_identidad_incluye_los_sitios_conocidos():
         "mostrar_equipos": "parent",
         "mostrar_seguridad": "parent",
         "mostrar_tam_campos": "parent",
-        "mostrar_analisis_img": "parent",
         "mostrar_dosimetria": "parent",
         "crear_ventanas_emergentes_tablas": "self",
         "mostrar_tablas_anuales_600_ix": "self",

@@ -217,7 +217,7 @@ SITIOS_EQUIPO_ID_PERMITIDOS = {
         "por resolver_guardado en la linea 76 (datos_a_dataframe); "
         "conserva EXACTAMENTE una llamada a obtener_por_id a proposito, "
         "exigido por test_q4_serie_guardada_manda.py::TestCierreDeClase."),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3409): (  # A.2 (21-09): 3203->3262; B.3 (21-09): 3262->3323; B.4 (21-09): 3323->3395; C.1 (25-09): 3395->3398; FS.2 (06-10): 3398->3409
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3104): (  # A.2 (21-09): 3203->3262; B.3 (21-09): 3262->3323; B.4 (21-09): 3323->3395; C.1 (25-09): 3395->3398; FS.2 (06-10): 3398->3409; G.1 (26-10): 3409->3104
         "EXENTO",
         "equipo_id viene de sender.currentData() -- la seleccion EN VIVO "
         "del combo que el fisico acaba de tocar al llenar la seccion de "
@@ -245,7 +245,7 @@ SITIOS_EQUIPO_ID_PERMITIDOS = {
         "R.3 (commit 9396f83), sitio #5 del censo original -- guardado "
         "por resolver_guardado en :2595-2598, con respaldo por "
         "Numero_serie si no resuelve."),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3978): (  # A.2 (21-09): 3772->3831; B.3 (21-09): 3831->3892; B.4 (21-09): 3892->3964; C.1 (25-09): 3964->3967; FS.2 (06-10): 3967->3978
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3673): (  # A.2 (21-09): 3772->3831; B.3 (21-09): 3831->3892; B.4 (21-09): 3892->3964; C.1 (25-09): 3964->3967; FS.2 (06-10): 3967->3978; G.1 (26-10): 3978->3673
         "BLINDADO",
         "R.3 (commit 9396f83), sitio #1 del censo original, EL CRITICO -- "
         "guardado por resolver_guardado en :3677 (Traerinfo)."),
@@ -277,7 +277,7 @@ SITIOS_EQUIPO_ID_PERMITIDOS = {
         "item.data(Qt.UserRole) de la fila EN VIVO que se está editando; "
         "lee 'datos originales' para comparar contra el formulario, no "
         "resuelve un puntero guardado en otra tabla."),
-    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3631): (  # A.2 (21-09): 3425->3484; B.3 (21-09): 3484->3545; B.4 (21-09): 3545->3617; C.1 (25-09): 3617->3620; FS.2 (06-10): 3620->3631
+    ("ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3326): (  # A.2 (21-09): 3425->3484; B.3 (21-09): 3484->3545; B.4 (21-09): 3545->3617; C.1 (25-09): 3617->3620; FS.2 (06-10): 3620->3631; G.1 (26-10): 3631->3326
         "EXENTO",
         "R.3, sitio #2 del censo original -- resuelve serie/fecha/tipo al "
         "GUARDAR, con el equipo_id que el propio combo tiene seleccionado "
@@ -477,7 +477,7 @@ class TestQuitarUnaJustificacionRompeElTest:
         hallado = censar_produccion()
         blanca_incompleta = dict(SITIOS_EQUIPO_ID_PERMITIDOS)
         sitio_retirado = (
-            "ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3978)  # A.2 (21-09): 3772->3831; B.3 (21-09): 3831->3892; B.4 (21-09): 3892->3964; C.1 (25-09): 3964->3967; FS.2 (06-10): 3967->3978
+            "ui/paginasControles/PruebasMensuales/seiscientos_mensual.py", 3673)  # A.2 (21-09): 3772->3831; B.3 (21-09): 3831->3892; B.4 (21-09): 3892->3964; C.1 (25-09): 3964->3967; FS.2 (06-10): 3967->3978; G.1 (26-10): 3978->3673
         del blanca_incompleta[sitio_retirado]
 
         extra = set(hallado) - set(blanca_incompleta)

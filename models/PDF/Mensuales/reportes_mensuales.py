@@ -37,8 +37,6 @@ class ReporteMensual:
                     'dosimetriaMen',
                     'control_cunas',  # Solo cuñas
                     'analisis_placa_franjas',
-                    'analisis_placa_verificaciones',
-                    'analisis_placa_correcciones'
                 ],
                 'accesorios': ['cunas']  # Solo cuñas
             },
@@ -54,8 +52,6 @@ class ReporteMensual:
                     'control_cunas',  # Cuñas
                     'control_conos',  # Y conos
                     'analisis_placa_franjas',
-                    'analisis_placa_verificaciones',
-                    'analisis_placa_correcciones'
                 ],
                 'accesorios': ['cunas', 'conos'],  # Ambos
                 'energias': ['6MV', '15MV', '6MeV', '9MeV', '12MeV', '15MeV']
@@ -822,95 +818,6 @@ def __crear_tabla_tamanos_campo_dosis_halcyon(tamano_data):
         #   print(fila, "->", len(fila), "columnas")
     # print("Columnas:", columnas, "->", len(columnas), "columnas")
     return pd.DataFrame(tabla, columns=columnas)
-
-# R11 (PLAN_REPORTES_LEGIBLES_08-09.md): la convención de ejes, DICHA en el
-# encabezado de la tabla en vez de DIBUJADA sobre la placa. Decisión del físico
-# (09-09): *"poner cualquier imagen sobre el BLOB es de cierta forma
-# contaminarla un poco visualmente al momento de una inspección visual"* -- la
-# película es evidencia, y superponerle cualquier cosa la vuelve un poco menos
-# evidencia.
-#
-# Dice SOLO el sentido del eje, que es una propiedad del sistema de coordenadas
-# (vale para todo control, no depende de ningún dato guardado) -- por eso se
-# puede afirmar sin el origen en píxeles (`centro_teorico`), que no se persiste
-# en ninguna tabla y que bloqueó la versión dibujada. **[medido]** el sentido
-# está fijado en dos sitios independientes del código: `delta_cruz_y =
-# (cruz[1] - centro_teorico[1])` (`Analisis_PlacaRC.py:924`) y `dibujar_excesos`,
-# que para pintar "hacia arriba" RESTA en Y (`Analisis_PlacaCuadrada.py:40`).
-#
-# NO dice el origen ni la operación de resta: `analisis_placa_correcciones`
-# guarda correcciones de FORMA por vértice (suman cero, no son un
-# desplazamiento) y el desfase real (`delta_cruz`) no se persiste -- ver `R12`,
-# diferida, y `DP-92`.
-#
-# Va en el encabezado, que es una fila que YA existe: no añade filas, así que no
-# puede empujar una página; queda pegada a las cifras que gobierna; y se
-# revierte en una línea el día que la convención se invierta.
-ENCABEZADO_ANALISIS_IMAGEN = (
-    'Análisis de imagen — coordenadas de imagen: el eje Y crece hacia ABAJO')
-
-
-def _crear_tabla_analisis_imagen(datos_completos):
-    """Crea la Tabla 6: Análisis de imagen"""
-    import re
-
-    franjas_data = datos_completos.get('analisis_placa_franjas', [])
-
-    if not franjas_data:
-        return pd.DataFrame([['No hay datos de análisis de imagen']], columns=['Información'])
-
-    # Ordenar por número de franja
-    franjas_data.sort(key=lambda f: int(re.search(r"\d+", f.get('franja', '0')).group()))
-
-    franja_labels = [f.get('franja', '') for f in franjas_data]
-
-    caracteristicas = [
-        ("Tam. Campo H", lambda f: f.get('ancho_media_h')),
-        ("Tam. Campo V", lambda f: f.get('ancho_media_v')),
-        ("Penumbra Izq. H", lambda f: f.get('penumbra_izq_h')),
-        ("Penumbra Izq. V", lambda f: f.get('penumbra_izq_v')),
-        ("Penumbra Der. H", lambda f: f.get('penumbra_der_h')),
-        ("Penumbra Der. V", lambda f: f.get('penumbra_der_v')),
-        ("Diferencia Camp. 1", lambda f: f.get('diferencia_arriba_izq')),
-        ("Diferencia Camp. 2", lambda f: f.get('diferencia_arriba_der')),
-        ("Diferencia Camp. 3", lambda f: f.get('diferencia_abajo_izq')),
-        ("Diferencia Camp. 4", lambda f: f.get('diferencia_abajo_der')),
-    ]
-
-    tabla = []
-
-    # Encabezados
-    headers = ['Característica'] + franja_labels
-    tabla.append(headers)
-
-    # Datos
-    for nombre, getter in caracteristicas:
-        fila = [nombre]
-        for franja_data in franjas_data:
-            valor = getter(franja_data)
-            if valor is None or valor == '':
-                fila.append('No Disponible')
-            else:
-                # Intentar convertir a float si es string
-                try:
-                    if isinstance(valor, str):
-                        valor_num = float(valor)
-                        fila.append(f'{valor_num:.3f}')
-                    else:
-                        fila.append(f'{valor:.3f}')
-                except (ValueError, TypeError):
-                    # Si no se puede convertir, usar el valor tal cual
-                    fila.append(str(valor))
-
-        # Completar fila si faltan columnas
-        while len(fila) < len(headers):
-            fila.append('')
-
-        tabla.append(fila)
-
-    # Crear DataFrame con columnas apropiadas
-    columnas = ['Característica'] + [f'Franja_{i+1}' for i in range(len(franja_labels))]
-    return pd.DataFrame(tabla, columns=[ENCABEZADO_ANALISIS_IMAGEN] + [''] * (len(columnas) - 1))
 
 def _crear_espacio_imagen(preguntas_data):
     """Crea un espacio reservado para imágenes en el reporte"""
@@ -1730,7 +1637,7 @@ def _secciones_de_la_placa(datos_completos):
             from models.PDF.Mensuales.seccion_placa_mensual import LINEA_SIN_ANALISIS_NUEVO
             analisis = pd.DataFrame([[LINEA_SIN_ANALISIS_NUEVO]], columns=['Información'])
         else:
-            analisis = _crear_tabla_analisis_imagen(datos_completos)
+            analisis = pd.DataFrame([['No hay datos de análisis de imagen']], columns=['Información'])
         return {'analisis_imagen': analisis, 'imagen': _crear_espacio_imagen(preguntas)}
     from models.PDF.Mensuales.seccion_placa_mensual import tablas_de_la_seccion
     tablas = dict(tablas_de_la_seccion(registro))

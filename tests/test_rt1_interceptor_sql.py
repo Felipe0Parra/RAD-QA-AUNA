@@ -227,9 +227,9 @@ class TestListaBlancaCensal:
         # aquí exactamente por la misma razón estructural que tablas_
         # anuales.py:61: ES1 no puede clasificarlos, RT1 sí porque ve el SQL
         # ya resuelto en tiempo de ejecución.
-        ("data/ManejoDatos/load.py", 2173),  # FS.1 (06-10): 2168->2173
-        ("data/ManejoDatos/load.py", 2569),  # FS.1 (06-10): 2564->2569
-        ("data/ManejoDatos/load.py", 2769),  # FS.1 (06-10): 2764->2769
+        ("data/ManejoDatos/load.py", 1874),  # FS.1 (06-10): 2168->2173; G.1 (26-10): 2173->1874
+        ("data/ManejoDatos/load.py", 2270),  # FS.1 (06-10): 2564->2569; G.1 (26-10): 2569->2270
+        ("data/ManejoDatos/load.py", 2470),  # FS.1 (06-10): 2764->2769; G.1 (26-10): 2769->2470
     }
 
     def test_toda_excepcion_de_rt1_esta_tambien_en_es1(self):
@@ -368,14 +368,18 @@ class TestDenominadorDeCobertura:
         #   107 -> 108 E.2 (PLAN_ANALISIS_PELICULAS_08-10.md, 25-10): `ui/paginasControles/PruebasMensuales/imagen_del_campo.py::hay_franjas_vigentes` -- una funcion lectora nueva
         #             sobre `analisis_placa_franjas` (el conteo de las filas vigentes de un `ref` para la linea de estado de «Imagen del campo»; sus censos de lecturas la declaran como
         #             un COUNT de clave incompleta); medido con `lectoras_del_bloque_qc()` sobre el arbol: entra esa y no sale ninguna.
+        #   108 -> 104 G.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 26-10): salen `crear_algo`, `mostrar_analisis_img`, `mostrar_analisis_franjas` y `mostrar_veri_corr` (los cuatro de `load.py`) con el
+        #             analisis mensual VIEJO (sus «Ver tabla» y su guardado de la imagen); no entra ninguna. Medido con `lectoras_del_bloque_qc()` sobre un espejo de HEAD (108) y sobre el mismo con la
+        #             retirada aplicada (104) en el pre-vuelo de Opus, y sobre el arbol al cerrar la tarea.
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 108, (
+        assert len(lectoras) == 104, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
             f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
             f"inicial, FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) y "
             f"FS.2 retiró la lectura propia de `actualizar_fisicos`, y BM.1 consolidó los ocho lectores por fecha del mensual de "
-            f"braquiterapia en siete que leen por `ref`, D.1 sumó `services/placa_mensual.py` (`leer` y `guardar`) y E.2 sumó "
-            f"`imagen_del_campo.py::hay_franjas_vigentes` -- 108 funciones esperadas; ahora salen "
+            f"braquiterapia en siete que leen por `ref`, D.1 sumó `services/placa_mensual.py` (`leer` y `guardar`), E.2 sumó "
+            f"`imagen_del_campo.py::hay_franjas_vigentes` y G.1 retiró `crear_algo`, `mostrar_analisis_img`, `mostrar_analisis_franjas` y "
+            f"`mostrar_veri_corr` -- 104 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"
