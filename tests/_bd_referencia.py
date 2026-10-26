@@ -51,3 +51,9 @@ BD_REBUILD_21_09 = CARPETA_BD / "BaseDatosQA(Rebuild_21-09-2026).db"
 # de braquiterapia ("UNIQUE constraint failed: MaximosCamaras.ref, MaximosCamaras.posicion").
 # La usa BM.1 (PLAN_GUARDADO_BRAQUI_MENSUAL_15-10.md). SIEMPRE se copia a un temporal antes de abrirla.
 BD_REBUILD_08_10 = CARPETA_BD / "BaseDatosQA(Rebuild_08-10-2026).db"
+
+# Copia de la PRODUCCION REAL al 05-10-2026 14:19 (entregada por el fisico el 06-10; md5 del .db 5f2ff402a09e9aad13ec9f2b4556f933). Son TRES archivos que van JUNTOS (`.db`, `-wal` y `-shm`): el `-wal`
+# guarda la ultima transaccion y copiar solo el `.db` da otra base. La usaban `test_gi0b_observador_renombres.py` (que la declaraba para si) y, desde E.2 (PLAN_ANALISIS_PELICULAS_08-10.md), la prueba de
+# «Imagen del campo» del mensual del 600 y del iX: sus 19 mensuales y los 10 con imagen vieja son los casos reales. SIEMPRE se copia (los tres archivos) a un temporal antes de abrirla; abrirla con
+# `Conexion()` la cambia (md5), y abrirla con `sqlite3` absorbe el WAL y lo borra.
+BD_PRODUCCION_06_10 = CARPETA_BD / "BaseDatosQA(Produccion_2026-10-06).db"

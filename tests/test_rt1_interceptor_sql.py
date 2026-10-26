@@ -365,14 +365,17 @@ class TestDenominadorDeCobertura:
         #   105 -> 107 D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10): `services/placa_mensual.py` -- dos funciones lectoras nuevas sobre `analisis_placa_mensual`
         #             (hija de `controles`): `leer` (por la clave de bloque `ref`, con `filtro_activo`) y `guardar` (la lectura de la vigente que reemplaza,
         #             `SELECT id ... WHERE ref = ?`, con `filtro_activo`); medido con `lectoras_del_bloque_qc()` sobre el arbol: entran esas dos y no sale ninguna.
+        #   107 -> 108 E.2 (PLAN_ANALISIS_PELICULAS_08-10.md, 25-10): `ui/paginasControles/PruebasMensuales/imagen_del_campo.py::hay_franjas_vigentes` -- una funcion lectora nueva
+        #             sobre `analisis_placa_franjas` (el conteo de las filas vigentes de un `ref` para la linea de estado de «Imagen del campo»; sus censos de lecturas la declaran como
+        #             un COUNT de clave incompleta); medido con `lectoras_del_bloque_qc()` sobre el arbol: entra esa y no sale ninguna.
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 107, (
+        assert len(lectoras) == 108, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
             f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
             f"inicial, FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) y "
             f"FS.2 retiró la lectura propia de `actualizar_fisicos`, y BM.1 consolidó los ocho lectores por fecha del mensual de "
-            f"braquiterapia en siete que leen por `ref`, y D.1 sumó `services/placa_mensual.py` (`leer` y `guardar`) "
-            f"-- 107 funciones esperadas; ahora salen "
+            f"braquiterapia en siete que leen por `ref`, D.1 sumó `services/placa_mensual.py` (`leer` y `guardar`) y E.2 sumó "
+            f"`imagen_del_campo.py::hay_franjas_vigentes` -- 108 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"

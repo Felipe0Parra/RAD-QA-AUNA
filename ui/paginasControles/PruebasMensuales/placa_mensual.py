@@ -741,16 +741,26 @@ class VentanaPlacaMensual(QWidget):
         ruta, _filtro = QFileDialog.getOpenFileName(self, "Seleccionar imagen", "", FILTRO_IMAGENES)
         if not ruta:
             return
-        # La carga es atómica: se lee y se interpreta todo ANTES de tocar la ventana; si algo falla, queda igual.
         try:
             with open(ruta, "rb") as archivo:
                 datos = archivo.read()
+        except OSError as error:
+            QMessageBox.warning(self, "Seleccionar imagen", f"No se pudo leer la imagen: {error}")
+            return
+        return self.cargar_imagen(datos, os.path.basename(ruta))
+
+    def cargar_imagen(self, datos, nombre, titulo="Seleccionar imagen"):
+        """Abre en la ventana la imagen `datos` (los bytes de un archivo) con el nombre `nombre`: el ÚNICO camino para cargar una imagen, venga de un archivo (`_al_seleccionar_imagen`) o de la base de datos
+        (E.2, DA-89: «Analizar la imagen guardada»). La carga es atómica: se lee y se interpreta todo ANTES de tocar la ventana; si no se lee, avisa con `titulo` y la ventana queda igual (devuelve False).
+        Si se lee, descarta todo lo de la imagen anterior (`_instalar_imagen`) y devuelve True."""
+        try:
             pelicula = pel.leer_pelicula(datos)
             rgb = dibujo.imagen_rgb(pelicula)
         except (OSError, ValueError) as error:
-            QMessageBox.warning(self, "Seleccionar imagen", f"No se pudo leer la imagen: {error}")
-            return
-        self._instalar_imagen(datos, os.path.basename(ruta), pelicula, rgb)
+            QMessageBox.warning(self, titulo, f"No se pudo leer la imagen: {error}")
+            return False
+        self._instalar_imagen(datos, nombre, pelicula, rgb)
+        return True
 
     def _instalar_imagen(self, datos, nombre, pelicula, rgb):
         """Descarta todo lo de la imagen anterior (resultado, marcas, sexto clic, análisis abierto, herramientas) y muestra la nueva en su color original (RGB uint8 con `nearest`)."""

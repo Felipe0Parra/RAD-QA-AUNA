@@ -260,6 +260,14 @@ SITIOS_CENSALES_PERMITIDOS = {
         "equipo_id = ?: cuenta las referencias de ESTE equipo cruzando "
         "todos los refs que lo usaron, no selecciona el bloque vigente de "
         "un ref concreto.",
+    # E.2 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-89): la linea de estado de «Imagen del campo» del mensual del 600 y del iX cuenta las filas VIGENTES del analisis viejo de un ref
+    # (`analisis_placa_franjas`) para elegir su texto. Un COUNT no elige fila: la clave (ref, franja) no se completa a proposito. Mismo criterio que el COUNT de Q.1 (arriba) y que
+    # el de `SITIOS_CLAVE_INCOMPLETA_PERMITIDOS` de test_le4; `TestListaBlancaCensal` exige que la misma clave este en las dos listas.
+    ("ui/paginasControles/PruebasMensuales/imagen_del_campo.py", 62):
+        "hay_franjas_vigentes -- COUNT(*) sobre analisis_placa_franjas WHERE "
+        "ref = ? con filtro de vigencia: cuenta las filas vigentes de UN ref "
+        "para decir si el control tiene un analisis viejo; no elige fila ni "
+        "lee un valor.",
     # FS.2 (06-10): la prueba de los fisicos al abrir construye por primera
     # vez, con el constructor de produccion, las pantallas ANUALES de Halcyon
     # y esta lectura (hoy solo la veia ES1) pasa a verla tambien el frente

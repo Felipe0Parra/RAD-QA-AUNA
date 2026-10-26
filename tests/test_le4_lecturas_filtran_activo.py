@@ -312,6 +312,14 @@ SITIOS_CLAVE_INCOMPLETA_PERMITIDOS = {
         "cruzando todos los refs que lo usaron, exactamente el mismo "
         "criterio que el COUNT(*) de la entrada anterior -- un COUNT no "
         "elige fila.",
+    ("ui/paginasControles/PruebasMensuales/imagen_del_campo.py", 62):
+        "E.2 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-89) -- analisis_placa_franjas "
+        "(hay_franjas_vigentes): COUNT(*) WHERE ref = ? con filtro de vigencia: "
+        "pregunta si el control tiene un analisis VIEJO vigente (V) para elegir "
+        "el texto de la linea de estado; cuenta las filas vigentes de UN ref, no "
+        "elige fila ni lee un valor (la tabla vieja se desconecta, DA-89), y la "
+        "clave (ref, franja) no se completa a proposito; mismo criterio que el "
+        "COUNT de Q.1, equipos.py:1035.",
     ("models/PDF/Mensuales/reportes_mensuales.py", 200):
         "TipoCalibracion -- fallback DELIBERADO y documentado en el propio "
         "código: el intento anterior YA busca por (fecha, tipo) exacto y "

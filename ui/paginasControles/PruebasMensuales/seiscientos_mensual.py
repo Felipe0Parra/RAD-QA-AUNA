@@ -980,9 +980,9 @@ class PruebaMensual600(PruebaBasico):
             # Tamaño de campo
             self.subtool.addItem(self.fieldSize('tamano_campo', self.ref), 'Tamaño de campo')
 
-            # Imagen del campo
-            self.imagen_campo = self.imagenUpLoader()
-            self.boton_aceptar.clicked.connect(self.subirlisto)
+            # Imagen del campo (E.2): «Análisis de la placa», su línea de estado y, debajo, el visor de la imagen vieja (IM4) sin «Seleccionar Imagen» ni «Aceptar»
+            from ui.paginasControles.PruebasMensuales.imagen_del_campo import seccion_imagen_del_campo     # import diferido (E.2): el servicio y la ventana se cargan al usarlos
+            self.imagen_campo = seccion_imagen_del_campo(self, self.imagenUpLoader(analisis=False))
             self.subtool.addItem(self.imagen_campo, 'Imagen del campo')
 
             # IM4: mostrar la imagen ya guardada de este control, si la hay.
