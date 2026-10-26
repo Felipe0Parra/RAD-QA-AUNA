@@ -1376,7 +1376,9 @@ MENSUALES_PY = "models/PDF/Mensuales/reportes_mensuales.py"
 BLOQUE_PY = "models/PDF/bloque_posicion_inicial.py"
 DIBUJO_PY = "analisisImagenes/dibujo_posicion_inicial.py"
 PAGINA_PY = "ui/paginasControles/PruebasMensuales/posicion_inicial_braqui.py"
-DONDE_NO_SE_ELIGE_LA_CAPA_A_MANO = (SERVICIO_PY, REPORTES_PY, PDF_PY, MENSUALES_PY, BLOQUE_PY)
+SECCION_MENSUAL_PY = "models/PDF/Mensuales/seccion_placa_mensual.py"            # F.1: el PDF del mensual del 600 y del iX imprime la capa que guardo el registro (la seccion y la pelicula con su recuadro)
+PELICULA_CON_RECUADRO_PY = "models/PDF/Mensuales/pelicula_con_recuadro.py"
+DONDE_NO_SE_ELIGE_LA_CAPA_A_MANO = (SERVICIO_PY, REPORTES_PY, PDF_PY, MENSUALES_PY, BLOQUE_PY, SECCION_MENSUAL_PY, PELICULA_CON_RECUADRO_PY)
 # Las UNICAS excepciones, cada una con su motivo: los nombres de columna de la tabla del servicio (`desfase_g_px`, `desfase_g_mm`...: son columnas, no una eleccion de capa; mientras sigan escritos
 # asi) y el especificador de formato `{valor:g}` de un f-string (el `g` de «general», no la capa verde).
 ASIGNACIONES_CON_COLUMNAS_PERMITIDAS = {"_COLUMNAS_SQL", "_COLUMNAS_INSERT"}

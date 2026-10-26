@@ -237,7 +237,7 @@ def _recopilar_datos_completos(db, ref_id, config_tablas, maquina, tipo_reporte)
             datos_tabla = _obtener_datos_tabla_relacionada(db, ref_id, tabla)
         datos_completos[tabla] = datos_tabla
 
-    return datos_completos
+    return _con_el_analisis_nuevo(datos_completos)
 
 def _obtener_datos_tabla_principal(db, ref_id):
     """Obtiene datos de la tabla controles"""
@@ -494,10 +494,10 @@ def _procesar_datos_para_reporte(datos_completos, diccionario, umbrales, maquina
     else:
         tablas_reporte['tamanos_campo'] = _crear_tabla_tamanos_campo(datos_completos.get('tamano_campo', []))
 
-    # Tabla 6: Análisis de imagen (solo para 600 e iX)
+    # Tabla 6: Análisis de imagen (solo para 600 e iX); F.1 (DA-89): con el análisis nuevo la sección nueva en lugar de las dos tablas de siempre, y sin él la imagen y la tabla o la línea de siempre (`_secciones_de_la_placa`, al final del archivo)
     if maquina in ['Clinac 600', 'Clinac ix']:
-        tablas_reporte['analisis_imagen'] = _crear_tabla_analisis_imagen(datos_completos)
-        tablas_reporte['imagen'] = _crear_espacio_imagen(datos_completos.get('preguntas', []))
+        tablas_reporte.update(_secciones_de_la_placa(datos_completos))
+        # F.1: la regla de V (franjas del análisis viejo), I (imagen de la fila de preguntas) y N (análisis nuevo) vive en esa función; aquí no se lee ninguna base
 
     # Tabla 7: Aspectos dosimétricos
     if maquina == 'Clinac ix':
@@ -914,7 +914,7 @@ def _crear_tabla_analisis_imagen(datos_completos):
 
 def _crear_espacio_imagen(preguntas_data):
     """Crea un espacio reservado para imágenes en el reporte"""
-    pregunta = preguntas_data[0]
+    pregunta = preguntas_data[0] if preguntas_data else {}      # F.1: un control sin fila de preguntas (el análisis nuevo ya no la crea) se trata como una fila sin imagen
     imagen  = pregunta.get('imagen', '')
     # Convertir de BLOB a QPixmap si es necesario
     if imagen:
@@ -1696,3 +1696,44 @@ def _es_reporte_de_linealidad(tipo_reporte):
     if tipo_reporte is None:
         raise ValueError("DP-147: falta tipo_reporte, el reporte pedido: sin él no se sabe de qué tabla de braquiterapia salen los datos y no se adivina por el dato")
     return 'Linealidad' in tipo_reporte
+
+
+# ============================================================================
+#  F.1 (PLAN_ANALISIS_PELICULAS_08-10.md, DP-157, DA-83 a DA-89): EL ANÁLISIS NUEVO DE LA PELÍCULA EN EL PDF DEL 600 Y DEL iX
+#  Lo nuevo va AL FINAL del archivo (cero citas por línea movidas). La sección y la película con su recuadro viven en `models/PDF/Mensuales/seccion_placa_mensual.py`
+#  y `pelicula_con_recuadro.py`.
+# ============================================================================
+
+CLAVE_DEL_ANALISIS_NUEVO = 'analisis_placa_mensual_vigente'
+
+
+def _con_el_analisis_nuevo(datos_completos):
+    """F.1: agrega a los datos del reporte el análisis nuevo VIGENTE del control (el diccionario de `services.placa_mensual.leer`, o None si no tiene), solo para el 600 y el iX. Lo lee la ÚNICA puerta
+    a la tabla (`svc.leer`) y va AQUÍ, en la fase que ya lee la base, y no en `_procesar_datos_para_reporte`, que para el 600 y el iX es una función pura de `datos_completos` (`test_t5_cunas_en_pdf_ix` la llama
+    sin base ni `ref_id`). Si la lectura falla, la excepción sube y el reporte no sale (regla de PI.8): no se imprime «sin análisis» como si no lo hubiera. Import local (Trampa 5)."""
+    if datos_completos.get('maquina') not in ('Clinac 600', 'Clinac ix'):
+        return datos_completos
+    from services import placa_mensual as svc_placa
+    datos_completos[CLAVE_DEL_ANALISIS_NUEVO] = svc_placa.leer(datos_completos['ref_id'])
+    return datos_completos
+
+
+def _secciones_de_la_placa(datos_completos):
+    """F.1: las tablas del análisis de la película del 600 y del iX, según N (hay análisis nuevo vigente), V (hay franjas vigentes del análisis viejo) e I (la imagen de la primera fila de `preguntas` no está
+    vacía: el mismo predicado con que `_crear_espacio_imagen` decide si hay algo que imprimir). DA-89 (23-10): la tabla vieja y sus valores se desconectaron del PDF.
+      con N:    la sección nueva y, solo si I, la imagen vieja (`imagen`); NUNCA la tabla vieja, «No hay datos de análisis de imagen» ni un recuadro vacío;
+      sin N:    `imagen` como siempre (con la guarda de una lista vacía) y `analisis_imagen` es UNA línea si V, o «No hay datos de análisis de imagen» como siempre si no."""
+    registro = datos_completos.get(CLAVE_DEL_ANALISIS_NUEVO)
+    preguntas = datos_completos.get('preguntas', [])
+    if registro is None:
+        if datos_completos.get('analisis_placa_franjas'):
+            from models.PDF.Mensuales.seccion_placa_mensual import LINEA_SIN_ANALISIS_NUEVO
+            analisis = pd.DataFrame([[LINEA_SIN_ANALISIS_NUEVO]], columns=['Información'])
+        else:
+            analisis = _crear_tabla_analisis_imagen(datos_completos)
+        return {'analisis_imagen': analisis, 'imagen': _crear_espacio_imagen(preguntas)}
+    from models.PDF.Mensuales.seccion_placa_mensual import tablas_de_la_seccion
+    tablas = dict(tablas_de_la_seccion(registro))
+    if preguntas and preguntas[0].get('imagen'):
+        tablas['imagen'] = _crear_espacio_imagen(preguntas)
+    return tablas
