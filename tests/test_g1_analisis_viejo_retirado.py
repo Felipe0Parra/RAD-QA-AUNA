@@ -19,8 +19,9 @@ intruso que lo viola se caza, uno que no, pasa) para que ninguno sea vacuo:
   6. LA PESTANA «GRAFICOS» (lo que se queda): `setupTap1` ya no crea `boton_anterior` ni `boton_siguiente` ni nombra `lista_graficas`/`grafica_actual`, cada `X.connect(self.Y)` de `graphicsWindow` y
      `setupTap1` resuelve `Y` en la MRO de `PruebaMensual600`, y con el 600 mensual real construido la pestana tiene combo, lienzo, tabla y la barra Eliminar/Editar/Aceptar/Cancelar/Buscar, y ningun
      boton «Anterior» o «Siguiente».
-  7. «ANALISIS IMG» QUEDA VACIA (G1-D1): `mostrar_controles_mensuales` para el 600, el iX y el Halcyon, sobre una BD sembrada y sobre la copia de la produccion del 06-10: la columna «Analisis Img»
-     (su encabezado se queda) no tiene widget ni item en ninguna fila; «Dif. Punt - Tel» sigue con su valor; las demas «Ver tabla» siguen con su boton.
+  7. «ANALISIS IMG» QUEDA VACIA (G1-D1; G.1b, DA-91): `mostrar_controles_mensuales` para el 600, el iX y el Halcyon, sobre una BD sembrada y sobre la copia de la produccion del 06-10: la columna «Analisis Img»
+     (su encabezado se queda) no tiene widget y lleva en cada fila UN item vacio, no editable y sin metadatos de tabla (G.1 la dejaba sin item; el fisico eligio la opcion (a) de G1-D1 el 26-10 y G.1b la hizo:
+     lo que hace «Editar» y el doble clic sobre ella lo fija `test_g1b_analisis_img_no_editable.py`); «Dif. Punt - Tel» sigue con su valor; las demas «Ver tabla» siguen con su boton.
   8. EL PDF DICE LO MISMO: sin N y sin V, `_secciones_de_la_placa` da `analisis_imagen` = el DataFrame de una fila «No hay datos de analisis de imagen» (igual a HEAD: la 8a no cae contra HEAD);
      el PDF del 600 y del iX ya no lee las dos tablas hermanas (G1-D2) y sigue leyendo `analisis_placa_franjas` (V de F.1).
   9. NINGUNA PANTALLA LLEGA A UN `analizar_imagen` DE `seiscientos_mensual.py` (la arista dinamica de `PruebasDiarias.py:1039`): solo braqui diario y el anual del Halcyon construyen el cargador
@@ -49,7 +50,7 @@ import pandas as pd
 import pytest
 from PyQt5 import sip
 from PyQt5.QtCore import QDate, Qt
-from PyQt5.QtWidgets import QApplication, QComboBox, QLineEdit, QPushButton, QTableWidget
+from PyQt5.QtWidgets import QApplication, QComboBox, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem
 
 import _bd_referencia
 import data.ManejoDatos.conection as conection_mod
@@ -900,15 +901,35 @@ def _columnas(tabla):
     return {tabla.horizontalHeaderItem(c).text(): c for c in range(tabla.columnCount())}
 
 
+def _problemas_del_item_vacio(tabla, fila, columna):
+    """Lo que le falta o le sobra a la celda para ser, desde G.1b (DA-91), la de «Analisis Img»: UN item de texto vacio, sin `Qt.ItemIsEditable`, con las MISMAS banderas que las demas celdas sin tabla de origen de
+    `mostrar_controles_mensuales` (un item nuevo al que solo se le quita lo editable: tambien seleccionable, que es lo que el plan pide con «igual que las demas»; `setFlags(Qt.ItemIsEnabled)` a secas no lo es), sin los
+    metadatos de tabla (`Qt.UserRole + 1`, que son lo que hace que «Editar» pida la contrasena) y SIN widget. Lista vacia = la celda es la esperada. La unica definicion: la usan esta prueba y `test_g1b_analisis_img_no_editable.py`."""
+    item = tabla.item(fila, columna)
+    if item is None:
+        return ["no tiene item (asi la dejaba G.1: «Editar» pedia la contrasena y luego decia «Celda vacia o no editable»)"]
+    problemas = []
+    if item.text() != "":
+        problemas.append(f"el texto no es vacio: {item.text()!r}")
+    if item.flags() & Qt.ItemIsEditable:
+        problemas.append("el item es editable")
+    elif int(item.flags()) != int(QTableWidgetItem().flags() & ~Qt.ItemIsEditable):                  # solo si no es editable: un item editable ya tiene su propio problema
+        problemas.append(f"las banderas son {int(item.flags())} y las de las demas celdas sin tabla de origen son {int(QTableWidgetItem().flags() & ~Qt.ItemIsEditable)}")
+    if item.data(Qt.UserRole + 1) is not None:
+        problemas.append(f"trae metadatos de tabla: {item.data(Qt.UserRole + 1)!r}")
+    if tabla.cellWidget(fila, columna) is not None:
+        problemas.append("tiene un widget")
+    return problemas
+
+
 def _verificar_la_tabla(tabla, familia):
-    """Lo que G1-D1 deja: la columna «Analisis Img» (con su encabezado) sin widget ni item en NINGUNA fila, y las demas «Ver tabla» con su boton en TODAS las filas."""
+    """Lo que G1-D1 deja (con G.1b, DA-91): la columna «Analisis Img» (con su encabezado) sin widget y con UN item vacio, no editable y sin metadatos en TODAS las filas, y las demas «Ver tabla» con su boton en TODAS las filas."""
     assert tabla.rowCount() > 0, "la prueba no puede ser vacua"
     columnas = _columnas(tabla)
     assert ANALISIS_IMG in columnas, "la columna y su encabezado se quedan"
     c = columnas[ANALISIS_IMG]
-    con_widget = [f for f in range(tabla.rowCount()) if tabla.cellWidget(f, c) is not None]
-    con_item = [f for f in range(tabla.rowCount()) if tabla.item(f, c) is not None]
-    assert (con_widget, con_item) == ([], []), f"«{ANALISIS_IMG}» debia quedar vacia: widgets en {con_widget}, items en {con_item}"
+    con_problemas = {f: p for f in range(tabla.rowCount()) if (p := _problemas_del_item_vacio(tabla, f, c))}
+    assert con_problemas == {}, f"«{ANALISIS_IMG}» debia llevar un item vacio y no editable en cada fila: {con_problemas}"
     con_boton = {nombre for nombre, col in columnas.items() if all(tabla.cellWidget(f, col) is not None and tabla.cellWidget(f, col).findChild(QPushButton) is not None for f in range(tabla.rowCount()))}
     assert con_boton == (TAL_CUAL_HALCYON if familia == "halcyon" else TAL_CUAL_600_IX), sorted(con_boton)
 
@@ -922,7 +943,7 @@ def _cargar_la_tabla(equipo):
 
 class TestAnalisisImgQuedaVacia:
     @pytest.mark.parametrize("familia", ["600", "ix", "halcyon"])
-    def test_sobre_una_base_sembrada_la_celda_no_tiene_widget_ni_item_y_las_demas_siguen(self, base_nueva, dialogos, familia):
+    def test_sobre_una_base_sembrada_la_celda_tiene_un_item_vacio_no_editable_y_las_demas_siguen(self, base_nueva, dialogos, familia):
         equipo = EQUIPOS[familia]
         ref = _sql(base_nueva, "INSERT INTO controles (equipo, control, fecha, user_id, activo) VALUES (?, 'Mensual', '15/03/2026', 'Fisico Uno', 1)", (equipo,))
         if familia != "halcyon":
@@ -946,7 +967,7 @@ class TestAnalisisImgQuedaVacia:
             cerrar(tabla)
 
     @pytest.mark.parametrize("familia", ["600", "ix", "halcyon"])
-    def test_sobre_la_copia_de_la_produccion_del_06_10_ninguna_fila_tiene_algo_en_la_celda(self, produccion, familia):
+    def test_sobre_la_copia_de_la_produccion_del_06_10_ninguna_fila_tiene_nada_en_la_celda_salvo_su_item_vacio(self, produccion, familia):
         equipo = EQUIPOS[familia]
         esperadas = _consulta(produccion, "SELECT COUNT(*) FROM controles WHERE equipo = ? AND control = 'Mensual' AND (activo IS NULL OR activo = 1)", (equipo,))[0][0]
         tabla = _cargar_la_tabla(equipo)

@@ -1499,7 +1499,7 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
                 crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_tam_campos(parent, r))
             )
 
-            # Cols 10–14 valores (preguntas); la 15, «Análisis Img», queda vacía (G.1)
+            # Cols 10–14 valores (preguntas); la 15, «Análisis Img», sin botón desde G.1 y con un ítem vacío y no editable desde G.1b (DA-91)
             for col, data in zip(range(10, 15), row_data[7:12]):
                 item = QTableWidgetItem(valor_a_texto(data))
                 header_meta = tableWidget.horizontalHeaderItem(col).data(Qt.UserRole)
@@ -1512,9 +1512,9 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 item.setTextAlignment(Qt.AlignCenter)
                 tableWidget.setItem(row_idx, col, item)
-
-
-
+            celda_vacia = QTableWidgetItem("")        # Col 15, «Análisis Img»: vacía, sin tabla de origen y no editable (G.1b, DA-91): «Editar» lo dice antes de pedir la contraseña
+            celda_vacia.setFlags(celda_vacia.flags() & ~Qt.ItemIsEditable)
+            tableWidget.setItem(row_idx, 15, celda_vacia)
             # Cols 16–19 valores (preguntas)
             for col, data in zip(range(16, 20), row_data[12:16]):
                 item = QTableWidgetItem(valor_a_texto(data))
@@ -1574,9 +1574,9 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
                 8,
                 crear_boton_tabla("Ver tabla", lambda _, r=id_ref: mostrar_tam_campos_HC(parent, r))
             )
-
-
-
+            celda_vacia = QTableWidgetItem("")        # Col 9, «Análisis Img»: vacía, sin tabla de origen y no editable (G.1b, DA-91): «Editar» lo dice antes de pedir la contraseña
+            celda_vacia.setFlags(celda_vacia.flags() & ~Qt.ItemIsEditable)
+            tableWidget.setItem(row_idx, 9, celda_vacia)
 
             valor_img = row_data[3]
             if valor_img:  # si no es None ni vacío
