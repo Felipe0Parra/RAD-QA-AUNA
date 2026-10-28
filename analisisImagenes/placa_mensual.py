@@ -64,7 +64,7 @@ import cv2
 import numpy as np
 from scipy import ndimage as ndi
 
-from analisisImagenes.pelicula import CAPAS_DEL_PISO, CLAVES_DE_LA_ESCALA, ESQUINAS, PARAMETROS_DEL_PISO, escala_mm, piso_de_pelicula
+from analisisImagenes.pelicula import CAPAS_DEL_PISO, CLAVES_DE_LA_ESCALA, ESQUINAS, FRACCION_DE_RECORTE_MAXIMA, MARGEN_DEL_RECORTE, MOTIVO_MESETA_RECORTADA, NIVEL_DE_RECORTE, PARAMETROS_DEL_PISO, escala_mm, meseta_recortada, piso_de_pelicula
 
 VERSION_ALGORITMO = "PM-1"
 
@@ -577,10 +577,10 @@ BASE_DENSIDAD_OPTICA = "densidad óptica neta"
 BASES = (BASE_DENSIDAD_OPTICA, BASE_VALOR_DE_PIXEL)
 BASE_POR_OMISION = BASE_DENSIDAD_OPTICA                        # EL lugar para cambiar la base del análisis (una línea): viaja como `PARAMETROS["base_de_la_medida"]` y cada análisis guarda la que usó
 VP_MINIMO = 0.5                                                # medio nivel de 8 bits: por debajo, el escáner recortó y log10(piso / v) no existe; se toma este piso del logaritmo (el del pre-vuelo `od_prevuelo.py`)
-NIVEL_DE_RECORTE = 1.5                                         # el NEGRO DEL ESCÁNER en la regla del recorte (solo netOD): una muestra de la meseta en este nivel o menos está recortada por el escáner (el rojo a 800 UM: la mediana de su meseta vale de 0.5 a 1.0 en las 8 películas; verde, azul y gris, 18 o más). LÍMITE CONOCIDO (OD1b-PROD-02, OD.1c): es un umbral ABSOLUTO; con un escáner cuyo negro estuviera en 2 niveles o más una meseta recortada no se reconocería y daría un ancho creíble. REAPERTURA: si cambia el escáner o sus ajustes, medir la mediana del rojo de una película a 800 UM en la zona central y, si pasa de 1.5, subir esta constante y su prueba
-FRACCION_DE_RECORTE_MAXIMA = 0.01                              # y más de esta fracción de la zona central recortada hace «no medible» a esa capa (logs/OD/od_recorte.log: de 0 % a 66 % no hay ninguna película en medio)
-MARGEN_DEL_RECORTE = 10.0                                      # OD.1c (OD1c-D1, vetable por el físico): la regla del recorte solo mira una meseta cuya MEDIANA vale NIVEL_DE_RECORTE más este margen o menos: el escáner solo recorta una meseta cerca de su negro; una muestra de 1.5 o menos dentro de una meseta más clara es tinta, polvo o un rayón (8 películas reales: mediana del rojo de 0.5 a 1.0; la más baja del verde 26.1, del azul 32.3 y del gris 18.6; ruido de la banda de 2.6 niveles como máximo)
-MOTIVO_MESETA_RECORTADA = "la meseta está recortada por el escáner"
+# CD.2: la regla del recorte de la netOD (NIVEL_DE_RECORTE, FRACCION_DE_RECORTE_MAXIMA, MARGEN_DEL_RECORTE y MOTIVO_MESETA_RECORTADA, de OD.1 y OD.1c) vive en `pelicula.meseta_recortada`, la
+# ÚNICA definición: la usan `medir_perfil` y la medición de una pieza de calibración (`pelicula.medir_pieza_uniforme`). Este módulo re-exporta las cuatro constantes con su nombre (el import
+# de arriba: `placa_mensual.NIVEL_DE_RECORTE` sigue valiendo 1.5); sus comentarios (los límites, la reapertura y lo medido en las 8 películas reales) se mudaron con ellas a `pelicula.py`.
+# Estas cuatro líneas ocupan las de sus antiguas definiciones: ninguna otra línea del módulo se mueve (Trampa 5).
 EJES = ("crossplane", "inplane")                            # crossplane = horizontal (recorre x, la banda promedia filas); inplane = vertical (recorre y, la banda promedia columnas)
 LADOS_DEL_EJE = {"crossplane": ("izquierdo", "derecho"), "inplane": ("superior", "inferior")}     # (menor, mayor) a lo largo del eje
 LADOS_DE_LA_COINCIDENCIA = ("izquierdo", "derecho", "superior", "inferior")
@@ -1116,9 +1116,9 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None)
     datos.update(meseta=meseta, muestras_meseta=int(sin_tinta.sum()))
     if not contraste >= P["contraste_minimo"]:
         return _no_medible(perfil, centro, f"el piso no es más claro que la meseta en al menos {P['contraste_minimo']:g} niveles (piso {piso:.1f}, meseta {meseta:.1f})", **datos)
-    if base == BASE_DENSIDAD_OPTICA and mediana <= NIVEL_DE_RECORTE + MARGEN_DEL_RECORTE:
-        recortada = float(np.mean(v[usables] <= NIVEL_DE_RECORTE))
-        if recortada > FRACCION_DE_RECORTE_MAXIMA:          # el escáner recortó la meseta (el rojo a 800 UM): el logaritmo de un valor recortado no es la densidad óptica y ninguna capa «con netOD» se inventa
+    if base == BASE_DENSIDAD_OPTICA:
+        recortada = meseta_recortada(v[usables])          # CD.2: la regla del recorte es UNA (`pelicula.meseta_recortada`): la mediana de la zona central cerca del negro del escáner y más de FRACCION_DE_RECORTE_MAXIMA de sus muestras en él
+        if recortada is not None:          # el escáner recortó la meseta (el rojo a 800 UM): el logaritmo de un valor recortado no es la densidad óptica y ninguna capa «con netOD» se inventa
             return _no_medible(perfil, centro, f"{MOTIVO_MESETA_RECORTADA}: el {100 * recortada:.0f} % de la zona central de la meseta vale {NIVEL_DE_RECORTE:g} niveles o menos y la densidad óptica no existe", **datos)
     datos.update(altura_media=nivel_de_la_base(base, P["altura_media"], piso, meseta), nivel_penumbra_alta=nivel_de_la_base(base, P["penumbra_alta"], piso, meseta),
                  nivel_penumbra_baja=nivel_de_la_base(base, P["penumbra_baja"], piso, meseta))

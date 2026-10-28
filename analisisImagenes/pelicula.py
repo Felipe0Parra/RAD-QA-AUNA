@@ -147,7 +147,7 @@ def escala_mm(dpi, P):
     escala (nadie más calcula 25.4 / dpi), y la escala es SIEMPRE la del procedimiento de escaneo
     (`resolucion_escaneo_dpi`, 600 dpi), nunca la que declara el archivo: Paint reescribe la resolución declarada
     (96) al recortar, sin remuestrear. Solo con una resolución "otra" (declarada y que ningún editor escribe) no hay
-    escala: es un escaneo a otra resolución y los milímetros saldrían falsos."""
+    escala: es un escaneo a otra resolución y los milímetros saldrían falsos. CD.2 (DC15): el procedimiento de una pieza de calibración es el de SU calibración, la resolución que declaran sus archivos (`medir_pieza_uniforme(..., escala="declarada")` la pone en `P`), y sigue siendo esta función la que vuelve esa resolución en escala."""
     if clase_resolucion(dpi, P) == "otra":
         return None
     return 25.4 / P["resolucion_escaneo_dpi"]
@@ -2043,16 +2043,22 @@ def _virgen_caja_de_la_pelicula(componente, origen, escala, forma):
             "pagina_mm": {"ancho": round(int(forma[1]) * escala, 1), "alto": round(int(forma[0]) * escala, 1)}}
 
 
-def piso_de_pelicula_virgen(datos, P, nombre_archivo="", fecha_calculo=None, orientacion_declarada=None):
-    """El piso medido en el escaneo de una película VIRGEN (sin irradiar), con las comprobaciones C1 a C7 de la investigación de A.3 (`borradores/A3/investigacion_pruebas_pelicula_virgen.md`):
-    una `ReferenciaVirgen` que dice si sirve («ok» o «no válida: <el primer rechazo>»), qué comprobó, de dónde salió el archivo y los parámetros con que lo midió. `datos`: los BYTES del
-    escaneo tal como lo entrega el escáner. `P`: la escala del procedimiento (`CLAVES_DE_LA_ESCALA`) y, si se quieren cambiar, los parámetros del piso y de la virgen (los que falten, de
-    fábrica). `fecha_calculo`: «AAAA-MM-DD» (por omisión, hoy). `orientacion_declarada`: la que declara el físico al cargarla («misma que la irradiada» o «girada»; no se mide).
+def _medicion(pruebas, procedencia, parametros, **medido):
+    """Lo que devuelve `_medir_zona_uniforme` (CD.2): las pruebas, la procedencia y los parámetros, y lo medido que haya; lo que no se llegó a medir, None."""
+    m = dict.fromkeys(("valores", "region", "medias", "tabla", "centro", "recortadas", "piezas", "escala_mm"))
+    m.update(pruebas=pruebas, procedencia=procedencia, parametros=parametros, **medido)
+    return m
 
-    NUNCA lanza por el contenido: una imagen que no sirve da una referencia «no válida» con las pruebas que se pudieron hacer. `ValueError` solo si `P` no trae la escala.
 
-    TODOS los umbrales de la virgen (`PARAMETROS_DE_LA_VIRGEN`) son PROPUESTAS de la investigación, sin una película virgen REAL detrás (el corpus no trae ninguna): hay que recalibrarlos con
-    los primeros escaneos vírgenes (deuda declarada, diseño de A.3 §12). La prueba `test_m` mide cada `VIRGEN*` que el físico deje en `ImagenesDeReferencia/PlacasHistoricas`."""
+def _medir_zona_uniforme(datos, P, nombre_archivo, fecha_calculo, orientacion_declarada, modo_escala, virgen):
+    """CD.2: LA medición de una zona uniforme de película, la ÚNICA (corolario 1). La hacen `piso_de_pelicula_virgen` (`virgen` True) y `medir_pieza_uniforme` (`virgen` False): la pieza de 0 cGy de
+    una calibración y la película virgen del análisis se miden con la misma regla y su densidad óptica es comparable. Mide la cadena de captura (C1), la zona (C2), el recorte y el fondo (C3), la tinta,
+    el ruido (C7), las motas (C6), los valores sin tinta ni motas, la uniformidad y el gradiente por bloques (C5), las rayas (C7), la media de cada capa y la tabla de uniformidad y ruido. Los juicios que
+    solo valen para una película SIN irradiar se hacen solo con `virgen`: el área mínima de una virgen (`area_minima_virgen_mm2`), el rango de una película sin irradiar (con la regla de «tan clara como el
+    fondo») y el azul testigo, y con ella la uniformidad con menos de `bloques_minimos_virgen` bloques rechaza (en una pieza, avisa). Sin `virgen` se miden además cuántas piezas de película hay en la
+    imagen (más de una rechaza: una pieza por imagen, DC14), la región central de `lado_region_uniformidad_virgen_mm` sin tinta ni motas (DC2; si no cabe, rechaza) y, por capa, si el escáner la
+    recortó (`meseta_recortada` sobre esa región). `modo_escala`: «procedimiento» (la resolución del procedimiento, D14) o «declarada» (la que declara el archivo, DC15: solo para una pieza; una resolución
+    ausente o de editor rechaza, y una tan baja que un bloque o la región central no llega a un píxel también: `LADOS_DE_LA_PIEZA_EN_MM`). Devuelve el `dict` de `_medicion`; con `virgen`, las pruebas y los valores son EXACTAMENTE los de `piso_de_pelicula_virgen` antes de CD.2."""
     P = {} if P is None else P
     faltan = [k for k in CLAVES_DE_LA_ESCALA if k not in P]
     if faltan:
@@ -2069,29 +2075,48 @@ def piso_de_pelicula_virgen(datos, P, nombre_archivo="", fecha_calculo=None, ori
         pelicula = leer_pelicula(datos)
     except Exception as error:
         pruebas.append(PruebaDeLaVirgen("C1 cadena", "rechazo", f"no se pudo leer el archivo: {error}"))
-        return _virgen_cerrar(pruebas, procedencia, parametros)
+        return _medicion(pruebas, procedencia, parametros)
     imagen_pil = _abrir_con_pillow(datos)
     calidad, submuestreo = (None, None) if imagen_pil is None else _jpeg_calidad_y_submuestreo(imagen_pil)
     procedencia.update({"formato": pelicula.formato, "bits": pelicula.bits, "dpi_declarado": None if pelicula.dpi is None else float(pelicula.dpi),
                         "clase_resolucion": clase_resolucion(pelicula.dpi, P), "forma": [int(n) for n in pelicula.validos.shape],
                         "fecha_escaneo": None if pelicula.fecha_escaneo is None else pelicula.fecha_escaneo.isoformat(),
                         "equipo": None if imagen_pil is None else _equipo_de_la_imagen(imagen_pil), "calidad_jpeg": calidad, "submuestreo": submuestreo})
+    if modo_escala == "declarada":
+        clase = procedencia["clase_resolucion"]
+        if clase in ("sin_dato", "editor"):
+            pruebas.append(PruebaDeLaVirgen("C1 cadena", "rechazo", MOTIVO_PIEZA_SIN_RESOLUCION if clase == "sin_dato" else
+                                            MOTIVO_PIEZA_RESOLUCION_DE_EDITOR.format(dpi=float(pelicula.dpi))))
+            return _medicion(pruebas, procedencia, parametros)
+        P = {**P, "resolucion_escaneo_dpi": float(pelicula.dpi)}       # el procedimiento de ESTA calibración: la resolución que declaran sus archivos (DC15); `escala_mm` la vuelve escala
+        procedencia["clase_resolucion"] = clase_resolucion(pelicula.dpi, P)
     escala = escala_mm(pelicula.dpi, P)
     if escala is None:
-        pruebas.append(PruebaDeLaVirgen("C1 cadena", "rechazo", f"la película virgen se escaneó a otra resolución ({pelicula.dpi:g} dpi) y no a la del procedimiento "
+        pruebas.append(PruebaDeLaVirgen("C1 cadena", "rechazo", f"{'la película virgen' if virgen else 'la pieza'} se escaneó a otra resolución ({pelicula.dpi:g} dpi) y no a la del procedimiento "
                                                                 f"({P['resolucion_escaneo_dpi']:g} dpi): sin esa escala no hay milímetros con que medirla"))
-        return _virgen_cerrar(pruebas, procedencia, parametros)
+        return _medicion(pruebas, procedencia, parametros)
+    if modo_escala == "declarada":           # CD2-PROD-01 (ronda 1): el contenido del archivo se volvió escala; si con ella un lado de la medición (un bloque, la región central) no llega a un píxel no hay con qué medir
+        for parametro, que in LADOS_DE_LA_PIEZA_EN_MM:
+            if int(round(v[parametro] / escala)) < 1:
+                pruebas.append(PruebaDeLaVirgen("C1 cadena", "rechazo", MOTIVO_PIEZA_RESOLUCION_DEMASIADO_BAJA.format(dpi=float(pelicula.dpi), que=que, lado=v[parametro])))
+                return _medicion(pruebas, procedencia, parametros)
     pruebas.append(_virgen_cadena(pelicula, procedencia, calidad, submuestreo, v))
+    piezas = None
+    if not virgen:
+        piezas = _piezas_en_la_imagen(pelicula, p, escala, v["lado_region_uniformidad_virgen_mm"] ** 2)
+        if piezas > 1:
+            pruebas.append(PruebaDeLaVirgen("C2 zona", "rechazo", f"hay {piezas} piezas de película en la imagen: suba una pieza por imagen"))
+            return _medicion(pruebas, procedencia, parametros, piezas=piezas, escala_mm=escala)
     limpieza = _piso_pelicula_limpia(pelicula, escala, p, v["margen_borde_virgen_mm"], True, v["distancia_fondo_mm"])
     if isinstance(limpieza, str):
         pruebas.append(PruebaDeLaVirgen("C2 zona", "rechazo", "no hay película en la imagen (todo es fondo del escáner o no tiene dato)"))
-        return _virgen_cerrar(pruebas, procedencia, parametros)
+        return _medicion(pruebas, procedencia, parametros, piezas=piezas, escala_mm=escala)
     roi, componente, origen = limpieza
     area = float(np.count_nonzero(roi)) * escala * escala
-    if area < v["area_minima_virgen_mm2"]:
+    if virgen and area < v["area_minima_virgen_mm2"]:
         pruebas.append(PruebaDeLaVirgen("C2 zona", "rechazo", f"no hay película virgen suficiente a {v['margen_borde_virgen_mm']:g} mm de los bordes ({area:.0f} mm²; hacen falta "
                                                               f"{v['area_minima_virgen_mm2']:g})"))
-        return _virgen_cerrar(pruebas, procedencia, parametros)
+        return _medicion(pruebas, procedencia, parametros)
     pruebas.append(PruebaDeLaVirgen("C2 zona", "ok", f"{area:.0f} mm² a {v['margen_borde_virgen_mm']:g} mm o más de los bordes"))
     ox, oy = origen
     alto_w, ancho_w = roi.shape
@@ -2114,12 +2139,15 @@ def piso_de_pelicula_virgen(datos, P, nombre_archivo="", fecha_calculo=None, ori
     pruebas.append(prueba_de_motas)
     usar = roi & ~tinta & ~motas
     if not usar.any():
-        pruebas.append(PruebaDeLaVirgen("rango", "rechazo", "no queda película limpia (sin tinta ni motas) en la zona medida"))
-        return _virgen_cerrar(pruebas, procedencia, parametros)
+        pruebas.append(PruebaDeLaVirgen("rango" if virgen else "C2 zona", "rechazo", "no queda película limpia (sin tinta ni motas) en la zona medida"))
+        return _medicion(pruebas, procedencia, parametros, piezas=piezas, escala_mm=escala)
     valores, como_fondo = _virgen_valores(planos, usar, p)
-    prueba_de_rango, prueba_del_azul = _virgen_rango_y_testigo(valores, como_fondo, p, v)
-    pruebas += [prueba_de_rango, prueba_del_azul]
+    if virgen:
+        prueba_de_rango, prueba_del_azul = _virgen_rango_y_testigo(valores, como_fondo, p, v)
+        pruebas += [prueba_de_rango, prueba_del_azul]
     uniformidad, gradiente, gradientes = _virgen_uniformidad_y_gradiente(_virgen_bloques(planos, roi, usar, v, escala), v)
+    if not virgen and uniformidad.resultado == "rechazo":            # en una pieza la uniformidad entre bloques solo se informa: su valor es la región central (DC2)
+        uniformidad = PruebaDeLaVirgen(uniformidad.nombre, "aviso", uniformidad.texto + ": la uniformidad entre bloques no se juzga")
     pruebas.append(uniformidad)
     if gradiente is not None:
         pruebas.append(gradiente)
@@ -2127,7 +2155,149 @@ def piso_de_pelicula_virgen(datos, P, nombre_archivo="", fecha_calculo=None, ori
     filas, columnas = np.flatnonzero(usar.any(axis=1)), np.flatnonzero(usar.any(axis=0))
     region = {"caja": [int(columnas[0]) + ox, int(filas[0]) + oy, int(columnas[-1]) + 1 + ox, int(filas[-1]) + 1 + oy], "n": valores["G"][1], "area_mm2": round(area, 1), **donde}
     tabla = uniformidad_y_ruido(planos, roi, escala, v, origen, gradientes)
-    return _virgen_cerrar(pruebas, procedencia, parametros, valores, region, _virgen_media(planos, roi, p), tabla)
+    centro, recortadas = None, None
+    if not virgen:
+        centro, recortadas, prueba_del_centro = _pieza_region_central(planos, usar, tabla, origen, v)
+        if prueba_del_centro is not None:
+            pruebas.append(prueba_del_centro)
+    return _medicion(pruebas, procedencia, parametros, valores=valores, region=region, medias=_virgen_media(planos, roi, p), tabla=tabla, centro=centro, recortadas=recortadas,
+                     piezas=piezas, escala_mm=escala)
+
+
+def piso_de_pelicula_virgen(datos, P, nombre_archivo="", fecha_calculo=None, orientacion_declarada=None):
+    """El piso medido en el escaneo de una película VIRGEN (sin irradiar), con las comprobaciones C1 a C7 de la investigación de A.3 (`borradores/A3/investigacion_pruebas_pelicula_virgen.md`):
+    una `ReferenciaVirgen` que dice si sirve («ok» o «no válida: <el primer rechazo>»), qué comprobó, de dónde salió el archivo y los parámetros con que lo midió. `datos`: los BYTES del
+    escaneo tal como lo entrega el escáner. `P`: la escala del procedimiento (`CLAVES_DE_LA_ESCALA`) y, si se quieren cambiar, los parámetros del piso y de la virgen (los que falten, de
+    fábrica). `fecha_calculo`: «AAAA-MM-DD» (por omisión, hoy). `orientacion_declarada`: la que declara el físico al cargarla («misma que la irradiada» o «girada»; no se mide).
+
+    NUNCA lanza por el contenido: una imagen que no sirve da una referencia «no válida» con las pruebas que se pudieron hacer. `ValueError` solo si `P` no trae la escala.
+
+    TODOS los umbrales de la virgen (`PARAMETROS_DE_LA_VIRGEN`) son PROPUESTAS de la investigación, sin una película virgen REAL detrás (el corpus no trae ninguna): hay que recalibrarlos con
+    los primeros escaneos vírgenes (deuda declarada, diseño de A.3 §12). La prueba `test_m` mide cada `VIRGEN*` que el físico deje en `ImagenesDeReferencia/PlacasHistoricas`.
+
+    CD.2: es la medición única de una zona uniforme (`_medir_zona_uniforme`, la misma de una pieza de calibración, `medir_pieza_uniforme`) con los juicios de una película sin irradiar (el área mínima,
+    el rango y el azul testigo); su `ReferenciaVirgen` es la de antes de CD.2, `como_dict()` byte a byte."""
+    m = _medir_zona_uniforme(datos, P, nombre_archivo, fecha_calculo, orientacion_declarada, "procedimiento", True)
+    return _virgen_cerrar(m["pruebas"], m["procedencia"], m["parametros"], m["valores"], m["region"], m["medias"], m["tabla"])
+
+
+# ============================================================================= CD.2: la medición de una pieza de película uniforme (una pieza de calibración) y la regla del recorte
+
+# La regla del recorte de la netOD (OD.1, OD.1c), la ÚNICA: la usan `placa_mensual.medir_perfil` (que re-exporta estas cuatro constantes con su nombre) y la medición de una pieza.
+NIVEL_DE_RECORTE = 1.5                                         # el NEGRO DEL ESCÁNER en la regla del recorte (solo netOD): una muestra de la meseta en este nivel o menos está recortada por el escáner (el rojo a 800 UM: la mediana de su meseta vale de 0.5 a 1.0 en las 8 películas; verde, azul y gris, 18 o más). LÍMITE CONOCIDO (OD1b-PROD-02, OD.1c): es un umbral ABSOLUTO; con un escáner cuyo negro estuviera en 2 niveles o más una meseta recortada no se reconocería y daría un ancho creíble. REAPERTURA: si cambia el escáner o sus ajustes, medir la mediana del rojo de una película a 800 UM en la zona central y, si pasa de 1.5, subir esta constante y su prueba
+FRACCION_DE_RECORTE_MAXIMA = 0.01                              # y más de esta fracción de la zona central recortada hace «no medible» a esa capa (logs/OD/od_recorte.log: de 0 % a 66 % no hay ninguna película en medio)
+MARGEN_DEL_RECORTE = 10.0                                      # OD.1c (OD1c-D1, vetable por el físico): la regla del recorte solo mira una meseta cuya MEDIANA vale NIVEL_DE_RECORTE más este margen o menos: el escáner solo recorta una meseta cerca de su negro; una muestra de 1.5 o menos dentro de una meseta más clara es tinta, polvo o un rayón (8 películas reales: mediana del rojo de 0.5 a 1.0; la más baja del verde 26.1, del azul 32.3 y del gris 18.6; ruido de la banda de 2.6 niveles como máximo)
+MOTIVO_MESETA_RECORTADA = "la meseta está recortada por el escáner"
+
+ESCALAS_DE_LA_PIEZA = ("procedimiento", "declarada")        # DC15: «procedimiento» = la resolución del procedimiento (la virgen y la mensual, 600 ppp); «declarada» = la que declaran los archivos de la calibración
+PREFIJO_NO_MEDIBLE = "no medible: "
+MOTIVO_PIEZA_SIN_RESOLUCION = ("la pieza no declara la resolución con que se escaneó: sin ella la región central de 10 × 10 mm tendría otro tamaño (escanee la pieza y suba el archivo tal como "
+                               "lo entrega el escáner)")
+MOTIVO_PIEZA_RESOLUCION_DE_EDITOR = ("la pieza declara {dpi:g} dpi, la resolución que escribe un editor al guardar un recorte y no la del escaneo: sin la del escaneo la región central de "
+                                     "10 × 10 mm tendría otro tamaño (suba el archivo tal como lo entrega el escáner)")
+MOTIVO_PIEZA_RESOLUCION_DEMASIADO_BAJA = ("la pieza declara {dpi:g} dpi, una resolución tan baja que {que} de {lado:g} × {lado:g} mm no llega a un píxel: no hay con qué medirla (suba el archivo tal como lo entrega "
+                                          "el escáner)")
+LADOS_DE_LA_PIEZA_EN_MM = (("lado_bloque_virgen_mm", "un bloque"), ("lado_region_uniformidad_virgen_mm", "la región central"))      # CD2-PROD-01 (ronda 1): los lados, en mm, que la resolución que declara una pieza tiene que poder volver en AL MENOS un píxel: `_virgen_bloques` y `uniformidad_y_ruido` los redondean a píxeles enteros y un lado de 0 no mide nada (el bloque de 5 mm manda con los parámetros de fábrica: 2.54 dpi o menos)
+
+
+def meseta_recortada(valores):
+    """La regla del recorte (OD.1, OD.1c), la ÚNICA: la fracción de `valores` (las muestras de una meseta, en niveles de 8 bits) que vale `NIVEL_DE_RECORTE` o menos, si la meseta está recortada por
+    el escáner; None si no lo está. Solo se mira una meseta cuya MEDIANA vale `NIVEL_DE_RECORTE + MARGEN_DEL_RECORTE` o menos (cerca del negro del escáner, el único lugar donde la puede recortar:
+    una muestra de ese nivel dentro de una meseta más clara es tinta, polvo o un rayón), y está recortada si más de `FRACCION_DE_RECORTE_MAXIMA` de sus muestras vale `NIVEL_DE_RECORTE` o menos.
+    La usan `placa_mensual.medir_perfil` (en netOD) y `medir_pieza_uniforme` (la región central de cada capa). Sin muestras, None."""
+    v = np.asarray(valores)
+    if not v.size:
+        return None
+    mediana = float(np.median(v))
+    if not mediana <= NIVEL_DE_RECORTE + MARGEN_DEL_RECORTE:
+        return None
+    recortada = float(np.mean(v <= NIVEL_DE_RECORTE))
+    if recortada > FRACCION_DE_RECORTE_MAXIMA:
+        return recortada
+    return None
+
+
+@dataclass(frozen=True, eq=False)
+class MedidaDePieza:
+    """CD.2: la medición de UNA pieza de película uniforme (una pieza de calibración, irradiada a una dosis, o la de 0 cGy): la de la película virgen (`_medir_zona_uniforme`) sin los juicios de
+    una película sin irradiar. `estado`: «ok» o «no medible: <el primer rechazo>»; `capas`: R, G, B y gris (`CapaDelPiso` con la mediana, la media, el n y el IQR de la zona medida sin tinta ni
+    motas, como la virgen; sin número si no es «ok»); `centro`: {capa: {"media", "n", "desviacion"}} de la región central de `lado_region_uniformidad_virgen_mm` (10 × 10 mm, la caja «centro» de
+    la tabla de uniformidad) sin tinta ni motas, el VALOR de la pieza (DC2), o None si no es «ok»; `recortadas`: {capa: la fracción de la región central en el negro del escáner si la capa está
+    recortada (`meseta_recortada`), o None}, o None si la pieza no es «ok»; `piezas`: cuántas piezas de película hay en la imagen; `pruebas`, `avisos`, `region`, `procedencia`, `parametros` y
+    `uniformidad` como en `ReferenciaVirgen` (la `region`, None si no es «ok», como la de una virgen que no sirve); `escala`: «procedimiento» o «declarada» (DC15) y `escala_mm`, los mm por píxel con que
+    se midió (None si no hubo escala). R1-PRU-04 (ronda 1): una pieza que no es «ok» no trae NINGÚN número medido (ni capas, ni centro, ni región, ni recortes), sea cual sea la causa; conserva lo que
+    explica el rechazo: el estado y las pruebas, los avisos, la procedencia, los parámetros, cuántas piezas hay, la escala y la tabla de uniformidad si se llegó a medir."""
+    estado: str
+    capas: dict
+    centro: dict | None
+    recortadas: dict | None
+    piezas: int | None
+    pruebas: tuple
+    avisos: tuple
+    region: dict | None
+    procedencia: dict
+    parametros: dict
+    uniformidad: dict | None
+    escala: str
+    escala_mm: float | None
+
+    def valor(self, capa):
+        """El valor de una capa (R, G, B o gris) de la pieza: la media de su región central sin tinta ni motas (DC2), o None si la pieza no es «ok»."""
+        return None if self.centro is None else self.centro[capa]["media"]
+
+
+def _piezas_en_la_imagen(pelicula, p, escala, area_minima_mm2):
+    """Cuántas piezas de película hay en la imagen (CD.2, DC14): las zonas conexas de película (con dato y no fondo, la máscara de A.2) de `area_minima_mm2` o más, que es lo que ocupa la región
+    central de una pieza; lo más chico es polvo, una marca o un fleco del corte, no una pieza."""
+    mascara = _piso_mascara_de_pelicula(pelicula, p["umbral_fondo"])
+    _, _, estadisticas, _ = cv2.connectedComponentsWithStats(mascara.view(np.uint8), connectivity=8)
+    del mascara
+    return int(np.count_nonzero(estadisticas[1:, cv2.CC_STAT_AREA] * escala * escala >= area_minima_mm2))
+
+
+def _pieza_region_central(planos, usar, tabla, origen, v):
+    """(centro, recortadas, prueba o None) de una pieza: la región «centro» de la tabla de uniformidad y ruido (la misma caja de 10 × 10 mm), su media, n y desviación por capa SIN tinta ni motas
+    (`usar`), y por capa la regla del recorte sobre TODA la región (como `medir_perfil` sobre su zona central). Si la región no cabe en la película a `margen_borde_virgen_mm` de sus bordes, o queda
+    toda cubierta de tinta o motas, la prueba «C2 zona» la rechaza."""
+    caja = tabla["regiones"]["centro"]["caja"]
+    lado = tabla["lado_mm"]
+    if caja is None:
+        return None, None, PruebaDeLaVirgen("C2 zona", "rechazo", f"no cabe la región central de {lado:g} × {lado:g} mm en la película a {v['margen_borde_virgen_mm']:g} mm o más de sus "
+                                                                   "bordes")
+    ox, oy = origen
+    x0, y0, x1, y1 = caja
+    ventana = (slice(y0 - oy, y1 - oy), slice(x0 - ox, x1 - ox))
+    limpia = usar[ventana]
+    recortadas = {c: meseta_recortada(planos[c][ventana].ravel()) for c in CAPAS_DEL_PISO}
+    n = int(np.count_nonzero(limpia))
+    if not n:
+        return None, recortadas, PruebaDeLaVirgen("C2 zona", "rechazo", f"la región central de {lado:g} × {lado:g} mm está toda cubierta de tinta o motas")
+    centro = {}
+    for c in CAPAS_DEL_PISO:
+        a = planos[c][ventana][limpia]
+        centro[c] = {"media": float(a.mean(dtype=np.float64)), "n": n, "desviacion": float(a.std(dtype=np.float64))}
+    return centro, recortadas, None
+
+
+def medir_pieza_uniforme(datos, P, nombre_archivo="", fecha_calculo=None, escala="procedimiento"):
+    """CD.2: la medición de UNA pieza de película uniforme (una pieza de calibración) -> `MedidaDePieza`. Es `_medir_zona_uniforme`, LA misma medición de la película virgen, sin los juicios de una
+    película sin irradiar: una pieza a 800 cGy está fuera del rango de una virgen por definición. `datos`: los BYTES del escaneo; `P`: como en `piso_de_pelicula_virgen`; `escala`: «procedimiento» (la
+    resolución del procedimiento, por omisión) o «declarada» (DC15: la que declara el archivo, la de las piezas de una calibración; una resolución ausente, de editor o tan baja que un bloque o la región central no llega a un píxel da «no medible»
+    con su motivo). NUNCA lanza por el contenido; `ValueError` si `P` no trae la escala o `escala` no es una de `ESCALAS_DE_LA_PIEZA`. No cambia la `P` de quien llama (la resolución declarada va en una copia)."""
+    if escala not in ESCALAS_DE_LA_PIEZA:
+        raise ValueError(f"La escala de una pieza es una de {', '.join(ESCALAS_DE_LA_PIEZA)}, no {escala!r}.")
+    m = _medir_zona_uniforme(datos, P, nombre_archivo, fecha_calculo, None, escala, False)
+    pruebas = tuple(m["pruebas"])
+    avisos = tuple(prueba.texto for prueba in pruebas if prueba.resultado == "aviso")
+    rechazos = [prueba.texto for prueba in pruebas if prueba.resultado == "rechazo"]
+    if rechazos or m["valores"] is None or m["centro"] is None:
+        estado = PREFIJO_NO_MEDIBLE + (rechazos[0] if rechazos else "no se pudo medir la pieza")
+        capas, centro, region, recortadas = {c: CapaDelPiso(c, estado) for c in CAPAS_DEL_PISO}, None, None, None       # R1-PRU-04 (ronda 1): sin número medido, como la virgen que no sirve (`_virgen_cerrar`)
+    else:
+        estado = "ok"
+        capas = {c: CapaDelPiso(c, "ok", mediana, n, iqr, None, None, m["medias"][c]) for c, (mediana, n, iqr) in m["valores"].items()}
+        centro, region, recortadas = m["centro"], m["region"], m["recortadas"]
+    return MedidaDePieza(estado, capas, centro, recortadas, m["piezas"], pruebas, avisos, region, m["procedencia"], m["parametros"], m["tabla"], escala, m["escala_mm"])
 
 
 # ============================================================================= A.3: la referencia de la película virgen junto a la base de datos (un JSON, sin tabla nueva)
@@ -2155,10 +2325,10 @@ def _escribir_sin_pisar(destino, contenido, binario):
         raise
 
 
-def _copiar_el_escaneo(carpeta, referencia, datos):
-    """Copia el escaneo a `carpeta/piso_pelicula_virgen_escaneos/<sha256><extensión>` si no está. Si ya hay un archivo con ese nombre se comprueba que su contenido sea el mismo: nunca se sobrescribe."""
+def _copiar_el_escaneo(carpeta, referencia, datos, subcarpeta=CARPETA_ESCANEOS_VIRGEN):
+    """Copia el escaneo a `carpeta/<subcarpeta>/<sha256><extensión>` si no está (por omisión `piso_pelicula_virgen_escaneos`; CD.2: la calibración pasa la suya, y `referencia` es todo lo que trae la `procedencia` del escaneo: una `ReferenciaVirgen` o una `MedidaDePieza`). Si ya hay un archivo con ese nombre se comprueba que su contenido sea el mismo: nunca se sobrescribe."""
     sha = referencia.procedencia["sha256"]
-    carpeta_de_escaneos = os.path.join(carpeta, CARPETA_ESCANEOS_VIRGEN)
+    carpeta_de_escaneos = os.path.join(carpeta, subcarpeta)
     os.makedirs(carpeta_de_escaneos, exist_ok=True)
     destino = os.path.join(carpeta_de_escaneos, sha + _extension_del_escaneo(referencia.procedencia))
     if os.path.exists(destino):

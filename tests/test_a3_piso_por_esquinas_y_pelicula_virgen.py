@@ -2484,18 +2484,24 @@ class TestEstructura:
         for n in ast.walk(arbol):
             if isinstance(n, ast.FunctionDef) and n.name != "escala_mm":
                 assert 25.4 not in [c.value for c in ast.walk(n) if isinstance(c, ast.Constant) and isinstance(c.value, float)], f"{n.name} divide 25.4"
-        for nombre in ("piso_de_pelicula", "piso_de_pelicula_virgen"):
-            f = next(n for n in arbol.body if isinstance(n, ast.FunctionDef) and n.name == nombre)
-            assert "escala_mm" in {c.func.id for c in ast.walk(f) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}, nombre
+        # CD.2 (22-10, clase b del paso 2): la medición de la virgen vive en `_medir_zona_uniforme`, la ÚNICA medición de una zona uniforme (la de la virgen y la de una pieza de calibración):
+        # la escala sale de `escala_mm` ahí, y `piso_de_pelicula_virgen` y `medir_pieza_uniforme` la llaman. Antes la llamada estaba en el cuerpo de `piso_de_pelicula_virgen`.
+        llamadas = {n.name: {c.func.id for c in ast.walk(n) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)} for n in arbol.body if isinstance(n, ast.FunctionDef)}
+        for nombre in ("piso_de_pelicula", "_medir_zona_uniforme"):
+            assert "escala_mm" in llamadas[nombre], nombre
+        for nombre in ("piso_de_pelicula_virgen", "medir_pieza_uniforme"):
+            assert "_medir_zona_uniforme" in llamadas[nombre], nombre
 
     def test_k_ningun_literal_de_un_parametro_vive_en_las_funciones_del_piso_ni_de_la_virgen(self):
         """Un literal escrito en la funcion ignora el parametro que se guarda con cada analisis. Se buscan los valores bastante distintivos: los de A.2 (235, 2000, 170, 0.10) y los del
         diseño (25 niveles de tinta, 15 de IQR, 11 mm del respaldo, 0.05 y 0.20, 10 de contraste); y los de la virgen (400 mm2, 10000 pixeles, 0.995, los umbrales de recorte, 75 y 95)."""
         _, arbol = _fuente("analisisImagenes/pelicula.py")
         prohibidos = {235, 2000, 170, 0.10, 15, 11, 0.05, 0.20, 10, 0.995, 400, 10000, 0.001, 0.0001, 0.0005, 0.02, 95, 145, 140, 200, 65, 110, 60}
-        funciones = [n for n in arbol.body if isinstance(n, ast.FunctionDef) and (n.name.startswith(("piso_de_pelicula", "_piso", "_region", "_virgen", "_respaldo")))]
+        # CD.2 (22-10, clase b): la medición de la virgen se mudó a `_medir_zona_uniforme` y la de una pieza la comparte; sin estos prefijos el tripwire dejaría de mirar el cuerpo mudado.
+        funciones = [n for n in arbol.body if isinstance(n, ast.FunctionDef) and (n.name.startswith(("piso_de_pelicula", "_piso", "_region", "_virgen", "_respaldo", "_medir", "_medicion", "_pieza",
+                                                                                                    "medir_pieza", "meseta_recortada")))]
         assert len(funciones) >= 12, [f.name for f in funciones]
-        assert any(f.name == "piso_de_pelicula_virgen" for f in funciones)
+        assert any(f.name == "piso_de_pelicula_virgen" for f in funciones) and any(f.name == "_medir_zona_uniforme" for f in funciones)
         for f in funciones:
             for c in ast.walk(f):
                 if isinstance(c, ast.Constant) and not isinstance(c.value, bool) and isinstance(c.value, (int, float)):
