@@ -145,6 +145,44 @@ MISMO_ARCHIVO = {"PLACA_REF6": "EPSON001_JPG"}
 # Las películas de braqui que `tests/datos/` ya guarda (nombre del archivo en `tests/datos/`): deben ser idénticas a las del corpus.
 COPIAS_EN_EL_REPO = {"BRAQUI_00_JPEG": "braqui_00.jpeg", "EPSON009": "EPSON009.jpeg", "EPSON031": "EPSON031.JPG"}
 
+# CD.3 (29-10-2026, PLAN_CURVA_DOSIS_PELICULAS_22-10.md, H9): las 21 PIEZAS DE CALIBRACION reales que dio el fisico el 22-10, en `ImagenesDeReferencia/Calibracion/` (SOLO LECTURA): recortes de unos
+# 18 mm de pelicula irradiados a 5, 50, 100 y de ahi cada 50 hasta 1000 cGy (el nombre es la dosis nominal; no traen la medida de la camara), escaneados en una Epson Expression 12000XL (transmision,
+# 16 bits, 150 ppp; el EXIF se perdio al recortarlos con GIMP). Raiz y registro APARTE de las peliculas (otra carpeta y otro tipo de dato), como PELICULAS_VIRGENES: las pruebas de A.1 y PF.0 iteran
+# `todas_las_peliculas_declaradas()` y la de PR.0 cuenta `peliculas_vigiladas_por_pr0()`. La regla de PR.0 se aplica igual, con `piezas_de_calibracion_que_faltan()`: si la carpeta existe y falta una
+# pieza, la prueba que las usa FALLA nombrandola; si la carpeta no existe, salta (HI-0).
+PIEZAS_DE_CALIBRACION_RAIZ = os.path.expanduser("~/Documents/CodigosPython/ImagenesDeReferencia/Calibracion")
+PIEZAS_DE_CALIBRACION = {dosis: f"{dosis}.tif" for dosis in (5, 50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000)}      # dosis nominal (cGy) -> archivo
+# La medida independiente del 22-10 de esas 21 piezas (OpenCV, sin nada de la app: `PLAN_CURVA_DOSIS_PELICULAS_22-10_anexo/logs/piezas_calibracion_22-10.log`, `scripts/piezas_calibracion.py`): la media
+# de la region central de 10 x 10 mm de cada capa, en niveles de 8 bits, {dosis nominal: (R, G, B)}. Contra ella se comprueban la medicion de CD.2 y la curva de CD.3 (CD2-M2: CD.3 la muda aqui).
+MEDIA_DE_LAS_PIEZAS_22_10 = {
+    5: (156.57, 150.74, 111.03), 50: (138.3, 138.02, 106.33), 100: (125.2, 128.71, 103.52),
+    150: (115.03, 120.0, 100.26), 200: (107.02, 112.39, 97.22), 250: (100.4, 106.3, 94.44),
+    300: (94.33, 100.72, 91.65), 350: (88.84, 95.64, 89.02), 400: (86.16, 92.44, 87.89),
+    450: (81.44, 88.09, 85.66), 500: (79.42, 85.47, 84.31), 550: (76.03, 82.58, 82.46),
+    600: (73.11, 79.63, 80.77), 650: (70.46, 76.37, 78.75), 700: (69.09, 74.77, 78.43),
+    750: (67.1, 72.32, 77.07), 800: (65.26, 70.34, 75.84), 850: (63.18, 67.99, 73.88),
+    900: (60.94, 65.89, 72.18), 950: (59.31, 64.01, 71.16), 1000: (58.54, 62.83, 70.63),
+}
+
+
+def piezas_de_calibracion_que_faltan():
+    """La regla de PR.0 para las piezas de calibracion: None si la carpeta de las piezas no existe (no hay corpus en esta maquina: la prueba salta); si existe, la lista ORDENADA de las dosis cuya pieza
+    falta (vacia si estan todas). Un archivo de 0 bytes y una carpeta con el nombre de la pieza no cuentan como la pieza."""
+    if not os.path.isdir(PIEZAS_DE_CALIBRACION_RAIZ):
+        return None
+
+    def presente(relativa):
+        ruta = os.path.join(PIEZAS_DE_CALIBRACION_RAIZ, relativa)
+        return os.path.isfile(ruta) and os.path.getsize(ruta) > 0
+
+    return sorted(dosis for dosis, relativa in PIEZAS_DE_CALIBRACION.items() if not presente(relativa))
+
+
+def ruta_de_pieza_de_calibracion(dosis):
+    """Ruta a una pieza de calibracion real (por su dosis nominal), o None si no existe (skip honesto)."""
+    ruta = os.path.join(PIEZAS_DE_CALIBRACION_RAIZ, PIEZAS_DE_CALIBRACION[dosis])
+    return ruta if os.path.isfile(ruta) else None
+
 
 def peliculas_vigiladas_por_pr0():
     """`{clave: archivo relativo a PELICULAS_RAIZ}` de TODAS las peliculas que la regla de PR.0 vigila (si la carpeta existe, tienen que estar todas): las declaradas (mensuales y de braqui) MAS las virgenes de OD.1 (`PELICULAS_VIRGENES`,

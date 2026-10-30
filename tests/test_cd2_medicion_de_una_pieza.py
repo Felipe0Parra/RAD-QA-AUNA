@@ -81,17 +81,9 @@ BAJA = ("la pieza declara {dpi} dpi, una resolución tan baja que {que} de {lado
 SIN_PELICULA = "no hay película en la imagen (todo es fondo del escáner o no tiene dato)"
 
 # La medida independiente del 22-10 de las 21 piezas de H9 (`logs/piezas_calibracion_22-10.log` del anexo, `scripts/piezas_calibracion.py`: OpenCV, sin nada de la app): la media de la region central de 10 x 10 mm
-# de cada capa, en niveles de 8 bits. {dosis en cGy: (R, G, B)}.
-H9_MEDIAS = {
-    5: (156.57, 150.74, 111.03), 50: (138.3, 138.02, 106.33), 100: (125.2, 128.71, 103.52),
-    150: (115.03, 120.0, 100.26), 200: (107.02, 112.39, 97.22), 250: (100.4, 106.3, 94.44),
-    300: (94.33, 100.72, 91.65), 350: (88.84, 95.64, 89.02), 400: (86.16, 92.44, 87.89),
-    450: (81.44, 88.09, 85.66), 500: (79.42, 85.47, 84.31), 550: (76.03, 82.58, 82.46),
-    600: (73.11, 79.63, 80.77), 650: (70.46, 76.37, 78.75), 700: (69.09, 74.77, 78.43),
-    750: (67.1, 72.32, 77.07), 800: (65.26, 70.34, 75.84), 850: (63.18, 67.99, 73.88),
-    900: (60.94, 65.89, 72.18), 950: (59.31, 64.01, 71.16), 1000: (58.54, 62.83, 70.63),
-}
-CARPETA_DE_H9 = Path(os.path.dirname(_corpus.PELICULAS_RAIZ)) / "Calibracion"
+# de cada capa, en niveles de 8 bits. {dosis en cGy: (R, G, B)}. CD.3 (CD2-M2) la mudo a `tests/_corpus.py`, con la lista de las piezas y su carpeta: una sola definicion.
+H9_MEDIAS = _corpus.MEDIA_DE_LAS_PIEZAS_22_10
+CARPETA_DE_H9 = Path(_corpus.PIEZAS_DE_CALIBRACION_RAIZ)
 
 # Lo que `piso_de_pelicula_virgen` de HEAD (99aac85) da en cada escena, medido el 28-10 ANTES de tocar produccion y escrito aqui tal cual (JSON: listas y numeros). Los flotantes se comparan a 1e-9.
 TABLA_PLANA = {'cabe': True,
