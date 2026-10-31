@@ -362,6 +362,18 @@ ALLOWLIST = {
     # test_a6_6_auditoria_braquiterapia.py, ambos en verde.
     ("data/ManejoDatos/load.py", "guardar_resultado_CambioFuente"):
         "delegada-en:services/anulacion.py::reemplazar_bloque",
+    # CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, 30-10): `services/curva_dosis.py::guardar`
+    # guarda una calibracion de pelicula (raiz `calibracion_pelicula` y sus piezas)
+    # en UNA transaccion y la fila de auditoria de la accion (`guardar` o `reemplazo`,
+    # con el lote, la fecha y el estado de cada capa) la escribe DENTRO de
+    # `reemplazar_bloque` de la raiz -- como `guardar_resultado_CambioFuente` (el
+    # patron de EB2b) --; el `UPDATE ... SET activo = 0` de las piezas viejas y el
+    # `reemplazar_bloque(..., auditar=False)` de las nuevas son parte de la misma
+    # accion. `anular` audita directamente (`_registrar_auditoria(..., con=db)`) y
+    # no necesita entrada. La prueba nueva de CD.4 fija las dos filas y que van
+    # dentro de la transaccion.
+    ("services/curva_dosis.py", "guardar"):
+        "delegada-en:services/anulacion.py::reemplazar_bloque",
 
     # --- A6.7 (TAC / Catphan) cerrada 2026-08-04: guardar_prueba_completa_
     # catphan es el ÚNICO punto de entrada real de las 9 (los 2 llamadores

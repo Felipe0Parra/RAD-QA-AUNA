@@ -162,6 +162,11 @@ CLAVES_INDICE = {
     # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-83 a DA-86): UN analisis vigente por control -- la clave de bloque del analisis nuevo del mensual es el control al que pertenece. Reguardar anula el
     # vigente e inserta el nuevo (`id` nuevo, mismo `ref`).
     "analisis_placa_mensual": ("ref",),
+
+    # CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, DA-90): UNA calibracion vigente por lote, dia de irradiacion y energia (guardarla otra vez la reemplaza: `id` nuevo, la misma clave) y, en ella, UNA pieza
+    # vigente por fila del formulario. `DATE(fecha_irradiacion)` es una expresion, como `DATE(date)` de las diarias (MI3).
+    "calibracion_pelicula": ("lote", "DATE(fecha_irradiacion)", "energia"),
+    "calibracion_pelicula_pieza": ("ref", "orden"),
 }
 
 _RE_EXPRESION_CLAVE = re.compile(r'^(\w+)\((\w+)\)$')

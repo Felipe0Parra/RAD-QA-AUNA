@@ -72,7 +72,10 @@ def test_crea_los_64_tras_mi1_mi3_eb6_r1_b1_pi2_d1(bd_temporal):
     # (braqui_posicion_inicial).
     # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10): +1 (analisis_placa_mensual,
     # clave ("ref",): un analisis vigente por control).
-    assert len(resultado) == 64
+    # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md): +2 (calibracion_pelicula,
+    # clave (lote, DATE(fecha_irradiacion), energia), y calibracion_pelicula_pieza,
+    # clave (ref, orden)) = 66. La prueba conserva su nombre (CD4-D13).
+    assert len(resultado) == 66
     for tabla, r in resultado.items():
         assert r == "creado", (
             f"{tabla}: se esperaba 'creado' -- tras MI1/MI3/EB6/R1 las 61 "
@@ -186,4 +189,6 @@ def test_claves_coinciden_con_las_del_plan_para_las_8_de_h2():
     # 21-09) añadió referencias_qc = 62. PI.2 (PLAN_POSICION_INICIAL_BRAQUI_
     # 01-10.md, 01-10) añadió braqui_posicion_inicial = 63. D.1
     # (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10) añadió analisis_placa_mensual = 64.
-    assert len(CLAVES_INDICE) == 64
+    # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md) añadió calibracion_pelicula
+    # y calibracion_pelicula_pieza = 66. La prueba conserva su nombre (CD4-D13).
+    assert len(CLAVES_INDICE) == 66

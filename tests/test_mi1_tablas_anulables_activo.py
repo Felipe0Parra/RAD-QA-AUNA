@@ -97,8 +97,13 @@ class TestInventarioTrasMI1:
         # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10): +1
         # (analisis_placa_mensual, HIJA de controles por FK: no es raíz) sobre
         # las 65 que dejó PI.2 -- 57 hijas + 9 raíces.
-        assert len(TABLAS_ANULABLES) == 66, (
-            f"57 hijas + 9 raíces tras MI1+R1+B.1+PI.2+D.1 -- hay "
+        # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md): +2
+        # (calibracion_pelicula, RAIZ propia sin FK -- también en RAICES_QC --, y
+        # calibracion_pelicula_pieza, su hija por `ref`) sobre las 66 que dejó
+        # D.1 -- 58 hijas + 10 raíces. La prueba conserva su nombre (CD4-D13): el
+        # número que fija es el de la aserción.
+        assert len(TABLAS_ANULABLES) == 68, (
+            f"58 hijas + 10 raíces tras MI1+R1+B.1+PI.2+D.1+CD.4 -- hay "
             f"{len(TABLAS_ANULABLES)}. Si el cambio es deliberado, "
             f"actualiza este número a la vez que TABLAS_ANULABLES.")
 

@@ -293,6 +293,7 @@ class Conexion():
             self.crearTablaReferenciasQC()  # B.1 (PLAN_REFERENCIAS_EDITABLES_21-09.md)
             self.crearTablaPosicionInicialBraqui()  # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md)
             self.crearTablaAnalisisPlacaMensual()  # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md)
+            self.crearTablasCalibracionPelicula()  # CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md)
 
             # R1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): DosisService.crear_tabla()
             # (que asegura columnas como "energia"/"vigente" via ALTER TABLE)
@@ -2836,6 +2837,80 @@ class Conexion():
                         print(f"Aviso: 'analisis_placa_mensual.{m.nombre}' es obligatoria, pero SQLite no agrega una columna NOT NULL a una tabla ya creada: en esta base queda admitiendo NULL (hace falta una migracion que reconstruya la tabla)")
             except sqlite3.Error as ex:
                 print(f"Aviso: no se pudo asegurar 'analisis_placa_mensual.{m.nombre}': {ex}")
+        self.con.commit()
+
+    def crearTablasCalibracionPelicula(self):
+        """CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, DA-90): una calibracion de pelicula -- un lote irradiado a dosis conocidas y su curva de dosis (CD.3) -- en DOS tablas del contrato de QC. Las escribe
+        y las lee SOLO `services/curva_dosis.py`.
+
+        `calibracion_pelicula` es RAIZ PROPIA, SIN FK (como `braqui_posicion_inicial`): una calibracion no es de un control puntual -- la usan, por COPIA, los analisis de muchos controles (DA-81) --, asi
+        que entra en `RAICES_QC` (services/lectura_vigente.py). Clave de bloque (`lote`, `DATE(fecha_irradiacion)`, `energia`): guardar otra vez la misma calibracion la reemplaza. Guarda el encabezado
+        (lote, tipo, fecha de irradiacion, acelerador, energia y las condiciones en JSON), la camara y el electrometro con su COPIA (modelo, serie, factor) y su PUNTERO al catalogo (DA-13, DP-105), la
+        incertidumbre declarada de la dosis medida, la cadena de captura, el cero y la copia de la pelicula virgen montada al calibrar (JSON, DC3), el modelo, la version, los parametros con que se midio y
+        se ajusto, el AJUSTE (la copia de la curva, `CurvaDeDosis.como_dict()`: la excepcion declarada a la regla del 09-09, porque es la referencia con que se miden los analisis) y el estado de cada capa.
+
+        `calibracion_pelicula_pieza` es su HIJA (`ref`, RESTRICT): una fila por escaneo, clave (`ref`, `orden`). (El orden de las columnas y `nombre_archivo` NOT NULL no repiten, a proposito, el
+        texto de las columnas de `analisis_placa_mensual`: las mutaciones de D.1 se anclan en el.) Guarda la dosis nominal y la medida, la huella y los metadatos que la medicion de CD.2 lee del
+        archivo, y en `medida` (JSON) la pieza tal como entro a la curva y su medicion entera. Los escaneos NO van a la base (DP-144): se copian junto a ella, en `calibraciones_pelicula_escaneos/`.
+
+        Sin `activo`: la agrega sola `_asegurar_activo_bloque_qc` (las dos estan en TABLAS_ANULABLES desde que nacen, como `analisis_placa_mensual`). Los indices unicos parciales los crea `crear_indices`
+        (la herramienta de migracion), como los de las demas. `CREATE TABLE IF NOT EXISTS`: aditiva e idempotente, no toca ninguna otra tabla."""
+        cursor = self.con.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS calibracion_pelicula (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lote TEXT NOT NULL,
+                tipo_pelicula TEXT NOT NULL,
+                fecha_irradiacion TEXT NOT NULL,
+                acelerador TEXT,
+                energia TEXT NOT NULL,
+                condiciones TEXT NOT NULL,
+                camara_modelo TEXT,
+                camara_serie TEXT,
+                camara_factor REAL,
+                camara_equipo_id INTEGER,
+                electrometro_modelo TEXT,
+                electrometro_serie TEXT,
+                electrometro_factor REAL,
+                electrometro_equipo_id INTEGER,
+                u_dosis_medida_pct REAL CHECK (u_dosis_medida_pct IS NULL OR u_dosis_medida_pct >= 0),
+                cadena_de_captura TEXT NOT NULL,
+                cero TEXT,
+                virgen TEXT,
+                parametros TEXT NOT NULL,
+                modelo TEXT NOT NULL,
+                version TEXT NOT NULL,
+                ajuste TEXT NOT NULL,
+                estado TEXT NOT NULL,
+                observaciones TEXT,
+                usuario TEXT NOT NULL,
+                fecha_registro TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS calibracion_pelicula_pieza (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER NOT NULL,
+                orden INTEGER NOT NULL,
+                dosis_nominal_cgy REAL NOT NULL CHECK (dosis_nominal_cgy >= 0),
+                dosis_medida_cgy REAL,
+                nombre_archivo TEXT NOT NULL,
+                sha256 TEXT NOT NULL,
+                bytes INTEGER,
+                formato TEXT,
+                bits INTEGER,
+                dpi_declarado REAL,
+                equipo TEXT,
+                fecha_exif TEXT,
+                dimensiones_px TEXT,
+                escaner_declarado TEXT,
+                fecha_escaneo TEXT,
+                posicion_mm TEXT,
+                medida TEXT NOT NULL,
+                estado TEXT NOT NULL,
+                FOREIGN KEY (ref) REFERENCES calibracion_pelicula(id) ON DELETE RESTRICT ON UPDATE CASCADE
+            )
+        """)
         self.con.commit()
 
 

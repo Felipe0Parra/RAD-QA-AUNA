@@ -99,6 +99,24 @@ CENSO_RAICES = {
         (IDENTIDAD, "anular, UPDATE ... SET activo = 0 WHERE id = ? -- la fila física ya identificada; a propósito NO "
          "pasa por sql_anular_bloque (su AND de vigencia sobre un WHERE id es el defecto de 'filtro sobre lectura de "
          "identidad' que RT1 vigila)"),
+    # -- CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, 30-10) ----------------
+    # `calibracion_pelicula` es la septima raiz propia (sin FK, tambien en RAICES_QC); su UNICA puerta es `services/curva_dosis.py`. Las sentencias sobre su hija
+    # `calibracion_pelicula_pieza` (que no es raiz) no entran a este censo; la prueba nueva de CD.4 fija la selectividad de cada una por AST.
+    ("services/curva_dosis.py", 499, "calibracion_pelicula"):
+        (LISTA, "guardar: SELECT id ... WHERE lote = ? AND DATE(fecha_irradiacion) = DATE(?) AND energia = ? -- la CLAVE DE BLOQUE completa de la calibracion "
+         "que el guardado reemplaza (no una fila fisica), asi que filtra activo con filtro_activo() dentro del f-string; corre en la misma transaccion que el reemplazo"),
+    ("services/curva_dosis.py", 525, "calibracion_pelicula"):
+        (IDENTIDAD, "anular, SELECT activo: WHERE id = ? -- lee `activo` COMO DATO para decidir si ya estaba anulada (False sin escribir ni auditar) y trae lote, fecha y "
+         "energia para el texto de la auditoria; no puede filtrarlo, o una calibracion anulada se confundiria con una que no existe"),
+    ("services/curva_dosis.py", 529, "calibracion_pelicula"):
+        (IDENTIDAD, "anular, UPDATE ... SET activo = 0 WHERE id = ? -- la fila fisica ya identificada; a proposito NO pasa por sql_anular_bloque (su AND de vigencia "
+         "sobre un WHERE id es el defecto de 'filtro sobre lectura de identidad' que RT1 vigila); las piezas se anulan en la sentencia siguiente, por su `ref`"),
+    ("services/curva_dosis.py", 555, "calibracion_pelicula"):
+        (LISTA, "listar: todas las calibraciones vigentes, de la mas reciente a la mas antigua, para la ventana de calibracion y para `vigentes_validas`; filtra "
+         "activo con filtro_activo() dentro del f-string (las anuladas se abren por `leer(id)` y se ven en el visor, no en esta lista)"),
+    ("services/curva_dosis.py", 574, "calibracion_pelicula"):
+        (IDENTIDAD, "leer: WHERE id = ? -- abrir una calibracion YA ELEGIDA, incluso anulada o reemplazada (DA-47): filtrar la haria desaparecer justo cuando se "
+         "quiere ver; trae todas las columnas y `activo`, y sus piezas se leen por `ref` = ese id sin filtro (las de UNA raiz)"),
     # -- B.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md) -----------------------
     # -- F.2 (PLAN_HANDOFF_IMAGENES_22-09.md) -----------------------------
     ("services/referencias_qc.py", 163, "controles"):
@@ -372,14 +390,16 @@ CENSO_RAICES = {
 # quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
 # en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
 # 70 -> 73 sitios físicos.
-FILAS_ESPERADAS = 78      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`); FS.1 (06-10): -1 (-2 busquedas de create_control retiradas de load.py y seiscientos_anual.py, +1 la unica `identidad_control.py::buscar_control_vigente`); FS.2 (06-10): -1 (la consulta propia de `actualizar_fisicos` se retira: usa `buscar_control_vigente`)
+FILAS_ESPERADAS = 83      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`); FS.1 (06-10): -1 (-2 busquedas de create_control retiradas de load.py y seiscientos_anual.py, +1 la unica `identidad_control.py::buscar_control_vigente`); FS.2 (06-10): -1 (la consulta propia de `actualizar_fisicos` se retira: usa `buscar_control_vigente`)
                           # RC.2 (30-09): +1, `corregir_calibracion` (IDENTIDAD sobre TipoCalibracion)
                           # PI.3 (02-10): +6, `services/posicion_inicial_braqui.py` (3 LISTA y 3 IDENTIDAD)
                           # PI.9 (05-10): -3, los tres sitios de la clase retirada (`actualizar_ref_bd` y las dos series temporales; LISTA)
-SITIOS_FISICOS_ESPERADOS = 76      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`); FS.1 (06-10): -1 (el mismo recuento de arriba); FS.2 (06-10): -1 (idem)
+                          # CD.4 (30-10): +5, `services/curva_dosis.py` sobre `calibracion_pelicula` (2 LISTA: guardar y listar; 3 IDENTIDAD: anular x2 y leer)
+SITIOS_FISICOS_ESPERADOS = 81      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`); FS.1 (06-10): -1 (el mismo recuento de arriba); FS.2 (06-10): -1 (idem)
                                     # RC.2 (30-09): +1 (corregir_calibracion, IDENTIDAD)
                                     # PI.3 (02-10): +6 (los seis del servicio, ninguno se resuelve a dos textos)
                                     # PI.9 (05-10): -3 (los mismos tres sitios; ninguno se resolvia a dos textos)
+                                    # CD.4 (30-10): +5 (los cinco del servicio, ninguno se resuelve a dos textos)
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

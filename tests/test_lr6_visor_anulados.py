@@ -77,11 +77,16 @@ class TestSecciones:
         # (braqui_posicion_inicial, sexta raíz propia -- RAICES_QC). Esto prueba
         # la CAPA DE DATOS del visor (`secciones()`); que la pantalla la muestre
         # es otra cosa (DP-144: su lista de chips es fija).
+        # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md): +1
+        # (calibracion_pelicula, séptima raíz propia -- RAICES_QC); su hija
+        # `calibracion_pelicula_pieza` sale en su sección. La pantalla sigue con
+        # su lista fija de 7 (DP-144): lo anulado de una calibración se ve por
+        # esta capa de datos. La prueba conserva su nombre (CD4-D13).
         secc = va.secciones()
         assert set(secc) == {
             "controles", "TipoCalibracion", "LinealidadBraquiterapia",
             "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui",
-            "referencias_qc", "braqui_posicion_inicial",
+            "referencias_qc", "braqui_posicion_inicial", "calibracion_pelicula",
         }
 
     def test_cada_seccion_incluye_a_su_propia_raiz(self, bd_temporal):

@@ -139,6 +139,13 @@ CLAVES_ESPERADAS_DEL_PLAN = {
     # mensual de aceleradores -- HIJA de controles; un analisis vigente por
     # control (clave de bloque = el propio control).
     "analisis_placa_mensual": ("ref",),
+    # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md, DA-90): una calibracion
+    # de pelicula -- UNA vigente por lote, dia de irradiacion y energia (septima
+    # raiz propia, sin FK; `DATE(fecha_irradiacion)` es una expresion, como
+    # `DATE(date)` de las diarias) -- y, en ella, UNA pieza vigente por fila del
+    # formulario (hija por `ref`).
+    "calibracion_pelicula": ("lote", "DATE(fecha_irradiacion)", "energia"),
+    "calibracion_pelicula_pieza": ("ref", "orden"),
 }
 
 # Tablas del bloque de QC que YA estaban en TABLAS_ANULABLES antes de IV1

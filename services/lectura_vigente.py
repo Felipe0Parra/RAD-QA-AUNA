@@ -84,6 +84,9 @@ RAICES_QC = frozenset({
     # FECHA, así que a propósito no tiene FK. Misma razón que `referencias_qc`: sin clasificarla aquí, IV2 la
     # marca "sobrante".
     "braqui_posicion_inicial",
+    # CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, DA-90): septima raiz propia -- una calibracion de pelicula no cuelga de un control puntual (la usan por COPIA los analisis de muchos controles, DA-81),
+    # asi que a proposito no tiene FK. Misma razon que `referencias_qc` y `braqui_posicion_inicial`: sin clasificarla aqui, IV2 la marca «sobrante». Su hija `calibracion_pelicula_pieza` sale del cierre.
+    "calibracion_pelicula",
 })
 
 

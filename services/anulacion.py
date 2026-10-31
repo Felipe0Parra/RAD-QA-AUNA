@@ -180,6 +180,10 @@ TABLAS_ANULABLES = frozenset({
     # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-83 a DA-86): el analisis nuevo del mensual de aceleradores (imagen + datos finales de la capa reportada). HIJA de `controles` (FK `ref`, RESTRICT): entra al
     # cierre transitivo por FK que vigila IV2 y NO es raiz (`RAICES_QC` no cambia). Escribe solo `services/placa_mensual.py`.
     "analisis_placa_mensual",
+    # CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, DA-90): una calibracion de pelicula. `calibracion_pelicula` es RAIZ propia sin FK (tambien en `RAICES_QC`, como `braqui_posicion_inicial`) y
+    # `calibracion_pelicula_pieza` su HIJA por `ref` (entra al cierre transitivo por FK que vigila IV2). Escribe solo `services/curva_dosis.py`.
+    "calibracion_pelicula",
+    "calibracion_pelicula_pieza",
 })
 
 

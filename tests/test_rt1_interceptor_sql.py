@@ -371,15 +371,18 @@ class TestDenominadorDeCobertura:
         #   108 -> 104 G.1 (PLAN_ANALISIS_PELICULAS_08-10.md, 26-10): salen `crear_algo`, `mostrar_analisis_img`, `mostrar_analisis_franjas` y `mostrar_veri_corr` (los cuatro de `load.py`) con el
         #             analisis mensual VIEJO (sus «Ver tabla» y su guardado de la imagen); no entra ninguna. Medido con `lectoras_del_bloque_qc()` sobre un espejo de HEAD (108) y sobre el mismo con la
         #             retirada aplicada (104) en el pre-vuelo de Opus, y sobre el arbol al cerrar la tarea.
+        #   104 -> 108 CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, 30-10): `services/curva_dosis.py` -- cuatro funciones lectoras nuevas sobre `calibracion_pelicula` (septima raiz del bloque de QC):
+        #             `guardar` (la vigente de la clave de bloque que reemplaza, con `filtro_activo`), `anular` (lee `activo` por identidad), `listar` (las vigentes, con `filtro_activo`) y `leer`
+        #             (por identidad); `vigentes_validas` no tiene SQL propio (sale de `listar` y `leer`). Medido con `lectoras_del_bloque_qc()` sobre el arbol de CD.4 (108) y sobre un espejo de HEAD (104).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 104, (
+        assert len(lectoras) == 108, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
             f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
             f"inicial, FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) y "
             f"FS.2 retiró la lectura propia de `actualizar_fisicos`, y BM.1 consolidó los ocho lectores por fecha del mensual de "
             f"braquiterapia en siete que leen por `ref`, D.1 sumó `services/placa_mensual.py` (`leer` y `guardar`), E.2 sumó "
             f"`imagen_del_campo.py::hay_franjas_vigentes` y G.1 retiró `crear_algo`, `mostrar_analisis_img`, `mostrar_analisis_franjas` y "
-            f"`mostrar_veri_corr` -- 104 funciones esperadas; ahora salen "
+            f"`mostrar_veri_corr`, y CD.4 sumó `services/curva_dosis.py` (`guardar`, `anular`, `listar` y `leer`) -- 108 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"

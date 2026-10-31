@@ -36,6 +36,7 @@ from data.ManejoDatos.conection import Conexion
 from services import medidas_placa_mensual as medidas
 from services.anulacion import filtro_activo, reemplazar_bloque
 from services.audit_minimo import ACCION_GUARDAR, ACCION_REEMPLAZO
+from services.json_estricto import json_estricto
 from services.ventana_edicion import mensaje_bloqueo_edicion, puede_editarse
 
 TABLA = "analisis_placa_mensual"
@@ -109,10 +110,9 @@ def _json_estricto(valor, columna, **opciones):
     """El texto JSON de una columna de la tabla (`parametros`, `puntos` o `piso`), o `PlacaMensualError` -- y no se escribe nada -- si `valor` no cabe en JSON VÁLIDO. `json.dumps` escribe NaN e infinito como
     `NaN` e `Infinity`, que no son JSON (SQLite `json_valid` da 0 y un lector estricto los rechaza), y no serializa un escalar de numpy: sin esto un sexto clic con NaN o un parámetro no finito llegaban a la base
     como una columna que la tabla documenta como JSON y no se puede leer de vuelta (D1-PROD-03). La ÚNICA puerta por la que se escriben las tres."""
-    try:
-        return json.dumps(valor, allow_nan=False, **opciones)
-    except (TypeError, ValueError) as error:
-        raise PlacaMensualError(f"lo que se guarda en la columna '{columna}' no es JSON válido ({error}): hay un número no finito (NaN o infinito) o un valor que JSON no admite") from error
+    # CD.4 (CD4-D1): la regla y su texto viven en `services/json_estricto.py`, la UNICA definicion, que comparte con la calibracion de la curva (`services/curva_dosis.py`); aqui solo se pone la
+    # clase del error de este servicio. El nombre, la firma y lo que dice no cambian.
+    return json_estricto(valor, columna, PlacaMensualError, **opciones)
 
 
 def motivo_para_no_guardar(resultado, capa):

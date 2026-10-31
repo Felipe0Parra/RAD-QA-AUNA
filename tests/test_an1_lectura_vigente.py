@@ -52,7 +52,10 @@ def test_tablas_del_bloque_qc_cubre_el_bloque_entero_raices_incluidas():
     # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md, 01-10): +1
     # (braqui_posicion_inicial, sexta raíz propia -- sin FK, el enlace con
     # el cambio de fuente es por la fecha).
-    assert len(lv.RAICES_QC) == 9
+    # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md): +1 (calibracion_pelicula,
+    # septima raiz propia -- sin FK: la usan por COPIA los analisis de muchos
+    # controles, DA-81). La prueba conserva su nombre (CD4-D13).
+    assert len(lv.RAICES_QC) == 10
 
     # Las 3 tablas del rebuild del 18-08 -- deliberadamente FUERA del
     # TABLAS_EN_ALCANCE de 18 tablas que tenía LE4, y sin embargo D3
@@ -397,7 +400,9 @@ def test_claves_indice_coincide_con_el_fuente():
     # (1, referencias_qc, PLAN_REFERENCIAS_EDITABLES_21-09.md) + PI.2 (1,
     # braqui_posicion_inicial, PLAN_POSICION_INICIAL_BRAQUI_01-10.md) + D.1 (1,
     # analisis_placa_mensual, PLAN_ANALISIS_PELICULAS_08-10.md: hija de controles)
-    assert len(claves) == 64
+    # + CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md: 2, calibracion_pelicula
+    # y calibracion_pelicula_pieza). La prueba conserva su nombre (CD4-D13).
+    assert len(claves) == 66
     assert claves == {t: frozenset(c) for t, c in CLAVES_REALES.items()}
     # LF5: la premisa que hace seguro tratar "id"/"rowid" como identidad
     # física en cualquier tabla, sin mirar CLAVES_INDICE caso por caso.
