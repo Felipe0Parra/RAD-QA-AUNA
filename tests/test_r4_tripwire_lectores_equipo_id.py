@@ -188,6 +188,13 @@ def _funcion_que_contiene(arbol, linea):
 #               fila (no de un puntero ajeno).
 
 SITIOS_EQUIPO_ID_PERMITIDOS = {
+    ("ui/paginasControles/PruebasMensuales/curva_dosis.py", 428): (  # CD.5 (30-10-2026); 31-10 (ronda 1 de la revision, corrector): 426->428 (el contenido, `equipo = EquiposService.obtener_por_id(equipo_id)`, es el mismo)
+        "EXENTO",
+        "_copia_del_equipo (ventana de calibracion de peliculas) -- equipo_id "
+        "viene de combo.currentData(), la calibracion que el fisico ACABA de "
+        "elegir en el combo (poblado por calibraciones_activas()); con una "
+        "calibracion abierta el combo no lleva id (muestra la copia guardada) "
+        "y Guardar esta apagado: no restaura ningun dato guardado."),
     ("ui/paginasControles/PruebasMensuales/braq_mensual.py", 476): (  # P.1 (28-09): 490->494; PI.9 (05-10): 494->436; BM.1 (15-10): 436->466; BM.1 (15-10, fecha_cal): 466->476
         "EXENTO",
         "on_serie_pozo_cambio -- equipo_id viene de "

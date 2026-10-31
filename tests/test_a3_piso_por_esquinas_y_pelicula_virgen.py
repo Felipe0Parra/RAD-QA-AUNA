@@ -2465,7 +2465,11 @@ class TestEstructura:
         ventana del analisis mensual (`VentanaPlacaMensual`), que elige el modo del piso (`MODO_DEL_PISO_POR_OMISION`), mide la pelicula virgen (`piso_de_pelicula_virgen`) y la guarda y la lee junto a la
         base (`guardar_referencia_virgen`, `leer_referencia_virgen`). Hoy los UNICOS archivos de produccion, fuera de `pelicula.py`, que nombran alguna de estas funciones son el motor mensual (solo
         `piso_de_pelicula`) y esa ventana (las cinco); el servicio del guardado (D.1) recibe la referencia por argumento y no las nombra, y el modulo de dibujo tampoco. Un consumidor nuevo sigue haciendo
-        caer la prueba."""
+        caer la prueba.
+
+        EDITADA EN CD.5 (30-10-2026, clase b: un consumidor nuevo, declarado; la identidad de la prueba se conserva): la ventana de calibracion de las peliculas
+        (`ui/paginasControles/PruebasMensuales/curva_dosis.py`) LEE la pelicula virgen montada junto a la base (`leer_referencia_virgen`, la misma funcion que la ventana mensual) para pasarla a
+        `services/curva_dosis.guardar` (CD4-D4: la virgen la pasa la ventana) y decir si sirve de cero (DC3). No mide, no guarda ni elige el modo del piso."""
         nombres = ("piso_de_pelicula", "piso_de_pelicula_virgen", "guardar_referencia_virgen", "leer_referencia_virgen", "MODO_DEL_PISO_POR_OMISION")
         usan = {}
         for ruta in RAIZ.rglob("*.py"):
@@ -2477,7 +2481,8 @@ class TestEstructura:
             if hallados:
                 usan[str(ruta.relative_to(RAIZ))] = hallados
         assert usan == {"analisisImagenes/placa_mensual.py": ["piso_de_pelicula"],
-                        "ui/paginasControles/PruebasMensuales/placa_mensual.py": ["piso_de_pelicula", "piso_de_pelicula_virgen", "guardar_referencia_virgen", "leer_referencia_virgen", "MODO_DEL_PISO_POR_OMISION"]}, usan
+                        "ui/paginasControles/PruebasMensuales/placa_mensual.py": ["piso_de_pelicula", "piso_de_pelicula_virgen", "guardar_referencia_virgen", "leer_referencia_virgen", "MODO_DEL_PISO_POR_OMISION"],
+                        "ui/paginasControles/PruebasMensuales/curva_dosis.py": ["leer_referencia_virgen"]}, usan
 
     def test_k_la_escala_sale_de_escala_mm_y_ninguna_funcion_nueva_divide_25_4(self):
         _, arbol = _fuente("analisisImagenes/pelicula.py")

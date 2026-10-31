@@ -41,6 +41,16 @@ hidden_imports = [
     # ui.mainpages; listado por la misma defensa de arriba.
     "services.respaldo",
 
+    # CD.5 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md): la ventana de calibracion de
+    # las peliculas y los modulos de la curva que usa. Import estatico (desde
+    # las pruebas y, en CD.7, desde la ventana mensual); listados por la misma
+    # defensa de D4, I5 y E9: un modulo que falte solo daria ModuleNotFoundError
+    # en Windows.
+    "analisisImagenes.curva_dosis",
+    "analisisImagenes.dibujo_curva_dosis",
+    "services.curva_dosis",
+    "ui.paginasControles.PruebasMensuales.curva_dosis",
+
     # MODELOS
     "models.PDF.reportes",
 ]
