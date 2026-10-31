@@ -746,7 +746,8 @@ class TestBarridoNoTieneParametros:
         pm = _pm()
         assert pm.VERSION_ALGORITMO == "PM-1"
         # OD.1 (21-10): `PARAMETROS` suma `base_de_la_medida` (`PARAMETROS_DE_LA_BASE`), que tampoco es de C.3: la vigila `test_od1_densidad_optica.py`.
-        propios = set(pm.PARAMETROS) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(_pel().PARAMETROS_DEL_PISO) - set(pm.PARAMETROS_DE_LA_BASE)
+        # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): tampoco es de C.3; lo vigila `test_cd6_base_dosis_del_motor.py`.
+        propios = set(pm.PARAMETROS) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(_pel().PARAMETROS_DEL_PISO) - set(pm.PARAMETROS_DE_LA_BASE) - set(pm.PARAMETROS_DE_LA_DOSIS)
         assert propios == {"radio_marca_mm", "contraste_minimo_marca", "fraccion_del_contraste_marca", "gris_maximo_de_la_tinta", "borde_blando_marca_mm", "area_minima_marca_mm2",
                            "resolucion_escaneo_dpi", "resoluciones_de_editor_dpi", "tolerancia_dpi_relativa"}, "los de C.1: ninguno de C.3"
         assert set(pm.PARAMETROS_DE_LA_MEDIDA) == {"margen_recorte_mm", "banda_perfil_mm", "fraccion_meseta", "excepcion_centro_mm", "muestras_minimas_de_la_meseta",
@@ -989,7 +990,7 @@ class TestLoQueNoSePuedeMedir:
         """Si ninguna banda se mide (aqui `medir_perfil` dice, de cada una, que banda es), la capa dice el motivo de la CENTRAL; y la raiz, `MOTIVO_NINGUNA_BANDA`."""
         pm = _pm()
 
-        def sin_medir(perfil, centro_px, piso, base_, P, bordes, reticulo_px=None):
+        def sin_medir(perfil, centro_px, piso, base_, P, bordes, reticulo_px=None, curva=None):          # CD.6 (31-10): `medir_perfil` se llama con `curva=` (None fuera de la dosis)
             return pm.MedidaDePerfil(estado=f"no medible: perfil {perfil.eje}: banda {perfil.banda}", capa=perfil.capa, eje=perfil.eje, tam_mm=perfil.tam_mm, centro_px=float(centro_px), perfil=perfil, piso=float(piso))
         monkeypatch.setattr(pm, "medir_perfil", sin_medir)
         b = pm.barrido(base.resultado)
@@ -1038,7 +1039,7 @@ class TestLoQueNoSePuedeMedir:
         pm = _pm()
         real = pm.medir_perfil
 
-        def solo_la_central(perfil, centro_px, piso, base_, P, bordes, reticulo_px=None):
+        def solo_la_central(perfil, centro_px, piso, base_, P, bordes, reticulo_px=None, curva=None):          # CD.6 (31-10): `medir_perfil` se llama con `curva=` (None fuera de la dosis)
             if perfil.banda == 0:
                 return real(perfil, centro_px, piso, base_, P, bordes, reticulo_px)
             return pm.MedidaDePerfil(estado=f"no medible: perfil {perfil.eje}: banda {perfil.banda}", capa=perfil.capa, eje=perfil.eje, tam_mm=perfil.tam_mm, centro_px=float(centro_px), perfil=perfil, piso=float(piso))

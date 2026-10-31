@@ -29,6 +29,13 @@ LA VERDAD
   g_c(D), con el piso en la pelicula virgen y el tope en el centro de la fila. Solo el azul es lineal en la dosis (k = 0): con el se valida
   el algoritmo, no se elige capa (H18 d). Los anchos por capa difieren (azul < verde < rojo) porque la respuesta satura.
 
+CD.6 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, H7): UNA VARIANTE con la respuesta definida en DENSIDAD OPTICA NETA. La respuesta de arriba (g_c en el valor de pixel) expresada en netOD es
+concava y el modelo de Devic (convexo) no la puede representar; para probar la base «dosis» del motor hace falta una pelicula cuya respuesta sea la de una curva de calibracion. Con
+`respuestas_netod` = {"R": r, "G": g, "B": b} (objetos con `dosis(x)` vectorizable, como `RespuestaDevic` de `_piezas_de_calibracion_sinteticas`) y `dosis_meseta_cgy` (la dosis de D = 1, el centro
+del campo), el crudo de cada capa es  virgen_c * 10^(-x_c(D * dosis_meseta_cgy)),  con x_c la inversa de la respuesta por biseccion PROPIA y vectorizada (`_netod_de`); el resto (la dosis D(u, v),
+la geometria, la tinta, el ruido, el redondeo) no cambia. La verdad en DOSIS es la de siempre (100.0 x 99.0 mm en los ejes centrales); la verdad por capa de `VerdadMensual.capas` es la del valor de pixel
+y en la variante queda VACIA ({}): no se usa. Sin `respuestas_netod` el generador es el de PF.0 byte a byte (`respuestas_netod=None` no toca ninguna linea de su camino).
+
 Uso:   import _placa_mensual_sintetica as G
        placa = G.generar("tiff", bits=16, alfa=True, variante="A", theta_deg=0.4, seed=1, dpi=150, beta=0.02, cupula_pct_40mm=-3.5)
        placa.datos (bytes del archivo), placa.verdad (VerdadMensual), placa.imagen (arreglo BGR/BGRA antes de codificar)
@@ -86,6 +93,23 @@ def _dosis_1d(u, w, sig):
 
 def _g(D, k):
     return D if k < 1e-9 else (1.0 - np.exp(-k * D)) / (1.0 - math.exp(-k))
+
+
+ITERACIONES_DE_LA_INVERSA = 80      # CD.6: la biseccion vectorizada de la variante en netOD (80 mitades de un intervalo de netOD de orden 1: por debajo de la resolucion de un float64)
+
+
+def _netod_de(respuesta, dosis):
+    """CD.6: la densidad optica neta x >= 0 con respuesta.dosis(x) = dosis, por biseccion PROPIA del generador sobre un arreglo (no usa el motor). `respuesta.dosis` es creciente y vale 0 en 0."""
+    d = np.maximum(np.asarray(dosis, dtype=np.float64), 0.0)
+    alto = np.ones_like(d)
+    while np.any(respuesta.dosis(alto) < d):
+        alto = np.where(respuesta.dosis(alto) < d, alto * 2.0, alto)
+    bajo = np.zeros_like(d)
+    for _ in range(ITERACIONES_DE_LA_INVERSA):
+        medio = (bajo + alto) / 2.0
+        debajo = respuesta.dosis(medio) < d
+        bajo, alto = np.where(debajo, medio, bajo), np.where(debajo, alto, medio)
+    return (bajo + alto) / 2.0
 
 
 def _factor_cupula(u, v, cupula_pct_40mm):
@@ -366,7 +390,9 @@ def _ventana_de_marca(mx, my, W, H, rad, borde, px):
 
 
 def _construir(campo, geom, c, tinta, ruido, fondo, defectos, seed, bits, alfa, filas_por_bloque):
-    """El arreglo (H, W, 3 o 4) BGR/BGRA, uint8 o uint16, armado por bloques de filas. Devuelve (arreglo, marcas_px)."""
+    """El arreglo (H, W, 3 o 4) BGR/BGRA, uint8 o uint16, armado por bloques de filas. Devuelve (arreglo, marcas_px). CD.6: si la calibracion `c` trae `respuestas_netod` y `dosis_meseta_cgy`, la
+    variante en netOD (ver el docstring del modulo)."""
+    respuestas_netod, dosis_meseta_cgy = c.get("respuestas_netod"), c.get("dosis_meseta_cgy")
     W, H, px, cx, cy = geom["W"], geom["H"], geom["px"], geom["cx"], geom["cy"]
     pel = geom["pel"]
     V = np.array(c["virgen_bgr"])
@@ -390,7 +416,10 @@ def _construir(campo, geom, c, tinta, ruido, fondo, defectos, seed, bits, alfa, 
             en_pelicula = (u >= pel["L"]) & (u <= pel["R"]) & (v >= pel["T"]) & (v <= pel["B"])
         img = np.empty((y1 - y0, W, 3), np.float64)
         for ch in range(3):
-            raw = V[ch] - (V[ch] - P[ch]) * _g(D, ks[ch])
+            if respuestas_netod is None:
+                raw = V[ch] - (V[ch] - P[ch]) * _g(D, ks[ch])
+            else:          # CD.6: la variante en netOD
+                raw = V[ch] * 10.0 ** (-_netod_de(respuestas_netod[CAPAS[ch]], D * dosis_meseta_cgy))
             img[:, :, ch] = np.where(en_pelicula, raw, c["fondo_escaner"])
         if tinta:
             for nombre, (mx, my) in marcas_px.items():
@@ -464,23 +493,33 @@ def codificar(imagen, formato, dpi=DPI_REAL):
 
 def generar_arreglo(*, bits=8, alfa=False, variante="A", theta_deg=0.0, seed=1, dpi=DPI_REAL, tinta=True, ruido=None,
                     desplazamiento_px=None, fondo="blanco", defectos=None, beta=0.0, cupula_pct_40mm=0.0, calib=None,
-                    filas_por_bloque=FILAS_POR_BLOQUE):
+                    filas_por_bloque=FILAS_POR_BLOQUE, respuestas_netod=None, dosis_meseta_cgy=None):
     """La pelicula sintetica sin codificar: (arreglo BGR/BGRA uint8 o uint16 de solo lectura, verdad). Para pruebas que no necesitan el archivo.
 
     bits: 8 | 16.  alfa: False | True (canal alfa opaco, como los TIFF del Epson) | 'sin_pelicula' (alfa 0 fuera de la pelicula: 'sin dato').
     variante: encuadre A/L/B/C/D/E (ver ENCUADRES).  theta_deg: giro de la pelicula (horario en pantalla).  seed: semilla del ruido
     (determinista: los mismos argumentos dan el mismo arreglo).  dpi: resolucion de la imagen (600 es la real; menos acelera las pruebas).
-    beta / cupula_pct_40mm: las dos extensiones (0 = el generador del anexo).  fondo: 'blanco' (escaner) | 'pelicula'."""
+    beta / cupula_pct_40mm: las dos extensiones (0 = el generador del anexo).  fondo: 'blanco' (escaner) | 'pelicula'.
+    respuestas_netod / dosis_meseta_cgy (CD.6): la variante con la respuesta en netOD; las dos o ninguna."""
     if bits not in (8, 16):
         raise ValueError("bits debe ser 8 o 16")
     if alfa not in (False, True, "sin_pelicula"):
         raise ValueError("alfa: False, True o 'sin_pelicula'")
+    if (respuestas_netod is None) != (dosis_meseta_cgy is None):
+        raise ValueError("la variante en netOD pide `respuestas_netod` y `dosis_meseta_cgy` juntas")
+    if respuestas_netod is not None and (set(respuestas_netod) != set(CAPAS) or not dosis_meseta_cgy > 0):
+        raise ValueError("`respuestas_netod` trae una respuesta por capa (R, G y B) y `dosis_meseta_cgy` es positiva")
     c = CALIB if calib is None else calib
+    if respuestas_netod is not None:          # CD.6: la variante viaja en la calibracion (como la respuesta de PF.0, `k_bgr`)
+        c = dict(c, respuestas_netod=dict(respuestas_netod), dosis_meseta_cgy=float(dosis_meseta_cgy))
     campo = Campo(c, beta=beta, cupula_pct_40mm=cupula_pct_40mm)
     geom = _geometria(variante, theta_deg, dpi, desplazamiento_px, c)
     imagen, _ = _construir(campo, geom, c, tinta, ruido, fondo, defectos, seed, bits, alfa, filas_por_bloque)
     verdad = VerdadMensual(campo, geom, c, dict(seed=seed, tinta=tinta, ruido=ruido, fondo=fondo, desplazamiento_px=desplazamiento_px,
                                                  bits=bits, alfa=alfa, formato=None))
+    if respuestas_netod is not None:          # CD.6: en la variante la verdad es la de la DOSIS; la de cada capa en valor de pixel no vale
+        verdad.capas = {}
+        verdad.parametros.update(respuestas_netod=dict(respuestas_netod), dosis_meseta_cgy=float(dosis_meseta_cgy))
     return imagen, verdad
 
 

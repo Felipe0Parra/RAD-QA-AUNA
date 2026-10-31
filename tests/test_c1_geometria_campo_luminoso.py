@@ -1677,7 +1677,8 @@ class TestLosParametros:
         # C.2 (17-10): `PARAMETROS` es el diccionario de TODO el modulo y C.2 le suma SUS nueve parametros (`PARAMETROS_DE_LA_MEDIDA`: el recorte, la banda del perfil, la zona central, la exclusion del reticulo,
         # las muestras minimas, las alturas de la medida y el suavizado). Esta prueba sigue siendo la de los parametros de la MARCA (C.1); los de la medida los vigila `test_c2_perfiles_y_coincidencia.py`.
         # OD.1 (21-10): `PARAMETROS` suma `base_de_la_medida` (`PARAMETROS_DE_LA_BASE`), que tampoco es de la marca: la vigila `test_od1_densidad_optica.py`.
-        propios = set(pm.PARAMETROS) - set(pel.PARAMETROS_DEL_PISO) - set(pel.CLAVES_DE_LA_ESCALA) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(pm.PARAMETROS_DE_LA_BASE)
+        # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): tampoco es de la marca; lo vigila `test_cd6_base_dosis_del_motor.py`.
+        propios = set(pm.PARAMETROS) - set(pel.PARAMETROS_DEL_PISO) - set(pel.CLAVES_DE_LA_ESCALA) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(pm.PARAMETROS_DE_LA_BASE) - set(pm.PARAMETROS_DE_LA_DOSIS)
         assert propios == {"radio_marca_mm", "contraste_minimo_marca", "fraccion_del_contraste_marca", "gris_maximo_de_la_tinta", "borde_blando_marca_mm", "area_minima_marca_mm2"}
         assert propios <= usados, propios - usados
         assert set(pm.CLAVES_DE_LA_MARCA) == propios

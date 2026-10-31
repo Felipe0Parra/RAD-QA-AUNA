@@ -102,7 +102,7 @@ class TestLaFormulaYSuMonotonia:
     def test_la_base_se_llama_densidad_optica_neta_y_es_la_de_omision(self):
         pm = _pm()
         assert pm.BASE_DENSIDAD_OPTICA == BASE_OD and pm.BASE_VALOR_DE_PIXEL == BASE_VP
-        assert set(pm.BASES) == {BASE_OD, BASE_VP} and len(pm.BASES) == 2
+        assert set(pm.BASES) == {BASE_OD, BASE_VP, "dosis"} and len(pm.BASES) == 3      # CD.6 (31-10, CD6-D2): la dosis es la tercera base; nunca la de omision (abajo)
         assert pm.BASE_POR_OMISION == pm.BASE_DENSIDAD_OPTICA == BASE_OD, "la netOD es la base por omision (decision del fisico del 21-10)"
         assert pm.VP_MINIMO == VP_MINIMO
 
@@ -197,7 +197,7 @@ class TestUnaConstantePorDecision:
         assert entrada["valor"] == pm.BASE_POR_OMISION and entrada["unidad"] and len(entrada["motivo"]) > 80
         assert BASE_OD in entrada["motivo"] and BASE_VP in entrada["motivo"], "el motivo dice las dos opciones y donde se cambia"
         assert "BASE_POR_OMISION" in entrada["motivo"]
-        assert len(pm.VALORES_DE_LA_GEOMETRIA) == 41 and pm.VALORES_DE_LA_GEOMETRIA["base_de_la_medida"] == BASE_OD, "los 40 de siempre y el de la base"
+        assert len(pm.VALORES_DE_LA_GEOMETRIA) == 42 and pm.VALORES_DE_LA_GEOMETRIA["base_de_la_medida"] == BASE_OD, "los 40 de siempre, el de la base y el de la dosis"      # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`)
         assert pm.VERSION_ALGORITMO == "PM-1", "la version no sube: la base viaja en los parametros guardados (vetable OD1-D1)"
 
     def test_el_modo_del_piso_por_omision_se_cambia_en_una_linea(self):

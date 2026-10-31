@@ -35,6 +35,13 @@ zona central de la meseta para las cuatro capas: ±`fraccion_meseta` / 2 de la d
 parámetro ni descarta ninguna banda (las que no se pueden medir quedan en la lista con su motivo); del FWHM de las medibles da la media, la mediana, la desviación estándar (la de la población, la `np.std` del
 resto de la aplicación) y cuántas son. El barrido se muestra y no se guarda: quien lo necesite lo vuelve a calcular con esta misma función.
 
+CD.6 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md; DA-92) agrega la TERCERA base, `BASE_DOSIS`: con la curva de dosis de una calibración (`analisisImagenes.curva_dosis`, CD.3) cada perfil se mide en DOSIS,
+convertida píxel a píxel desde la netOD con la curva de SU capa (`curva_de_la_capa`), y el borde está donde la dosis vale la mitad de la de la meseta (H4: no es el borde a la mitad de la netOD). Se pide
+con `parametros["base_de_la_medida"] = BASE_DOSIS` y `analizar(..., curva=, cadena=)`; una capa se mide en dosis solo si cumple las cinco condiciones de DC8 (`base_de_la_capa`, UNA regla) y, si no,
+queda «no medible en dosis: <motivo>» (una vista nunca mezcla las dos bases: sus números en netOD son los del análisis en netOD). `se_puede_pasar_a_dosis` es la regla del botón «Ver en dosis» sobre la
+capa reportada y `curva_efectiva` la curva que usa un análisis (la válida más reciente con la cadena de captura de la película). Sin curva y con las bases de siempre, todo es idéntico a OD.1 bit a bit.
+El motor no lee la base: las calibraciones le llegan como argumento.
+
 CONVENCIONES. Todo está en el marco de la imagen tal como la leyó `analisisImagenes.pelicula.leer_pelicula`: x a la derecha (columna), y hacia abajo (fila), el centro del primer píxel es
 (0, 0). Los ángulos son en GRADOS y su signo es el de la pantalla: positivo = giro HORARIO (la y hacia abajo hace que `atan2(dy, dx)` crezca en el sentido de las agujas del reloj). Un campo
 girado theta en ese sentido tiene el ángulo +theta y se corrige con `matriz_giro(cruce, theta)` (un ángulo positivo de `getRotationMatrix2D` gira en sentido antihorario). Las longitudes salen en
@@ -58,13 +65,15 @@ Sin Qt, sin base de datos y sin `cv2.imread`."""
 import copy
 import math
 import numbers
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import cv2
 import numpy as np
 from scipy import ndimage as ndi
 
 from analisisImagenes.pelicula import CAPAS_DEL_PISO, CLAVES_DE_LA_ESCALA, ESQUINAS, FRACCION_DE_RECORTE_MAXIMA, MARGEN_DEL_RECORTE, MOTIVO_MESETA_RECORTADA, NIVEL_DE_RECORTE, PARAMETROS_DEL_PISO, escala_mm, meseta_recortada, piso_de_pelicula
+from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, _abrir_con_pillow, _equipo_de_la_imagen, leer_pelicula          # CD.6: el nombre de cada capa en los motivos y la cadena de captura de la película
+from analisisImagenes.curva_dosis import ESTADO_VALIDA, PREFIJO_GUIA, CurvaDeDosis, _texto_de_la_cadena, cadena_de_captura, curva_desde_dict          # CD.6: la curva de dosis (CD.3), su ÚNICA definición
 
 VERSION_ALGORITMO = "PM-1"
 
@@ -574,7 +583,8 @@ def geometria_luz(esquinas, reticulo, tam_mm, pivote=None):
 # La netOD es la base por omisión (decisión del físico del 21-10); `BASE_VALOR_DE_PIXEL` sigue siendo una opción y la base de todo registro guardado sin el parámetro `base_de_la_medida`.
 BASE_VALOR_DE_PIXEL = "valor de píxel normalizado"
 BASE_DENSIDAD_OPTICA = "densidad óptica neta"
-BASES = (BASE_DENSIDAD_OPTICA, BASE_VALOR_DE_PIXEL)
+BASE_DOSIS = "dosis"                                           # CD.6 (DA-92): la dosis de la curva de cada capa, desde la netOD; solo con una curva (`curva_de_la_capa`) y nunca por omisión
+BASES = (BASE_DENSIDAD_OPTICA, BASE_VALOR_DE_PIXEL, BASE_DOSIS)
 BASE_POR_OMISION = BASE_DENSIDAD_OPTICA                        # EL lugar para cambiar la base del análisis (una línea): viaja como `PARAMETROS["base_de_la_medida"]` y cada análisis guarda la que usó
 VP_MINIMO = 0.5                                                # medio nivel de 8 bits: por debajo, el escáner recortó y log10(piso / v) no existe; se toma este piso del logaritmo (el del pre-vuelo `od_prevuelo.py`)
 # CD.2: la regla del recorte de la netOD (NIVEL_DE_RECORTE, FRACCION_DE_RECORTE_MAXIMA, MARGEN_DEL_RECORTE y MOTIVO_MESETA_RECORTADA, de OD.1 y OD.1c) vive en `pelicula.meseta_recortada`, la
@@ -641,13 +651,25 @@ PARAMETROS_DE_LA_BASE = {
         "valor": BASE_POR_OMISION, "unidad": "base (texto)",
         "motivo": "La base en que se normaliza cada perfil antes de buscar sus bordes: «densidad óptica neta» (por omisión: log10(piso / valor), la netOD de Devic et al. 2004 con el piso como I0, normalizada a 0 en el piso y "
                   "1 en la meseta; su altura media está en la media geométrica del piso y la meseta; la banda de 1 mm de cada perfil se promedia como la imagen ya convertida píxel a píxel, con la media de log10 por píxel) "
-                  "o «valor de píxel normalizado» ((piso - valor) / (piso - meseta), la base de antes, con la media aritmética). Se cambia en UNA "
+                  "o «valor de píxel normalizado» ((piso - valor) / (piso - meseta), la base de antes, con la media aritmética) o, desde CD.6, «dosis» (la dosis de la curva de cada capa desde la netOD: solo con una "
+                  "curva de dosis, `analizar(..., curva=, cadena=)`, y nunca por omisión). Se cambia en UNA "
                   "línea, `BASE_POR_OMISION` de este archivo, y cada análisis guarda la que usó: reabrirlo o imprimirlo lo mide con ESA base aunque la constante cambie; uno guardado sin este parámetro se mide en valor de píxel. "
                   "Medido el 21-10 en ocho escaneos: el verde en valor de píxel sale de +1.0 a +2.8 mm más ancho que el campo luminoso y en netOD de -0.6 a +1.0 mm (logs/OD/); el rojo a 800 UM está recortado por el "
                   "escáner y en netOD es «no medible»."},
 }
 PARAMETROS.update(copy.deepcopy(PARAMETROS_DE_LA_BASE))
 VALORES_DE_LA_GEOMETRIA.update({nombre: copy.deepcopy(parametro["valor"]) for nombre, parametro in PARAMETROS_DE_LA_BASE.items()})
+
+# CD.6: el parámetro 42. Solo lo lee un análisis en dosis (no está en `CLAVES_QUE_PIDE_ANALIZAR`): un registro guardado antes de CD.6 no lo trae y se mide con el de fábrica, como OD.1 hizo con la base.
+PARAMETROS_DE_LA_DOSIS = {
+    "diferencia_virgen_maxima_pct": {
+        "valor": 2.0, "unidad": "%",
+        "motivo": "En un análisis en dosis, si el piso de una capa (el valor de la película virgen montada) y el I0 del cero de la curva (sus piezas de 0 cGy o la virgen con que se calibró) difieren "
+                  "más que esto, la ventana lo avisa sin bloquear: la netOD del análisis se mide contra su virgen y la de la curva contra su cero, y si no son la misma película la dosis se corre (otro "
+                  "lote, otra sesión de escaneo). Es la propuesta del plan (§9), sin una medición detrás: se recalibra con la primera calibración real (CD.10). Vetable."},
+}
+PARAMETROS.update(copy.deepcopy(PARAMETROS_DE_LA_DOSIS))
+VALORES_DE_LA_GEOMETRIA.update({nombre: copy.deepcopy(parametro["valor"]) for nombre, parametro in PARAMETROS_DE_LA_DOSIS.items()})
 CLAVES_QUE_PIDE_LA_MEDIDA = tuple(PARAMETROS_DE_LA_MEDIDA) + ("umbral_fondo", "margen_borde_mm", "delta_tinta", "contraste_minimo")      # lo que `medir_perfil` y `perfil_central` leen de `P`
 CLAVES_QUE_PIDE_ANALIZAR = CLAVES_QUE_PIDE_LA_MEDIDA + CLAVES_DE_LA_ESCALA
 
@@ -738,6 +760,7 @@ class MedidaDePerfil:
     penumbras_mm: tuple = (None, None)
     avisos: tuple = ()
     suavizado: np.ndarray | None = field(default=None, repr=False)
+    desviacion_meseta: float | None = None          # CD.6: la desviación estándar de las muestras de la meseta (solo en dosis: entra en la U de la dosis de la meseta); no va en `como_dict`
 
     @property
     def ok(self):
@@ -768,6 +791,10 @@ class MedidaDeCapa:
     centro_radiacion_px: tuple
     radiacion_menos_luz_mm: tuple
     radiacion_menos_reticulo_mm: tuple
+    base: str | None = None                 # CD.6: solo en un análisis en dosis: `BASE_DOSIS` si la capa se midió en dosis o `BASE_DENSIDAD_OPTICA` si no (con su motivo); None en las bases de siempre
+    motivo_de_la_base: str | None = None    # CD.6: por qué esa capa no se mide en dosis (la primera condición de DC8 que falla), o None
+    dosis_meseta_cgy: float | None = None   # CD.6 (DC10): la dosis de la meseta (la media de las de sus dos perfiles, cGy contados desde el cero de la curva), o None
+    u_dosis_meseta_cgy: float | None = None  # CD.6 (DC10): su U (k = 2, cGy), o None
 
     @property
     def ok(self):
@@ -777,9 +804,12 @@ class MedidaDeCapa:
         def par(p):
             return [None if x is None else float(x) for x in p]
 
-        return {"capa": self.capa, "estado": self.estado, "piso": self.piso, "crossplane": self.crossplane.como_dict(), "inplane": self.inplane.como_dict(),
-                "coincidencia_mm": dict(self.coincidencia_mm), "centro_radiacion_px": par(self.centro_radiacion_px), "radiacion_menos_luz_mm": par(self.radiacion_menos_luz_mm),
-                "radiacion_menos_reticulo_mm": par(self.radiacion_menos_reticulo_mm)}
+        d = {"capa": self.capa, "estado": self.estado, "piso": self.piso, "crossplane": self.crossplane.como_dict(), "inplane": self.inplane.como_dict(),
+             "coincidencia_mm": dict(self.coincidencia_mm), "centro_radiacion_px": par(self.centro_radiacion_px), "radiacion_menos_luz_mm": par(self.radiacion_menos_luz_mm),
+             "radiacion_menos_reticulo_mm": par(self.radiacion_menos_reticulo_mm)}
+        if self.base is not None:          # CD.6: solo un análisis en dosis lleva estas claves; en las bases de siempre el diccionario es el de OD.1
+            d.update(base=self.base, motivo_de_la_base=self.motivo_de_la_base, dosis_meseta_cgy=self.dosis_meseta_cgy, u_dosis_meseta_cgy=self.u_dosis_meseta_cgy)
+        return d
 
 
 @dataclass(frozen=True, eq=False)
@@ -807,6 +837,9 @@ class ResultadoPlacaMensual:
     capas: dict
     bordes_luz_px: dict
     luz_menos_reticulo_mm: tuple | None
+    curva: CurvaDeDosis | None = field(default=None, repr=False)      # CD.6: la curva con que se midió en dosis (None en las bases de siempre)
+    cadena: dict | None = None                                        # CD.6: la cadena de captura de la película con que se juzgó la condición 3 de DC8 (None en las bases de siempre)
+    avisos_de_la_dosis: tuple = ()                                    # CD.6: la película virgen del análisis contra el cero de la curva (`diferencia_virgen_maxima_pct`); no bloquean
 
     @property
     def ok(self):
@@ -828,10 +861,13 @@ class ResultadoPlacaMensual:
         def par(p):
             return None if p is None else [None if x is None else float(x) for x in p]
 
-        return {"version": self.version, "estado": self.estado, "parametros": copy.deepcopy(self.parametros), "base": self.base, "tam_mm": self.tam_mm, "marcas": copy.deepcopy(list(self.marcas)),
-                "puntos": None if self.puntos is None else self.puntos.como_dict(), "geometria": None if self.geometria is None else self.geometria.como_dict(),
-                "piso": None if self.piso is None else self.piso.como_dict(), "capas": {nombre: medida.como_dict() for nombre, medida in self.capas.items()},
-                "bordes_luz_px": {eje: par(b) for eje, b in self.bordes_luz_px.items()}, "luz_menos_reticulo_mm": par(self.luz_menos_reticulo_mm)}
+        d = {"version": self.version, "estado": self.estado, "parametros": copy.deepcopy(self.parametros), "base": self.base, "tam_mm": self.tam_mm, "marcas": copy.deepcopy(list(self.marcas)),
+             "puntos": None if self.puntos is None else self.puntos.como_dict(), "geometria": None if self.geometria is None else self.geometria.como_dict(),
+             "piso": None if self.piso is None else self.piso.como_dict(), "capas": {nombre: medida.como_dict() for nombre, medida in self.capas.items()},
+             "bordes_luz_px": {eje: par(b) for eje, b in self.bordes_luz_px.items()}, "luz_menos_reticulo_mm": par(self.luz_menos_reticulo_mm)}
+        if self.base == BASE_DOSIS:          # CD.6: solo un análisis en dosis lleva la curva, la cadena y los avisos; en las bases de siempre el diccionario es el de OD.1
+            d.update(curva=None if self.curva is None else self.curva.como_dict(), cadena=copy.deepcopy(self.cadena), avisos_de_la_dosis=list(self.avisos_de_la_dosis))
+        return d
 
 
 # ----------------------------------------------------------------------------- la base y las claves
@@ -844,36 +880,56 @@ def _pedir(P, claves, para):
 
 def _exigir_la_base(base):
     if base not in BASES:
-        raise ValueError(f"La base de la medida es «{BASE_DENSIDAD_OPTICA}» o «{BASE_VALOR_DE_PIXEL}»; «{base}» no está implementada.")
+        raise ValueError(f"La base de la medida es «{BASE_DENSIDAD_OPTICA}», «{BASE_VALOR_DE_PIXEL}» o «{BASE_DOSIS}»; «{base}» no está implementada.")
 
 
-def normalizar(base, valores, piso, meseta):
+def _exigir_la_curva(base, curva):
+    """CD.6: la base dosis pide la curva de la capa (`curva_de_la_capa`) y las otras dos no la admiten (una curva que nadie usa sería un argumento ignorado)."""
+    if base == BASE_DOSIS and not isinstance(curva, CurvaDeLaCapa):
+        raise ValueError(f"La base «{BASE_DOSIS}» necesita la curva de dosis de la capa (`curva_de_la_capa(curva, capa)`), no {type(curva).__name__}.")
+    if base != BASE_DOSIS and curva is not None:
+        raise ValueError(f"La curva de dosis solo se usa con la base «{BASE_DOSIS}», no con «{base}».")
+
+
+def normalizar(base, valores, piso, meseta, curva=None):
     """Los niveles de 8 bits `valores` normalizados entre el piso (0) y la meseta (1) en la base pedida, la ÚNICA definición de la base del análisis (OD.1): en `BASE_VALOR_DE_PIXEL`,
     (piso - v) / (piso - meseta) (0.5 en la media aritmética); en `BASE_DENSIDAD_OPTICA`, log10(piso / max(v, VP_MINIMO)) / log10(piso / max(meseta, VP_MINIMO)) (0.5 en la media geométrica;
-    monótona: a menor valor de píxel, mayor netOD). Un NaN sigue siendo NaN. Cualquier otra base es `ValueError`."""
+    monótona: a menor valor de píxel, mayor netOD); en `BASE_DOSIS` (CD.6), D(netOD(v)) / D(netOD(meseta)) con la curva de la capa `curva` (0.5 donde la dosis vale la mitad de la de la meseta; monótona
+    porque la curva lo es). Un NaN sigue siendo NaN. Cualquier otra base es `ValueError`, y también la dosis sin curva o una curva con otra base."""
     _exigir_la_base(base)
+    _exigir_la_curva(base, curva)
     v = np.asarray(valores, dtype=np.float64)
     if base == BASE_VALOR_DE_PIXEL:
         return (piso - v) / (piso - meseta)
+    if base == BASE_DOSIS:
+        return valores_en_la_base(base, v, piso, curva) / float(valores_en_la_base(base, meseta, piso, curva))
     return np.log10(piso / np.maximum(v, VP_MINIMO)) / np.log10(piso / max(float(meseta), VP_MINIMO))
 
 
-def nivel_de_la_base(base, fraccion, piso, meseta):
+def nivel_de_la_base(base, fraccion, piso, meseta, curva=None):
     """El nivel de 8 bits donde la señal normalizada vale `fraccion` (0 en el piso, 1 en la meseta): la altura media y los niveles de la penumbra, para dibujarlos y decirlos en niveles. En valor de pixel,
-    piso - fraccion · (piso - meseta); en netOD, piso · (meseta / piso)^fraccion (la media geométrica para 0.5). Es la inversa de `normalizar` en esa base."""
+    piso - fraccion · (piso - meseta); en netOD, piso · (meseta / piso)^fraccion (la media geométrica para 0.5); en dosis (CD.6), piso · 10^(−x) con x la netOD de la dosis fraccion · D(netOD(meseta))
+    (la inversa de la curva, `CurvaDeDosis.netod`). Es la inversa de `normalizar` en esa base."""
     _exigir_la_base(base)
+    _exigir_la_curva(base, curva)
     if base == BASE_VALOR_DE_PIXEL:
         return piso - fraccion * (piso - meseta)
+    if base == BASE_DOSIS:
+        return float(piso) * 10.0 ** (-curva.netod(fraccion * float(valores_en_la_base(base, meseta, piso, curva))))
     return piso * (max(float(meseta), VP_MINIMO) / piso) ** fraccion
 
 
-def valores_en_la_base(base, valores, piso):
+def valores_en_la_base(base, valores, piso, curva=None):
     """Los niveles de 8 bits `valores` en la unidad de la base, para DIBUJAR un perfil con la base con que se midió: en valor de píxel los mismos niveles; en netOD la densidad óptica neta absoluta
-    log10(piso / max(v, VP_MINIMO)) (0 en el piso; sin normalizar a la meseta). Acepta un arreglo o un escalar."""
+    log10(piso / max(v, VP_MINIMO)) (0 en el piso; sin normalizar a la meseta); en dosis (CD.6) la dosis de esa netOD con la curva de la capa, en cGy contados desde el cero de la curva (0 en el piso).
+    Acepta un arreglo o un escalar."""
     _exigir_la_base(base)
+    _exigir_la_curva(base, curva)
     v = np.asarray(valores, dtype=np.float64)
     if base == BASE_VALOR_DE_PIXEL:
         return v
+    if base == BASE_DOSIS:
+        return curva.dosis(np.log10(float(piso) / np.maximum(v, VP_MINIMO)))
     return np.log10(float(piso) / np.maximum(v, VP_MINIMO))
 
 
@@ -940,7 +996,7 @@ def girar(pelicula, M, P, cruce):
 
 # ----------------------------------------------------------------------------- el perfil
 
-def perfil_central(capa, eje, P, banda=0, base=BASE_VALOR_DE_PIXEL):
+def perfil_central(capa, eje, P, banda=0, base=BASE_VALOR_DE_PIXEL, curva=None, piso=None):
     """El perfil de `capa` (una `CapaGirada`) por el cruce de diagonales -> `PerfilCentral`: la fila (crossplane) o la columna (inplane) que pasa por él en el marco girado, PROMEDIADA en una banda de
     `banda_perfil_mm` de ancho. La banda `banda` es la de las filas (columnas) cuyo centro cae en [cruce + (banda - 1/2) mm, cruce + (banda + 1/2) mm): las vecinas no se solapan ni dejan huecos y la 0
     es el perfil central. El crossplane recorre x y promedia filas, el inplane recorre y y promedia columnas, nunca cruzados. Un punto del perfil solo vale si TODAS las filas de la banda tienen ahí película
@@ -952,11 +1008,18 @@ def perfil_central(capa, eje, P, banda=0, base=BASE_VALOR_DE_PIXEL):
     PÍXEL a densidad óptica: la media de log10(max(v, VP_MINIMO)) de las filas, devuelta a niveles de 8 bits (10 ** esa media: la media GEOMÉTRICA), de modo que log10(piso / valor del perfil) es el promedio de la
     netOD de cada píxel de la banda (lo que `dibujar_perfil` traza) y una mota brillante dentro de la banda no la acorta más de lo que acorta a la imagen convertida (con el logaritmo del promedio LINEAL el azul
     inplane de EPSON007 y de EPSON008.TIF salía casi 3 mm más angosto). El piso de VP_MINIMO se aplica POR PÍXEL, antes del logaritmo (un píxel en 0 no da infinito). La máscara de píxeles con película y dato, el
-    margen del borde y las filas de la banda son los mismos en las dos bases."""
+    margen del borde y las filas de la banda son los mismos en las dos bases.
+
+    EN DOSIS (CD.6): `curva` (la de ESTA capa, `curva_de_la_capa`) y `piso` (el nivel de piso de la capa) son obligatorios. La banda es la de la imagen CONVERTIDA PÍXEL A PÍXEL a dosis: la media de
+    D(log10(piso / max(v, VP_MINIMO))) de sus filas, devuelta a niveles de 8 bits con la inversa de la curva (piso · 10^(−x), x = `CurvaDeDosis.netod` de esa media), de modo que la dosis del valor del perfil es
+    el promedio de la dosis de cada píxel de la banda, como OD1-REV-D1 en netOD. Con una curva lineal (D = k·x) es EXACTAMENTE la banda de netOD."""
     if eje not in EJES:
         raise ValueError(f"El eje es uno de {EJES}, no {eje!r}.")
     _exigir_la_base(base)
     _pedir(P, ("banda_perfil_mm", "margen_borde_mm"), "`perfil_central`")
+    _exigir_la_curva(base, curva)
+    if base == BASE_DOSIS and (piso is None or not np.isfinite(piso) or not piso > 0):
+        raise ValueError(f"La banda en dosis necesita el nivel de piso de la capa (positivo), no {piso!r}.")
     ancho_px = P["banda_perfil_mm"] / capa.tam_mm
     if eje == "crossplane":
         centro_perpendicular, origen_perpendicular, origen_del_eje = capa.cruce[1], capa.origen[1], capa.origen[0]
@@ -973,6 +1036,10 @@ def perfil_central(capa, eje, P, banda=0, base=BASE_VALOR_DE_PIXEL):
         raise ValueError(f"La banda {banda} del perfil {eje} (de {primera} a {fin}) queda fuera de la película girada.")
     if base == BASE_DENSIDAD_OPTICA:
         valores = 10.0 ** np.log10(np.maximum(datos[a:b], VP_MINIMO), dtype=np.float64).mean(axis=0)
+    elif base == BASE_DOSIS:
+        netod = math.log10(float(piso)) - np.log10(np.maximum(datos[a:b], VP_MINIMO), dtype=np.float64)          # en float64 desde el logaritmo (el cociente en float32 perdería 1e-7)
+        dosis = np.asarray(curva.dosis(netod), dtype=np.float64).mean(axis=0)
+        valores = float(piso) * 10.0 ** (-np.asarray(curva.netod(dosis), dtype=np.float64))
     else:
         valores = datos[a:b].mean(axis=0, dtype=np.float64)
     bueno = pelicula[a:b].all(axis=0) & validos[a:b].all(axis=0)
@@ -1067,7 +1134,7 @@ def _no_medible(perfil, centro, motivo, **extra):
     return MedidaDePerfil(estado=f"no medible: perfil {perfil.eje}: {motivo}", capa=perfil.capa, eje=perfil.eje, tam_mm=perfil.tam_mm, centro_px=float(centro), perfil=perfil, **extra)
 
 
-def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None):
+def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None, curva=None):
     """Mide un perfil -> `MedidaDePerfil`: meseta, altura media, bordes de radiación, FWHM, centro de radiación y penumbras.
 
     ZONA CENTRAL: [centro - e, centro + e] con e = `fraccion_meseta` / 2 x la distancia entre los dos bordes luminosos de esa línea (`bordes_luz`, el resultado de la función del mismo nombre), alrededor del cruce de
@@ -1083,9 +1150,15 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None)
     AFUERA, el primer cruce al salir de la zona central (nunca el punto más cercano a la altura media de todo el perfil), con interpolación lineal subpíxel, sobre el perfil suavizado
     `suavizado_perfil_mm`. La penumbra de cada lado va del `penumbra_alta` al `penumbra_baja` de la señal; si el perfil llega al borde de la película antes de cruzar el segundo queda «incompleta» (None y el aviso),
     nunca un número inventado. Lo que no se puede medir NO lanza: la medida dice «no medible» con su motivo y trae lo que sí se midió (por ejemplo un solo borde). `ValueError` solo si la base no existe o a
-    `P` le falta un parámetro."""
+    `P` le falta un parámetro.
+
+    EN DOSIS (CD.6, `curva` = la de esta capa): la zona, la tinta (apartada en niveles), el contraste y la regla del recorte son los de netOD (la dosis sale de la netOD: una meseta recortada sigue «no
+    medible»); la meseta es la DOSIS MEDIA de esas muestras (P4 de la curva: el 50 % de la media de la meseta; decisión CD6-D3), devuelta a su nivel; si su netOD pasa la netOD más alta del rango útil
+    de la curva, el perfil es «no medible en dosis» (DC8, condición 4: no se extrapola, `motivo_del_rango`); y la altura media y la penumbra son el 50 % y el 80 y 20 % de la DOSIS de la meseta
+    (`normalizar` y `nivel_de_la_base` con la curva)."""
     _exigir_la_base(base)
     _pedir(P, CLAVES_QUE_PIDE_LA_MEDIDA, "`medir_perfil`")
+    _exigir_la_curva(base, curva)
     tam = perfil.tam_mm
     centro = float(centro_px)
     if piso is None or not np.isfinite(piso):
@@ -1116,16 +1189,28 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None)
     datos.update(meseta=meseta, muestras_meseta=int(sin_tinta.sum()))
     if not contraste >= P["contraste_minimo"]:
         return _no_medible(perfil, centro, f"el piso no es más claro que la meseta en al menos {P['contraste_minimo']:g} niveles (piso {piso:.1f}, meseta {meseta:.1f})", **datos)
-    if base == BASE_DENSIDAD_OPTICA:
+    if base in (BASE_DENSIDAD_OPTICA, BASE_DOSIS):
         recortada = meseta_recortada(v[usables])          # CD.2: la regla del recorte es UNA (`pelicula.meseta_recortada`): la mediana de la zona central cerca del negro del escáner y más de FRACCION_DE_RECORTE_MAXIMA de sus muestras en él
         if recortada is not None:          # el escáner recortó la meseta (el rojo a 800 UM): el logaritmo de un valor recortado no es la densidad óptica y ninguna capa «con netOD» se inventa
             return _no_medible(perfil, centro, f"{MOTIVO_MESETA_RECORTADA}: el {100 * recortada:.0f} % de la zona central de la meseta vale {NIVEL_DE_RECORTE:g} niveles o menos y la densidad óptica no existe", **datos)
-    datos.update(altura_media=nivel_de_la_base(base, P["altura_media"], piso, meseta), nivel_penumbra_alta=nivel_de_la_base(base, P["penumbra_alta"], piso, meseta),
-                 nivel_penumbra_baja=nivel_de_la_base(base, P["penumbra_baja"], piso, meseta))
+    if base == BASE_DOSIS:
+        # CD.6 (CD6-D3): en dosis la meseta es la DOSIS MEDIA de las mismas muestras (las de la zona central sin la tinta, apartada en niveles como siempre), devuelta a su nivel con la inversa de la
+        # curva: el 50 % es el de la dosis de la meseta, como en la imagen convertida a dosis. En netOD la meseta sigue siendo el nivel medio (OD.1); con la meseta plana y sin ruido son el mismo nivel.
+        meseta = float(piso * 10.0 ** (-curva.netod(float(np.mean(valores_en_la_base(base, v[sin_tinta], piso, curva))))))
+        datos["meseta"] = meseta
+        fuera = motivo_del_rango(curva, math.log10(piso / max(meseta, VP_MINIMO)))          # DC8, condición 4: la netOD de la meseta no pasa el rango útil de la curva; no se extrapola
+        if fuera is not None:
+            return MedidaDePerfil(estado=f"{PREFIJO_NO_MEDIBLE_EN_DOSIS}perfil {perfil.eje}: {fuera}", capa=perfil.capa, eje=perfil.eje, tam_mm=perfil.tam_mm, centro_px=centro, perfil=perfil, **datos)
+        datos["desviacion_meseta"] = float(np.std(v[sin_tinta]))
+    datos.update(altura_media=nivel_de_la_base(base, P["altura_media"], piso, meseta, curva), nivel_penumbra_alta=nivel_de_la_base(base, P["penumbra_alta"], piso, meseta, curva),
+                 nivel_penumbra_baja=nivel_de_la_base(base, P["penumbra_baja"], piso, meseta, curva))
     muestras = 2 * int(round((P["suavizado_perfil_mm"] / tam - 1) / 2)) + 1
-    suave = _suavizar(v, max(muestras, 1))
+    if base == BASE_DOSIS:          # CD.6 (CD6-D3): en dosis se suaviza la DOSIS (la imagen convertida), y el perfil suavizado vuelve a niveles con la inversa de la curva
+        suave = float(piso) * 10.0 ** (-np.asarray(curva.netod(_suavizar(valores_en_la_base(base, v, piso, curva), max(muestras, 1))), dtype=np.float64))
+    else:
+        suave = _suavizar(v, max(muestras, 1))
     datos["suavizado"] = suave
-    n = normalizar(base, suave, piso, meseta)
+    n = normalizar(base, suave, piso, meseta, curva)
     if np.any(n[usables] <= P["altura_media"]):
         return _no_medible(perfil, centro, "la zona central de la meseta no está toda dentro del campo de radiación (hay muestras bajo la altura media)", **datos)
     indices = np.flatnonzero(en_zona)
@@ -1166,8 +1251,9 @@ def _sin_medir_la_capa(nombre, estado, tam_mm):
                         centro_radiacion_px=(None, None), radiacion_menos_luz_mm=(None, None), radiacion_menos_reticulo_mm=(None, None))
 
 
-def _medir_la_capa(girada, nombre, piso, geometria, luz, P, base=BASE_VALOR_DE_PIXEL):
-    """Las dos medidas de perfil de una capa, la coincidencia por lado y los tres centros, en la base `base`. El nivel de piso es el de ESE `Piso`; si esa capa no tiene piso no se mide y se dice por qué."""
+def _medir_la_capa(girada, nombre, piso, geometria, luz, P, base=BASE_VALOR_DE_PIXEL, curva=None):
+    """Las dos medidas de perfil de una capa, la coincidencia por lado y los tres centros, en la base `base`. El nivel de piso es el de ESE `Piso`; si esa capa no tiene piso no se mide y se dice por qué.
+    En dosis (CD.6) `curva` es la de ESTA capa y la medida trae además la base, la dosis de la meseta y su U (`_dosis_de_la_meseta`)."""
     del_piso = piso.capas[nombre]
     if del_piso.estado != "ok" or del_piso.mediana is None:
         return _sin_medir_la_capa(nombre, del_piso.estado, girada.tam_mm)
@@ -1177,11 +1263,11 @@ def _medir_la_capa(girada, nombre, piso, geometria, luz, P, base=BASE_VALOR_DE_P
     medidas = {}
     for i, eje in enumerate(EJES):
         try:
-            perfil = perfil_central(capa, eje, P, base=base)
+            perfil = perfil_central(capa, eje, P, base=base, curva=curva, piso=del_piso.mediana)
         except ValueError as motivo:
             medidas[eje] = MedidaDePerfil(estado=f"no medible: perfil {eje}: {motivo}", capa=nombre, eje=eje, tam_mm=girada.tam_mm, centro_px=float(cruce[i]), piso=float(del_piso.mediana))
             continue
-        medidas[eje] = medir_perfil(perfil, cruce[i], del_piso.mediana, base, P, luz[eje], reticulo[i])
+        medidas[eje] = medir_perfil(perfil, cruce[i], del_piso.mediana, base, P, luz[eje], reticulo[i], curva=curva)
     rad, luminoso = {}, {}
     for eje in EJES:
         for j, lado in enumerate(LADOS_DEL_EJE[eje]):
@@ -1192,8 +1278,9 @@ def _medir_la_capa(girada, nombre, piso, geometria, luz, P, base=BASE_VALOR_DE_P
     menos_luz = tuple(None if c is None else float((c - cruce[i]) * tam) for i, c in enumerate(centro))
     menos_reticulo = tuple(None if c is None else float((c - reticulo[i]) * tam) for i, c in enumerate(centro))
     fallas = [m.estado for m in medidas.values() if not m.ok]
+    en_dosis = {} if base != BASE_DOSIS else dict(zip(("base", "dosis_meseta_cgy", "u_dosis_meseta_cgy"), (BASE_DOSIS,) + _dosis_de_la_meseta(curva, del_piso.mediana, medidas)))
     return MedidaDeCapa(capa=nombre, estado="ok" if not fallas else fallas[0], piso=float(del_piso.mediana), crossplane=medidas["crossplane"], inplane=medidas["inplane"],
-                        coincidencia_mm=coincidencia(rad, luminoso, tam), centro_radiacion_px=centro, radiacion_menos_luz_mm=menos_luz, radiacion_menos_reticulo_mm=menos_reticulo)
+                        coincidencia_mm=coincidencia(rad, luminoso, tam), centro_radiacion_px=centro, radiacion_menos_luz_mm=menos_luz, radiacion_menos_reticulo_mm=menos_reticulo, **en_dosis)
 
 
 def _del_campo_luminoso(geometria):
@@ -1213,7 +1300,7 @@ def _marca_como_dato(marca):
     return [x, y]
 
 
-def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, referencia_virgen=None):
+def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, referencia_virgen=None, curva=None, cadena=None):
     """El análisis mensual de una película -> `ResultadoPlacaMensual`: los cinco puntos, la geometría del campo luminoso (C.1), UNA llamada a `piso_de_pelicula` (todas las capas usan ese `Piso`), la película
     recortada y girada y, para R, G, B y el gris por separado, los perfiles centrales, el FWHM, los bordes, la coincidencia por lado y los tres centros.
 
@@ -1222,7 +1309,12 @@ def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, re
     guardados, no con los de hoy); la BASE sale de `P["base_de_la_medida"]` (OD.1) y, si el registro no la trae (uno guardado antes de OD.1), es el valor de píxel: se mide como se midió.
     `modo_piso`, `punto_manual` y `referencia_virgen` pasan tal cual a `piso_de_pelicula` (A.3): sin `modo_piso`, la regla de `modo_efectivo` decide (la película virgen si hay referencia y las esquinas si no). Lo que no se puede medir NO lanza: el resultado y cada capa dicen «no medible»
     con su motivo; los bordes luminosos y luz - retículo, que no dependen de la película, se entregan siempre que la geometría sea buena. La raíz es «ok» si al menos una capa se midió
-    por completo (`MOTIVO_NINGUNA_CAPA` si ninguna). `ValueError` solo si los argumentos tienen una forma equivocada (no son cinco puntos, a `P` le falta un parámetro, el modo no existe)."""
+    por completo (`MOTIVO_NINGUNA_CAPA` si ninguna). `ValueError` solo si los argumentos tienen una forma equivocada (no son cinco puntos, a `P` le falta un parámetro, el modo no existe).
+
+    EN DOSIS (CD.6): `P["base_de_la_medida"] = BASE_DOSIS`, `curva` (la `CurvaDeDosis` de `curva_efectiva` o la copia guardada de un registro; None dice «no hay curva de dosis» en cada capa) y `cadena`
+    (la de `cadena_de_la_pelicula`, para la condición 3). Cada capa pasa por `base_de_la_capa`: si cumple las condiciones 1, 2, 3 y 5 de DC8 se mide en dosis con la curva de ESA capa (la 4, el rango, la
+    juzga `medir_perfil` en cada perfil) y si no queda «no medible en dosis: <motivo>», sin números (sus números en netOD son los del análisis en netOD: una vista nunca mezcla bases). El resultado trae la
+    curva, la cadena y los avisos de la película virgen (`diferencia_virgen_maxima_pct`, que no bloquean). Una curva o una cadena con otra base es `ValueError` (no se ignora un argumento)."""
     P = parametros
     _pedir(P, CLAVES_QUE_PIDE_ANALIZAR, "`analizar`")
     base = P.get("base_de_la_medida", BASE_VALOR_DE_PIXEL)
@@ -1236,11 +1328,19 @@ def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, re
     marcas = tuple(_marca_como_dato(m) for m in lista)
     usados = copy.deepcopy(dict(P))
     usados.setdefault("base_de_la_medida", base)              # los parámetros que viajan dicen la base con que SE MIDIÓ (un registro de antes de OD.1 no la traía)
+    if base != BASE_DOSIS and (curva is not None or cadena is not None):
+        raise ValueError(f"La curva de dosis y la cadena de captura solo se usan con la base «{BASE_DOSIS}», no con «{base}».")
+    if curva is not None and not isinstance(curva, CurvaDeDosis):
+        raise ValueError(f"La curva de un análisis en dosis es una `CurvaDeDosis` (`curva_desde_dict` de la copia), no {type(curva).__name__}.")
+    en_dosis = {}
+    if base == BASE_DOSIS:
+        usados.setdefault("diferencia_virgen_maxima_pct", PARAMETROS_DE_LA_DOSIS["diferencia_virgen_maxima_pct"]["valor"])      # CD.6: el de fábrica si el registro no lo trae
+        en_dosis = dict(curva=curva, cadena=None if cadena is None else copy.deepcopy(dict(cadena)))
 
     def sin_medir(estado, **extra):
         return ResultadoPlacaMensual(version=VERSION_ALGORITMO, estado=estado, parametros=usados, base=base, tam_mm=tam_mm, marcas=marcas, puntos=extra.get("puntos"),
                                      geometria=extra.get("geometria"), piso=extra.get("piso"), girada=None, capas={n: _sin_medir_la_capa(n, estado, tam_mm) for n in CAPAS_DEL_PISO},
-                                     bordes_luz_px=extra.get("bordes_luz_px") or {eje: None for eje in EJES}, luz_menos_reticulo_mm=extra.get("luz_menos_reticulo_mm"))
+                                     bordes_luz_px=extra.get("bordes_luz_px") or {eje: None for eje in EJES}, luz_menos_reticulo_mm=extra.get("luz_menos_reticulo_mm"), **en_dosis)
 
     if not clasificados.ok:
         return sin_medir(clasificados.estado, puntos=clasificados)
@@ -1252,10 +1352,14 @@ def analizar(pelicula, puntos, parametros, modo_piso=None, punto_manual=None, re
     if piso.estado != "ok":
         return sin_medir(piso.estado, puntos=clasificados, geometria=geometria, piso=piso, bordes_luz_px=luz, luz_menos_reticulo_mm=luz_menos_reticulo)
     girada = girar(pelicula, geometria.matriz_de_giro, P, geometria.cruce)
-    capas = {nombre: _medir_la_capa(girada, nombre, piso, geometria, luz, P, base) for nombre in CAPAS_DEL_PISO}
+    if base == BASE_DOSIS:
+        capas = {nombre: _medir_la_capa_en_dosis(girada, nombre, piso, geometria, luz, P, curva, cadena) for nombre in CAPAS_DEL_PISO}
+        en_dosis["avisos_de_la_dosis"] = avisos_de_la_virgen(curva, piso, usados["diferencia_virgen_maxima_pct"])
+    else:
+        capas = {nombre: _medir_la_capa(girada, nombre, piso, geometria, luz, P, base) for nombre in CAPAS_DEL_PISO}
     estado = "ok" if any(medida.ok for medida in capas.values()) else MOTIVO_NINGUNA_CAPA
     return ResultadoPlacaMensual(version=VERSION_ALGORITMO, estado=estado, parametros=usados, base=base, tam_mm=tam_mm, marcas=marcas, puntos=clasificados, geometria=geometria,
-                                 piso=piso, girada=girada, capas=capas, bordes_luz_px=luz, luz_menos_reticulo_mm=luz_menos_reticulo)
+                                 piso=piso, girada=girada, capas=capas, bordes_luz_px=luz, luz_menos_reticulo_mm=luz_menos_reticulo, **en_dosis)
 
 
 def valores_medidos(resultado, capa):
@@ -1436,12 +1540,13 @@ def _banda_del_barrido(resultado, capa, eje, i, k, cruce_luz, mediana):
     P = resultado.parametros
     girada = resultado.girada
     linea = cruce_luz[1 - i] + k * (P["banda_perfil_mm"] / girada.tam_mm)
+    curva = None if resultado.base != BASE_DOSIS else curva_de_la_capa(resultado.curva, capa.nombre)          # CD.6: en dosis, la curva de ESTA capa
     try:
-        perfil = perfil_central(capa, eje, P, banda=k, base=resultado.base)
+        perfil = perfil_central(capa, eje, P, banda=k, base=resultado.base, curva=curva, piso=mediana)
     except ValueError as motivo:
         medida = MedidaDePerfil(estado=f"no medible: perfil {eje}: {motivo}", capa=capa.nombre, eje=eje, tam_mm=girada.tam_mm, centro_px=float(girada.cruce[i]), piso=float(mediana))
     else:
-        medida = medir_perfil(perfil, girada.cruce[i], mediana, resultado.base, P, bordes_luz(eje, resultado.geometria.esquinas_giradas, linea_px=linea), resultado.geometria.reticulo_girado[i])
+        medida = medir_perfil(perfil, girada.cruce[i], mediana, resultado.base, P, bordes_luz(eje, resultado.geometria.esquinas_giradas, linea_px=linea), resultado.geometria.reticulo_girado[i], curva=curva)
     return BandaDelBarrido(k=k, posicion_mm=float(k * P["banda_perfil_mm"]), linea_px=float(linea), medida=medida)
 
 
@@ -1455,6 +1560,8 @@ def _barrer_la_capa(resultado, nombre, eje, i, ks, cruce_luz):
     del_piso = resultado.piso.capas[nombre]
     if del_piso.estado != "ok" or del_piso.mediana is None:
         return _barrido_de_capa_sin_barrer(nombre, eje, _motivo_del_barrido_sin_piso(del_piso))
+    if resultado.base == BASE_DOSIS and resultado.capas[nombre].base != BASE_DOSIS:          # CD.6: una capa que no se mide en dosis tampoco se barre en dosis (su motivo es el de la capa)
+        return _barrido_de_capa_sin_barrer(nombre, eje, resultado.capas[nombre].estado)
     capa = resultado.girada.capa(nombre)
     bandas = tuple(_banda_del_barrido(resultado, capa, eje, i, k, cruce_luz, del_piso.mediana) for k in ks)
     estadistica = _estadistica([b.fwhm_mm for b in bandas if b.ok], len(bandas))
@@ -1502,3 +1609,219 @@ def barrido(resultado):
     ejes = {eje: _barrer_el_eje(resultado, eje, i, cruce_luz) for i, eje in enumerate(EJES)}
     ok = any(c.ok for e in ejes.values() for c in e.capas.values())
     return BarridoPlacaMensual(version=VERSION_ALGORITMO, estado="ok" if ok else MOTIVO_NINGUNA_BANDA, tam_mm=resultado.girada.tam_mm, ejes=ejes)
+
+
+# ============================================================================= CD.6: la base «dosis», la regla por capa, la regla del botón y la curva efectiva (DC7, DC8, DC10; DA-92)
+
+PREFIJO_NO_MEDIBLE_EN_DOSIS = "no medible en dosis: "        # el estado de una capa (o de un perfil) que no se mide en dosis: «no medible», como manda DA-88, y en qué base
+MOTIVO_SIN_CURVA = "no hay curva de dosis"
+FUENTES_DEL_CERO_QUE_PASAN_A_DOSIS = ("piezas_de_0_cgy", "pelicula_virgen")      # DC8, condición 5 (DA-90): el cero de la pieza de menor dosis es una guía y nunca pasa a dosis
+TEXTO_DEL_ORIGEN_DEL_PISO = {"automatico": "el de las esquinas de la película", "manual": "el del punto marcado"}
+CONDICIONES_PARA_PASAR_A_DOSIS = ("Una capa se mide en dosis solo si la curva de esa capa es «válida», su cero es una pieza de 0 cGy o la película virgen montada (no la pieza de menor dosis), el piso "
+                                  "del análisis es el de la película virgen, la película se escaneó con la misma cadena de captura que la calibración (escáner, bits, resolución y formato) y la netOD de "
+                                  "la meseta no pasa el rango útil de la curva (no se extrapola).")          # DC8 entera, para la ayuda del botón (CD.7): los motivos dicen la primera que falla
+REGLA_DE_LA_CURVA = "la curva de un análisis es la de la calibración vigente más reciente con al menos una capa «válida» escaneada con la misma cadena de captura que la película"
+
+
+@dataclass(frozen=True, eq=False)
+class CurvaDeLaCapa:
+    """La curva de dosis de UNA capa: lo que `normalizar`, `nivel_de_la_base`, `valores_en_la_base`, `perfil_central` y `medir_perfil` reciben en dosis. Es una vista de la `CurvaDeDosis` de CD.3: la
+    dosis y su inversa son SUS `dosis(capa, x)` y `netod(capa, d)` (las únicas definiciones), con la capa fija para que ninguna llamada pueda pedir la de otra."""
+    curva: CurvaDeDosis
+    capa: str
+
+    def dosis(self, netod):
+        return self.curva.dosis(self.capa, netod)
+
+    def netod(self, dosis):
+        return self.curva.netod(self.capa, dosis)
+
+    @property
+    def netod_maxima(self):
+        return self.curva.capas[self.capa]["netod_maxima"]
+
+    @property
+    def rango_cgy(self):
+        return self.curva.rango(self.capa)
+
+
+def _exigir_la_capa(capa):
+    if capa in CAPAS_DEL_PISO:
+        return
+    raise ValueError(f"La capa es una de {CAPAS_DEL_PISO}, no {capa!r}.")
+
+
+def curva_de_la_capa(curva, capa):
+    """La `CurvaDeLaCapa` de `capa` (R, G, B o gris) en la `CurvaDeDosis` `curva`. `ValueError` si no es una curva, la capa no existe o la curva no tiene parámetros en esa capa."""
+    if not isinstance(curva, CurvaDeDosis):
+        raise ValueError(f"La curva de dosis es una `CurvaDeDosis`, no {type(curva).__name__}.")
+    _exigir_la_capa(capa)
+    if curva.capas[capa]["parametros"] is None:
+        raise ValueError(f"La curva de la capa {ADJETIVO_DE_LA_CAPA[capa]} no tiene parámetros: {curva.estado(capa)}.")
+    return CurvaDeLaCapa(curva, capa)
+
+
+def motivo_del_rango(curva, netod_meseta):
+    """DC8, condición 4 (no se extrapola): None si la netOD de la meseta no pasa la netOD más alta del rango útil de la curva de la capa (`CurvaDeLaCapa`), o el motivo con los dos números."""
+    maxima = curva.netod_maxima
+    if maxima is None:
+        return f"la curva de la capa {ADJETIVO_DE_LA_CAPA[curva.capa]} no tiene rango útil"
+    if netod_meseta > maxima:
+        return (f"la meseta (netOD {netod_meseta:.3f}) pasa el rango útil de la curva de la capa {ADJETIVO_DE_LA_CAPA[curva.capa]} (hasta netOD {maxima:.3f}, {curva.rango_cgy:g} cGy): "
+                f"no se extrapola")
+    return None
+
+
+def base_de_la_capa(curva, capa, piso, cadena, netod_meseta=None):
+    """LA regla de la base de una capa (DC8, UNA): (`BASE_DOSIS`, None) si la capa se puede medir en dosis, o (`BASE_DENSIDAD_OPTICA`, motivo) con el motivo de la PRIMERA condición que falla, en
+    este orden: hay curva; la curva de esa capa es «válida» (una «guía» lo dice así); su cero es una pieza de 0 cGy o la película virgen montada (condición 5); el piso es el de la película virgen
+    (condición 2, P8); la cadena de captura de la película (`cadena_de_la_pelicula`) es la de la calibración (condición 3); y, si se da `netod_meseta`, la meseta no pasa el rango útil (condición 4,
+    `motivo_del_rango`; sin ella la juzga `medir_perfil` perfil a perfil). `curva`: una `CurvaDeDosis` o None; `piso`: el `Piso` del análisis; `cadena`: un diccionario de `cadena_de_captura` o None."""
+    _exigir_la_capa(capa)
+    nombre = ADJETIVO_DE_LA_CAPA[capa]
+    if curva is None:
+        return BASE_DENSIDAD_OPTICA, MOTIVO_SIN_CURVA
+    estado = curva.estado(capa)
+    if estado.startswith(PREFIJO_GUIA):
+        return BASE_DENSIDAD_OPTICA, f"la curva de la capa {nombre} es una guía: {estado[len(PREFIJO_GUIA):]}"
+    if estado != ESTADO_VALIDA:
+        return BASE_DENSIDAD_OPTICA, f"la curva de la capa {nombre} no es válida: {estado}"
+    cero = curva.cero or {}
+    if cero.get("fuente") not in FUENTES_DEL_CERO_QUE_PASAN_A_DOSIS:
+        return BASE_DENSIDAD_OPTICA, f"la curva de la capa {nombre} es una guía: su cero no es una pieza de 0 cGy ni la película virgen montada ({cero.get('detalle') or 'sin cero'})"
+    if piso is None or piso.estado != "ok" or piso.origen != "virgen":
+        origen = "no se midió" if piso is None or piso.estado != "ok" else TEXTO_DEL_ORIGEN_DEL_PISO.get(piso.origen, piso.origen)
+        return BASE_DENSIDAD_OPTICA, f"el piso no es el de la película virgen ({origen}): la dosis lo exige"
+    if cadena is None:
+        return BASE_DENSIDAD_OPTICA, "no se conoce la cadena de captura de la película"
+    if dict(cadena) != curva.cadena:
+        return BASE_DENSIDAD_OPTICA, f"la película se escaneó con otra cadena de captura que la calibración: {_texto_de_la_cadena(cadena)} contra {_texto_de_la_cadena(curva.cadena)}"
+    if netod_meseta is not None:
+        fuera = motivo_del_rango(CurvaDeLaCapa(curva, capa), netod_meseta)
+        if fuera is not None:
+            return BASE_DENSIDAD_OPTICA, fuera
+    return BASE_DOSIS, None
+
+
+def _sin_medir_en_dosis(nombre, motivo, tam_mm):
+    """La capa de un análisis en dosis que no se mide en dosis: «no medible en dosis: <motivo>», sin números, con su base (netOD) y su motivo."""
+    return replace(_sin_medir_la_capa(nombre, PREFIJO_NO_MEDIBLE_EN_DOSIS + motivo, tam_mm), base=BASE_DENSIDAD_OPTICA, motivo_de_la_base=motivo)
+
+
+def _medir_la_capa_en_dosis(girada, nombre, piso, geometria, luz, P, curva, cadena):
+    """Una capa de un análisis en dosis: `base_de_la_capa` decide (condiciones 1, 2, 3 y 5) y, si pasa, se mide con la curva de ESA capa; si un perfil queda fuera del rango útil (condición 4), la capa
+    entera es «no medible en dosis» con ese motivo y sin números (nunca un perfil en dosis y el otro sin medir: lo que se guarda en dosis, CD.6b, es de una capa medida por completo)."""
+    base, motivo = base_de_la_capa(curva, nombre, piso, cadena)
+    if base != BASE_DOSIS:
+        return _sin_medir_en_dosis(nombre, motivo, girada.tam_mm)
+    medida = _medir_la_capa(girada, nombre, piso, geometria, luz, P, BASE_DOSIS, curva_de_la_capa(curva, nombre))
+    for eje in EJES:
+        estado = getattr(medida, eje).estado
+        if estado.startswith(PREFIJO_NO_MEDIBLE_EN_DOSIS):
+            return _sin_medir_en_dosis(nombre, estado[len(PREFIJO_NO_MEDIBLE_EN_DOSIS):].split(": ", 1)[1], girada.tam_mm)
+    return medida
+
+
+def _dosis_de_la_meseta(curva, piso, medidas):
+    """DC10: (la dosis de la meseta, su U) de una capa medida en dosis, o (None, None) si alguno de sus dos perfiles no se midió. La dosis es la media de las de las mesetas de sus dos perfiles (cGy
+    contados desde el cero de la curva); su U (k = 2) es `CurvaDeDosis.incertidumbre` en la netOD de esa dosis con la u de la película = la dispersión relativa de las muestras de las dos mesetas (la raíz de
+    la media de sus cuadrados) / ln 10. Lectura de Opus, vetable (CD6-D7)."""
+    perfiles = [medidas[eje] for eje in EJES]
+    if not all(m.ok and m.desviacion_meseta is not None for m in perfiles):
+        return None, None
+    dosis = float(np.mean([curva.dosis(math.log10(piso / max(m.meseta, VP_MINIMO))) for m in perfiles]))
+    relativa = math.sqrt(float(np.mean([(m.desviacion_meseta / m.meseta) ** 2 for m in perfiles])))
+    return dosis, float(curva.curva.incertidumbre(curva.capa, curva.netod(dosis), relativa / math.log(10.0)))
+
+
+def avisos_de_la_virgen(curva, piso, maximo_pct):
+    """§9 del plan: un aviso por capa en que el piso del análisis (la película virgen montada) y el I0 del cero de la curva difieren más que `maximo_pct` (`diferencia_virgen_maxima_pct`). No bloquea.
+    () sin curva, sin cero, sin piso o con un piso que NO es el de una película virgen (las esquinas o el punto marcado: no hay virgen que comparar; la regla de la base ya deja esas capas «no medible en dosis»)."""
+    if curva is None or curva.cero is None or piso is None or piso.estado != "ok" or piso.origen != "virgen":
+        return ()
+    avisos = []
+    for c in CAPAS_DEL_PISO:
+        i0 = curva.cero["capas"][c]["i0"]
+        valor = piso.capas[c].mediana
+        if valor is None or not i0:
+            continue
+        diferencia = 100.0 * (float(valor) - float(i0)) / float(i0)
+        if abs(diferencia) > maximo_pct:
+            avisos.append(f"La película virgen del análisis difiere {diferencia:+.2f} % del cero de la curva en la capa {ADJETIVO_DE_LA_CAPA[c]} (piso {float(valor):.2f} contra I0 {float(i0):.2f} "
+                          f"[nivel]; se avisa a más de {maximo_pct:g} %): la netOD del análisis y la de la curva no salen de la misma película virgen (otro lote u otra sesión de escaneo).")
+    return tuple(avisos)
+
+
+@dataclass(frozen=True, eq=False)
+class CurvaEfectiva:
+    """La curva que usa un análisis (DC7, `curva_efectiva`): `curva` (la `CurvaDeDosis` de la copia guardada, o None), `id`, `lote` y `fecha_irradiacion` de su calibración (None sin curva) y `motivo`
+    (por qué no hay curva, con la regla entera; None si la hay)."""
+    curva: CurvaDeDosis | None
+    id: int | None = None
+    lote: str | None = None
+    fecha_irradiacion: str | None = None
+    motivo: str | None = None
+
+
+def curva_efectiva(calibraciones, cadena):
+    """LA regla de qué curva usa un análisis (DC7, como `modo_efectivo` del piso): de `calibraciones` (lo que da `services.curva_dosis.vigentes_validas()`: las vigentes con una capa «válida», completas
+    y en SU orden, la más reciente primero; el motor no lee la base ni vuelve a ordenar), la PRIMERA cuya copia de la curva (`ajuste`, leída con `curva_desde_dict`) tiene al menos una capa «válida» y la
+    misma cadena de captura que la película (`cadena`, de `cadena_de_la_pelicula`). No mira la capa reportada: la curva es una por análisis y la regla del botón juzga la capa. Una copia dañada no se usa
+    y el motivo la cuenta. -> `CurvaEfectiva`."""
+    if cadena is None:
+        return CurvaEfectiva(None, motivo=f"{MOTIVO_SIN_CURVA}: no se conoce la cadena de captura de la película ({REGLA_DE_LA_CURVA})")
+    leidas, danadas = [], 0
+    for registro in calibraciones:
+        try:
+            curva = curva_desde_dict(registro["ajuste"])
+        except ValueError:
+            danadas += 1
+            continue
+        if any(curva.estado(c) == ESTADO_VALIDA for c in CAPAS_DEL_PISO):
+            leidas.append((registro, curva))
+    for registro, curva in leidas:
+        if curva.cadena == dict(cadena):
+            return CurvaEfectiva(curva, registro["id"], registro["lote"], registro["fecha_irradiacion"])
+    if leidas:
+        registro, curva = leidas[0]
+        cuantas = f"{len(leidas)} calibración vigente con una capa válida, de otra cadena" if len(leidas) == 1 else f"{len(leidas)} calibraciones vigentes con una capa válida, todas de otra cadena"
+        motivo = (f"{MOTIVO_SIN_CURVA} para la cadena de captura de esta película ({_texto_de_la_cadena(cadena)}): hay {cuantas} (la más reciente, el lote «{registro['lote']}» irradiado el "
+                  f"{registro['fecha_irradiacion']}: {_texto_de_la_cadena(curva.cadena)})")
+    else:
+        motivo = f"{MOTIVO_SIN_CURVA}: no hay ninguna calibración vigente con una capa válida (se hace con «Curva de dosis...»)"
+    if danadas:
+        motivo += f"; {danadas} con la copia de la curva dañada, que no se puede leer"
+    return CurvaEfectiva(None, motivo=f"{motivo} ({REGLA_DE_LA_CURVA})")
+
+
+def se_puede_pasar_a_dosis(resultado, efectiva, capa, cadena):
+    """LA regla del botón «Ver en dosis» (DA-92, DC8 sobre la CAPA REPORTADA): (True, None) si la capa `capa` del análisis en densidad óptica neta `resultado` se puede medir en dosis con la curva de
+    `efectiva` (`curva_efectiva`, o la copia guardada de un registro en una `CurvaEfectiva`), o (False, motivo) con el de la primera condición que falla: no hay curva (el motivo entero de `curva_efectiva`),
+    las condiciones 1, 5, 2 y 3 de `base_de_la_capa`, la capa no se midió en netOD (sin meseta no hay dosis: la roja recortada) y la 4 con la meseta más oscura de sus dos perfiles. `ValueError` si el
+    resultado no es un análisis en netOD, la capa no existe o `efectiva` no es una `CurvaEfectiva`. `CONDICIONES_PARA_PASAR_A_DOSIS` dice la regla entera."""
+    if not isinstance(resultado, ResultadoPlacaMensual) or resultado.base != BASE_DENSIDAD_OPTICA:
+        raise ValueError(f"La regla del botón se juzga sobre el análisis en «{BASE_DENSIDAD_OPTICA}» (el que la ventana muestra al abrir).")
+    _exigir_la_capa(capa)
+    if not isinstance(efectiva, CurvaEfectiva):
+        raise ValueError(f"La curva del botón es una `CurvaEfectiva` (`curva_efectiva`), no {type(efectiva).__name__}.")
+    if efectiva.curva is None:
+        return False, efectiva.motivo or MOTIVO_SIN_CURVA
+    base, motivo = base_de_la_capa(efectiva.curva, capa, resultado.piso, cadena)
+    if base != BASE_DOSIS:
+        return False, motivo
+    medida = resultado.capas[capa]
+    if not medida.ok:
+        return False, f"la capa {ADJETIVO_DE_LA_CAPA[capa]} no se midió en densidad óptica neta, así que tampoco en dosis: {medida.estado}"
+    netod = max(math.log10(m.piso / max(m.meseta, VP_MINIMO)) for m in (medida.crossplane, medida.inplane))
+    base, motivo = base_de_la_capa(efectiva.curva, capa, resultado.piso, cadena, netod_meseta=netod)
+    return (True, None) if base == BASE_DOSIS else (False, motivo)
+
+
+def cadena_de_la_pelicula(datos, pelicula=None):
+    """La cadena de captura de una película mensual (DC8, condición 3): el escáner que declara su EXIF, los bits, la resolución declarada y el formato, con la MISMA forma que la de una pieza de
+    calibración (`curva_dosis.cadena_de_captura` de la procedencia de CD.2; una prueba fija que coinciden). `datos`: los bytes del escaneo; `pelicula`: su `Pelicula` si ya se leyó (no se vuelve a leer)."""
+    datos = bytes(datos)
+    pel = leer_pelicula(datos) if pelicula is None else pelicula
+    imagen = _abrir_con_pillow(datos)
+    return cadena_de_captura({"equipo": None if imagen is None else _equipo_de_la_imagen(imagen), "bits": pel.bits, "dpi_declarado": None if pel.dpi is None else float(pel.dpi),
+                              "formato": pel.formato})

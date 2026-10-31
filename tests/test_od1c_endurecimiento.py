@@ -606,7 +606,7 @@ class TestGuardarDesdeLaVentanaEnLaBaseDeFabrica:
         v.boton_guardar.click()
         registro = svc.leer(v.ref_de_prueba)
         assert registro["parametros"]["base_de_la_medida"] == BASE_OD, "«Guardar» guarda la base con que la pantalla midio"
-        assert registro["parametros"] == pm.VALORES_DE_LA_GEOMETRIA and len(registro["parametros"]) == 41
+        assert registro["parametros"] == pm.VALORES_DE_LA_GEOMETRIA and len(registro["parametros"]) == 42      # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): un analisis nuevo lo guarda (H-CD6-7)
         assert {k: registro[k] for k in mostrado} == mostrado, "los siete datos finales guardados son EXACTAMENTE los que la ventana mostro"
         assert textos == [dib.numero(registro["fwhm_crossplane_mm"], 3), dib.numero(registro["fwhm_inplane_mm"], 3)]
         for eje, indice in (("crossplane", 0), ("inplane", 1)):

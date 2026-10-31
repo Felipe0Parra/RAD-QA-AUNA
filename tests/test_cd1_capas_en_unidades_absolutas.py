@@ -745,7 +745,8 @@ class TestLaApiYLoQueYaNoEsta:
                                                                                                                                                                RECORTADA, ANCHO_DEL_TITULO)
         nombres = {"factor_del_tope", "percentil_del_tope", "tope_en_niveles", "tope_sin_senal", "ancho_del_titulo_de_la_capa", "recortada_por_el_escaner"}
         assert not nombres & set(pm.VALORES_DE_LA_GEOMETRIA) and not nombres & set(d.TRAZO_DE_PARAMETRO), "CD1-D7: no viajan con lo guardado ni se dibujan como parametros del analisis"
-        assert set(d.TRAZO_DE_PARAMETRO) == set(pm.VALORES_DE_LA_GEOMETRIA), "compuerta: el dibujo sigue diciendo donde se ve cada parametro del analisis"
+        # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): no entra en ninguna medida y su entrada en el dibujo la pone CD.7 (H-CD6-6), que vuelve a dejar esta igualdad sin la resta.
+        assert set(d.TRAZO_DE_PARAMETRO) == set(pm.VALORES_DE_LA_GEOMETRIA) - set(pm.PARAMETROS_DE_LA_DOSIS), "compuerta: el dibujo sigue diciendo donde se ve cada parametro del analisis"
 
     def test_el_dibujo_ya_no_normaliza_ninguna_capa(self):
         """La causa: `capa_acondicionada` normalizaba con `motor.normalizar`. Ninguna funcion del modulo de dibujo la llama ya, y su docstring no la nombra."""

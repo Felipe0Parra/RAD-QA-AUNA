@@ -1982,8 +1982,8 @@ class TestLaEstructuraDelModulo:
         assert list(inspect.signature(pm.bordes_luz).parameters)[:2] == ["eje", "esquinas_giradas"]
         assert list(inspect.signature(pm.coincidencia).parameters)[:2] == ["bordes_rad", "bordes_luz"]
         sig = inspect.signature(pm.analizar)
-        assert list(sig.parameters) == ["pelicula", "puntos", "parametros", "modo_piso", "punto_manual", "referencia_virgen"]
-        assert [sig.parameters[k].default for k in ("modo_piso", "punto_manual", "referencia_virgen")] == [None, None, None]
+        assert list(sig.parameters) == ["pelicula", "puntos", "parametros", "modo_piso", "punto_manual", "referencia_virgen", "curva", "cadena"]      # CD.6 (31-10): la curva y la cadena, al final
+        assert [sig.parameters[k].default for k in ("modo_piso", "punto_manual", "referencia_virgen", "curva", "cadena")] == [None, None, None, None, None]
         assert list(inspect.signature(pm.valores_medidos).parameters) == ["resultado", "capa"]
 
     def test_valores_medidos_es_la_unica_definicion_de_lo_que_se_guarda(self):

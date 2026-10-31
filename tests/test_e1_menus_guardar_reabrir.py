@@ -661,7 +661,7 @@ class TestGuardar:
         (args, kwargs), = espias["guardar"]
         assert args[0] == v.ref_de_prueba and args[1] == USUARIO and args[2] == placa.datos and args[3] == "placa.png"
         assert args[4] == [m.clic for m in v.marcas] and all(m.estado == "refinada" and m.punto != m.clic for m in v.marcas), "los clics SIN refinar: el servicio los refina el mismo"
-        assert args[5] == parametros() and len(args[5]) == len(pm().VALORES_DE_LA_GEOMETRIA) == 41 and args[6] == "G" and args[7] == "automatico" and kwargs == {"punto_manual": None, "referencia_virgen": None}
+        assert args[5] == parametros() and len(args[5]) == len(pm().VALORES_DE_LA_GEOMETRIA) == 42 and args[6] == "G" and args[7] == "automatico" and kwargs == {"punto_manual": None, "referencia_virgen": None}
 
     def test_guardar_llamado_por_codigo_sin_un_analisis_de_esta_sesion_no_hace_nada(self, fabrica, dialogos, archivo_placa, clics, espias):
         v = fabrica()

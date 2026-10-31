@@ -656,7 +656,7 @@ class TestElAnalisisEsElDelMotor:
         assert piso.modo == "automatico" and piso.como_dict() == oraculos["automatico"].piso
 
     def test_se_mide_con_los_40_parametros_de_fabrica_enteros(self, solo_lectura):
-        assert solo_lectura.v._resultado.parametros == _P() and len(_P()) == len(pm().VALORES_DE_LA_GEOMETRIA) == 41      # OD.1: eran 40; la base de la medida es el 41
+        assert solo_lectura.v._resultado.parametros == _P() and len(_P()) == len(pm().VALORES_DE_LA_GEOMETRIA) == 42      # OD.1: eran 40; la base de la medida es el 41. CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`)
 
     def test_la_pelicula_no_se_retiene_tras_el_analisis(self, solo_lectura):
         v = solo_lectura.v
@@ -1364,11 +1364,12 @@ class TestCadaParametroTieneSuTrazo:
     def test_cada_parametro_que_entra_en_la_medida_tiene_su_entrada_en_trazo_de_parametro(self):
         trazo = dibujo_mod().TRAZO_DE_PARAMETRO
         claves, _ = parametros_que_entran_en_la_medida([MOTOR_PY.read_text(encoding="utf-8"), PELICULA_PY.read_text(encoding="utf-8")], set(_P()))
+        claves = claves - {"diferencia_virgen_maxima_pct"}      # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): dice cuando se avisa y no entra en ninguna medida; su entrada la pone CD.7 (H-CD6-6), que quita esta resta
         assert not sorted(claves - set(trazo)), f"parametros que entran en una medida y no dicen donde se ven: {sorted(claves - set(trazo))}"
 
     def test_las_entradas_son_exactamente_los_40_parametros_y_declaran_un_tipo_conocido(self):
         trazo = dibujo_mod().TRAZO_DE_PARAMETRO
-        assert set(trazo) == set(_P()) and len(trazo) == 41      # OD.1: eran 40; la base de la medida es el 41
+        assert set(trazo) == set(_P()) - {"diferencia_virgen_maxima_pct"} and len(trazo) == 41      # OD.1: eran 40; la base de la medida es el 41. CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): lo dibuja CD.7 (H-CD6-6)
         tipos = {"marca", "sexto", "banda", "zona", "perfil", "exclusion", "pagina", "pie"}
         assert all(isinstance(v, tuple) and len(v) == 2 and v[0] in tipos and isinstance(v[1], str) and v[1] for v in trazo.values())
 
