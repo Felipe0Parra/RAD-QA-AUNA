@@ -347,7 +347,7 @@ def todos_los_textos(v):
         elif isinstance(w, QTableWidget):
             textos += [w.horizontalHeaderItem(c).text() for c in range(w.columnCount())]
             textos += [t for fila in texto_de_la_tabla(w) for t in fila if t]
-    for lienzo in (v.lienzo_imagen, v.lienzo_gris, v.lienzo_capas, v.lienzo_perfiles, v.lienzo_barridos, v.lienzo_cuadratura):
+    for lienzo in (v.lienzo_imagen, v.lienzo_capas, v.lienzo_perfiles, v.lienzo_barridos, v.lienzo_cuadratura):      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
         for t in lienzo.figure.findobj(lambda a: hasattr(a, "get_text") and callable(a.get_text)):
             textos.append(t.get_text())
     return [t for t in textos if t]

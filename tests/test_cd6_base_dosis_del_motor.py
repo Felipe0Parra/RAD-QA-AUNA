@@ -214,6 +214,7 @@ class TestSinCurvaComoAntes:
         """Un registro guardado antes de CD.6 (41 parametros) se mide en netOD con sus 41: el resultado no gana el parametro 42 (lo que se guardo es lo que se mide)."""
         P = _P()
         del P["diferencia_virgen_maxima_pct"]
+        del P["nivel_de_llegada_al_piso"]      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %): un registro de antes de CD.6 tampoco lo trae
         r = _pm().analizar(escena.pelicula, escena.puntos, P, modo_piso="virgen", referencia_virgen=escena.ref)
         assert "diferencia_virgen_maxima_pct" not in r.parametros and len(r.parametros) == 41
         assert r.como_dict()["capas"] == escena.od.como_dict()["capas"], "el parametro 42 no cambia ninguna medida en netOD"
@@ -849,7 +850,7 @@ class TestElAvisoDeLaPeliculaVirgen:
         pm = _pm()
         p = pm.PARAMETROS["diferencia_virgen_maxima_pct"]
         assert p["valor"] == 2.0 and p["unidad"] == "%" and len(p["motivo"]) > 100
-        assert len(pm.VALORES_DE_LA_GEOMETRIA) == 42 and list(pm.VALORES_DE_LA_GEOMETRIA)[-1] == "diferencia_virgen_maxima_pct"
+        assert len(pm.VALORES_DE_LA_GEOMETRIA) == 43 and list(pm.VALORES_DE_LA_GEOMETRIA)[-2:] == ["diferencia_virgen_maxima_pct", "nivel_de_llegada_al_piso"]      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %)
         assert "diferencia_virgen_maxima_pct" not in pm.CLAVES_QUE_PIDE_ANALIZAR
 
 

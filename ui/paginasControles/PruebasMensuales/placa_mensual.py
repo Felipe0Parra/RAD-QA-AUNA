@@ -1,7 +1,7 @@
 """E.1 (PLAN_ANALISIS_PELICULAS_08-10.md, DA-83 a DA-86, PD1): la ventana del análisis mensual de aceleradores, `VentanaPlacaMensual(ref, equipo, usuario, parent)`.
 
 El físico abre la película del control (el recorte o la página completa del escáner), marca los cinco puntos del campo luminoso (las cuatro esquinas y el retículo, en cualquier orden) y ve el análisis en cinco
-pestañas, «lo más parecido a braqui» (la posición inicial): la imagen con el recuadro del campo luminoso y, al lado, los perfiles del gris con la tabla de sus desfases; las tres capas acondicionadas; los
+pestañas, «lo más parecido a braqui» (la posición inicial): la imagen con el recuadro del campo luminoso y, al lado, la tabla de la capa reportada con los datos importantes; las tres capas acondicionadas; los
 perfiles de cada capa con sus FWHM; los barridos; la cuadratura. Con la capa que elige en el menú «Capa reportada» (rojo, verde o azul) guarda los datos finales del análisis (D.1); al abrir un control con
 análisis guardado, la ventana carga la imagen y los puntos, recalcula y, si lo recalculado difiere de lo guardado, lo dice (DD3).
 
@@ -21,6 +21,22 @@ cuál se reporta. Con un análisis guardado a la vista (B7-C1) la capa que dice 
 Memoria. La película se lee de los bytes cuando hace falta y NO se retiene tras el análisis (una página del escáner, 6600 x 5100, son 135 MB leída y 540 MB con sus cuatro capas en flotante): la ventana guarda los
 bytes del archivo, la imagen para mostrar en RGB uint8 con `nearest` (101 MB; un gris 2D con mapa de color pedía 2 GB) y el resultado, cuya película girada es la RECORTADA a la película (nunca la página).
 
+EN DOSIS (CD.7, DA-92, DC9, DC11). El botón «Ver en dosis», con estado, a la izquierda de «Recalcular» y «Limpiar», arranca apagado: la ventana mide y muestra la netOD, como siempre. Se habilita con LA
+regla del motor (`motor.se_puede_pasar_a_dosis` sobre la capa reportada, con la curva de `motor.curva_efectiva`: la calibración vigente más reciente con la cadena de captura de la película, que da
+`services.curva_dosis.vigentes_validas`); deshabilitado, su ayuda y la línea de la dosis dicen el motivo (y la ayuda, la regla entera). Pulsado, la ventana muestra el análisis en dosis (`_vista`): se calcula
+la primera vez, con el cursor de espera, y queda en memoria hasta que cambian la película, los puntos, el piso o la curva (`_descartar_resultado`, `_leer_la_curva`); apagado vuelve al de netOD sin recalcular.
+Todo sigue al botón salvo la imagen con lo dibujado encima (y la cuadratura, que es geometría). «Limpiar», abrir un registro y guardar lo dejan apagado (un registro abre en netOD; hasta CD.6b ninguno guardó la
+dosis). Cambiar la capa reportada vuelve a evaluar la regla y, si ya no se cumple, la vista vuelve a netOD. «Guardar» guarda la netOD como siempre (guardar la dosis es CD.6b). «Curva de dosis...» abre la
+ventana de calibración (CD.5) con el OBJETO de la sesión (su permiso de «Anular» lo necesita, H-CD5-7) y, cuando se cierra, la curva y la regla se vuelven a evaluar.
+
+EL AJUSTE DEL 31-10 (CD.7, pedidos del físico). (1) El cuadro «Info»: «que se eliminara el cuadro que aparece sobre las pestañas que indica las marcas ... y la explicación de abajo del todo de la ventana ...
+muéstralas todas con un solo botón de Info al lado ... del botón de guardar, para que no ocupen espacio y no reduzcan el tamaño de la imagen a medida que se marcan los puntos». Las líneas de
+`EXPLICACIONES_EN_LA_INFO` (las marcas, la base y el piso, la curva de dosis, la nota de la pestaña 1 y el pie de parámetros fijos) NO están en la ventana: viven en el cuadro «Info» (`_DialogoInfo`, no
+modal), que abre el botón «Info», a la derecha de «Guardar». Son los MISMOS widgets que la ventana escribe (una sola definición de cada texto): el cuadro dice siempre lo que la ventana acaba de escribir. En la
+ventana quedan solo la línea de la regla (por qué no se puede guardar) y la del registro abierto. (2) «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»: las pestañas
+muestran R, G y B (el motor sigue midiendo el gris: los clics se refinan sobre él), y la tabla de la pestaña 1 es la de los desfases de la CAPA REPORTADA, con los dos desfases de centro (radiación − cruce
+de diagonales y radiación − retículo). (3) La cuadratura se compara con un cuadrado de 100 mm de lado (`dibujo.LADO_DEL_CUADRADO_PERFECTO_MM`), no con la media de los lados medidos.
+
 Ningún manejador deja escapar una excepción (`_protegido`) y ningún diálogo se abre con el cursor de espera puesto."""
 import copy
 import dataclasses
@@ -30,7 +46,8 @@ import os
 import traceback
 from datetime import date
 
-from PyQt5.QtCore import Qt
+from PyQt5 import sip
+from PyQt5.QtCore import QEvent, QObject, Qt
 from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea,
                              QSplitter, QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
@@ -40,6 +57,7 @@ from analisisImagenes import placa_mensual as motor
 from data.ManejoDatos import conection
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from services import audit_minimo
+from services import curva_dosis as svc_curva
 from services import placa_mensual as svc
 
 DECIMALES_CLIC = 3                     # los clics se guardan redondeados a 3 decimales: los `MouseEvent` reales traen ruido de 1e-13
@@ -49,12 +67,12 @@ SIN_IMAGEN = "Ninguna imagen"
 TEXTO_ANALIZANDO = "Analizando la imagen..."
 FILTRO_IMAGENES = "Imágenes (*.jpg *.jpeg *.JPG *.JPEG *.png *.PNG *.tif *.tiff *.TIF *.TIFF)"
 # el alto mínimo de cada lienzo con dibujos, en píxeles: por debajo de él el lienzo se DESPLAZA dentro de su área en vez de aplastar los ejes
-ALTO_MINIMO_DEL_LIENZO = {"imagen": 300, "perfiles_del_gris": 420, "capas": 300, "perfiles": 780, "barridos": 480, "cuadratura": 380}
+ALTO_MINIMO_DEL_LIENZO = {"imagen": 300, "capas": 300, "perfiles": 780, "barridos": 480, "cuadratura": 380}
 ALTO_DE_LA_FILA = 21                   # alto de cada fila de las tablas, en píxeles
 TAMANO_DE_LETRA_DE_LAS_LINEAS = 9      # puntos: las lineas de informacion y la de la regla (algunas miden de 250 a 390 caracteres) ocupan menos alto que con la letra de los botones
-ALTO_DEL_PIE = 62
 TAMANO_DE_LA_VENTANA = (1380, 880)
-PARTES_DEL_DIVISOR = {"imagen": (5, 3), "perfiles": (3, 1), "barridos": (3, 1)}     # el alto de cada pestaña con tabla se reparte (gráfica, tabla) así; el físico puede mover el divisor
+PARTES_DE_LA_PESTANA_1 = (5, 4)     # CD.7 (ajuste del 31-10): el ancho de la pestaña 1 se reparte (imagen, tabla de la capa reportada) así. Segunda pasada (01-11): era (3, 2); a 1297 × 706 la columna del valor se cortaba («≥ 3.389 (cor…», «+0.267; -0.1…») y la imagen no pierde alto (la limita el alto, no el ancho)
+PARTES_DEL_DIVISOR = {"perfiles": (3, 1), "barridos": (3, 1)}     # el alto de cada pestaña con tabla se reparte (gráfica, tabla) así; el físico puede mover el divisor
 FILAS_MINIMAS_DE_UNA_TABLA = 4         # una tabla nunca se ve con menos de estas filas (más su cabecera): el divisor no la deja más baja
 TEXTO_PISO_AUTOMATICO = "Automático (esquinas)"
 TEXTO_PISO_PUNTO = "Punto marcado (sexto clic)"
@@ -69,6 +87,23 @@ NOTA_DEL_PISO = ("Cómo se toma el piso de la película: la película virgen gua
 AYUDA_DE_LA_VIRGEN = (f"Mide una película virgen (sin irradiar) escaneada aparte y la guarda como referencia: su valor medio por capa es el piso de los análisis. Escanéela UNA vez, en TIFF a "
                       f"{motor.VALORES_DE_LA_GEOMETRIA['resolucion_escaneo_dpi']:g} ppp, en el mismo lugar del vidrio donde van las placas (una pieza de 10 × 10 cm) o como una hoja entera; el cuadro muestra su "
                       "uniformidad y su ruido como el Catphan.")
+TEXTO_VER_EN_DOSIS = "Ver en dosis"
+TEXTO_DE_LA_CURVA = "Curva de dosis..."
+TEXTO_PASANDO_A_DOSIS = "Pasando a dosis..."
+AYUDA_DE_LA_CURVA = "Abre la calibración de las películas (la curva de dosis): al cerrarla, la ventana vuelve a buscar la curva vigente más reciente de la cadena de captura de esta película."
+AYUDA_VER_EN_DOSIS = ("Muestra el análisis en dosis [cGy] con la curva de calibración vigente más reciente de la cadena de captura de la película: todo salvo la imagen con lo dibujado encima. "
+                      f"{motor.CONDICIONES_PARA_PASAR_A_DOSIS} Apagado, la ventana muestra la {motor.BASE_DENSIDAD_OPTICA}. «Guardar» guarda la {motor.BASE_DENSIDAD_OPTICA} en los dos casos.")      # OD.1: el nombre de una base lo dice el motor
+MOTIVO_REGISTRO_SIN_DOSIS = "el registro se guardó sin dosis"
+TEXTO_DE_LA_INFO = "Info"
+TITULO_DE_LA_INFO = "Info del análisis de la película"
+AYUDA_DE_LA_INFO = ("Abre, en un cuadro aparte que no bloquea la ventana, las explicaciones del análisis: las marcas (cuántas van, cuáles se refinaron y, si alguna quedó sin refinar, por qué: por ejemplo, "
+                    "que no se encontró la mancha de tinta), la base de la medida y el piso, la curva de dosis, qué capa se guarda y los parámetros fijos con que se mide (entre ellos, hasta dónde llega el "
+                    "largo por debajo del 20 % de cada lado: hasta el piso o, si la película se acaba antes, hasta su borde y marcado cortado). Lo que dice el cuadro sigue a la "
+                    "ventana mientras se marcan los puntos.")
+# CD.7 (ajuste del 31-10): las líneas explicativas que NO están en la ventana sino en el cuadro «Info», en este orden; la ÚNICA lista (el cuadro las toma de aquí y la prueba también)
+EXPLICACIONES_EN_LA_INFO = ("etiqueta_marcas", "etiqueta_piso", "linea_dosis", "nota_pestana1", "pie_de_parametros")
+TAMANO_DE_LA_INFO = (820, 460)
+LETRAS_MINIMAS_DEL_MENU_DEL_PISO = 18   # CD.7 (ajuste del 31-10): el menú «Piso» se recorta a este ancho (el nombre del archivo de la película virgen ya no ensancha la barra): con «Info» la ventana pide 1266 px y cabe en los 1297 que toma de una pantalla de 1366 (medido: con 22 pedía 1306)
 
 
 # ----------------------------------------------------------------------------------------------------- piezas de pantalla (copias de las de la posición inicial; ver obstaculos de E.1)
@@ -153,6 +188,29 @@ def _poner_texto(etiqueta, texto):
     etiqueta.setVisible(bool(texto))
 
 
+class _DialogoInfo(QDialog):
+    """CD.7 (ajuste del 31-10, pedido del físico): el cuadro «Info». Recibe las etiquetas de `EXPLICACIONES_EN_LA_INFO` (los MISMOS widgets que la ventana escribe con `_poner_texto` y `setText`: una sola
+    definición de cada texto, nada copiado) y las pone, en ese orden, en un área con barra. No es modal (`show`, nunca `exec_`): no bloquea la ventana, se puede dejar abierto mientras se marcan los
+    puntos y lo que dice sigue a la ventana. Es hijo de la ventana (se destruye con ella) y se cierra con la cruz de su barra o con Esc."""
+
+    def __init__(self, ventana, etiquetas):
+        super().__init__(ventana)
+        self.setWindowTitle(TITULO_DE_LA_INFO)
+        self.setModal(False)
+        interior = QWidget()
+        capa = QVBoxLayout(interior)
+        for etiqueta in etiquetas:
+            capa.addWidget(etiqueta)
+        capa.addStretch(1)
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.NoFrame)
+        area.setWidget(interior)
+        principal = QVBoxLayout(self)
+        principal.addWidget(area)
+        self.resize(*TAMANO_DE_LA_INFO)
+
+
 def _nueva_tabla(columnas, alto=None):
     """Una tabla de solo lectura con esas columnas (cada una al ancho de su contenido y la última toma lo que sobra)."""
     tabla = QTableWidget(0, len(columnas))
@@ -202,11 +260,48 @@ def _tamano_inicial():
         return ancho, alto
 
 
+def _huella_de_la_curva(efectiva):
+    """CD.7: lo que decide si la curva cambió: la calibración y su copia de la curva (None sin curva)."""
+    if efectiva is None or efectiva.curva is None:
+        return None
+    return efectiva.id, repr(efectiva.curva.como_dict())
+
+
 def _nombre_del_usuario(usuario):
     """El nombre con que se audita lo que se guarda: el texto que se da (`usuario_actual` del formulario) o el nombre de un objeto de usuario de la sesión (`_nombre`)."""
     if isinstance(usuario, str):
         return usuario
     return getattr(usuario, "_nombre", None)
+
+
+def _poner_columnas(tabla, columnas):
+    """CD.7: las columnas de una tabla (la de los perfiles gana la dosis de la meseta en dosis); con las mismas columnas no cambia nada."""
+    columnas = list(columnas)
+    if tabla.columnCount() != len(columnas):
+        tabla.setColumnCount(len(columnas))
+    tabla.setHorizontalHeaderLabels(columnas)
+
+
+def _cadena_de(datos, pelicula):
+    """CD.7: la cadena de captura de la película abierta (`motor.cadena_de_la_pelicula`, la condición 3 de DC8), o None si no se puede leer (la regla lo dice)."""
+    try:
+        return motor.cadena_de_la_pelicula(datos, pelicula)
+    except (OSError, ValueError):
+        return None
+
+
+class _AlCerrarLaCurva(QObject):
+    """CD.7: vigila la ventana de calibración (CD.5) que abrió la mensual: cuando se oculta o se cierra, la mensual vuelve a buscar la curva y a evaluar la regla de «Ver en dosis». La ventana de CD.5 no
+    emite nada al cerrarse y no se toca: se la observa con un filtro de eventos, como E.2 hace con esta."""
+
+    def __init__(self, mensual):
+        super().__init__(mensual)
+        self._mensual = mensual
+
+    def eventFilter(self, objeto, evento):
+        if evento.type() in (QEvent.Hide, QEvent.Close) and objeto is self._mensual._ventana_curva:
+            self._mensual._al_volver_de_la_curva()
+        return False
 
 
 # ----------------------------------------------------------------------------------------------------- la película virgen
@@ -334,7 +429,10 @@ class VentanaPlacaMensual(QWidget):
         super().__init__(parent, Qt.Window)
         self.ref = ref
         self.equipo = equipo
+        self._usuario_de_la_sesion = usuario          # CD.7 (H-CD5-7): el objeto de la sesión (o el nombre) tal cual: lo recibe la ventana de calibración, cuyo permiso de «Anular» lo necesita
         self.usuario = _nombre_del_usuario(usuario)
+        self._ventana_curva = None
+        self._vigia_de_la_curva = _AlCerrarLaCurva(self)
         self.setWindowTitle(f"Análisis de la placa del campo luminoso - {equipo}" if equipo else "Análisis de la placa del campo luminoso")
         self._referencia_virgen = None
         self._aviso_referencia = ""
@@ -373,6 +471,8 @@ class VentanaPlacaMensual(QWidget):
         self.etiqueta_piso_menu = QLabel("Piso:")
         self.selector_piso = _SelectorSinRueda()
         self.selector_piso.setToolTip(NOTA_DEL_PISO)
+        self.selector_piso.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)     # CD.7 (ajuste del 31-10): con «Info» la barra cabe en 1297 px; el nombre de
+        self.selector_piso.setMinimumContentsLength(LETRAS_MINIMAS_DEL_MENU_DEL_PISO)               # la película virgen se recorta en el menú cerrado
         for modo in pel.MODOS_DEL_PISO:
             self.selector_piso.addItem("", modo)
         self.etiqueta_piso_menu.setBuddy(self.selector_piso)
@@ -387,10 +487,17 @@ class VentanaPlacaMensual(QWidget):
         self.boton_recalcular = QPushButton("Recalcular")
         self.boton_limpiar = QPushButton("Limpiar")
         self.boton_guardar = QPushButton("Guardar")
-        for widget in (self.etiqueta_piso_menu, self.selector_piso, self.boton_virgen, self.etiqueta_capa, self.selector_capa):
+        self.boton_curva = QPushButton(TEXTO_DE_LA_CURVA)          # CD.7 (DC11): junto a «Película virgen...»
+        self.boton_curva.setToolTip(AYUDA_DE_LA_CURVA)
+        self.boton_dosis = QPushButton(TEXTO_VER_EN_DOSIS)         # CD.7 (DA-92, DC11): con estado, a la izquierda de «Recalcular» y «Limpiar»
+        self.boton_dosis.setCheckable(True)
+        self.boton_dosis.setToolTip(AYUDA_VER_EN_DOSIS)
+        self.boton_info = QPushButton(TEXTO_DE_LA_INFO)            # CD.7 (ajuste del 31-10): a la derecha de «Guardar»; abre el cuadro «Info»
+        self.boton_info.setToolTip(AYUDA_DE_LA_INFO)
+        for widget in (self.etiqueta_piso_menu, self.selector_piso, self.boton_virgen, self.boton_curva, self.etiqueta_capa, self.selector_capa):
             fila_controles.addWidget(widget)
         fila_controles.addStretch(1)
-        for boton in (self.boton_recalcular, self.boton_limpiar, self.boton_guardar):
+        for boton in (self.boton_dosis, self.boton_recalcular, self.boton_limpiar, self.boton_guardar, self.boton_info):
             fila_controles.addWidget(boton)
         principal.addLayout(fila_controles)
 
@@ -408,26 +515,21 @@ class VentanaPlacaMensual(QWidget):
         fila_datos.addWidget(self.etiqueta_imagen, 1)
         principal.addWidget(self.linea_regla)
         principal.addLayout(fila_datos)
-        for etiqueta in (self.etiqueta_marcas, self.etiqueta_piso, self.etiqueta_registro):
-            principal.addWidget(etiqueta)
+        principal.addWidget(self.etiqueta_registro)        # CD.7 (ajuste del 31-10): las marcas, el piso y la curva de dosis van al cuadro «Info» (`EXPLICACIONES_EN_LA_INFO`)
+        self.linea_dosis = _recuadro()                # CD.7: la curva en uso o por qué no se puede ver en dosis (en el cuadro «Info»)
 
         self.pestanas = QTabWidget()
-        # 1. Imagen: la imagen para marcar, al lado los dos perfiles del gris y debajo la tabla de sus desfases
-        arriba = QWidget()
-        fila1 = QHBoxLayout(arriba)
+        # 1. Imagen: la imagen para marcar y, AL LADO, la tabla de la CAPA REPORTADA con los datos importantes (CD.7, ajuste del 31-10, pedidos del físico: sin los perfiles del gris; «en esa tabla
+        # que vas a poner en la primera pestaña al lado de la imagen, solo incluye los datos importantes»: `dibujo.filas_de_la_capa_reportada`). La imagen tiene todo el alto de la pestaña.
+        tab1 = QWidget()
+        fila1 = QHBoxLayout(tab1)
         fila1.setContentsMargins(0, 0, 0, 0)
         contenedor, self._fig_imagen, self.lienzo_imagen, self.barra_imagen = _nuevo_lienzo(mpl, ALTO_MINIMO_DEL_LIENZO["imagen"])
         self.eje_imagen = self._fig_imagen.add_subplot(111)
-        fila1.addWidget(contenedor, 3)
-        contenedor, self._fig_gris, self.lienzo_gris, self.barra_gris = _nuevo_lienzo(mpl, ALTO_MINIMO_DEL_LIENZO["perfiles_del_gris"])
-        fila1.addWidget(contenedor, 2)
-        self.tabla_desfases = _nueva_tabla(("Medida", "Valor"))
+        fila1.addWidget(contenedor, PARTES_DE_LA_PESTANA_1[0])
+        self.tabla_desfases = _nueva_tabla(("Medida", "Valor"))        # el nombre de siempre: ahora es la tabla de la capa reportada (no solo sus desfases)
+        fila1.addWidget(self.tabla_desfases, PARTES_DE_LA_PESTANA_1[1])
         self.nota_pestana1 = _recuadro()
-        tab1 = QWidget()                              # la nota va FUERA del divisor: un divisor no respeta la altura de un texto con ajuste de linea y lo dibujaria encima de la tabla
-        capa1 = QVBoxLayout(tab1)
-        capa1.setContentsMargins(0, 0, 0, 0)
-        capa1.addWidget(_divisor(arriba, self.tabla_desfases, PARTES_DEL_DIVISOR["imagen"]), 1)
-        capa1.addWidget(self.nota_pestana1)
         # 2. Capas
         tab2 = QWidget()
         capa2 = QVBoxLayout(tab2)
@@ -455,17 +557,14 @@ class VentanaPlacaMensual(QWidget):
             self.pestanas.addTab(tab, nombre)
         principal.addWidget(self.pestanas, 3)
 
-        # El pie de parámetros fijos (PD1): el valor con que se midió cada parámetro que no tiene un trazo propio, siempre a la vista (con su barra si no cabe).
+        # El pie de parámetros fijos (PD1): el valor con que se midió cada parámetro que no tiene un trazo propio. CD.7 (ajuste del 31-10, pedido del físico): no está en la ventana sino en el cuadro
+        # «Info», con las otras líneas explicativas (`EXPLICACIONES_EN_LA_INFO`); las pestañas llegan hasta abajo y nada de lo que se escribe al marcar los puntos o al analizar le quita alto a la imagen.
         self.pie_de_parametros = QLabel()
         self.pie_de_parametros.setTextFormat(Qt.PlainText)
         self.pie_de_parametros.setWordWrap(True)
-        self.pie_de_parametros.setStyleSheet("color: #666; font-size: 9px;")
-        area = QScrollArea()
-        area.setWidgetResizable(True)
-        area.setFrameShape(QFrame.NoFrame)
-        area.setWidget(self.pie_de_parametros)
-        area.setFixedHeight(ALTO_DEL_PIE)
-        principal.addWidget(area)
+        self.pie_de_parametros.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.pie_de_parametros.setStyleSheet(f"color: #444; font-size: {TAMANO_DE_LETRA_DE_LAS_LINEAS}pt;")
+        self.dialogo_info = _DialogoInfo(self, tuple(getattr(self, nombre) for nombre in EXPLICACIONES_EN_LA_INFO))
 
         self._artistas_de_la_imagen = []              # lo que se dibujó ENCIMA de la imagen (marcas, geometría, región del piso): se quita sin tocar la imagen
         self._ejes_de_los_perfiles = {}
@@ -477,6 +576,9 @@ class VentanaPlacaMensual(QWidget):
         self.boton_recalcular.clicked.connect(lambda *_: self._al_recalcular())
         self.boton_limpiar.clicked.connect(lambda *_: self._al_limpiar())
         self.boton_guardar.clicked.connect(lambda *_: self._al_guardar())
+        self.boton_curva.clicked.connect(lambda *_: self._al_abrir_la_curva())
+        self.boton_dosis.clicked.connect(lambda marcado: self._al_ver_en_dosis(marcado))
+        self.boton_info.clicked.connect(lambda *_: self._al_abrir_la_info())
         self.selector_capa.currentIndexChanged.connect(lambda indice: self._al_cambiar_capa(indice))     # cualquier cambio del menú; las veces que la VENTANA lo mueve (`_poner_capa`) lo hace con las señales bloqueadas
         self.selector_piso.currentIndexChanged.connect(lambda indice: self._al_cambiar_piso(indice))     # ídem: la ventana lo mueve con `_poner_modo`
         # UN solo manejador de clics, aquí y no al instalar cada imagen: N imágenes seguidas acumularían N marcas por clic.
@@ -552,7 +654,7 @@ class VentanaPlacaMensual(QWidget):
         self._resultado = None
         self._barrido = None
         self.boton_guardar.setEnabled(False)
-        for figura, barra, lienzo in ((self._fig_gris, self.barra_gris, self.lienzo_gris), (self._fig_capas, self.barra_capas, self.lienzo_capas),
+        for figura, barra, lienzo in ((self._fig_capas, self.barra_capas, self.lienzo_capas),
                                       (self._fig_perfiles, self.barra_perfiles, self.lienzo_perfiles), (self._fig_barridos, self.barra_barridos, self.lienzo_barridos)):
             figura.clear()
             barra.update()                       # sin esto, «Home» volvería a la vista de la figura anterior
@@ -566,7 +668,13 @@ class VentanaPlacaMensual(QWidget):
         for etiqueta in (self.nota_pestana1, self.nota_pestana2, self.linea_regla):
             _poner_texto(etiqueta, "")
         _poner_texto(self.etiqueta_piso, "")
-        self.pie_de_parametros.setText(dibujo.texto_de_parametros())
+        self.pie_de_parametros.setText(dibujo.texto_de_parametros(en_la_ventana=True))
+        self._resultado_en_dosis = None              # CD.7: el análisis en dosis se descarta con el de netOD (la película, los puntos o el piso cambiaron) y la vista vuelve a netOD
+        self._barrido_en_dosis = None
+        self._poner_dosis(False)
+        self.boton_dosis.setEnabled(False)
+        _poner_texto(self.linea_dosis, "")
+        _poner_columnas(self.tabla_perfiles, dibujo.COLUMNAS_DE_LOS_PERFILES)        # la tabla de los perfiles vuelve a las columnas de la netOD (en dosis gana dos)
 
     def _quitar_artistas_de_la_imagen(self):
         """Quita de la imagen lo que se dibujó encima de ella (marcas, geometría, región del piso, sexto clic, leyenda); la imagen queda."""
@@ -578,7 +686,7 @@ class VentanaPlacaMensual(QWidget):
         self._artistas_de_la_imagen = []
 
     def _apagar_herramientas(self):
-        for barra in (self.barra_imagen, self.barra_gris, self.barra_capas, self.barra_perfiles, self.barra_barridos, self.barra_cuadratura):
+        for barra in (self.barra_imagen, self.barra_capas, self.barra_perfiles, self.barra_barridos, self.barra_cuadratura):
             _apagar_barra(barra)
 
     def _restablecer_estado(self):
@@ -591,6 +699,8 @@ class VentanaPlacaMensual(QWidget):
         self._nombre = None
         self._forma = None
         self._con_milimetros = True              # el archivo abierto da escala en milímetros (lo dice `_instalar_imagen`); el texto de las marcas habla en milímetros solo si la hay
+        self._cadena = None                      # CD.7: la cadena de captura de la película abierta (`motor.cadena_de_la_pelicula`) y la curva que le toca (`_leer_la_curva`)
+        self._efectiva = None
         self._pelicula = None
         self._marcas = []
         self._sexto = None
@@ -613,6 +723,7 @@ class VentanaPlacaMensual(QWidget):
         self._actualizar_el_menu_del_piso()
         self._poner_modo(self._modo_por_omision())
         self.pestanas.setCurrentIndex(PESTANA_IMAGEN)
+        self.dialogo_info.hide()                    # CD.7 (ajuste del 31-10): una ventana nueva no tiene el cuadro «Info» abierto
 
     # ----------------------------------------------------------------------------------------------------- el menú «Piso» y la película virgen
 
@@ -635,6 +746,7 @@ class VentanaPlacaMensual(QWidget):
         except (ValueError, OSError) as error:               # un archivo danado o que no se puede leer (permisos, la red): se dice y no se usa
             self._referencia_virgen = None
             self._aviso_referencia = str(error)
+        self._leer_la_curva()                       # CD.7: la curva vigente también puede haber cambiado (otra ventana guardó o anuló una calibración)
         modo_perdido = self._actualizar_el_menu_del_piso()
         cambio_de_modo = False
         if self._estado_actual != "registro" and not self._modo_elegido and self._modo_por_omision() != self.modo_del_piso:
@@ -649,6 +761,14 @@ class VentanaPlacaMensual(QWidget):
     def showEvent(self, evento):
         super().showEvent(evento)
         self.refrescar()
+
+    def hideEvent(self, evento):
+        """CD.7 (revisión, CD7-REV1-PROD-03): el cuadro «Info» es una ventana propia (hija, no modal) y Qt no oculta las ventanas hijas de primer nivel al ocultar a su madre; la ventana no se destruye al cerrarla (E.2
+        la guarda y la vuelve a mostrar). Al cerrarla u ocultarla el cuadro se oculta con ella; al minimizarla no (lo decide el sistema, que lo trae de vuelta con la ventana: el ocultar es «espontáneo»)."""
+        super().hideEvent(evento)
+        info = getattr(self, "dialogo_info", None)
+        if info is not None and not evento.spontaneous() and not sip.isdeleted(info):
+            info.hide()
 
     def _referencia_utilizable(self):
         """La referencia de la película virgen que se puede usar (la guardada, si es válida), o None."""
@@ -783,6 +903,8 @@ class VentanaPlacaMensual(QWidget):
         self.boton_sexto.setChecked(False)
         self._bytes, self._nombre, self._forma = datos, nombre, rgb.shape[:2]
         self._pelicula = pelicula
+        self._cadena = _cadena_de(datos, pelicula)
+        self._leer_la_curva()                       # CD.7: la curva de la cadena de ESTA película (el registro anterior ya se soltó)
         self.eje_imagen.clear()
         dibujo.dibujar_imagen(self.eje_imagen, rgb)
         self.barra_imagen.update()
@@ -923,10 +1045,8 @@ class VentanaPlacaMensual(QWidget):
 
     def _mostrar(self):
         """Dibuja las cinco pestañas con el resultado y escribe lo que depende de la capa reportada (la nota, el panel de la pestaña 3, la línea de la regla y «Guardar»)."""
-        resultado, barrido = self._resultado, self._barrido
+        resultado, barrido = self._vista()            # CD.7: el de netOD o, con «Ver en dosis» pulsado, el de dosis; la imagen y la cuadratura no dependen de la base
         self._pintar_la_imagen()
-        self._fig_gris.clear()
-        dibujo.dibujar_perfiles_del_gris(self._fig_gris, resultado)
         self._fig_capas.clear()
         dibujo.dibujar_capas(self._fig_capas, resultado)
         self._fig_perfiles.clear()
@@ -940,12 +1060,12 @@ class VentanaPlacaMensual(QWidget):
         else:
             self.tabla_cuadratura.setRowCount(0)
         _llenar_tabla(self.tabla_barridos, dibujo.filas_de_los_barridos(barrido))
-        _llenar_tabla(self.tabla_desfases, dibujo.tabla_de_desfases(resultado))
-        self.pie_de_parametros.setText(dibujo.texto_de_parametros(resultado.parametros))
-        for barra in (self.barra_gris, self.barra_capas, self.barra_perfiles, self.barra_barridos, self.barra_cuadratura):
+        _poner_columnas(self.tabla_perfiles, dibujo.columnas_de_los_perfiles(resultado.base))
+        self.pie_de_parametros.setText(dibujo.texto_de_parametros(resultado.parametros, en_la_ventana=True))
+        for barra in (self.barra_capas, self.barra_perfiles, self.barra_barridos, self.barra_cuadratura):
             barra.update()
-        self._aplicar_la_regla()
-        for lienzo in (self.lienzo_gris, self.lienzo_capas, self.lienzo_perfiles, self.lienzo_barridos, self.lienzo_cuadratura):
+        self._aplicar_la_regla()                    # CD.7 (ajuste del 31-10): también la tabla de desfases, que es la de la capa reportada
+        for lienzo in (self.lienzo_capas, self.lienzo_perfiles, self.lienzo_barridos, self.lienzo_cuadratura):
             lienzo.draw_idle()
 
     def _texto_del_piso(self):
@@ -953,6 +1073,8 @@ class VentanaPlacaMensual(QWidget):
         informativa y, si el piso no se pudo medir, lo que se puede hacer."""
         piso = self._resultado.piso if self._resultado is not None else None
         partes = [] if self._resultado is None else [dibujo.texto_de_la_base(self._resultado.base)]       # OD.1: la base del análisis, a la vista, antes del piso
+        if partes and self._vista()[0] is not self._resultado:
+            partes[0] = dibujo.texto_de_la_base(self._vista()[0].base)      # CD.7: con «Ver en dosis» pulsado, la base de lo que se ve
         if piso is not None:
             texto = dibujo.con_punto_final(pel.texto_breve_del_piso(piso, self._capa_que_se_reporta()))       # la frase de una capa o de un piso sin número no trae punto: se cierra antes de lo que sigue
             if piso.estado == "ok":
@@ -992,6 +1114,7 @@ class VentanaPlacaMensual(QWidget):
         habilitado, texto, _motivo = self._regla_de_guardar()
         self.boton_guardar.setEnabled(habilitado)
         _poner_texto(self.linea_regla, texto)
+        self._aplicar_la_dosis()
         texto_del_piso = self._texto_del_piso()
         _poner_texto(self.etiqueta_piso, texto_del_piso)
         if self._resultado is None:
@@ -1000,18 +1123,149 @@ class VentanaPlacaMensual(QWidget):
         capa = self._capa_que_se_reporta()
         motivo = self._motivo_de_la_capa_que_se_reporta()
         _poner_texto(self.nota_pestana1, dibujo.nota_de_la_pestana_1(motivo, capa, registro))
-        _llenar_tabla(self.tabla_perfiles, dibujo.filas_de_los_perfiles(self._resultado, capa, motivo, registro))
+        vista = self._vista()[0]
+        _llenar_tabla(self.tabla_desfases, dibujo.filas_de_la_capa_reportada(vista, capa))      # CD.7 (ajuste del 31-10): la capa reportada, no el gris; sigue al menú y al botón
+        _llenar_tabla(self.tabla_perfiles, dibujo.filas_de_los_perfiles(vista, capa, motivo, registro))
         _poner_texto(self.nota_pestana2, "")
         for (capa_del_eje, eje), ax in self._ejes_de_los_perfiles.items():
-            ax.set_title(dibujo.titulo_del_perfil(getattr(self._resultado.capas[capa_del_eje], eje), capa_del_eje, reportada=(capa_del_eje == capa)), fontsize=8)
+            ax.set_title(dibujo.titulo_del_perfil(getattr(vista.capas[capa_del_eje], eje), capa_del_eje, reportada=(capa_del_eje == capa)), fontsize=8)
         self.lienzo_perfiles.draw_idle()
+
+    # ----------------------------------------------------------------------------------------------------- «Ver en dosis» y «Curva de dosis...» (CD.7)
+
+    def _poner_dosis(self, pulsado):
+        """Pone «Ver en dosis» pulsado o no SIN emitir señales (como `_poner_capa`): quien lo mueve redibuja si hace falta."""
+        bloqueado = self.boton_dosis.blockSignals(True)
+        try:
+            self.boton_dosis.setChecked(pulsado)
+        finally:
+            self.boton_dosis.blockSignals(bloqueado)
+
+    def _vista(self):
+        """(resultado, barrido) que la ventana MUESTRA: el análisis en dosis si «Ver en dosis» está pulsado y ya se calculó, y si no el de netOD. Lo que se guarda y la regla de «Guardar»
+        son siempre del de netOD (`self._resultado`)."""
+        if self.boton_dosis.isChecked() and self._resultado_en_dosis is not None:
+            return self._resultado_en_dosis, self._barrido_en_dosis
+        return self._resultado, self._barrido
+
+    def _leer_la_curva(self):
+        """La curva que le toca a la película abierta: `motor.curva_efectiva` (LA regla, DC7) sobre `svc_curva.vigentes_validas()` (la ventana no lee la base: lo hace el servicio) y la cadena de la
+        película. Sin película, o con un registro a la vista, no se busca. Si la curva cambió (otra calibración, otra copia o ninguna), el análisis en dosis se descarta y, si estaba a la vista, se vuelve a netOD."""
+        if self._bytes is None or self._registro is not None:
+            self._efectiva = None
+            return
+        if self._cadena is None:                         # la imagen de un registro tras «Recalcular»: su cadena se lee una vez, de sus bytes
+            self._cadena = _cadena_de(self._bytes, self._pelicula)
+        if self._cadena is None:
+            efectiva = motor.curva_efectiva([], None)
+        else:
+            try:
+                efectiva = motor.curva_efectiva(svc_curva.vigentes_validas(), self._cadena)
+            except Exception as error:                   # la ventana no importa sqlite3 (E.1): un fallo al leer (la base ocupada, una copia dañada) se dice como motivo y no impide abrir la imagen
+                traceback.print_exc()
+                efectiva = motor.CurvaEfectiva(None, motivo=f"{motor.MOTIVO_SIN_CURVA}: no se pudieron leer las calibraciones ({type(error).__name__}: {error})")
+        anterior, self._efectiva = self._efectiva, efectiva
+        if _huella_de_la_curva(anterior) == _huella_de_la_curva(efectiva):
+            return
+        self._resultado_en_dosis = None
+        self._barrido_en_dosis = None
+        if self.boton_dosis.isChecked():
+            self._poner_dosis(False)
+            if self._resultado is not None:
+                self._mostrar()
+
+    def _regla_de_la_dosis(self):
+        """(habilitado, motivo): LA regla de «Ver en dosis» en la ventana, una sola: la del motor (`motor.se_puede_pasar_a_dosis`) sobre el análisis en netOD de esta sesión, la capa reportada, la curva de
+        `_leer_la_curva` y la cadena de la película. Sin análisis, (False, None); con un registro a la vista, (False, `MOTIVO_REGISTRO_SIN_DOSIS`): un registro abre en netOD y nunca usa la curva vigente."""
+        if self._resultado is None or self._estado not in ("analizada", "registro"):
+            return False, None
+        if self._estado == "registro":
+            return False, MOTIVO_REGISTRO_SIN_DOSIS
+        if self._resultado.base != motor.BASE_DENSIDAD_OPTICA:
+            return False, f"el análisis no está en {motor.BASE_DENSIDAD_OPTICA} ({self._resultado.base})"
+        if self._efectiva is None:
+            self._leer_la_curva()
+        return motor.se_puede_pasar_a_dosis(self._resultado, self._efectiva, self.capa_reportada, self._cadena)
+
+    def _aplicar_la_dosis(self):
+        """El habilitado de «Ver en dosis», su ayuda (la regla entera y, si no se puede, el motivo) y la línea de la dosis (la curva en uso o el motivo; en dosis, los avisos de la película virgen)."""
+        habilitado, motivo = self._regla_de_la_dosis()
+        self.boton_dosis.setEnabled(habilitado)
+        self.boton_dosis.setToolTip(AYUDA_VER_EN_DOSIS if motivo is None else f"{AYUDA_VER_EN_DOSIS}\nAhora no se puede: {motivo}")
+        en_dosis = self.boton_dosis.isChecked() and self._resultado_en_dosis is not None
+        avisos = self._resultado_en_dosis.avisos_de_la_dosis if en_dosis else ()
+        _poner_texto(self.linea_dosis, dibujo.texto_de_la_dosis(self._efectiva, self.capa_reportada, habilitado, motivo, en_dosis, avisos))
+        self.linea_dosis.setToolTip(motor.CONDICIONES_PARA_PASAR_A_DOSIS if self._resultado is not None else "")
+
+    def _medir_en_dosis(self):
+        """El análisis en dosis por el MISMO camino que `_medir` (la película de los bytes, las mismas marcas, el mismo modo del piso, el mismo sexto clic y la misma referencia) con la base dosis, la
+        curva de `_leer_la_curva` y la cadena de la película. Devuelve (resultado, barrido)."""
+        modo = self.modo_del_piso
+        P = self._parametros()
+        P["base_de_la_medida"] = motor.BASE_DOSIS
+        resultado = motor.analizar(self._pelicula_cargada(), self._marcas, P, modo_piso=modo, punto_manual=self._sexto if modo == "punto_manual" else None,
+                                   referencia_virgen=self._referencia_utilizable() if modo == "virgen" else None, curva=self._efectiva.curva, cadena=self._cadena)
+        return resultado, motor.barrido(resultado)
+
+    @_protegido("Ver en dosis")
+    def _al_ver_en_dosis(self, pulsado):
+        """«Ver en dosis»: pulsado, la vista pasa al análisis en dosis (calculado la primera vez con la espera; queda en memoria); apagado, vuelve al de netOD sin recalcular. Si la regla no se cumple el
+        botón no se queda pulsado."""
+        if pulsado and self._resultado_en_dosis is None:
+            if not self._regla_de_la_dosis()[0]:
+                self._poner_dosis(False)
+                self._aplicar_la_regla()
+                return
+            try:
+                medido = self._con_espera(TEXTO_PASANDO_A_DOSIS, self._medir_en_dosis)
+            except ValueError as error:
+                medido = None
+                QMessageBox.warning(self, TEXTO_VER_EN_DOSIS, dibujo.con_punto_final(f"No se pudo pasar a dosis: {error}"))
+            except Exception as error:               # CD.7 (revisión, CD7-REV1-PROD-02): cualquier otro fallo (un RuntimeError, un MemoryError con una página entera) deja lo mismo que un ValueError; subía a `_protegido` y el botón quedaba pulsado con la vista en netOD
+                medido = None
+                traceback.print_exc()
+                QMessageBox.critical(self, TEXTO_VER_EN_DOSIS, f"Error inesperado al pasar a dosis ({type(error).__name__}: {error}).")
+            finally:
+                self._soltar_la_pelicula()
+            if medido is None:
+                self._poner_dosis(False)
+                self._aplicar_la_regla()
+                return
+            self._resultado_en_dosis, self._barrido_en_dosis = medido
+        self._mostrar()
+
+    @_protegido("Curva de dosis")
+    def _al_abrir_la_curva(self):
+        """«Curva de dosis...»: abre la ventana de calibración (CD.5), una sola por ventana mensual (si ya existe se trae al frente), con el objeto de la sesión."""
+        ventana = self._ventana_curva
+        if ventana is None or sip.isdeleted(ventana):
+            from ui.paginasControles.PruebasMensuales.curva_dosis import VentanaCurvaDosis      # diferido: esa ventana importa piezas de esta (al cargar el módulo sería un import circular)
+            ventana = VentanaCurvaDosis(self._usuario_de_la_sesion, self)
+            ventana.installEventFilter(self._vigia_de_la_curva)
+            self._ventana_curva = ventana
+        ventana.setWindowState((ventana.windowState() & ~Qt.WindowMinimized) | Qt.WindowActive)
+        ventana.show()
+        ventana.raise_()
+        ventana.activateWindow()
+        return ventana
+
+    @_protegido("Curva de dosis")
+    def _al_volver_de_la_curva(self):
+        """La ventana de calibración se ocultó o se cerró: la curva vigente pudo cambiar (se guardó o se anuló una calibración); se vuelve a buscar y se vuelve a evaluar la regla."""
+        self._leer_la_curva()
+        self._aplicar_la_regla()
 
     # ----------------------------------------------------------------------------------------------------- los menús
 
     @_protegido("Capa reportada")
     def _al_cambiar_capa(self, _indice):
         """El físico eligió otra capa en el menú. NO se mide ni se redibuja nada: el motor ya midió las tres capas; cambia lo que se REPORTA, así que solo se vuelve a evaluar la regla (leer un estado) y se
-        reescriben lo que depende de ella. Sin resultado el menú guarda la elección para el próximo análisis."""
+        reescriben lo que depende de ella. Sin resultado el menú guarda la elección para el próximo análisis. CD.7: la regla de «Ver en dosis» se juzga sobre la capa reportada; si con la nueva ya no se
+        cumple, la vista vuelve a netOD (sin recalcular) y la línea de la dosis dice por qué."""
+        if self._resultado is not None and self.boton_dosis.isChecked() and not self._regla_de_la_dosis()[0]:
+            self._poner_dosis(False)
+            self._mostrar()
+            return
         if self._resultado is None:
             return
         self._aplicar_la_regla()
@@ -1046,6 +1300,13 @@ class VentanaPlacaMensual(QWidget):
             self._pintar_la_imagen()
         self.pestanas.setCurrentIndex(PESTANA_IMAGEN)
 
+    @_protegido("Info")
+    def _al_abrir_la_info(self):
+        """CD.7 (ajuste del 31-10): muestra el cuadro «Info» (no modal) y lo trae al frente; si ya estaba abierto, solo lo trae. Lo que dice son las líneas que la ventana escribe: no se copia nada."""
+        self.dialogo_info.show()
+        self.dialogo_info.raise_()
+        self.dialogo_info.activateWindow()
+
     @_protegido("Limpiar")
     def _al_limpiar(self):
         self._restablecer_estado()
@@ -1077,6 +1338,9 @@ class VentanaPlacaMensual(QWidget):
         self._capa_guardada = capa
         self._estado = "registro"
         self._aplicar_la_regla()
+        if self.boton_dosis.isChecked():                 # CD.7: lo guardado es la netOD y un registro se ve en netOD
+            self._poner_dosis(False)
+            self._mostrar()
         _poner_texto(self.etiqueta_registro, f"Guardado: análisis del control {self.ref}, capa reportada {pel.ADJETIVO_DE_LA_CAPA[capa]}.")
         QMessageBox.information(self, "Guardar", f"Análisis guardado para el control {self.ref} (capa {pel.ADJETIVO_DE_LA_CAPA[capa]}; id {nuevo}).")
 
@@ -1105,6 +1369,8 @@ class VentanaPlacaMensual(QWidget):
         dibujo.dibujar_imagen(self.eje_imagen, rgb)
         self._bytes, self._nombre, self._forma = registro["imagen"], registro["nombre_archivo"] or "", rgb.shape[:2]
         self._pelicula = None
+        self._cadena = None                             # CD.7: un registro abre en netOD y, hasta CD.6b, ninguno guardó la dosis: no se busca curva
+        self._efectiva = None
         self._marcas = list(registro["puntos"])
         piso = registro["piso"]
         self._sexto = None if piso.get("punto") is None else tuple(piso["punto"])

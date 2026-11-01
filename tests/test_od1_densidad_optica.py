@@ -197,7 +197,7 @@ class TestUnaConstantePorDecision:
         assert entrada["valor"] == pm.BASE_POR_OMISION and entrada["unidad"] and len(entrada["motivo"]) > 80
         assert BASE_OD in entrada["motivo"] and BASE_VP in entrada["motivo"], "el motivo dice las dos opciones y donde se cambia"
         assert "BASE_POR_OMISION" in entrada["motivo"]
-        assert len(pm.VALORES_DE_LA_GEOMETRIA) == 42 and pm.VALORES_DE_LA_GEOMETRIA["base_de_la_medida"] == BASE_OD, "los 40 de siempre, el de la base y el de la dosis"      # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`)
+        assert len(pm.VALORES_DE_LA_GEOMETRIA) == 43 and pm.VALORES_DE_LA_GEOMETRIA["base_de_la_medida"] == BASE_OD, "los 40 de siempre, el de la base, el de la dosis y el del largo"      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %). Antes: CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`)
         assert pm.VERSION_ALGORITMO == "PM-1", "la version no sube: la base viaja en los parametros guardados (vetable OD1-D1)"
 
     def test_el_modo_del_piso_por_omision_se_cambia_en_una_linea(self):
@@ -1454,8 +1454,8 @@ def _referencia_guardada(bd, escaneo):
 
 def _ejes_de_los_perfiles(v):
     ejes = list(v._fig_perfiles.axes)
-    assert len(ejes) == 8
-    return dict(zip([(c, e) for c in (*CAPAS, "gris") for e in EJES], ejes))
+    assert len(ejes) == 6      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
+    return dict(zip([(c, e) for c in CAPAS for e in EJES], ejes))
 
 
 class TestElDibujoDelPerfilEnLaBase:
@@ -1648,7 +1648,7 @@ class TestLaVentana:
         dib, pm = _dib(), _pm()
         sin = {k: v for k, v in pm.VALORES_DE_LA_GEOMETRIA.items() if k != "base_de_la_medida"}
         assert f"base de la medida: {BASE_VP}" in dib.texto_de_parametros(sin)
-        assert dib.TRAZO_DE_PARAMETRO["base_de_la_medida"][0] == "pie" and len(dib.TRAZO_DE_PARAMETRO) == 41
+        assert dib.TRAZO_DE_PARAMETRO["base_de_la_medida"][0] == "pie" and len(dib.TRAZO_DE_PARAMETRO) == 43      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %) (tipo «largo»). Antes: CD.7 (31-10, H-CD6-6): el 42 (`diferencia_virgen_maxima_pct`) tiene su frase en el pie; la resta que CD.6 puso aqui se quita: es el 42 (tipo «dosis»)
 
     def test_el_texto_de_la_base_dice_la_formula_de_su_base(self):
         dib = _dib()

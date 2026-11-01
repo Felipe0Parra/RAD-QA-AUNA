@@ -1678,7 +1678,8 @@ class TestLosParametros:
         # las muestras minimas, las alturas de la medida y el suavizado). Esta prueba sigue siendo la de los parametros de la MARCA (C.1); los de la medida los vigila `test_c2_perfiles_y_coincidencia.py`.
         # OD.1 (21-10): `PARAMETROS` suma `base_de_la_medida` (`PARAMETROS_DE_LA_BASE`), que tampoco es de la marca: la vigila `test_od1_densidad_optica.py`.
         # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): tampoco es de la marca; lo vigila `test_cd6_base_dosis_del_motor.py`.
-        propios = set(pm.PARAMETROS) - set(pel.PARAMETROS_DEL_PISO) - set(pel.CLAVES_DE_LA_ESCALA) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(pm.PARAMETROS_DE_LA_BASE) - set(pm.PARAMETROS_DE_LA_DOSIS)
+        # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %): tampoco es de la marca; lo vigila `test_cd7_ventana_mensual_en_dosis.py`.
+        propios = set(pm.PARAMETROS) - set(pel.PARAMETROS_DEL_PISO) - set(pel.CLAVES_DE_LA_ESCALA) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(pm.PARAMETROS_DE_LA_BASE) - set(pm.PARAMETROS_DE_LA_DOSIS) - set(pm.PARAMETROS_DEL_LARGO)
         assert propios == {"radio_marca_mm", "contraste_minimo_marca", "fraccion_del_contraste_marca", "gris_maximo_de_la_tinta", "borde_blando_marca_mm", "area_minima_marca_mm2"}
         assert propios <= usados, propios - usados
         assert set(pm.CLAVES_DE_LA_MARCA) == propios

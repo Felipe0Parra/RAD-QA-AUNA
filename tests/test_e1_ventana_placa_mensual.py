@@ -104,7 +104,7 @@ def solo_lectura(app, plantilla, tmp_path_factory, placa, clics):
     v.boton_imagen.click()
     marcar(v, clics)
     assert v.estado == "analizada" and not avisos, (v.estado, avisos)
-    for lienzo in (v.lienzo_imagen, v.lienzo_gris, v.lienzo_capas, v.lienzo_perfiles, v.lienzo_barridos, v.lienzo_cuadratura):
+    for lienzo in (v.lienzo_imagen, v.lienzo_capas, v.lienzo_perfiles, v.lienzo_barridos, v.lienzo_cuadratura):      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
         lienzo.draw()                      # los limites de un eje de aspecto igual se ajustan al DIBUJAR: la huella de referencia se toma con todo ya dibujado
     estado = SimpleNamespace(v=v, avisos=avisos, huella_al_crear=huella(v), ruta_bd=ruta_bd, ruta_png=str(ruta_png))
     yield estado
@@ -114,10 +114,10 @@ def solo_lectura(app, plantilla, tmp_path_factory, placa, clics):
 
 
 def _grupo(v):
-    """Los ocho ejes de los perfiles de la pestana 3 como {(capa, eje): eje}, en el orden de la figura (R, G, B y el gris; crossplane e inplane)."""
+    """Los seis ejes de los perfiles de la pestana 3 como {(capa, eje): eje}, en el orden de la figura (R, G y B; crossplane e inplane). CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4: eran ocho, con el gris."""
     ejes = list(v._fig_perfiles.axes)
-    assert len(ejes) == 8, f"la pestana 3 tiene ocho perfiles, no {len(ejes)}"
-    clave = [(c, e) for c in (*CAPAS, "gris") for e in ("crossplane", "inplane")]
+    assert len(ejes) == 6, f"la pestana 3 tiene seis perfiles, no {len(ejes)}"
+    clave = [(c, e) for c in CAPAS for e in ("crossplane", "inplane")]
     return dict(zip(clave, ejes))
 
 
@@ -137,9 +137,9 @@ ESQUINAS_A_MANO = (("UL", "superior izquierda"), ("UR", "superior derecha"), ("D
 
 def _filas_de_la_cuadratura_esperadas(g):
     """E1-REV1-PRU-01. Las 15 filas (rotulo, valor, cuadrado perfecto, diferencia) de la tabla de la pestana 5 para esa geometria, con la aritmetica del plan escrita AQUI (no con `filas_de_la_cuadratura`): el
-    lado perfecto es el medio de los cuatro lados, la inclinacion y el angulo girado se comparan con 0, los angulos interiores con 90 y las diagonales con el lado perfecto por la raiz de 2; la diferencia
-    es SIEMPRE «medido menos perfecto», con signo."""
-    lado = sum(g.lados_mm[n] for n in LADOS_A_MANO) / 4.0
+    lado perfecto es SIEMPRE 100 mm (CD.7, CD7-D17; antes de CD.7 era el medio de los cuatro lados medidos), la inclinacion y el angulo girado se comparan con 0, los angulos interiores con 90 y las diagonales
+    con el lado perfecto por la raiz de 2; la diferencia es SIEMPRE «medido menos perfecto», con signo."""
+    lado = 100.0      # CD.7 (ajuste del 31-10, pedido del fisico: «los lados ideales deben ser siempre 100 mm»; CD7-D17): el cuadrado perfecto tiene 100 mm de lado (`LADO_DEL_CUADRADO_PERFECTO_MM`), no el medio de los lados medidos
     diagonal = lado * math.sqrt(2.0)
     filas = [[f"Lado {n} [mm]", f"{g.lados_mm[n]:.3f}", f"{lado:.3f}", _con_signo(g.lados_mm[n] - lado)] for n in LADOS_A_MANO]
     filas += [[f"Inclinación del lado {n} [°]", _con_signo(g.inclinacion_de_los_lados_grados[n]), "0.000", _con_signo(g.inclinacion_de_los_lados_grados[n])] for n in LADOS_A_MANO]
@@ -166,7 +166,7 @@ class TestLaVentanaArranca:
     def test_arranca_vacia_con_guardar_apagado_y_sin_nada_dibujado(self, ventana):
         assert ventana.estado == "vacia" and not ventana.boton_guardar.isEnabled() and ventana.marcas == () and ventana.sexto_clic is None
         assert ventana.nombre_archivo.text() == "Ninguna imagen" and ventana.nombre_archivo.isReadOnly()
-        for figura in (ventana._fig_gris, ventana._fig_capas, ventana._fig_perfiles, ventana._fig_barridos):
+        for figura in (ventana._fig_capas, ventana._fig_perfiles, ventana._fig_barridos):      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
             assert not figura.axes
         assert not ventana.eje_imagen.images and not ventana.eje_cuadratura.lines
         assert all(t.rowCount() == 0 for t in (ventana.tabla_desfases, ventana.tabla_perfiles, ventana.tabla_barridos, ventana.tabla_cuadratura))
@@ -195,7 +195,7 @@ class TestLaVentanaArranca:
     def test_el_pie_de_parametros_fijos_esta_escrito_desde_el_arranque(self, ventana):
         pie = ventana.pie_de_parametros.text()
         assert pie.startswith("Parámetros fijos del método (se guardan con cada análisis; no se ajustan en pantalla):")
-        assert pie == dibujo_mod().texto_de_parametros()
+        assert pie == dibujo_mod().texto_de_parametros(en_la_ventana=True)      # CD.7 (ajuste del 01-11): el pie de la ventana (en el cuadro «Info») dice tambien la frase del 43, de tipo «largo» (`texto_de_parametros(en_la_ventana=True)`); el del PDF no
 
     def test_el_titulo_dice_el_equipo(self, fabrica):
         assert EQUIPO in fabrica().windowTitle() and "campo luminoso" in fabrica().windowTitle()
@@ -519,12 +519,12 @@ class TestLosClics:
         acciones = {"cargar otra imagen": lambda v: cargar(v, dialogos, archivo_placa), "Recalcular": lambda v: v.boton_recalcular.click(), "Limpiar": lambda v: v.boton_limpiar.click()}
         for nombre, accion in acciones.items():
             v = analizada(fabrica(), dialogos, archivo_placa, clics)
-            barras = [v.barra_imagen, v.barra_gris, v.barra_capas, v.barra_perfiles, v.barra_barridos, v.barra_cuadratura]
+            barras = [v.barra_imagen, v.barra_capas, v.barra_perfiles, v.barra_barridos, v.barra_cuadratura]      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
             for barra in barras:
                 getattr(barra, herramienta)()
             assert all(barra.mode == modo for barra in barras), "premisa: la herramienta esta puesta en las seis"
             accion(v)
-            assert [barra.mode == "" for barra in barras] == [True] * 6, nombre
+            assert [barra.mode == "" for barra in barras] == [True] * 5, nombre      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4: cinco barras, sin la del gris
 
     def test_un_trazo_ya_quitado_no_hace_caer_la_limpieza_de_lo_dibujado_sobre_la_imagen(self, ventana, dialogos, archivo_placa):
         cargar(ventana, dialogos, archivo_placa)
@@ -656,7 +656,7 @@ class TestElAnalisisEsElDelMotor:
         assert piso.modo == "automatico" and piso.como_dict() == oraculos["automatico"].piso
 
     def test_se_mide_con_los_40_parametros_de_fabrica_enteros(self, solo_lectura):
-        assert solo_lectura.v._resultado.parametros == _P() and len(_P()) == len(pm().VALORES_DE_LA_GEOMETRIA) == 42      # OD.1: eran 40; la base de la medida es el 41. CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`)
+        assert solo_lectura.v._resultado.parametros == _P() and len(_P()) == len(pm().VALORES_DE_LA_GEOMETRIA) == 43      # OD.1: eran 40; la base de la medida es el 41. CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`). CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %)
 
     def test_la_pelicula_no_se_retiene_tras_el_analisis(self, solo_lectura):
         v = solo_lectura.v
@@ -748,33 +748,37 @@ class TestPestana1Imagen:
                          "zona central de la meseta y del barrido", "región del piso"):
             assert esperada in etiquetas_vistas, (esperada, etiquetas_vistas)
 
-    def test_al_lado_van_los_dos_perfiles_del_gris_con_el_fwhm_del_motor(self, solo_lectura, oraculos):
+    def test_al_lado_de_la_imagen_va_la_tabla_de_la_capa_reportada_y_ningun_perfil_del_gris(self, solo_lectura):
+        """CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4; CD.7 (ajuste del 31-10, pedido del fisico de las 22:50; CD7-D19): la tabla de la pestana 1 es la de la capa reportada, al lado de la imagen, con los datos importantes (`filas_de_la_capa_reportada`)."""
         v = solo_lectura.v
-        assert len(v._fig_gris.axes) == 2
-        gris = oraculos["automatico"].valores["gris"]
-        assert [e.get_title() for e in v._fig_gris.axes] == [f"Gris, crossplane: FWHM {gris['fwhm_crossplane_mm']:.3f} mm", f"Gris, inplane: FWHM {gris['fwhm_inplane_mm']:.3f} mm"]
+        assert not any(hasattr(v, n) for n in ("_fig_gris", "lienzo_gris", "barra_gris"))
+        assert v.tabla_desfases.parentWidget() is v.pestanas.widget(0), "la tabla va en la pagina de la pestana 1, al lado de la imagen"
 
-    def test_los_perfiles_del_gris_llevan_todas_las_lineas_de_la_pestana_3(self, solo_lectura):
+    def test_los_perfiles_de_la_pestana_3_llevan_todas_sus_lineas(self, solo_lectura):
+        """CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4: lo que fijaba esta prueba sobre los perfiles del gris lo fija ahora sobre los seis de la pestana 3 (R, G y B)."""
         gids = {"perfil:crudo", "perfil:suavizado", "perfil:piso", "perfil:meseta", "perfil:altura_media", "perfil:penumbra_alta", "perfil:penumbra_baja", "perfil:zona", "perfil:exclusion",
                 "perfil:borde_luz", "perfil:borde_rad", "perfil:cruce"}
-        for ax in solo_lectura.v._fig_gris.axes:
+        assert len(solo_lectura.v._fig_perfiles.axes) == 6
+        for ax in solo_lectura.v._fig_perfiles.axes:
             assert gids <= {a.get_gid() for a in ax.get_children()}
 
-    def test_la_tabla_de_desfases_es_la_del_gris_con_los_numeros_del_motor(self, solo_lectura, directo):
-        gris = directo.resultado.capas["gris"]
-        c = gris.coincidencia_mm
+    def test_la_tabla_de_la_pestana_1_es_la_de_la_capa_reportada_con_los_numeros_del_motor(self, solo_lectura, directo):
+        """CD.7 (ajuste del 31-10, pedido del fisico de las 22:50; CD7-D19): la tabla de la pestana 1 es la de la capa reportada, al lado de la imagen, con los datos importantes (`filas_de_la_capa_reportada`)."""
+        verde = directo.resultado.capas["G"]
+        c = verde.coincidencia_mm
 
         def f(x):
             return f"{x:+.3f}"
-        esperado = [["Lado izquierdo (radiación − luz) [mm]", f(c["izquierdo"])], ["Lado derecho (radiación − luz) [mm]", f(c["derecho"])], ["Lado superior (radiación − luz) [mm]", f(c["superior"])],
-                    ["Lado inferior (radiación − luz) [mm]", f(c["inferior"])],
-                    ["Radiación − cruce de diagonales (x; y) [mm]", f"{f(gris.radiacion_menos_luz_mm[0])}; {f(gris.radiacion_menos_luz_mm[1])}"],
-                    ["Luz − retículo (x; y) [mm]", f"{f(directo.resultado.luz_menos_reticulo_mm[0])}; {f(directo.resultado.luz_menos_reticulo_mm[1])}"],
-                    ["Radiación − retículo (x; y) [mm]", f"{f(gris.radiacion_menos_reticulo_mm[0])}; {f(gris.radiacion_menos_reticulo_mm[1])}"]]
-        assert texto_de_la_tabla(solo_lectura.v.tabla_desfases) == esperado
+        filas = dict(map(tuple, texto_de_la_tabla(solo_lectura.v.tabla_desfases)))
+        esperado = {"Capa reportada": "Capa verde", "FWHM crossplane [mm]": f"{verde.crossplane.fwhm_mm:.3f}", "FWHM inplane [mm]": f"{verde.inplane.fwhm_mm:.3f}",
+                    "Lado izquierdo (radiación − luz) [mm]": f(c["izquierdo"]), "Lado derecho (radiación − luz) [mm]": f(c["derecho"]), "Lado superior (radiación − luz) [mm]": f(c["superior"]),
+                    "Lado inferior (radiación − luz) [mm]": f(c["inferior"]),
+                    "Radiación − cruce de diagonales (x; y) [mm]": f"{f(verde.radiacion_menos_luz_mm[0])}; {f(verde.radiacion_menos_luz_mm[1])}",
+                    "Radiación − retículo (x; y) [mm]": f"{f(verde.radiacion_menos_reticulo_mm[0])}; {f(verde.radiacion_menos_reticulo_mm[1])}"}
+        assert {k: filas.get(k) for k in esperado} == esperado and "Luz − retículo (x; y) [mm]" not in filas
 
     def test_la_nota_dice_que_lo_que_se_guarda_es_lo_de_la_capa_reportada(self, solo_lectura):
-        assert solo_lectura.v.nota_pestana1.text() == "Estos son los desfases del perfil de grises. Lo que se guarda y se imprime es lo de la capa verde, que se ve en la pestaña 3."
+        assert solo_lectura.v.nota_pestana1.text() == "La tabla al lado de la imagen da los valores de la capa verde, la reportada: lo que se guarda y lo que imprime el PDF."      # CD.7 (ajuste del 31-10): la nota de la pestana 1 (en el cuadro «Info») habla de la tabla de la capa reportada, no de los desfases del gris
 
     def test_los_ejes_de_la_imagen_tienen_su_rotulo_en_pixeles_con_corchetes(self, solo_lectura):
         ax = solo_lectura.v.eje_imagen
@@ -878,7 +882,7 @@ class TestPestana3PerfilesPorCapa:
             x0, x1 = ax.get_xlim()
             assert x0 == pytest.approx((m.perfil.desde_px - m.centro_px) * m.tam_mm) and x1 == pytest.approx((m.perfil.desde_px + len(m.perfil.valores) - 1 - m.centro_px) * m.tam_mm)
             assert x0 < -55.0 and x1 > 55.0, f"{capa} {eje}: la pelicula de {x0:.1f} a {x1:.1f} mm cubre los bordes del campo (a +-50 mm) con margen a cada lado"
-            assert ax.get_xlabel() == ("posición desde el cruce de diagonales [mm]" if capa == "gris" else "") and ax.get_ylabel() == "valor de píxel [nivel]"
+            assert ax.get_xlabel() == ("posición desde el cruce de diagonales [mm]" if capa == "B" else "") and ax.get_ylabel() == "valor de píxel [nivel]"      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4: el rotulo x va en la fila de abajo, la de B
 
     def test_los_bordes_de_radiacion_dibujados_dan_el_fwhm_y_los_luminosos_son_los_de_esa_linea(self, solo_lectura, directo, oraculos):
         for (capa, eje), ax in _grupo(solo_lectura.v).items():
@@ -912,7 +916,7 @@ class TestPestana3PerfilesPorCapa:
         t = solo_lectura.v.tabla_perfiles
         assert [t.horizontalHeaderItem(c).text() for c in range(t.columnCount())] == list(dibujo_mod().COLUMNAS_DE_LOS_PERFILES)
         filas = texto_de_la_tabla(t)
-        assert [(f[0], f[1]) for f in filas] == [(n, e) for n in ("Capa roja", "Capa verde", "Capa azul", "Gris") for e in ("crossplane", "inplane")]
+        assert [(f[0], f[1]) for f in filas] == [(n, e) for n in ("Capa roja", "Capa verde", "Capa azul") for e in ("crossplane", "inplane")]      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
         valores = oraculos["automatico"].valores
         for fila, ((capa, eje), _ax) in zip(filas, _grupo(solo_lectura.v).items()):
             m = getattr(directo.resultado.capas[capa], eje)
@@ -928,7 +932,7 @@ class TestPestana3PerfilesPorCapa:
                              "Penumbra derecha o inferior [mm]", "Piso [nivel]", "Meseta [nivel]", "Avisos", "Se guarda"], "las columnas del plan (las escribe la prueba a mano), ninguna que compare capas"
         filas = texto_de_la_tabla(tabla)
         assert all(len(f) == 12 and None not in f for f in filas)
-        assert [f[11] for f in filas] == ["", "", "se guarda", "se guarda", "", "", "", ""], "la capa verde, y nada mas"
+        assert [f[11] for f in filas] == ["", "", "se guarda", "se guarda", "", ""], "la capa verde, y nada mas"      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
         palabras = re.compile(r"mayor|menor|mejor|peor|compar|diferencia|promedio de las capas|cumple|tolerancia", re.I)
         assert not [t for f in [cabeceras, *filas] for t in f if palabras.search(t)], "PD3: cada capa por separado, sin ninguna marca ni juicio que las compare"
 
@@ -947,7 +951,8 @@ class TestPestana4Barridos:
         ejes = solo_lectura.v._fig_barridos.axes
         assert len(ejes) == 2 and [e.get_title() for e in ejes] == ["Barrido crossplane: FWHM de cada banda de 1.0 mm", "Barrido inplane: FWHM de cada banda de 1.0 mm"]
         for ax, eje in zip(ejes, ("crossplane", "inplane")):
-            for capa in (*CAPAS, "gris"):
+            assert not por_gid(ax, "barrido:bandas:gris")      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
+            for capa in CAPAS:
                 b = directo.barrido.ejes[eje].capas[capa]
                 linea = por_gid(ax, f"barrido:bandas:{capa}")[0]
                 assert len(linea.get_xdata()) == len(b.bandas) == 79, "todas las bandas, sin descartar ninguna"
@@ -956,7 +961,7 @@ class TestPestana4Barridos:
     def test_la_media_la_mediana_el_corte_central_y_los_limites_de_la_zona_son_los_del_motor(self, solo_lectura, directo):
         for ax, eje in zip(solo_lectura.v._fig_barridos.axes, ("crossplane", "inplane")):
             b = directo.barrido.ejes[eje]
-            for capa in (*CAPAS, "gris"):
+            for capa in CAPAS:      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
                 c = b.capas[capa]
                 assert float(por_gid(ax, f"barrido:media:{capa}")[0].get_ydata()[0]) == pytest.approx(c.estadistica.media_mm)
                 assert float(por_gid(ax, f"barrido:mediana:{capa}")[0].get_ydata()[0]) == pytest.approx(c.estadistica.mediana_mm)
@@ -972,9 +977,9 @@ class TestPestana4Barridos:
 
     def test_la_tabla_de_los_barridos_dice_las_medidas_estadisticas_del_motor(self, solo_lectura, directo):
         filas = texto_de_la_tabla(solo_lectura.v.tabla_barridos)
-        assert len(filas) == 8
+        assert len(filas) == 6      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
         esperado = []
-        for capa, nombre in (("R", "Capa roja"), ("G", "Capa verde"), ("B", "Capa azul"), ("gris", "Gris")):
+        for capa, nombre in (("R", "Capa roja"), ("G", "Capa verde"), ("B", "Capa azul")):
             for eje in ("crossplane", "inplane"):
                 c = directo.barrido.ejes[eje].capas[capa]
                 e = c.estadistica
@@ -985,19 +990,19 @@ class TestPestana4Barridos:
         """En la sintetica la media y la mediana de las bandas coinciden y la tabla no distingue de cual se aleja el corte central: aqui se FABRICAN distintas (una mota desplaza la media y deja la mediana)."""
         barrido = directo.barrido
         eje = barrido.ejes["crossplane"]
-        capa = eje.capas["gris"]
+        capa = eje.capas["G"]      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4: la capa verde en lugar del gris
         e = capa.estadistica
         distinta = dataclasses.replace(e, media_mm=e.media_mm + 0.37, mediana_mm=e.mediana_mm - 0.21)
-        otro = dataclasses.replace(barrido, ejes={**barrido.ejes, "crossplane": dataclasses.replace(eje, capas={**eje.capas, "gris": dataclasses.replace(capa, estadistica=distinta)})})
-        fila = next(f for f in dibujo_mod().filas_de_los_barridos(otro) if f[0] == "Gris" and f[1] == "crossplane")
+        otro = dataclasses.replace(barrido, ejes={**barrido.ejes, "crossplane": dataclasses.replace(eje, capas={**eje.capas, "G": dataclasses.replace(capa, estadistica=distinta)})})
+        fila = next(f for f in dibujo_mod().filas_de_los_barridos(otro) if f[0] == "Capa verde" and f[1] == "crossplane")
         assert fila[5] == f"{distinta.media_mm:.3f}" and fila[6] == f"{distinta.mediana_mm:.3f}" and fila[8] == f"{capa.central.fwhm_mm:.3f}"
         assert fila[9] == _con_signo(capa.central.fwhm_mm - distinta.mediana_mm) != _con_signo(capa.central.fwhm_mm - distinta.media_mm), "cuanto se aleja el corte central: de la MEDIANA"
 
 
 class TestPestana5Cuadratura:
-    def test_el_cuadrado_perfecto_es_el_del_lado_medio_sin_girar_y_con_el_mismo_centro(self, solo_lectura, directo):
+    def test_el_cuadrado_perfecto_es_el_de_100_mm_sin_girar_y_con_el_mismo_centro(self, solo_lectura, directo):
         g = directo.resultado.geometria
-        lado = float(np.mean(list(g.lados_mm.values())))
+        lado = 100.0      # CD.7 (ajuste del 31-10, pedido del fisico: «los lados ideales deben ser siempre 100 mm»; CD7-D17): el cuadrado perfecto tiene 100 mm de lado (`LADO_DEL_CUADRADO_PERFECTO_MM`), no el medio de los lados medidos
         perfecto = por_gid(solo_lectura.v.eje_cuadratura, "cuadratura:perfecto")[0]
         xy = list(zip(map(float, perfecto.get_xdata()), map(float, perfecto.get_ydata())))
         mitad = lado / 2
@@ -1009,7 +1014,7 @@ class TestPestana5Cuadratura:
         ax = solo_lectura.v.eje_cuadratura
         g = directo.resultado.geometria
         real = [(float((x - g.cruce[0]) * g.tam_mm), float((y - g.cruce[1]) * g.tam_mm)) for x, y in g.esquinas]
-        lado = float(np.mean(list(g.lados_mm.values())))
+        lado = 100.0      # CD.7 (ajuste del 31-10, pedido del fisico: «los lados ideales deben ser siempre 100 mm»; CD7-D17): el cuadrado perfecto tiene 100 mm de lado (`LADO_DEL_CUADRADO_PERFECTO_MM`), no el medio de los lados medidos
         perfecto = [(-lado / 2, -lado / 2), (lado / 2, -lado / 2), (lado / 2, lado / 2), (-lado / 2, lado / 2)]
         linea = por_gid(ax, "cuadratura:real")[0]
         assert list(zip(map(float, linea.get_xdata()), map(float, linea.get_ydata())))[:4] == pytest.approx(real)
@@ -1030,7 +1035,7 @@ class TestPestana5Cuadratura:
         assert len(filas) == 15
         assert [f[0] for f in filas] == [f"Lado {n} [mm]" for n in ("superior", "derecho", "inferior", "izquierdo")] + [f"Inclinación del lado {n} [°]" for n in ("superior", "derecho", "inferior", "izquierdo")] \
             + [f"Ángulo interior {n} [°]" for n in ("superior izquierda", "superior derecha", "inferior derecha", "inferior izquierda")] + ["Diagonal principal [mm]", "Diagonal secundaria [mm]", "Ángulo girado [°]"]
-        lado = float(np.mean(list(g.lados_mm.values())))
+        lado = 100.0      # CD.7 (ajuste del 31-10, pedido del fisico: «los lados ideales deben ser siempre 100 mm»; CD7-D17): el cuadrado perfecto tiene 100 mm de lado (`LADO_DEL_CUADRADO_PERFECTO_MM`), no el medio de los lados medidos
         for fila, nombre in zip(filas[:4], ("superior", "derecho", "inferior", "izquierdo")):
             assert fila[1] == f"{g.lados_mm[nombre]:.3f}" and fila[2] == f"{lado:.3f}" and fila[3] == _con_signo(g.lados_mm[nombre] - lado)
         assert [f[2] for f in filas[8:12]] == ["90.000"] * 4 and filas[12][2] == filas[13][2] == f"{lado * 2 ** 0.5:.3f}"
@@ -1104,7 +1109,7 @@ class TestElEstiloDeCadaLinea:
 
     def test_en_los_barridos_la_media_es_discontinua_la_mediana_punteada_y_la_leyenda_lo_dice_con_el_estilo_que_dibuja(self, solo_lectura):
         for ax in solo_lectura.v._fig_barridos.axes:
-            for capa in (*CAPAS, "gris"):
+            for capa in CAPAS:      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
                 assert [l.get_linestyle() for l in por_gid(ax, f"barrido:media:{capa}")] == ["--"], (capa, "la media, discontinua")
                 assert [l.get_linestyle() for l in por_gid(ax, f"barrido:mediana:{capa}")] == [":"], (capa, "la mediana, punteada")
                 assert [l.get_linestyle() for l in por_gid(ax, f"barrido:bandas:{capa}")] == ["-"], (capa, "el FWHM de las bandas, una linea continua con sus puntos")
@@ -1121,7 +1126,7 @@ class TestElEstiloDeCadaLinea:
         """La misma regla para TODA leyenda de las seis figuras (la de los ejes y la de la figura entera): si una etiqueta nombra un estilo con palabras, el trazo de ese renglon lo tiene."""
         v = solo_lectura.v
         vistas = 0
-        for lienzo in (v.lienzo_imagen, v.lienzo_gris, v.lienzo_capas, v.lienzo_perfiles, v.lienzo_barridos, v.lienzo_cuadratura):
+        for lienzo in (v.lienzo_imagen, v.lienzo_capas, v.lienzo_perfiles, v.lienzo_barridos, v.lienzo_cuadratura):      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
             figura = lienzo.figure
             for leyenda in [*figura.legends, *[ax.get_legend() for ax in figura.axes if ax.get_legend() is not None]]:
                 for texto, manejador in zip(leyenda.get_texts(), getattr(leyenda, "legend_handles", None) or leyenda.legendHandles):
@@ -1191,7 +1196,7 @@ class TestLasFuncionesPuras:
         assert len(figura.axes) == 2
         for ax in figura.axes:
             gids = {l.get_gid() for l in ax.get_lines()}
-            assert "barrido:bandas:R" not in gids and {"barrido:bandas:G", "barrido:bandas:B", "barrido:bandas:gris"} <= gids
+            assert "barrido:bandas:R" not in gids and {"barrido:bandas:G", "barrido:bandas:B"} <= gids and "barrido:bandas:gris" not in gids      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
 
     def test_el_barrido_con_la_roja_sin_medir_rotula_igual_el_corte_central_la_media_y_la_mediana(self, directo):
         """E1-R2-PROD-01 con la figura sola: la roja dibuja sus bandas (como huecos) pero no tiene corte central, media ni mediana; las otras capas SI los tienen y la leyenda los nombra UNA vez por eje."""
@@ -1248,14 +1253,15 @@ class TestLasFuncionesPuras:
         assert d.texto_de_las_marcas([sin_pixeles], con_milimetros=False) == "Marcas 1 de 5. Refinadas: 1.", "una marca guardada sin sus pixeles no inventa un rango, ni lo dice en milimetros"
 
     def test_filas_de_la_cuadratura_con_numeros_hechos_a_mano_dicen_cada_columna_y_cada_signo(self):
-        """E1-REV1-PRU-01. Una geometria FABRICADA con numeros distintos y lejos de cero (el lado medio es 100.000, la diagonal perfecta 141.421) y las 15 filas escritas aqui a mano, a ojo y sin formulas:
-        cada diferencia es «medido menos perfecto» y lleva su signo (la inclinacion y el angulo girado se comparan con 0, los angulos interiores con 90, las diagonales con la perfecta)."""
-        g = pm().GeometriaLuz("ok", lados_mm={"superior": 99.0, "derecho": 100.0, "inferior": 101.0, "izquierdo": 100.0},
+        """E1-REV1-PRU-01. Una geometria FABRICADA con numeros distintos y lejos de cero (el lado perfecto es 100.000, la diagonal perfecta 141.421) y las 15 filas escritas aqui a mano, a ojo y sin formulas:
+        cada diferencia es «medido menos perfecto» y lleva su signo (la inclinacion y el angulo girado se comparan con 0, los angulos interiores con 90, las diagonales con la perfecta). CD7-REV1-R1-P4: los
+        cuatro lados medidos suman 403.5 (su media, 100.875, NO es 100): con los lados 99, 100, 101 y 100 de antes la media daba justo 100 y la prueba no distinguia comparar con 100 de compararlos con la media."""
+        g = pm().GeometriaLuz("ok", lados_mm={"superior": 99.5, "derecho": 100.5, "inferior": 102.0, "izquierdo": 101.5},
                               inclinacion_de_los_lados_grados={"superior": 0.25, "derecho": -0.5, "inferior": 0.75, "izquierdo": -1.0},
                               angulos_interiores_grados={"UL": 89.5, "UR": 90.25, "DR": 90.5, "DL": 89.75}, diagonales_mm=(141.0, 142.0), angulo_grados=-0.375)
         assert dibujo_mod().filas_de_la_cuadratura(g) == [
-            ("Lado superior [mm]", "99.000", "100.000", "-1.000"), ("Lado derecho [mm]", "100.000", "100.000", "0.000"),
-            ("Lado inferior [mm]", "101.000", "100.000", "+1.000"), ("Lado izquierdo [mm]", "100.000", "100.000", "0.000"),
+            ("Lado superior [mm]", "99.500", "100.000", "-0.500"), ("Lado derecho [mm]", "100.500", "100.000", "+0.500"),
+            ("Lado inferior [mm]", "102.000", "100.000", "+2.000"), ("Lado izquierdo [mm]", "101.500", "100.000", "+1.500"),
             ("Inclinación del lado superior [°]", "+0.250", "0.000", "+0.250"), ("Inclinación del lado derecho [°]", "-0.500", "0.000", "-0.500"),
             ("Inclinación del lado inferior [°]", "+0.750", "0.000", "+0.750"), ("Inclinación del lado izquierdo [°]", "-1.000", "0.000", "-1.000"),
             ("Ángulo interior superior izquierda [°]", "89.500", "90.000", "-0.500"), ("Ángulo interior superior derecha [°]", "90.250", "90.000", "+0.250"),
@@ -1299,12 +1305,12 @@ class TestLasFuncionesPuras:
         assert dibujo_mod().texto_se_guarda(capa, reportada, motivo, registro) == esperado
 
     @pytest.mark.parametrize("motivo,reportada,registro,esperado", [
-        (None, "G", False, "Estos son los desfases del perfil de grises. Lo que se guarda y se imprime es lo de la capa verde, que se ve en la pestaña 3."),
+        (None, "G", False, "La tabla al lado de la imagen da los valores de la capa verde, la reportada: lo que se guarda y lo que imprime el PDF."),      # CD.7 (ajuste del 31-10): la nota de la pestana 1 (en el cuadro «Info») habla de la tabla de la capa reportada, no de los desfases del gris
         ("MOTIVO", "G", False, "MOTIVO"),
-        (None, "B", True, "Estos son los desfases del perfil de grises. Lo guardado y lo que imprime el PDF es la capa azul, que se ve en la pestaña 3."),
-        ("MOTIVO", "R", True, "Estos son los desfases del perfil de grises. Lo guardado y lo que imprime el PDF es la capa roja, que se ve en la pestaña 3."),
-        (None, None, True, "Estos son los desfases del perfil de grises. Este registro no guardó ninguna capa reportada."),
-        (None, None, False, "Estos son los desfases del perfil de grises. Lo que se guarda y se imprime es lo de ninguna capa, que se ve en la pestaña 3.")])
+        (None, "B", True, "La tabla al lado de la imagen da los valores de la capa azul, la que guardó este registro y la que imprime el PDF."),
+        ("MOTIVO", "R", True, "La tabla al lado de la imagen da los valores de la capa roja, la que guardó este registro y la que imprime el PDF."),
+        (None, None, True, "Este registro no guardó ninguna capa reportada: la tabla al lado de la imagen queda vacía."),
+        (None, None, False, "La tabla al lado de la imagen da los valores de ninguna capa, la reportada: lo que se guarda y lo que imprime el PDF.")])
     def test_nota_de_la_pestana_1_dice_lo_que_se_guarda_o_el_texto_del_servicio_tal_cual(self, motivo, reportada, registro, esperado):
         assert dibujo_mod().nota_de_la_pestana_1(motivo, reportada, registro) == esperado
 
@@ -1364,13 +1370,13 @@ class TestCadaParametroTieneSuTrazo:
     def test_cada_parametro_que_entra_en_la_medida_tiene_su_entrada_en_trazo_de_parametro(self):
         trazo = dibujo_mod().TRAZO_DE_PARAMETRO
         claves, _ = parametros_que_entran_en_la_medida([MOTOR_PY.read_text(encoding="utf-8"), PELICULA_PY.read_text(encoding="utf-8")], set(_P()))
-        claves = claves - {"diferencia_virgen_maxima_pct"}      # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): dice cuando se avisa y no entra en ninguna medida; su entrada la pone CD.7 (H-CD6-6), que quita esta resta
+        # CD.7 (31-10, H-CD6-6): el 42 (`diferencia_virgen_maxima_pct`) tiene su frase en el pie; la resta que CD.6 puso aqui se quita.
         assert not sorted(claves - set(trazo)), f"parametros que entran en una medida y no dicen donde se ven: {sorted(claves - set(trazo))}"
 
     def test_las_entradas_son_exactamente_los_40_parametros_y_declaran_un_tipo_conocido(self):
         trazo = dibujo_mod().TRAZO_DE_PARAMETRO
-        assert set(trazo) == set(_P()) - {"diferencia_virgen_maxima_pct"} and len(trazo) == 41      # OD.1: eran 40; la base de la medida es el 41. CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): lo dibuja CD.7 (H-CD6-6)
-        tipos = {"marca", "sexto", "banda", "zona", "perfil", "exclusion", "pagina", "pie"}
+        assert set(trazo) == set(_P()) and len(trazo) == 43      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %). OD.1: eran 40; la base de la medida es el 41. CD.7 (31-10, H-CD6-6): el 42 (`diferencia_virgen_maxima_pct`) tiene su frase en el pie; la resta que CD.6 puso aqui se quita
+        tipos = {"marca", "sexto", "banda", "zona", "perfil", "exclusion", "pagina", "pie", "dosis", "largo"}      # CD.7 (ajuste del 01-11): el pie de la ventana (en el cuadro «Info») dice tambien la frase del 43, de tipo «largo» (`texto_de_parametros(en_la_ventana=True)`); el del PDF no. CD.7 (31-10, CD7-D4): el tipo «dosis» de `TRAZO_DE_PARAMETRO` es una frase del pie SOLO en un analisis en dosis (el 42; el pie del PDF de F.1, en netOD, no cambia)
         assert all(isinstance(v, tuple) and len(v) == 2 and v[0] in tipos and isinstance(v[1], str) and v[1] for v in trazo.values())
 
     def test_el_censo_nombra_un_parametro_nuevo_que_nadie_dibuja(self):
@@ -1399,8 +1405,10 @@ class TestCadaParametroTieneSuTrazo:
             elif donde == "pagina":
                 valor = P[clave]
                 ok = all(f"{x:g}" in getattr(v, texto).text() for x in (valor if isinstance(valor, (list, tuple)) else [valor]))
+            elif donde == "dosis":
+                ok = _frase_del_pie(texto, P[clave]) not in pie      # CD.7 (31-10, CD7-D4): el tipo «dosis» de `TRAZO_DE_PARAMETRO` es una frase del pie SOLO en un analisis en dosis (el 42; el pie del PDF de F.1, en netOD, no cambia): en netOD no se dice; en dosis lo prueba `test_cd7_ventana_mensual_en_dosis.py`
             else:
-                ok = _frase_del_pie(texto, P[clave]) in pie
+                ok = _frase_del_pie(texto, P[clave], donde) in pie      # CD7-REV1-PROD-04: `donde` para que el oraculo sepa que el tipo «largo» (el 43) se dice en por ciento y exacto
             if not ok:
                 faltan.append((clave, donde, texto))
         assert not faltan, f"parametros cuyo trazo o rotulo declarado no esta en la ventana: {faltan}"
@@ -1432,9 +1440,12 @@ def etiquetas_del_perfil(ax):
     return [_normalizar_texto(h.get_label()) for h in ax.get_lines() + ax.patches if not h.get_label().startswith("_")]
 
 
-def _frase_del_pie(plantilla, valor):
-    """La frase del pie con el valor con que se midio (el ORACULO de la prueba: no llama a la produccion). Una lista se dice con comas, un diccionario por capa y un booleano con si o no."""
-    if isinstance(valor, bool):
+def _frase_del_pie(plantilla, valor, donde="pie"):
+    """La frase del pie con el valor con que se midio (el ORACULO de la prueba: no llama a la produccion). Una lista se dice con comas, un diccionario por capa y un booleano con si o no; el tipo «largo»
+    (el 43, `nivel_de_llegada_al_piso`, CD7-REV1-PROD-04) es una fraccion y su plantilla lo recibe en por ciento y exacto: 0.02 es «2», 0.025 es «2.5»."""
+    if donde == "largo":
+        valor = f"{100.0 * valor:g}"
+    elif isinstance(valor, bool):
         valor = "sí" if valor else "no"
     elif isinstance(valor, dict):
         valor = ", ".join(f"{k} {v[0]:g} a {v[1]:g}" for k, v in valor.items())
@@ -1448,7 +1459,8 @@ class TestNingunControlCambiaUnNumero:
         v = solo_lectura.v
         todos = list(recorrer(v))
         botones = [w.text() for w in todos if isinstance(w, QPushButton)]
-        assert sorted(botones) == sorted(["Seleccionar imagen", "Marcar película sin irradiar", "Película virgen...", "Recalcular", "Limpiar", "Guardar"])
+        # CD.7 (31-10, DA-92): «Ver en dosis» no cambia ningun numero (cambia la vista: lo guardado es la netOD) y «Curva de dosis...» abre la calibracion; los dos se declaran aqui
+        assert sorted(botones) == sorted(["Seleccionar imagen", "Marcar película sin irradiar", "Película virgen...", "Curva de dosis...", "Ver en dosis", "Recalcular", "Limpiar", "Guardar", "Info"])      # CD.7 (ajuste del 31-10, CD7-D14): «Info» abre el cuadro de las explicaciones; no cambia ningun numero
         assert sorted(type(w).__name__ for w in todos if isinstance(w, QComboBox)) == ["_SelectorSinRueda", "_SelectorSinRueda"]
         prohibidos = (QSpinBox, QDoubleSpinBox, QSlider, QCheckBox, QRadioButton)
         assert not [w for w in todos if isinstance(w, prohibidos)], "ningun deslizador, caja de numero ni casilla: nada que mueva un parametro"

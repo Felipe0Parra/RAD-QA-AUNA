@@ -103,7 +103,7 @@ def _valores(datos, limite=200):
 def _estado_de_los_dibujos(v):
     """Lo que las cinco figuras dibujan, como valores comparables: por eje, cuantos artistas de cada clase y los datos de cada linea (no solo cuantas hay)."""
     foto = []
-    for lienzo in (v.lienzo_imagen, v.lienzo_gris, v.lienzo_capas, v.lienzo_perfiles, v.lienzo_barridos, v.lienzo_cuadratura):
+    for lienzo in (v.lienzo_imagen, v.lienzo_capas, v.lienzo_perfiles, v.lienzo_barridos, v.lienzo_cuadratura):      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
         for ax in lienzo.figure.axes:
             lineas = tuple((l.get_gid(), _valores(l.get_xdata()), _valores(l.get_ydata())) for l in ax.get_lines())
             foto.append((len(ax.images), len(ax.patches), len(ax.collections), lineas))
@@ -117,8 +117,8 @@ def _huella_del_analisis(v):
 
 
 def _datos_del_perfil(v):
-    """Los datos de los dos perfiles del gris de la pestana 1 (las lineas de cada eje, con su valor)."""
-    return [[(l.get_gid(), _valores(l.get_ydata())) for l in ax.get_lines()] for ax in v._fig_gris.axes]
+    """Los datos de los seis perfiles de la pestana 3 (las lineas de cada eje, con su valor). CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4: antes, los dos del gris de la pestana 1."""
+    return [[(l.get_gid(), _valores(l.get_ydata())) for l in ax.get_lines()] for ax in v._fig_perfiles.axes]
 
 
 def _mostrado(v):
@@ -199,16 +199,17 @@ class TestElMenuCapaReportada:
         assert [f[11] for f in filas] == ["se guarda" if f[0] == f"Capa {ADJETIVO[capa]}" else "" for f in filas]
         titulos = [a.get_title() for a in v._fig_perfiles.axes]
         assert [("(reportada)" in t) for t in titulos] == [t.startswith(f"Capa {ADJETIVO[capa]}") for t in titulos] and sum("(reportada)" in t for t in titulos) == 2
-        assert v.nota_pestana1.text() == f"Estos son los desfases del perfil de grises. Lo que se guarda y se imprime es lo de la capa {ADJETIVO[capa]}, que se ve en la pestaña 3."
+        assert v.nota_pestana1.text() == f"La tabla al lado de la imagen da los valores de la capa {ADJETIVO[capa]}, la reportada: lo que se guarda y lo que imprime el PDF."      # CD.7 (ajuste del 31-10): la nota de la pestana 1 (en el cuadro «Info») habla de la tabla de la capa reportada, no de los desfases del gris
         assert v.etiqueta_piso.text().startswith("Base de la medida: ") and f"Piso (capa {ADJETIVO[capa]}): " in v.etiqueta_piso.text()      # OD.1: la linea empieza por la base
 
-    def test_los_perfiles_y_la_tabla_de_la_pestana_1_son_los_del_gris_y_no_cambian_con_el_menu(self, fabrica, dialogos, archivo_placa, clics):
+    def test_la_tabla_de_la_pestana_1_sigue_al_menu_y_los_perfiles_no_cambian(self, fabrica, dialogos, archivo_placa, clics):
+        """CD.7 (ajuste del 31-10, pedido del fisico de las 22:50; CD7-D19): la tabla de la pestana 1 es la de la capa reportada, al lado de la imagen, con los datos importantes (`filas_de_la_capa_reportada`): la tabla de la pestana 1 es la de la capa elegida (antes, la del gris, que no cambiaba con el menu); los perfiles medidos no cambian con el menu (solo su titulo «reportada»)."""
         v = analizada(fabrica(), dialogos, archivo_placa, clics)
-        tabla, perfiles, titulos = texto_de_la_tabla(v.tabla_desfases), _datos_del_perfil(v), [a.get_title() for a in v._fig_gris.axes]
+        tabla, perfiles = texto_de_la_tabla(v.tabla_desfases), _datos_del_perfil(v)
         for capa in ("R", "B"):
             elegir_capa(v, capa)
-            assert texto_de_la_tabla(v.tabla_desfases) == tabla and _datos_del_perfil(v) == perfiles and [a.get_title() for a in v._fig_gris.axes] == titulos
-            assert all(t.startswith("Gris") and "reportada" not in t for t in titulos)
+            assert texto_de_la_tabla(v.tabla_desfases)[0] == ["Capa reportada", f"Capa {ADJETIVO[capa]}"] and texto_de_la_tabla(v.tabla_desfases) != tabla
+            assert _datos_del_perfil(v) == perfiles
 
     @pytest.mark.parametrize("capa", ["R", "B"])
     def test_elegir_la_capa_antes_de_analizar_converge_con_elegirla_despues(self, fabrica, dialogos, archivo_placa, clics, capa):
@@ -661,7 +662,7 @@ class TestGuardar:
         (args, kwargs), = espias["guardar"]
         assert args[0] == v.ref_de_prueba and args[1] == USUARIO and args[2] == placa.datos and args[3] == "placa.png"
         assert args[4] == [m.clic for m in v.marcas] and all(m.estado == "refinada" and m.punto != m.clic for m in v.marcas), "los clics SIN refinar: el servicio los refina el mismo"
-        assert args[5] == parametros() and len(args[5]) == len(pm().VALORES_DE_LA_GEOMETRIA) == 42 and args[6] == "G" and args[7] == "automatico" and kwargs == {"punto_manual": None, "referencia_virgen": None}
+        assert args[5] == parametros() and len(args[5]) == len(pm().VALORES_DE_LA_GEOMETRIA) == 43 and args[6] == "G" and args[7] == "automatico" and kwargs == {"punto_manual": None, "referencia_virgen": None}      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %)
 
     def test_guardar_llamado_por_codigo_sin_un_analisis_de_esta_sesion_no_hace_nada(self, fabrica, dialogos, archivo_placa, clics, espias):
         v = fabrica()

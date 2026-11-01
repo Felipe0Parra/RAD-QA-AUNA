@@ -670,6 +670,22 @@ PARAMETROS_DE_LA_DOSIS = {
 }
 PARAMETROS.update(copy.deepcopy(PARAMETROS_DE_LA_DOSIS))
 VALORES_DE_LA_GEOMETRIA.update({nombre: copy.deepcopy(parametro["valor"]) for nombre, parametro in PARAMETROS_DE_LA_DOSIS.items()})
+# CD.7 (ajuste del 01-11): el parámetro 43. Como el 42, no está en `CLAVES_QUE_PIDE_LA_MEDIDA`: un registro guardado antes de CD.7 no lo trae y se mide con el de fábrica (`P.get` en `medir_perfil`);
+# un análisis nuevo lo guarda con sus parámetros. No cambia ninguna medida guardada: solo el largo por debajo del 20 %, que no se guarda.
+PARAMETROS_DEL_LARGO = {
+    "nivel_de_llegada_al_piso": {
+        "valor": 0.02, "unidad": "fracción",
+        "motivo": "El largo por debajo del 20 % de cada lado llega al piso donde la señal normalizada (0 en el piso, 1 en la meseta; netOD o dosis) baja por primera vez al 2 %: el perfil real tiene una "
+                  "cola de dispersión y ruido y no llega a 0. Medido el 01-11 en las 8 películas reales del oráculo de OD.1 (verde y azul, 64 lados). Con la película virgen EPSON179 como piso, que es el "
+                  "modo con que arranca la ventana por omisión (DA-88): con 2 % llega al piso 1 lado, 60 se cortan antes en el borde de la película (de 0.15 a 8.9 mm del 20 %) y 3 no tienen largo (su "
+                  "penumbra no cierra dentro de la película); con 5 % llegan 6. Con ese piso la señal no baja al nivel antes del borde en casi ningún lado: el largo sale casi siempre como cota "
+                  "(«≥ x (cortado)») y subir el nivel no lo arregla. Con el piso de las esquinas (modo «automático»): con 2 % llegan al piso 16 lados (de 3.9 a 9.0 mm desde el 20 %) y 48 se cortan antes "
+                  "en el borde de la película, que queda de 1.6 a 9.2 mm del 20 %; con 5 % llegarían 35. Si la película se acaba antes, el largo es hasta su borde y se marca «cortado por el borde». "
+                  "Es una propuesta sin norma detrás: vetable por el físico."},
+}
+NIVEL_DE_LLEGADA_DE_FABRICA = PARAMETROS_DEL_LARGO["nivel_de_llegada_al_piso"]["valor"]
+PARAMETROS.update(copy.deepcopy(PARAMETROS_DEL_LARGO))
+VALORES_DE_LA_GEOMETRIA.update({nombre: copy.deepcopy(parametro["valor"]) for nombre, parametro in PARAMETROS_DEL_LARGO.items()})
 CLAVES_QUE_PIDE_LA_MEDIDA = tuple(PARAMETROS_DE_LA_MEDIDA) + ("umbral_fondo", "margen_borde_mm", "delta_tinta", "contraste_minimo")      # lo que `medir_perfil` y `perfil_central` leen de `P`
 CLAVES_QUE_PIDE_ANALIZAR = CLAVES_QUE_PIDE_LA_MEDIDA + CLAVES_DE_LA_ESCALA
 
@@ -738,7 +754,12 @@ class MedidaDePerfil:
     `centro_px`: el cruce de diagonales a lo largo del eje. `piso`, `meseta` (el nivel medio de la zona central sin la exclusión del retículo y sin la tinta), `altura_media`, `nivel_penumbra_alta` y
     `nivel_penumbra_baja`: niveles de 8 bits. `zona_px` y `exclusion_px`: los límites de la zona central y de la exclusión del retículo (None si no hay retículo). `muestras_meseta`: cuántas muestras
     entraron a la media. `bordes_luz_px`: los bordes luminosos de esa línea. `bordes_rad_px`: los bordes de radiación al 50 % (None si no se alcanzó). `fwhm_mm` y `centro_rad_px`: solo si están los dos
-    bordes. `penumbras_mm`: la penumbra 80 a 20 % de cada lado (None si quedó incompleta). `avisos`: los de la penumbra. `perfil` y `suavizado`: el perfil medido y el que se usó para buscar los cruces."""
+    bordes. `penumbras_mm`: la penumbra 80 a 20 % de cada lado (None si quedó incompleta). `avisos`: los de la penumbra. `perfil` y `suavizado`: el perfil medido y el que se usó para buscar los cruces.
+    `largos_bajo_la_penumbra_mm` y `largos_cortados` (CD.7, ajuste del 01-11, pedido del físico: «el largo de la parte por debajo del 20%», «Una por lado, el largo hasta el piso solo si no se
+    corta antes»): por lado (menor, mayor, en el orden de `LADOS_DEL_EJE`), el largo [mm] del tramo del perfil que queda por debajo del `penumbra_baja` de la señal (el 20 %), desde su cruce hacia
+    afuera HASTA EL PISO (el primer cruce del `nivel_de_llegada_al_piso` de la señal, el 2 %); si la película se acaba antes (el perfil llega a un dato que falta o al final), el largo es hasta la última
+    muestra con dato y `largos_cortados` lo marca (True): es una cota mínima, nunca «llegó al piso». None en un lado sin el cruce del 20 % (la penumbra incompleta) o si el perfil no se midió. Es
+    ADITIVA: no cambia ninguna otra medida ni lo guardado, y no va en `como_dict` (como `desviacion_meseta`)."""
     estado: str
     capa: str
     eje: str
@@ -761,6 +782,8 @@ class MedidaDePerfil:
     avisos: tuple = ()
     suavizado: np.ndarray | None = field(default=None, repr=False)
     desviacion_meseta: float | None = None          # CD.6: la desviación estándar de las muestras de la meseta (solo en dosis: entra en la U de la dosis de la meseta); no va en `como_dict`
+    largos_bajo_la_penumbra_mm: tuple | None = None # CD.7 (ajuste del 01-11): por lado, el largo por debajo del `penumbra_baja` hasta el piso [mm]; no va en `como_dict`
+    largos_cortados: tuple | None = None            # CD.7 (ajuste del 01-11): por lado, True si la película se acaba antes del piso (el largo es una cota mínima)
 
     @property
     def ok(self):
@@ -1130,6 +1153,22 @@ def _primer_cruce(normalizado, inicio, paso, nivel):
     return inicio + paso * (k - 1 + (tramo[k - 1] - nivel) / (tramo[k - 1] - tramo[k]))
 
 
+def _largo_hasta_el_piso(normalizado, bajo, paso, nivel_bajo, nivel_piso):
+    """CD.7 (ajuste del 01-11): el largo [en muestras] del tramo por debajo de `nivel_bajo` (el 20 %) de un lado, desde su cruce `bajo` (de `_primer_cruce`) hacia afuera (`paso`), y si la película se acaba
+    antes del piso -> (largo, cortado). Hasta el primer cruce de `nivel_piso` (el piso: la señal ya bajó a `nivel_de_llegada_al_piso`) -> (largo, False); si antes llega a un dato que falta o al final del
+    arreglo, hasta la última muestra con dato -> (largo, True): una cota mínima. Usa el mismo `_primer_cruce` que los bordes y las penumbras."""
+    desde = int(np.floor(bajo)) if paso > 0 else int(np.ceil(bajo))          # la última muestra por encima del 20 %, del lado de adentro del cruce
+    if not normalizado[desde] > nivel_bajo:
+        desde -= paso
+    piso = _primer_cruce(normalizado, desde, paso, nivel_piso)
+    if piso is not None:
+        return abs(piso - bajo), False
+    tramo = normalizado[desde:] if paso > 0 else normalizado[desde::-1]
+    falta = ~np.isfinite(tramo)
+    ultima = (int(np.argmax(falta)) if falta.any() else len(tramo)) - 1          # la última muestra con dato antes del primer hueco (o del final)
+    return abs(desde + paso * ultima - bajo), True
+
+
 def _no_medible(perfil, centro, motivo, **extra):
     return MedidaDePerfil(estado=f"no medible: perfil {perfil.eje}: {motivo}", capa=perfil.capa, eje=perfil.eje, tam_mm=perfil.tam_mm, centro_px=float(centro), perfil=perfil, **extra)
 
@@ -1216,6 +1255,7 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None,
     indices = np.flatnonzero(en_zona)
     inicios = {-1: int(indices[0]), 1: int(indices[-1])}
     bordes, penumbras, avisos, faltan = [], [], [], []
+    largos, cortados = [], []          # CD.7 (ajuste del 01-11): por lado, el largo por debajo del `penumbra_baja` hasta el piso y si la película se acaba antes
     for paso, lado in zip((-1, 1), LADOS_DEL_EJE[perfil.eje]):
         inicio = inicios[paso]
         medio = _primer_cruce(n, inicio, paso, P["altura_media"])
@@ -1223,10 +1263,15 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None,
             bordes.append(None)
             penumbras.append(None)
             faltan.append(lado)
+            largos.append(None)
+            cortados.append(None)
             continue
         bordes.append(float(perfil.desde_px + medio))
         alto = _primer_cruce(n, inicio, paso, P["penumbra_alta"])
         bajo = _primer_cruce(n, inicio, paso, P["penumbra_baja"])
+        largo, cortado = (None, None) if bajo is None else _largo_hasta_el_piso(n, bajo, paso, P["penumbra_baja"], P.get("nivel_de_llegada_al_piso", NIVEL_DE_LLEGADA_DE_FABRICA))
+        largos.append(None if largo is None else float(largo * tam))
+        cortados.append(cortado)
         if bajo is None:
             penumbras.append(None)
             avisos.append(AVISO_PENUMBRA_INCOMPLETA.format(porcentaje=P["penumbra_baja"] * 100))
@@ -1238,6 +1283,7 @@ def medir_perfil(perfil, centro_px, piso, base, P, bordes_luz, reticulo_px=None,
     datos.update(bordes_rad_px=tuple(bordes), penumbras_mm=tuple(penumbras), avisos=tuple(avisos))
     if faltan:
         return _no_medible(perfil, centro, f"no se encuentra el borde {' ni el borde '.join(faltan)} al {P['altura_media'] * 100:g} %: el perfil llega al borde de la película o a una zona sin dato antes de cruzar la altura media", **datos)
+    datos.update(largos_bajo_la_penumbra_mm=tuple(largos), largos_cortados=tuple(cortados))          # CD.7 (ajuste del 01-11): solo de un perfil medido
     return MedidaDePerfil(estado="ok", capa=perfil.capa, eje=perfil.eje, tam_mm=tam, centro_px=centro, perfil=perfil, fwhm_mm=float((bordes[1] - bordes[0]) * tam),
                           centro_rad_px=float((bordes[0] + bordes[1]) / 2), **datos)
 

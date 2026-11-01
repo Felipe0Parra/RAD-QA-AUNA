@@ -162,8 +162,8 @@ class TestLaVentanaNoOfreceGuardarUnaCapaNoMedible:
         assert v.nota_pestana1.text() == escenas[53.0].motivos["R"], "la nota de la pestana 1 es, en vez de la frase de siempre, el texto del servicio tal cual"
         assert "se guarda" not in v.nota_pestana1.text().replace("no se guarda", "")
         elegir_capa(v, "G")
-        assert [f[11] for f in texto_de_la_tabla(v.tabla_perfiles)] == ["", "", "se guarda", "se guarda", "", "", "", ""], "con la verde, la fila de la verde dice se guarda y la de la roja ya no dice nada"
-        assert v.nota_pestana1.text() == "Estos son los desfases del perfil de grises. Lo que se guarda y se imprime es lo de la capa verde, que se ve en la pestaña 3."
+        assert [f[11] for f in texto_de_la_tabla(v.tabla_perfiles)] == ["", "", "se guarda", "se guarda", "", ""], "con la verde, la fila de la verde dice se guarda y la de la roja ya no dice nada"      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
+        assert v.nota_pestana1.text() == "La tabla al lado de la imagen da los valores de la capa verde, la reportada: lo que se guarda y lo que imprime el PDF."      # CD.7 (ajuste del 31-10): la nota de la pestana 1 (en el cuadro «Info») habla de la tabla de la capa reportada, no de los desfases del gris
 
     def test_con_el_piso_no_medible_la_ventana_dice_su_motivo_y_ofrece_la_virgen_y_el_sexto_clic(self, fabrica, dialogos, escenas, clics):
         v = analizada(fabrica(), dialogos, escenas[51.0].ruta, clics)
@@ -342,7 +342,7 @@ class TestConUnRegistro:
         assert f"En lo recalculado la capa guardada ya no es medible: {escenas[53.0].motivos['R']}." in w.etiqueta_registro.text()
         filas = {(f[0], f[1]): f for f in texto_de_la_tabla(w.tabla_perfiles)}
         assert filas[("Capa roja", "crossplane")][11] == filas[("Capa roja", "inplane")][11] == "guardada; en lo recalculado no es medible", "nunca afirma que se guarda lo que el guardado rechaza"
-        assert w.nota_pestana1.text() == "Estos son los desfases del perfil de grises. Lo guardado y lo que imprime el PDF es la capa roja, que se ve en la pestaña 3."
+        assert w.nota_pestana1.text() == "La tabla al lado de la imagen da los valores de la capa roja, la que guardó este registro y la que imprime el PDF."      # CD.7 (ajuste del 31-10): la nota de la pestana 1 (en el cuadro «Info») habla de la tabla de la capa reportada, no de los desfases del gris
 
     def test_en_lo_recalculado_el_motivo_que_ya_trae_su_punto_no_se_cierra_con_otro(self, fabrica, dialogos, escenas, clics, monkeypatch):
         """E1-R2-PROD-03 (la misma clase, otro sitio): la linea «En lo recalculado la capa guardada ya no es medible: <motivo>» tampoco duplica el punto del motivo."""
@@ -493,7 +493,7 @@ class TestLaLeyendaDeLosBarridosDiceLoQueDibuja:
         """Las escenas donde el defecto se ve: en el crossplane de la pelicula cortada a 53.0 mm la roja no tiene corte central y en la de 51.5 mm solo lo tiene la azul."""
         v = analizada(fabrica(), dialogos, escenas[u].ruta, clics)
         ax = v._fig_barridos.axes[0]
-        for capa in (*CAPAS, "gris"):
+        for capa in CAPAS:      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
             for clave in ROTULOS_DEL_BARRIDO:
                 assert bool(con_gid(ax, f"barrido:{clave}:{capa}")) == (capa not in sin_centro), (u, capa, clave)
         assert set(ROTULOS_DEL_BARRIDO.values()) <= set(etiquetas(ax)), etiquetas(ax)

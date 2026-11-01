@@ -41,6 +41,11 @@ hidden_imports = [
     # ui.mainpages; listado por la misma defensa de arriba.
     "services.respaldo",
 
+    # CD.7: la ventana mensual de la placa y su dibujo (E.1/E.2 no los habian
+    # listado): la ventana abre la de calibracion de CD.5 con un import diferido.
+    "ui.paginasControles.PruebasMensuales.placa_mensual",
+    "analisisImagenes.dibujo_placa_mensual",
+
     # CD.5 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md): la ventana de calibracion de
     # las peliculas y los modulos de la curva que usa. Import estatico (desde
     # las pruebas y, en CD.7, desde la ventana mensual); listados por la misma

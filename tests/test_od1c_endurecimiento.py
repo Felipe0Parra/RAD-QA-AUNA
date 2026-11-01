@@ -579,7 +579,7 @@ class TestLoLibreDeLaReferenciaTieneTopeDeProfundidad:
 
 def _ejes_de_los_perfiles(v):
     ejes = list(v._fig_perfiles.axes)
-    assert len(ejes) == 8
+    assert len(ejes) == 6      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
     return ejes
 
 
@@ -606,7 +606,7 @@ class TestGuardarDesdeLaVentanaEnLaBaseDeFabrica:
         v.boton_guardar.click()
         registro = svc.leer(v.ref_de_prueba)
         assert registro["parametros"]["base_de_la_medida"] == BASE_OD, "«Guardar» guarda la base con que la pantalla midio"
-        assert registro["parametros"] == pm.VALORES_DE_LA_GEOMETRIA and len(registro["parametros"]) == 42      # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): un analisis nuevo lo guarda (H-CD6-7)
+        assert registro["parametros"] == pm.VALORES_DE_LA_GEOMETRIA and len(registro["parametros"]) == 43      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %). Antes: CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): un analisis nuevo lo guarda (H-CD6-7)
         assert {k: registro[k] for k in mostrado} == mostrado, "los siete datos finales guardados son EXACTAMENTE los que la ventana mostro"
         assert textos == [dib.numero(registro["fwhm_crossplane_mm"], 3), dib.numero(registro["fwhm_inplane_mm"], 3)]
         for eje, indice in (("crossplane", 0), ("inplane", 1)):
@@ -624,7 +624,7 @@ class TestGuardarDesdeLaVentanaEnLaBaseDeFabrica:
         assert w.estado == "registro" and w._resultado.base == BASE_OD
         assert svc.diferencias(svc.leer(v.ref_de_prueba), w._resultado) == []
         assert not dialogos.de("warning") and not dialogos.de("critical")
-        assert [ax.get_ylabel() for ax in _ejes_de_los_perfiles(w)] == ["densidad óptica neta [1]"] * 8
+        assert [ax.get_ylabel() for ax in _ejes_de_los_perfiles(w)] == ["densidad óptica neta [1]"] * 6      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
         assert w.etiqueta_piso.text().startswith("Base de la medida: densidad óptica neta"), w.etiqueta_piso.text()
 
     def test_reabrir_con_la_constante_cambiada_a_pixel_sigue_midiendo_con_la_base_guardada(self, fabrica, dialogos, bd, monkeypatch):

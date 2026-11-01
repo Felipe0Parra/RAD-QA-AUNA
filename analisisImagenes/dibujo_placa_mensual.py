@@ -8,10 +8,15 @@ PD1 (nada escondido que cambie el número): cada gráfica dibuja TODO lo que se 
 el recuadro del campo luminoso con sus diagonales, el cruce y el retículo, las dos bandas de 1 mm de donde salen los perfiles centrales, la zona central de la meseta y del barrido y la región de donde salió el
 piso. En cada perfil: el perfil crudo y el suavizado con que se buscaron los cruces, el piso, la media de la meseta, la altura media, los niveles de la penumbra, los límites de la zona central y de la
 exclusión del retículo, los bordes de radiación y los bordes luminosos de esa línea, en milímetros desde el cruce de diagonales y con la película completa a los dos lados del campo. `TRAZO_DE_PARAMETRO`
-dice dónde se ve cada uno de los 41 parámetros del análisis (un trazo, una etiqueta o una frase del pie) y una prueba lo deriva del código del motor por AST.
+dice dónde se ve cada uno de los parámetros del análisis, todos los de `motor.VALORES_DE_LA_GEOMETRIA` (un trazo, una etiqueta o una frase del pie), y una prueba lo deriva del código del motor por AST.
 
 OD.1 (DA-87): la BASE del análisis (`motor.BASE_POR_OMISION`: la densidad óptica neta o el valor de píxel normalizado) es un parámetro más que viaja con cada análisis; los perfiles se dibujan en la unidad de
 esa base (`motor.valores_en_la_base`), la pestaña de las capas se pinta en su unidad desde CD.1 (`capa_acondicionada`: la densidad óptica neta de cada píxel, o el valor de píxel en un registro medido en esa base, con una escala absoluta que va de 0 a un tope que dice el título, el mismo para las tres capas desde CD.1b: `escala_de_las_capas`) y la ventana dice cuál es (`texto_de_la_base`). Ningún dibujo escribe el nombre de una base: sale del motor.
+
+CD.7 (DA-92, DC9): un análisis en DOSIS (`motor.BASE_DOSIS`, el que la ventana calcula al pulsar «Ver en dosis») se dibuja en cGy con la curva que trae (`resultado.curva`, de la capa de cada perfil:
+`motor.curva_de_la_capa`): cada perfil y cada capa de la pestaña 2 con el MISMO eje fijo, de 0 a la mayor dosis útil de las capas válidas de la curva redondeada hacia arriba a
+`PASO_DEL_EJE_DE_LA_DOSIS_CGY` (`eje_de_la_dosis`: el mismo para toda película medida con esa curva), y una capa «no medible en dosis» dice su motivo sin dibujar nada en otra base. La tabla de los perfiles
+gana la dosis de la meseta con su U (k = 2) (`columnas_de_los_perfiles`). La imagen con lo dibujado encima no depende de la base.
 
 Marcos. Los dibujos de la pestaña 1 (la imagen) están en el marco de la IMAGEN, el que el físico ve y en el que marca; los de las pestañas 2 a 5 en el marco GIRADO que usa el motor (la película recortada
 y girada hasta que los ejes del campo quedan horizontal y vertical). `a_imagen(matriz, puntos)` es la inversa de la matriz de giro del motor y lleva un trazo del marco girado a la imagen.
@@ -43,6 +48,8 @@ COLOR_LUZ = "#e07b00"                  # los bordes luminosos de la línea de un
 COLOR_EXCLUSION = "#7a4cc2"            # la exclusión del retículo
 FACTOR_DE_AMPLIACION = 20              # PD1: las desviaciones del recuadro frente al cuadrado perfecto no se ven a escala real (0.4 grados y menos de 1 mm en 100 mm): el dibujo de la cuadratura las
                                        # amplía este factor FIJO y lo rotula («desviaciones × 20»); la tabla da los números sin ampliar
+LADO_DEL_CUADRADO_PERFECTO_MM = 100.0  # CD.7 (ajuste del 31-10, pedido del físico: «así como los ángulos permanecen en cero, los lados ideales deben ser siempre 100 mm»): el lado del cuadrado
+                                       # perfecto con que se compara el recuadro del campo luminoso (el campo de 10 × 10 cm del control mensual); su diagonal, LADO × raíz de 2. Una sola definición.
 PUNTOS_DEL_CIRCULO = 73
 ANCHO_DE_LA_LEYENDA = 34               # caracteres por línea de una etiqueta de la leyenda
 _ESQUINA = {"UL": "superior izquierda", "UR": "superior derecha", "DR": "inferior derecha", "DL": "inferior izquierda"}
@@ -52,7 +59,7 @@ NO_MEDIBLE = "no medible"                # lo que dice la ventana de todo valor 
 PREFIJO_DE_LA_REGLA = "No se puede guardar: "
 TEXTO_DEL_FACTOR = f"desviaciones × {FACTOR_DE_AMPLIACION}"
 
-# qué trazo o qué rótulo muestra CADA parámetro del análisis (los 41 de `motor.VALORES_DE_LA_GEOMETRIA`). `{clave: (dónde, texto)}`; una prueba deriva por AST qué claves leen el motor y el piso, exige que cada una
+# qué trazo o qué rótulo muestra CADA parámetro del análisis (todos los de `motor.VALORES_DE_LA_GEOMETRIA`, sin contarlos aquí; desde CD.7, el 42, el aviso de la película virgen en dosis, y el 43, el largo por debajo del 20 %). `{clave: (dónde, texto)}`; una prueba deriva por AST qué claves leen el motor y el piso, exige que cada una
 # tenga su entrada y comprueba que cada entrada está de verdad en la ventana. Dónde:
 #   "marca"      el círculo de búsqueda de cada clic (la etiqueta del trazo empieza por `texto`);
 #   "sexto"      el cuadrado del punto marcado sobre película sin irradiar (la etiqueta empieza por `texto`);
@@ -61,7 +68,11 @@ TEXTO_DEL_FACTOR = f"desviaciones × {FACTOR_DE_AMPLIACION}"
 #   "perfil"     un trazo de cada perfil cuya etiqueta empieza por `texto`;
 #   "exclusion"  la exclusión del retículo en cada perfil;
 #   "pagina"     la etiqueta de la ventana con ese nombre, que DICE el valor con que se midió (la resolución del escaneo);
-#   "pie"        una frase del pie de parámetros fijos de la ventana; `texto` es su plantilla y se llena con el valor con que se midió.
+#   "pie"        una frase del pie de parámetros fijos de la ventana; `texto` es su plantilla y se llena con el valor con que se midió;
+#   "dosis"      (CD.7) una frase del pie SOLO en un análisis en dosis (el único que usa el parámetro): un análisis en netOD —lo guardado y lo que imprime el PDF de F.1, que arma su pie con
+#                `texto_de_parametros`— no la dice, así que ningún PDF cambia.
+#   "largo"      (CD.7, ajuste del 01-11) una frase del pie SOLO en la ventana (en el cuadro «Info», `texto_de_parametros(en_la_ventana=True)`): el pie del PDF de F.1 no la dice, así que ningún PDF cambia.
+#                Su valor es una fracción y la plantilla lo recibe en por ciento y exacto (`porcentaje`; CD7-REV1-PROD-04: el «{:.0%}» decía «2%» para 0.025 y para 0.015).
 TRAZO_DE_PARAMETRO = {
     "base_de_la_medida": ("pie", "base de la medida: {}"),
     "radio_marca_mm": ("marca", "círculo de búsqueda"),
@@ -104,9 +115,16 @@ TRAZO_DE_PARAMETRO = {
     "penumbra_alta": ("perfil", "nivel de penumbra alta"),
     "penumbra_baja": ("perfil", "nivel de penumbra baja"),
     "suavizado_perfil_mm": ("perfil", "perfil suavizado"),
+    "diferencia_virgen_maxima_pct": ("dosis", "en dosis, aviso si la película virgen difiere más de {:g} % del cero de la curva"),
+    "nivel_de_llegada_al_piso": ("largo", "el largo por debajo del 20 % llega al piso donde la señal baja al {} % (si la película se acaba antes, se marca cortado por el borde)"),
 }
+ROTULO_DEL_LARGO = "Largo bajo el {baja:g} %, lado {lado} [mm]"          # CD.7 (ajuste del 01-11): EL rótulo de la medida (una línea si el físico le da otro nombre)
+TEXTO_DEL_LARGO_CORTADO = "≥ {valor} (cortado)"          # CD.7 (ajuste del 01-11): un lado que la película corta antes del piso: una cota mínima, nunca «hasta el piso»
 LARGO_DEL_PIE = 220                    # caracteres por línea del pie de parámetros fijos
-ETIQUETA_DEL_EJE_Y = {motor.BASE_DENSIDAD_OPTICA: f"{motor.BASE_DENSIDAD_OPTICA} [1]", motor.BASE_VALOR_DE_PIXEL: "valor de píxel [nivel]"}      # OD.1: lo que dice el eje vertical de un perfil en cada base
+ETIQUETA_DEL_EJE_Y = {motor.BASE_DENSIDAD_OPTICA: f"{motor.BASE_DENSIDAD_OPTICA} [1]", motor.BASE_VALOR_DE_PIXEL: "valor de píxel [nivel]",
+                      motor.BASE_DOSIS: f"{motor.BASE_DOSIS} [cGy]"}      # OD.1: lo que dice el eje vertical de un perfil en cada base (CD.7: y en dosis, DC9)
+PASO_DEL_EJE_DE_LA_DOSIS_CGY = 50.0    # CD.7 (DC9): el eje fijo de la dosis va de 0 a la mayor dosis útil de las capas válidas de la curva, redondeada hacia arriba a este paso [cGy]
+COLUMNAS_DE_LA_DOSIS_DE_LA_MESETA = ("Dosis de la meseta [cGy]", "U de la dosis de la meseta, k = 2 [cGy]")      # CD.7 (DC10): las que gana la tabla de los perfiles en dosis, tras «Meseta [nivel]»
 # CD.1: la ESCALA de cada capa de la pestaña 2. Son constantes del DIBUJO, no parámetros del análisis: no deciden ningún número medido ni viajan con lo guardado; el título de cada capa las dice.
 FACTOR_DEL_TOPE = 1.1                  # el tope de una capa con meseta es 1.1 veces la densidad óptica neta de su meseta: lo que pasa de la meseta se ve sin saturarlo todo
 PERCENTIL_DEL_TOPE = 99.5              # el tope de una capa sin meseta válida (no medida, recortada por el escáner o no más oscura que el piso) es este percentil de su densidad óptica neta
@@ -134,6 +152,9 @@ def texto_de_la_base(base):
     elif base == motor.BASE_VALOR_DE_PIXEL:
         formula = ("la película se mide en valor de píxel, n = (piso − valor) / (piso − meseta): 0 en el piso, 1 en la meseta, y el borde de radiación donde n vale 0.5 "
                    "(a la media aritmética entre el piso y la meseta)")
+    elif base == motor.BASE_DOSIS:
+        formula = ("cada píxel se convierte en dosis con la curva de su capa, n = D(netOD(valor)) / D(netOD(meseta)): 0 en el piso, 1 en la meseta, y el borde de radiación donde la dosis "
+                   "vale la mitad de la de la meseta")
     else:
         return f"Base de la medida: {base}."
     return f"Base de la medida: {base}; {formula}."
@@ -147,6 +168,11 @@ def numero(valor, decimales=3, con_signo=False):
     if float(texto) == 0:
         texto = texto.lstrip("+-")
     return texto
+
+
+def porcentaje(fraccion):
+    """Una fracción dicha en por ciento con su valor exacto y sin ceros de sobra: 0.02 es «2», 0.025 es «2.5». (CD7-REV1-PROD-04: el «{:.0%}» redondeaba a un entero y el pie decía «2%» para los dos.)"""
+    return f"{100.0 * float(fraccion):g}"
 
 
 def con_punto_final(texto):
@@ -213,7 +239,7 @@ def titulo_del_perfil(medida, capa, reportada=False):
     return f"{nombre}, {NOMBRE_DEL_EJE[medida.eje]}: {NO_MEDIBLE}"
 
 
-def texto_se_guarda(capa, reportada, motivo, registro=False):
+def texto_se_guarda(capa, reportada, motivo, registro=False, en_dosis=False):
     """Lo que dice, en la fila de una capa del panel de la pestaña 3, si esa capa se guarda. Solo la fila de la capa REPORTADA dice algo; las demás, vacío. `motivo` es lo que devuelve
     `services.placa_mensual.motivo_para_no_guardar(resultado, reportada)` (None si se puede guardar). Con un análisis guardado a la vista (`registro`) la fila dice «guardada» y, si en lo recalculado
     la capa ya no es medible, lo dice: nunca afirma que se guarda lo que el guardado rechaza (corolario 6)."""
@@ -221,6 +247,8 @@ def texto_se_guarda(capa, reportada, motivo, registro=False):
         return ""
     if registro:
         return "guardada" if motivo is None else "guardada; en lo recalculado no es medible"
+    if en_dosis:                                # CD.7: «Guardar» guarda la netOD aunque la vista esté en dosis (guardar la dosis es CD.6b)
+        return ("se guarda" if motivo is None else "no se guarda: no es medible") + " (en densidad óptica neta)"
     return "se guarda" if motivo is None else "no se guarda: no es medible"
 
 
@@ -247,25 +275,89 @@ def texto_de_la_regla(motivo, guardables):
     return texto + f" En esta película sí se pueden guardar: {_unir(_colores(guardables))}; elija una en el menú «Capa reportada»."
 
 
+def texto_de_la_dosis(efectiva, capa, habilitado, motivo, en_dosis=False, avisos=()):
+    """CD.7: la línea de la dosis de la ventana mensual. Sin análisis (ni motivo), vacía. Si «Ver en dosis» no se puede pulsar, «No se puede ver en dosis: <motivo>» (el motivo del motor TAL CUAL: la
+    primera condición que falla; la regla entera la dice la ayuda). Si se puede, la curva en uso: su lote, su fecha de irradiación, la calibración y el rango útil de la capa reportada; en dosis empieza por
+    «Vista en dosis [cGy].» y sigue con los avisos de la película virgen (no bloquean)."""
+    if not habilitado:
+        return "" if motivo is None else con_punto_final(f"No se puede ver en dosis: {motivo}")
+    curva = efectiva.curva
+    rango, maxima = curva.rango(capa), curva.capas[capa]["netod_maxima"]
+    texto = (f"Curva de dosis en uso: lote «{efectiva.lote or 'sin lote'}», irradiada el {efectiva.fecha_irradiacion or 'sin fecha'} (calibración {efectiva.id}); rango útil de la capa "
+             f"{ADJETIVO_DE_LA_CAPA[capa]}: hasta {rango:g} [cGy] (netOD {maxima:.3f} [1]).")
+    if not en_dosis:
+        return texto
+    return " ".join(("Vista en dosis [cGy].", texto, *avisos))
+
+
 def nota_de_la_pestana_1(motivo, reportada, registro=False):
-    """La nota bajo la tabla de desfases del gris: o lo que se guarda y se imprime (la capa reportada, que se ve en la pestaña 3) o, si esa capa no es medible, el texto del servicio TAL CUAL (D.1b)."""
+    """La nota de la tabla de la pestaña 1 (CD.7, ajuste del 31-10: la tabla es la de la capa reportada, al lado de la imagen, y la nota vive en el cuadro «Info»): o qué capa es y que es la que se guarda y se
+    imprime, o, si esa capa no es medible, el texto del servicio TAL CUAL (D.1b)."""
     if motivo is not None and not registro:
         return motivo
     capa = f"la capa {ADJETIVO_DE_LA_CAPA[reportada]}" if reportada in CAPAS else "ninguna capa"
     if registro:
-        return (f"Estos son los desfases del perfil de grises. Lo guardado y lo que imprime el PDF es {capa}, que se ve en la pestaña 3." if reportada in CAPAS
-                else "Estos son los desfases del perfil de grises. Este registro no guardó ninguna capa reportada.")
-    return f"Estos son los desfases del perfil de grises. Lo que se guarda y se imprime es lo de {capa}, que se ve en la pestaña 3."
+        return (f"La tabla al lado de la imagen da los valores de {capa}, la que guardó este registro y la que imprime el PDF." if reportada in CAPAS
+                else "Este registro no guardó ninguna capa reportada: la tabla al lado de la imagen queda vacía.")
+    return f"La tabla al lado de la imagen da los valores de {capa}, la reportada: lo que se guarda y lo que imprime el PDF."
 
 
-def tabla_de_desfases(resultado, capa="gris"):
-    """Las filas (rótulo, valor) de la tabla de la pestaña 1: de la capa `capa` (el gris), respecto del campo luminoso el desfase de cada lado (radiación − luz, positivo hacia afuera) y, respecto del centro de
-    radiación, los tres centros (radiación − cruce de diagonales, luz − retículo y radiación − retículo; x; y). Los números son los del motor, sin recalcular."""
+def _meseta_de_la_capa(medida, base):
+    """CD.7 (ajuste del 31-10): la fila (o las dos filas) de la meseta de la capa `medida` (su `MedidaDeCapa`) en la base `base`: en dosis, la dosis de la meseta y su U (k = 2) del motor (CD.6, DC10, la media
+    de sus dos perfiles); en densidad óptica neta, la media de la netOD de la meseta de sus dos perfiles, log10(piso / meseta) con la definición del motor (`motor.valores_en_la_base`); en el valor de píxel de
+    antes de OD.1, la media de sus dos mesetas en niveles. Un perfil sin meseta deja el valor «no medible»."""
+    if base == motor.BASE_DOSIS:
+        return [("Dosis media de la meseta [cGy]", numero(medida.dosis_meseta_cgy, 1)), ("U de la dosis de la meseta, k = 2 [cGy]", numero(medida.u_dosis_meseta_cgy, 1))]
+    perfiles = [getattr(medida, eje) for eje in motor.EJES]
+    if any(p.meseta is None or p.piso is None for p in perfiles):
+        valor = None
+    elif base == motor.BASE_DENSIDAD_OPTICA:
+        valor = float(np.mean([float(motor.valores_en_la_base(base, p.meseta, p.piso)) for p in perfiles]))
+    else:
+        valor = float(np.mean([p.meseta for p in perfiles]))
+    if base == motor.BASE_DENSIDAD_OPTICA:
+        return [("Densidad óptica neta media de la meseta [1]", numero(valor, 3))]
+    return [("Meseta media [nivel]", numero(valor, 1))]
+
+
+def _texto_del_largo(perfil, i):
+    """CD.7 (ajuste del 01-11): el largo por debajo del 20 % del lado `i` del perfil como lo dice la tabla: el número, «no medible» si falta, o la cota con `TEXTO_DEL_LARGO_CORTADO` si se cortó."""
+    largos, cortados = perfil.largos_bajo_la_penumbra_mm, perfil.largos_cortados
+    valor = None if largos is None else largos[i]
+    if valor is not None and cortados is not None and cortados[i]:
+        return TEXTO_DEL_LARGO_CORTADO.format(valor=numero(valor, 3))
+    return numero(valor, 3)
+
+
+def filas_de_la_capa_reportada(resultado, capa):
+    """CD.7 (ajuste del 31-10, pedido del físico: «En esa tabla que vas a poner en la primera pestaña al lado de la imagen, solo incluye los datos importantes, FWHM por corte, desfases a centro, y desfases por
+    lado y media de densidad óptica o dosis según aplique y la capa reportada. También deberíamos mostrar las penumbras y las umbras. Tanto en esa tabla como en el pdf»; y del 31-10, 23:00 a 23:10: «es el largo de la parte por debajo del 20%», «Una por lado, el largo hasta
+    el piso solo si no se corta antes»): las filas (rótulo, valor) de la tabla
+    de la pestaña 1, al lado de la imagen, y de la tabla de valores del PDF (CD.8): UNA definición para las dos. De la capa `capa` (la reportada) del análisis `resultado` (el de la vista: netOD, o dosis con
+    «Ver en dosis»): la capa; el FWHM de cada corte; los dos desfases de centro, respecto del centro de radiación (radiación − cruce de diagonales y radiación − retículo, el centro marcado; x; y); el desfase
+    de cada lado (radiación − luz, positivo hacia afuera); la meseta (`_meseta_de_la_capa`); la penumbra de cada lado (del `penumbra_alta` al `penumbra_baja` de la señal) y, por lado, el largo por
+    debajo del `penumbra_baja` hasta el piso (`MedidaDePerfil.largos_bajo_la_penumbra_mm`, con `TEXTO_DEL_LARGO_CORTADO` si la película se acaba antes: ajuste del 01-11). Los números son los del
+    motor, sin recalcular. Una capa que no se midió (o no se midió en dosis)
+    da la capa y su estado, sin números; sin capa (un registro que no guardó ninguna), ninguna fila."""
+    if capa not in CAPAS:
+        return []
     medida = resultado.capas[capa]
-    filas = [(f"Lado {lado} (radiación − luz) [mm]", numero(medida.coincidencia_mm.get(lado), 3, True)) for lado in motor.LADOS_DE_LA_COINCIDENCIA]
+    filas = [("Capa reportada", nombre_de_la_capa(capa))]
+    if not medida.ok:
+        return filas + [("Estado", medida.estado)]
+    P = resultado.parametros or motor.VALORES_DE_LA_GEOMETRIA
+    alta, baja = 100 * P["penumbra_alta"], 100 * P["penumbra_baja"]
+    filas += [(f"FWHM {NOMBRE_DEL_EJE[eje]} [mm]", numero(getattr(medida, eje).fwhm_mm, 3)) for eje in motor.EJES]
     filas.append(("Radiación − cruce de diagonales (x; y) [mm]", _par(medida.radiacion_menos_luz_mm)))
-    filas.append(("Luz − retículo (x; y) [mm]", _par(resultado.luz_menos_reticulo_mm)))
     filas.append(("Radiación − retículo (x; y) [mm]", _par(medida.radiacion_menos_reticulo_mm)))
+    filas += [(f"Lado {lado} (radiación − luz) [mm]", numero(medida.coincidencia_mm.get(lado), 3, True)) for lado in motor.LADOS_DE_LA_COINCIDENCIA]
+    filas += _meseta_de_la_capa(medida, motor.BASE_DOSIS if medida.base == motor.BASE_DOSIS else resultado.base)
+    for eje in motor.EJES:
+        perfil = getattr(medida, eje)
+        filas += [(f"Penumbra lado {lado}, del {alta:g} al {baja:g} % [mm]", numero(perfil.penumbras_mm[i], 3)) for i, lado in enumerate(LADOS_DE_CADA_EJE[eje])]
+    for eje in motor.EJES:
+        perfil = getattr(medida, eje)
+        filas += [(ROTULO_DEL_LARGO.format(baja=baja, lado=lado), _texto_del_largo(perfil, i)) for i, lado in enumerate(LADOS_DE_CADA_EJE[eje])]
     return filas
 
 
@@ -273,11 +365,27 @@ COLUMNAS_DE_LOS_PERFILES = ("Capa", "Eje", "Estado", "FWHM [mm]", "Desfase izqui
                             "Penumbra derecha o inferior [mm]", "Piso [nivel]", "Meseta [nivel]", "Avisos", "Se guarda")
 
 
+def columnas_de_los_perfiles(base):
+    """CD.7: las columnas de la tabla de la pestaña 3 en la base del análisis a la vista: las de siempre (`COLUMNAS_DE_LOS_PERFILES`) y, en dosis, además la dosis de la meseta y su U (k = 2) tras «Meseta
+    [nivel]» (`COLUMNAS_DE_LA_DOSIS_DE_LA_MESETA`)."""
+    if base != motor.BASE_DOSIS:
+        return COLUMNAS_DE_LOS_PERFILES
+    i = COLUMNAS_DE_LOS_PERFILES.index("Meseta [nivel]") + 1
+    return COLUMNAS_DE_LOS_PERFILES[:i] + COLUMNAS_DE_LA_DOSIS_DE_LA_MESETA + COLUMNAS_DE_LOS_PERFILES[i:]
+
+
+def _dosis_de_la_fila(m, en_dosis):
+    """CD.7: las dos celdas de la dosis de la meseta de la capa `m` (su `MedidaDeCapa`) y su U (k = 2), en dosis; ninguna en las otras bases."""
+    return (numero(m.dosis_meseta_cgy, 1), numero(m.u_dosis_meseta_cgy, 1)) if en_dosis else ()
+
+
 def filas_de_los_perfiles(resultado, reportada, motivo, registro=False):
-    """Las filas del panel de la pestaña 3: una por capa (R, G, B y el gris, cada una por separado, sin ninguna marca que las compare) y eje: el estado, el FWHM, el desfase de los dos lados, las penumbras, el
-    piso, la meseta y los avisos; la fila de la capa reportada dice si se guarda (`texto_se_guarda`). Cada fila es una tupla de `COLUMNAS_DE_LOS_PERFILES`, con los números como texto."""
+    """Las filas del panel de la pestaña 3: una por capa (R, G y B, cada una por separado, sin ninguna marca que las compare; sin el gris desde CD.7, ajuste del 31-10) y eje: el estado, el FWHM, el desfase de los dos lados, las penumbras, el
+    piso, la meseta y los avisos; la fila de la capa reportada dice si se guarda (`texto_se_guarda`). Cada fila es una tupla de `columnas_de_los_perfiles(resultado.base)`, con los números como texto: en
+    dosis (CD.7) cada fila lleva además la dosis de la meseta de SU capa y su U (k = 2), y «Se guarda» dice que lo que se guarda es la netOD."""
+    en_dosis = resultado.base == motor.BASE_DOSIS
     filas = []
-    for capa in (*CAPAS, "gris"):
+    for capa in CAPAS:
         m = resultado.capas[capa]
         for eje in motor.EJES:
             p = getattr(m, eje)
@@ -285,20 +393,16 @@ def filas_de_los_perfiles(resultado, reportada, motivo, registro=False):
             filas.append((nombre_de_la_capa(capa), NOMBRE_DEL_EJE[eje], "ok" if p.ok else p.estado, numero(p.fwhm_mm, 3),
                           numero(m.coincidencia_mm.get(lados[0]), 3, True), numero(m.coincidencia_mm.get(lados[1]), 3, True),
                           numero(p.penumbras_mm[0], 3), numero(p.penumbras_mm[1], 3), numero(p.piso if p.piso is not None else m.piso, 1), numero(p.meseta, 1),
-                          "; ".join(p.avisos), texto_se_guarda(capa, reportada, motivo, registro)))
+                          *_dosis_de_la_fila(m, en_dosis), "; ".join(p.avisos), texto_se_guarda(capa, reportada, motivo, registro, en_dosis)))
     return filas
 
 
-def lado_perfecto_mm(geometria):
-    """El lado del cuadrado perfecto con el que se compara el recuadro: el medio de los cuatro lados medidos [mm]."""
-    return float(np.mean(list(geometria.lados_mm.values())))
-
-
 def filas_de_la_cuadratura(geometria):
-    """Las filas (rótulo, valor, cuadrado perfecto, diferencia) de la pestaña 5, todo como texto: la longitud de cada lado [mm] y su diferencia con el lado del cuadrado perfecto (el medio de los cuatro), la
-    inclinación de cada lado [°] (frente a 0), los cuatro ángulos interiores [°] (frente a 90), las dos diagonales [mm] (frente a la del cuadrado perfecto, lado × raíz de 2) y el ángulo girado [°] (frente a
-    0). Los números son los de la geometría del campo luminoso (C.1); no dependen de la capa."""
-    lado = lado_perfecto_mm(geometria)
+    """Las filas (rótulo, valor, cuadrado perfecto, diferencia) de la pestaña 5, todo como texto: la longitud de cada lado [mm] y su diferencia con el lado del cuadrado perfecto (SIEMPRE
+    `LADO_DEL_CUADRADO_PERFECTO_MM`, 100 mm: CD.7, ajuste del 31-10; antes, la media de los cuatro lados medidos, que cambiaba con cada análisis), la inclinación de cada lado [°] (frente a 0), los cuatro ángulos
+    interiores [°] (frente a 90), las dos diagonales [mm] (frente a la del cuadrado perfecto, 100 × raíz de 2) y el ángulo girado [°] (frente a 0). Los números son los de la geometría del campo luminoso (C.1);
+    no dependen de la capa."""
+    lado = LADO_DEL_CUADRADO_PERFECTO_MM
     filas = []
     for nombre in motor.LADOS:
         valor = geometria.lados_mm[nombre]
@@ -320,10 +424,10 @@ COLUMNAS_DE_LOS_BARRIDOS = ("Capa", "Eje", "Estado", "Bandas", "Bandas medidas",
 
 
 def filas_de_los_barridos(barrido):
-    """Las filas de la tabla de la pestaña 4: por capa (R, G, B y el gris) y eje, cuántas bandas tiene el barrido y cuántas se midieron, la media, la mediana y la desviación estándar (de la población) del FWHM
+    """Las filas de la tabla de la pestaña 4: por capa (R, G y B; sin el gris desde CD.7, ajuste del 31-10) y eje, cuántas bandas tiene el barrido y cuántas se midieron, la media, la mediana y la desviación estándar (de la población) del FWHM
     de las medibles, el corte central (la banda 0) y cuánto se aleja de la mediana. Ninguna banda se descarta; los números son los del motor."""
     filas = []
-    for capa in (*CAPAS, "gris"):
+    for capa in CAPAS:
         for eje in motor.EJES:
             b = barrido.ejes[eje].capas[capa]
             e = b.estadistica
@@ -346,17 +450,18 @@ def _valor_del_pie(valor):
     return valor
 
 
-def texto_de_parametros(parametros=None):
+def texto_de_parametros(parametros=None, en_la_ventana=False):
     """El pie de parámetros fijos de la ventana (PD1): las frases de las entradas «pie» de `TRAZO_DE_PARAMETRO`, con el valor con que se midió (`parametros`: los del análisis, que se guardan con él; por omisión los
     de fábrica `motor.VALORES_DE_LA_GEOMETRIA`), en líneas de `LARGO_DEL_PIE` caracteres sin partir una frase."""
     P = {"base_de_la_medida": motor.BASE_VALOR_DE_PIXEL, **(motor.VALORES_DE_LA_GEOMETRIA if parametros is None else parametros)}       # un análisis de antes de OD.1 no trae la base y se midió en valor de píxel
+    en_dosis = P["base_de_la_medida"] == motor.BASE_DOSIS          # CD.7: las entradas «dosis» solo en un análisis en dosis (en netOD el pie, y el del PDF, son los de siempre)
     titulo = "Parámetros fijos del método (se guardan con cada análisis; no se ajustan en pantalla):"
     lineas, linea = [], titulo
     for clave, (donde, plantilla) in TRAZO_DE_PARAMETRO.items():
-        if donde != "pie":
+        if donde != "pie" and not (donde == "dosis" and en_dosis) and not (donde == "largo" and en_la_ventana):
             continue
-        valor = _valor_del_pie(P[clave])
-        frase = plantilla.format(valor)
+        valor = _valor_del_pie(P.get(clave, motor.VALORES_DE_LA_GEOMETRIA[clave]) if donde == "largo" else P[clave])          # CD.7 (ajuste del 01-11): un registro de antes de CD.7 no trae el 43 y se midió con el de fábrica
+        frase = plantilla.format(porcentaje(valor) if donde == "largo" else valor)
         union = " " if linea == titulo else " · "
         if linea != titulo and len(linea) + len(union) + len(frase) > LARGO_DEL_PIE:
             lineas.append(linea)
@@ -541,16 +646,28 @@ def _vertical(ax, px, medida, **estilo):
     return ax.axvline(float(_mm(px, medida)), **estilo)
 
 
-def dibujar_perfil(ax, medida, capa, parametros=None, reportada=False):
+def eje_de_la_dosis(curva):
+    """CD.7 (DC9): el tope del eje FIJO de la dosis [cGy] de una curva: la mayor dosis útil (`rango`) de sus capas «válidas», redondeada hacia arriba a `PASO_DEL_EJE_DE_LA_DOSIS_CGY`. Sale solo de la
+    curva (no de la película): el mismo para toda película medida con ella. None si la curva no tiene ninguna capa válida con rango."""
+    rangos = [curva.rango(c) for c in motor.CAPAS_DEL_PISO if curva.estado(c) == motor.ESTADO_VALIDA and curva.rango(c)]
+    if not rangos:
+        return None
+    return PASO_DEL_EJE_DE_LA_DOSIS_CGY * math.ceil(max(rangos) / PASO_DEL_EJE_DE_LA_DOSIS_CGY)
+
+
+def dibujar_perfil(ax, medida, capa, parametros=None, reportada=False, curva=None):
     """El perfil de UNA capa en UN eje, COMPLETO (PD1): el eje x cubre la película entera a los dos lados del campo, en milímetros desde el cruce de diagonales; el y va de lo más bajo del perfil (la marca del
     retículo) a lo más alto. Dibuja el perfil crudo (la banda de 1 mm promediada) y el suavizado con que se buscaron los cruces, el piso (`-.`), la media de la meseta (discontinua), la altura media (continua),
     los niveles de la penumbra (finos), los límites de la zona central y de la exclusión del retículo (punteadas), los bordes de radiación (verticales continuas del color de la capa) y los bordes luminosos de
     esa línea (naranja). Lo que la medida no tiene (un perfil que no se pudo medir) no se dibuja; si no hay ni el perfil, dice por qué. `parametros`: los del análisis, solo para el porcentaje y la ventana de
     cada etiqueta. Cada trazo lleva su `gid` (`perfil:crudo`, `perfil:suavizado`, `perfil:piso`, `perfil:meseta`, `perfil:altura_media`, `perfil:penumbra_alta`, `perfil:penumbra_baja`, `perfil:zona`,
-    `perfil:exclusion`, `perfil:borde_luz`, `perfil:borde_rad`, `perfil:cruce`)."""
+    `perfil:exclusion`, `perfil:borde_luz`, `perfil:borde_rad`, `perfil:cruce`). CD.7: en dosis, `curva` es la `CurvaDeDosis` del análisis (`resultado.curva`): cada nivel se dibuja con la curva de ESTA capa
+    y el eje vertical va de 0 a `eje_de_la_dosis(curva)` [cGy], el mismo en todos los perfiles en dosis."""
     P = motor.VALORES_DE_LA_GEOMETRIA if parametros is None else parametros
     base = base_de(parametros)
     color = COLOR_CAPA[capa]
+    if base == motor.BASE_DOSIS and curva is None:
+        raise ValueError("Un perfil en dosis se dibuja con la curva del análisis (`resultado.curva`).")
     ax.set_title(titulo_del_perfil(medida, capa, reportada), fontsize=8)
     ax.set_xlabel("posición desde el cruce de diagonales [mm]")
     ax.set_ylabel(ETIQUETA_DEL_EJE_Y[base])
@@ -562,9 +679,12 @@ def dibujar_perfil(ax, medida, capa, parametros=None, reportada=False):
         ax.text(0.5, 0.5, textwrap.fill(f"Sin piso no hay densidad óptica: {medida.estado}", 55), transform=ax.transAxes, ha="center", va="center", fontsize=8, color=TINTA_SUAVE, gid="perfil:sin_medida")
         return
 
+    de_la_capa = motor.curva_de_la_capa(curva, capa) if base == motor.BASE_DOSIS else None
+
     def en_la_base(niveles):
-        """Niveles de 8 bits -> la unidad del eje (OD.1): los mismos en valor de píxel, la densidad óptica neta absoluta en netOD (0 en el piso). Una sola cuenta: la del motor."""
-        return motor.valores_en_la_base(base, niveles, medida.piso)
+        """Niveles de 8 bits -> la unidad del eje (OD.1): los mismos en valor de píxel, la densidad óptica neta absoluta en netOD (0 en el piso) y la dosis de la curva de la capa en dosis (CD.7). Una
+        sola cuenta: la del motor."""
+        return motor.valores_en_la_base(base, niveles, medida.piso, de_la_capa)
 
     x = _mm(perfil.desde_px + np.arange(len(perfil.valores)), medida)
     crudo = en_la_base(perfil.valores)
@@ -596,7 +716,10 @@ def dibujar_perfil(ax, medida, capa, parametros=None, reportada=False):
     ax.set_xlim(float(x[0]), float(x[-1]))
     finitos = crudo[np.isfinite(crudo)]
     valores = ([float(finitos.min()), float(finitos.max())] if len(finitos) else []) + [float(en_la_base(v)) for v in (medida.piso, medida.meseta) if v is not None]
-    if valores:
+    tope = eje_de_la_dosis(curva) if base == motor.BASE_DOSIS else None
+    if tope is not None:
+        ax.set_ylim(0.0, tope)                  # CD.7 (DC9): el eje fijo de la curva, no el del perfil
+    elif valores:
         holgura = 0.05 * max(max(valores) - min(valores), 1.0)
         ax.set_ylim(min(valores) - holgura, max(valores) + holgura)
     ax.grid(color=COLOR_REJILLA)
@@ -611,26 +734,18 @@ def dibujar_leyenda_de_los_perfiles(figura, ejes, columnas=4):
         caja.set_gid("leyenda")
 
 
-def dibujar_perfiles_del_gris(figura, resultado):
-    """Los dos perfiles del GRIS (crossplane arriba, inplane debajo) con todas sus líneas: lo que va al lado de la imagen en la pestaña 1. No cambian con el menú «Capa reportada»."""
-    ejes = list(figura.subplots(2, 1))
-    for ax, eje in zip(ejes, motor.EJES):
-        dibujar_perfil(ax, getattr(resultado.capas["gris"], eje), "gris", resultado.parametros)
-    dibujar_leyenda_de_los_perfiles(figura, ejes, columnas=2)
-    return dict(zip(motor.EJES, ejes))
-
-
 def dibujar_perfiles_por_capa(figura, resultado, reportada=None):
-    """La pestaña 3: una columna con los perfiles crossplane y al lado la de los inplane, una gráfica por capa (R, G, B y el gris), cada una con todas sus líneas. Devuelve {(capa, eje): eje de la figura}.
-    `reportada`: la capa que el menú «Capa reportada» tiene elegida (su título lleva «(reportada)»)."""
-    ejes = figura.subplots(4, 2)
+    """La pestaña 3: una columna con los perfiles crossplane y al lado la de los inplane, una gráfica por capa (R, G y B; sin el gris desde CD.7, ajuste del 31-10: «retiremos el perfil gris también de
+    todas las partes donde se muestre del control mensual»), cada una con todas sus líneas. Devuelve {(capa, eje): eje de la figura}. `reportada`: la capa que el menú «Capa reportada» tiene elegida (su título
+    lleva «(reportada)»)."""
+    ejes = figura.subplots(len(CAPAS), 2)
     salida = {}
-    for fila, capa in enumerate((*CAPAS, "gris")):
+    for fila, capa in enumerate(CAPAS):
         for columna, eje in enumerate(motor.EJES):
             ax = ejes[fila][columna]
-            dibujar_perfil(ax, getattr(resultado.capas[capa], eje), capa, resultado.parametros, reportada=(capa == reportada))
-            if capa != "gris":
-                ax.set_xlabel("")                       # el eje x es el mismo en las cuatro filas: el rótulo va solo en la de abajo
+            dibujar_perfil(ax, getattr(resultado.capas[capa], eje), capa, resultado.parametros, reportada=(capa == reportada), curva=resultado.curva)
+            if capa != CAPAS[-1]:
+                ax.set_xlabel("")                       # el eje x es el mismo en las tres filas: el rótulo va solo en la de abajo
             salida[(capa, eje)] = ax
     dibujar_leyenda_de_los_perfiles(figura, list(salida.values()))
     return salida
@@ -670,7 +785,10 @@ def capa_acondicionada(resultado, capa):
       `PERCENTIL_DEL_TOPE`, y el texto dice por qué; si tampoco ese es positivo, de 0 a `TOPE_SIN_SENAL`.
     - Densidad óptica neta sin piso (esa capa no tiene piso): sin piso no hay densidad óptica; se pinta su valor de píxel de 0 a 255 y el texto lo dice.
     - Valor de píxel (un registro medido antes de OD.1): sus niveles de 0 a 255.
-    Lo que la película girada no tiene (lo que el giro dejó fuera) queda NaN: transparente."""
+    Lo que la película girada no tiene (lo que el giro dejó fuera) queda NaN: transparente.
+    - Dosis (CD.7, DC9): `_capa_en_dosis`."""
+    if resultado.base == motor.BASE_DOSIS:
+        return _capa_en_dosis(resultado, capa)
     girada = resultado.girada
     m = resultado.capas[capa]
     mesetas = [p.meseta for p in (m.crossplane, m.inplane) if p.meseta is not None]
@@ -708,6 +826,22 @@ def capa_acondicionada(resultado, capa):
     if not (math.isfinite(tope) and tope > 0):
         return CapaEnUnidades(valores, TOPE_SIN_SENAL, unidad, f"{motivo}; de 0 a {TOPE_SIN_SENAL:g} [1]: ningún píxel es más oscuro que el piso", None, motivo)
     return CapaEnUnidades(valores, tope, unidad, f"{motivo}; de 0 a {numero(tope)} [1]: el percentil {PERCENTIL_DEL_TOPE:g} de la capa", None, motivo)
+
+
+def _capa_en_dosis(resultado, capa):
+    """CD.7 (DC9): la capa en DOSIS: la dosis de cada píxel con la curva de esa capa (`motor.valores_en_la_base` con `motor.curva_de_la_capa`), de 0 al eje fijo de la curva (`eje_de_la_dosis`, el
+    mismo para las tres capas y para toda película medida con esa curva: es la escala común). Una capa que no se midió en dosis no se pinta en otra base: queda vacía (NaN) y el título dice su motivo."""
+    girada = resultado.girada
+    m = resultado.capas[capa]
+    unidad = ETIQUETA_DEL_EJE_Y[motor.BASE_DOSIS]
+    tope = eje_de_la_dosis(resultado.curva) or TOPE_SIN_SENAL
+    if m.base != motor.BASE_DOSIS:
+        valores = np.full(girada.capas[capa].shape, np.nan, dtype=np.float32)
+        return CapaEnUnidades(valores, tope, unidad, m.estado, None, m.estado)
+    en_dosis = motor.valores_en_la_base(motor.BASE_DOSIS, girada.capas[capa], m.piso, motor.curva_de_la_capa(resultado.curva, capa))
+    valores = np.where(girada.validos, en_dosis, np.nan).astype(np.float32)          # NaN donde la película girada no tiene dato (transparente)
+    texto = f"de 0 a {tope:g} [cGy], el eje de la dosis de la curva; dosis de la meseta {numero(m.dosis_meseta_cgy, 1)} [cGy]"
+    return CapaEnUnidades(valores, tope, unidad, texto, m.dosis_meseta_cgy, None)
 
 
 def titulo_de_la_capa(capa, texto):
@@ -749,6 +883,8 @@ def escala_de_las_capas(resultado, capas):
     El tope común es el MAYOR de los topes de las capas NO recortadas por el escáner (CD1b-D1, la lectura del físico): la capa recortada se pinta contra él y satura. Con una sola capa no recortada, su
     tope es el común. Sin ninguna (CD1b-D6, el mismo criterio de CD1b-D2: un tope que sale de menos película solo se usa si no hay otro), el mayor de los topes de las recortadas (su percentil), y si tampoco
     (ningún píxel de ninguna capa es más oscuro que el piso), `TOPE_SIN_SENAL`. Con un empate gana la primera de `CAPAS` (R, G, B), sea cual sea el orden del diccionario: se recorre `CAPAS`, no `capas`."""
+    if resultado.base == motor.BASE_DOSIS:
+        return None                             # CD.7 (DC9): en dosis la escala común es el eje fijo de la curva, que ya lleva cada capa (`_capa_en_dosis`)
     unidad = ETIQUETA_DEL_EJE_Y[resultado.base]
     en_la_base = [(capa, capas[capa]) for capa in CAPAS if capa in capas and capas[capa].unidad == unidad]
     if not en_la_base:
@@ -819,7 +955,7 @@ def dibujar_capas(figura, resultado):
 
 def dibujar_barridos(figura, barrido):
     """La pestaña 4: el FWHM de cada banda contra su posición [mm], crossplane arriba e inplane debajo, las cuatro capas en el mismo gráfico, cada una con su media (discontinua), su mediana (punteada), el corte
-    central marcado (la banda 0) y los límites de la zona central en el eje. Todas las bandas: una que no se pudo medir queda como hueco y se marca al pie. Sin selector (PD2): el barrido no tiene parámetro.
+    central marcado (la banda 0) y los límites de la zona central en el eje. Las capas son R, G y B (sin el gris desde CD.7, ajuste del 31-10). Todas las bandas: una que no se pudo medir queda como hueco y se marca al pie. Sin selector (PD2): el barrido no tiene parámetro.
     Devuelve {eje: eje de la figura}."""
     ejes = figura.subplots(2, 1)
     salida = {}
@@ -843,14 +979,14 @@ def dibujar_barridos(figura, barrido):
                 return "_" + texto
             rotulados.add(clave)
             return texto
-        for capa in (*CAPAS, "gris"):
+        for capa in CAPAS:
             c = b.capas[capa]
             if not c.bandas:
                 continue
             color = COLOR_CAPA[capa]
             posiciones = np.array([x.posicion_mm for x in c.bandas])
             valores = np.array([np.nan if x.fwhm_mm is None else x.fwhm_mm for x in c.bandas])
-            ax.plot(posiciones, valores, "-o", ms=2.5, lw=0.9, color=color, gid=f"barrido:bandas:{capa}", label=f"capa {ADJETIVO_DE_LA_CAPA[capa]}" if capa != "gris" else "gris")
+            ax.plot(posiciones, valores, "-o", ms=2.5, lw=0.9, color=color, gid=f"barrido:bandas:{capa}", label=f"capa {ADJETIVO_DE_LA_CAPA[capa]}")
             if (~np.isfinite(valores)).any():
                 huecos.append((capa, posiciones[~np.isfinite(valores)]))
             if c.central is not None and c.central.fwhm_mm is not None:
@@ -871,9 +1007,10 @@ def dibujar_barridos(figura, barrido):
 
 # ----------------------------------------------------------------------------------------------------- la pestaña 5: la cuadratura
 
-def cuadrado_perfecto(geometria):
-    """Las cuatro esquinas (UL, UR, DR, DL), en milímetros desde el cruce de diagonales, del cuadrado perfecto con el mismo centro, sin girar y de lado el medio de los cuatro lados medidos."""
-    mitad = lado_perfecto_mm(geometria) / 2.0
+def cuadrado_perfecto():
+    """Las cuatro esquinas (UL, UR, DR, DL), en milímetros desde el cruce de diagonales, del cuadrado perfecto con el mismo centro, sin girar y de lado `LADO_DEL_CUADRADO_PERFECTO_MM` (100 mm; CD.7, ajuste
+    del 31-10: antes, la media de los cuatro lados medidos)."""
+    mitad = LADO_DEL_CUADRADO_PERFECTO_MM / 2.0
     return [(-mitad, -mitad), (mitad, -mitad), (mitad, mitad), (-mitad, mitad)]
 
 
@@ -885,19 +1022,19 @@ def recuadro_en_mm(geometria):
 def recuadro_ampliado(geometria, factor=FACTOR_DE_AMPLIACION):
     """El recuadro con sus desviaciones frente al cuadrado perfecto AMPLIADAS `factor` veces (perfecto + factor x (marcado − perfecto)), en milímetros desde el cruce: así se ve a escala del dibujo lo que
     a escala real son décimas de grado y menos de un milímetro."""
-    perfecto = cuadrado_perfecto(geometria)
+    perfecto = cuadrado_perfecto()
     marcado = recuadro_en_mm(geometria)
     return [(px + factor * (mx - px), py + factor * (my - py)) for (px, py), (mx, my) in zip(perfecto, marcado)]
 
 
 def dibujar_cuadratura(ax, geometria, factor=FACTOR_DE_AMPLIACION):
-    """La pestaña 5: el recuadro del campo luminoso junto a un cuadrado perfecto con el mismo centro (el cruce de diagonales), el lado medio de los cuatro y sin girar. Las desviaciones se ven AMPLIADAS `factor`
+    """La pestaña 5: el recuadro del campo luminoso junto a un cuadrado perfecto con el mismo centro (el cruce de diagonales), de 100 mm de lado (`LADO_DEL_CUADRADO_PERFECTO_MM`) y sin girar. Las desviaciones se ven AMPLIADAS `factor`
     veces y rotuladas («desviaciones × 20»): a escala real no se ven. También se dibuja el recuadro tal como se marcó (fino). El ángulo girado frente al 0 del cuadrado perfecto va en el título; la tabla da los números
     sin ampliar. Eje en milímetros desde el cruce de diagonales, con la y hacia abajo como la imagen."""
-    perfecto = _cerrado(cuadrado_perfecto(geometria))
+    perfecto = _cerrado(cuadrado_perfecto())
     real = _cerrado(recuadro_en_mm(geometria))
     ampliado = _cerrado(recuadro_ampliado(geometria, factor))
-    ax.plot([p[0] for p in perfecto], [p[1] for p in perfecto], "-", color=TINTA, lw=1.5, gid="cuadratura:perfecto", label="cuadrado perfecto, mismo centro, lado medio y sin girar")
+    ax.plot([p[0] for p in perfecto], [p[1] for p in perfecto], "-", color=TINTA, lw=1.5, gid="cuadratura:perfecto", label=f"cuadrado perfecto de {LADO_DEL_CUADRADO_PERFECTO_MM:g} mm, mismo centro y sin girar")
     ax.plot([p[0] for p in real], [p[1] for p in real], "-", color=COLOR_RECUADRO, lw=0.7, alpha=0.6, gid="cuadratura:real", label="recuadro marcado, a escala real")
     ax.plot([p[0] for p in ampliado], [p[1] for p in ampliado], "-", color=COLOR_RECUADRO, lw=1.8, gid="cuadratura:ampliado", label=f"recuadro marcado, {TEXTO_DEL_FACTOR}")
     for forma, color, estilo, gid in ((perfecto, TINTA, ":", "cuadratura:diagonal_perfecta"), (ampliado, COLOR_RECUADRO, "--", "cuadratura:diagonal_ampliada")):

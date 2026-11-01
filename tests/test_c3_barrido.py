@@ -747,7 +747,8 @@ class TestBarridoNoTieneParametros:
         assert pm.VERSION_ALGORITMO == "PM-1"
         # OD.1 (21-10): `PARAMETROS` suma `base_de_la_medida` (`PARAMETROS_DE_LA_BASE`), que tampoco es de C.3: la vigila `test_od1_densidad_optica.py`.
         # CD.6 (31-10): el 42 es `diferencia_virgen_maxima_pct` (`PARAMETROS_DE_LA_DOSIS`): tampoco es de C.3; lo vigila `test_cd6_base_dosis_del_motor.py`.
-        propios = set(pm.PARAMETROS) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(_pel().PARAMETROS_DEL_PISO) - set(pm.PARAMETROS_DE_LA_BASE) - set(pm.PARAMETROS_DE_LA_DOSIS)
+        # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %): tampoco es de C.3; lo vigila `test_cd7_ventana_mensual_en_dosis.py`.
+        propios = set(pm.PARAMETROS) - set(pm.PARAMETROS_DE_LA_MEDIDA) - set(_pel().PARAMETROS_DEL_PISO) - set(pm.PARAMETROS_DE_LA_BASE) - set(pm.PARAMETROS_DE_LA_DOSIS) - set(pm.PARAMETROS_DEL_LARGO)
         assert propios == {"radio_marca_mm", "contraste_minimo_marca", "fraccion_del_contraste_marca", "gris_maximo_de_la_tinta", "borde_blando_marca_mm", "area_minima_marca_mm2",
                            "resolucion_escaneo_dpi", "resoluciones_de_editor_dpi", "tolerancia_dpi_relativa"}, "los de C.1: ninguno de C.3"
         assert set(pm.PARAMETROS_DE_LA_MEDIDA) == {"margen_recorte_mm", "banda_perfil_mm", "fraccion_meseta", "excepcion_centro_mm", "muestras_minimas_de_la_meseta",

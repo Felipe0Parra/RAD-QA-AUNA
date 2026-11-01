@@ -600,15 +600,28 @@ def _no_medibles_de_los_perfiles(resultado):
 
 
 def _no_medibles_de_los_desfases(resultado):
-    """Lo mismo con la tabla de los desfases de cada capa (`tabla_de_desfases`)."""
+    """Lo mismo con la tabla de la pestaña 1 (`filas_de_la_capa_reportada`; CD.7 (ajuste del 31-10, pedido del fisico de las 22:50; CD7-D19): la tabla de la pestana 1 es la de la capa reportada, al lado de la imagen, con los datos importantes (`filas_de_la_capa_reportada`)): de R, G y B; una capa que el motor no midió da su ESTADO (el del motor tal cual, «no medible: ...»: cuenta una) y una medida
+    dice «no medible» en cada desfase que el motor no dio."""
     no_medibles = 0
-    for capa in ("R", "G", "B", "gris"):
+    for capa in ("R", "G", "B"):
         m = resultado.capas[capa]
-        filas = dibujo.tabla_de_desfases(resultado, capa)
-        crudos = [m.coincidencia_mm.get(lado) for lado in pm.LADOS_DE_LA_COINCIDENCIA]
-        for (_rotulo, celda), crudo in zip(filas[:len(crudos)], crudos):
-            no_medibles += _dice_lo_que_debe(celda, crudo)
-        for (_rotulo, celda), par in zip(filas[len(crudos):], (m.radiacion_menos_luz_mm, resultado.luz_menos_reticulo_mm, m.radiacion_menos_reticulo_mm)):
+        filas = dibujo.filas_de_la_capa_reportada(resultado, capa)
+        if not m.ok:
+            assert filas == [("Capa reportada", dibujo.nombre_de_la_capa(capa)), ("Estado", m.estado)] and m.estado.startswith("no medible"), (capa, filas)
+            no_medibles += 1
+            continue
+        valores = dict(filas)
+        for lado in pm.LADOS_DE_LA_COINCIDENCIA:
+            no_medibles += _dice_lo_que_debe(valores[f"Lado {lado} (radiación − luz) [mm]"], m.coincidencia_mm.get(lado))
+        # CD.7 (01-11, el implementador, al correr B17 de la bateria de B.8 sobre el arbol con CD.7): antes esta prueba veia el desfase que falta en la tabla del GRIS de una capa no medida; la tabla de la pestana 1 ya
+        # no lista numeros de una capa no medida (da su estado), asi que una capa MEDIDA a la que le falta el borde luminoso de los cuatro lados (lo que da el motor si la linea no cruza el campo luminoso) se arma
+        # AQUI a mano: sus cuatro desfases dicen «no medible», nunca «sin dato».
+        sin_luz = dataclasses.replace(m, coincidencia_mm={lado: None for lado in pm.LADOS_DE_LA_COINCIDENCIA})
+        dichos = dict(dibujo.filas_de_la_capa_reportada(dataclasses.replace(resultado, capas={**resultado.capas, capa: sin_luz}), capa))
+        for lado in pm.LADOS_DE_LA_COINCIDENCIA:
+            no_medibles += _dice_lo_que_debe(dichos[f"Lado {lado} (radiación − luz) [mm]"], None)
+        for rotulo, par in (("Radiación − cruce de diagonales (x; y) [mm]", m.radiacion_menos_luz_mm), ("Radiación − retículo (x; y) [mm]", m.radiacion_menos_reticulo_mm)):
+            celda = valores[rotulo]
             assert "sin dato" not in celda.lower()
             assert (celda == "no medible") == (par is None or any(v is None for v in par)), (capa, celda, par)
             no_medibles += celda == "no medible"
@@ -647,7 +660,7 @@ class TestCadaTablaConUnValorNoMedidoDiceNoMedible:
 
     def test_la_tabla_de_los_desfases_dice_no_medible_donde_el_motor_no_midio(self, analisis):
         resultado, _barrido = analisis
-        assert _no_medibles_de_los_desfases(resultado) >= 4, "compuerta de no vacuidad: la capa roja no tiene desfases"
+        assert _no_medibles_de_los_desfases(resultado) >= 1, "compuerta de no vacuidad: la capa roja no medida da su estado"      # CD.7 (ajuste del 31-10, pedido del fisico de las 22:50; CD7-D19): la tabla de la pestana 1 es la de la capa reportada, al lado de la imagen, con los datos importantes (`filas_de_la_capa_reportada`): una capa no medida es UNA fila con su estado
 
     def test_la_tabla_de_los_barridos_dice_no_medible_donde_el_motor_no_midio(self, analisis):
         _resultado, barrido = analisis
@@ -762,7 +775,7 @@ class TestElCuadroDeLaVirgenRechazadaNoDiceQueLaPeliculaNoSeMidio:
 # meseta recortada y las otras capas encuentran su borde: la frase no aparece; por eso la clase mide en valor de pixel, que es la base donde sale.
 ESCENAS_SIN_BORDE = {53.0: {("R", "crossplane")}, 51.5: {("R", "crossplane"), ("G", "crossplane"), ("gris", "crossplane")}}
 # Cuantas celdas «no medible» dan las tres tablas del analisis en cada escena (medido el 23-10, `contar_no_medibles.log`): la compuerta de no vacuidad de la prueba de las celdas.
-NO_MEDIBLES_DE_LA_ESCENA = {53.0: dict(perfiles=6, desfases=3, barridos=5), 51.5: dict(perfiles=10, desfases=9, barridos=15)}
+NO_MEDIBLES_DE_LA_ESCENA = {53.0: dict(perfiles=5, desfases=1, barridos=5), 51.5: dict(perfiles=7, desfases=2, barridos=10)}      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4; CD.7 (ajuste del 31-10, pedido del fisico de las 22:50; CD7-D19): la tabla de la pestana 1 es la de la capa reportada, al lado de la imagen, con los datos importantes (`filas_de_la_capa_reportada`) (los minimos, MEDIDOS con la ventana sin el gris)
 NOMBRE_DE_LA_FILA = {"R": "Capa roja", "G": "Capa verde", "B": "Capa azul", "gris": "Gris"}
 
 
@@ -799,7 +812,7 @@ class TestConUnPerfilQueNoEncuentraSuBordeLaVentanaSoloDiceSinDatoDentroDeLaFras
         e = escenas[u]
         v = analizada(ventana_mensual, dialogos, e.ruta, e.clics)
         filas = {(f[0], f[1]): f for f in _celdas(v.tabla_perfiles)}
-        for capa in ("R", "G", "B", "gris"):
+        for capa in ("R", "G", "B"):      # CD.7 (ajuste del 31-10, pedido del fisico: «retiremos el perfil gris también de todas las partes donde se muestre del control mensual»; CD7-D16): la ventana no tiene los perfiles del gris (`_fig_gris`, `lienzo_gris`, `barra_gris`) ni filas del gris en las tablas de las pestanas 3 y 4
             for eje in ("crossplane", "inplane"):
                 medida = getattr(e.resultado.capas[capa], eje)
                 celda = filas[(NOMBRE_DE_LA_FILA[capa], eje)][2]
@@ -814,7 +827,7 @@ class TestConUnPerfilQueNoEncuentraSuBordeLaVentanaSoloDiceSinDatoDentroDeLaFras
         v = analizada(ventana_mensual, dialogos, e.ruta, e.clics)
         textos = todos_los_textos(v)
         con_la_frase = [t for t in textos if FRASE_DEL_MOTOR in t]
-        assert len(con_la_frase) >= len(e.sin_borde), "compuerta de no vacuidad: la frase esta en la celda de cada perfil sin borde (y en los textos que la citan)"
+        assert len(con_la_frase) >= len({s for s in e.sin_borde if s[0] != "gris"}), "compuerta de no vacuidad: la frase esta en la celda de cada perfil sin borde (y en los textos que la citan)"
         assert [t for t in textos if "sin dato" in t.replace(FRASE_DEL_MOTOR, "").lower()] == []
         for tabla in TABLAS_DE_LA_VENTANA:
             celdas = [c for fila in _celdas(getattr(v, tabla)) for c in fila if c]

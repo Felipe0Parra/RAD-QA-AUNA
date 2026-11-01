@@ -151,7 +151,7 @@ def abrir_analisis_placa(pagina):
             return ventana
         try:
             from ui.paginasControles.PruebasMensuales.placa_mensual import VentanaPlacaMensual
-            ventana = VentanaPlacaMensual(pagina.ref, pagina.equipo_f, usuario_actual(pagina), pagina)
+            ventana = VentanaPlacaMensual(pagina.ref, pagina.equipo_f, getattr(pagina, "user_id", None) or usuario_actual(pagina), pagina)      # CD.7 (H-CD5-7): el OBJETO de la sesion (su nombre audita igual; el permiso de «Anular» de la curva lo necesita)
         except Exception as error:
             registrar_error("E.2: abrir la ventana del análisis de la placa", error)
             QMessageBox.critical(pagina, TEXTO_DEL_BOTON, TEXTO_NO_ABRE.format(motivo=f"{type(error).__name__}: {error}"))
