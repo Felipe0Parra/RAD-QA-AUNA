@@ -647,9 +647,9 @@ def _vertical(ax, px, medida, **estilo):
 
 
 def eje_de_la_dosis(curva):
-    """CD.7 (DC9): el tope del eje FIJO de la dosis [cGy] de una curva: la mayor dosis útil (`rango`) de sus capas «válidas», redondeada hacia arriba a `PASO_DEL_EJE_DE_LA_DOSIS_CGY`. Sale solo de la
+    """CD.7 (DC9): el tope del eje FIJO de la dosis [cGy] de una curva: la mayor dosis útil (`rango`) de sus capas «válidas» (`CAPAS_DE_LA_CURVA`, R, G y B: DA-94), redondeada hacia arriba a `PASO_DEL_EJE_DE_LA_DOSIS_CGY`. Sale solo de la
     curva (no de la película): el mismo para toda película medida con ella. None si la curva no tiene ninguna capa válida con rango."""
-    rangos = [curva.rango(c) for c in motor.CAPAS_DEL_PISO if curva.estado(c) == motor.ESTADO_VALIDA and curva.rango(c)]
+    rangos = [curva.rango(c) for c in motor.CAPAS_DE_LA_CURVA if curva.estado(c) == motor.ESTADO_VALIDA and curva.rango(c)]
     if not rangos:
         return None
     return PASO_DEL_EJE_DE_LA_DOSIS_CGY * math.ceil(max(rangos) / PASO_DEL_EJE_DE_LA_DOSIS_CGY)

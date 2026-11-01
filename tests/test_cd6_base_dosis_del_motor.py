@@ -52,6 +52,7 @@ BASE_DOSIS = "dosis"
 VP_MINIMO = 0.5
 EJES = ("crossplane", "inplane")
 TODAS = ("R", "G", "B", "gris")
+DE_LA_CURVA = ("R", "G", "B")      # CD.5b (01-11, DA-94): las capas que la curva calibra y que pasan a dosis; el gris queda «no medible en dosis» (lo fija test_cd5b)
 SIMBOLOS = "✓✗✔✘⚠❌✅❎☑☒"
 FECHA = "2026-10-31"
 DOSIS_MESETA = 300.0
@@ -150,13 +151,13 @@ def con_capa(curva, capa, **cambios):
 
 def lineal(curva, k=1000.0):
     """La curva con D = k x EXACTA en las cuatro capas (b = 0, n = 1), con un rango que cubre cualquier meseta."""
-    capas = {c: {**copy.deepcopy(curva.capas[c]), "parametros": {"a": k, "b": 0.0, "n": 1.0}, "netod_maxima": 5.0, "rango_cgy": 5000.0} for c in TODAS}
+    capas = {c: {**copy.deepcopy(curva.capas[c]), "parametros": {"a": k, "b": 0.0, "n": 1.0}, "netod_maxima": 5.0, "rango_cgy": 5000.0} for c in DE_LA_CURVA}
     return dataclasses.replace(curva, capas=capas)
 
 
 def ancha(curva):
     """La curva con un rango que cubre cualquier meseta (para medir la banda de peliculas reales con una curva de otra cadena)."""
-    capas = {c: {**copy.deepcopy(curva.capas[c]), "netod_maxima": 5.0, "rango_cgy": 50000.0} for c in TODAS}
+    capas = {c: {**copy.deepcopy(curva.capas[c]), "netod_maxima": 5.0, "rango_cgy": 50000.0} for c in DE_LA_CURVA}
     return dataclasses.replace(curva, capas=capas)
 
 
@@ -251,7 +252,7 @@ class TestLaCurvaLinealEsElControl:
         pm = _pm()
         od = pm.analizar(escena.pelicula, escena.puntos, _P(suavizado_perfil_mm=0.0), modo_piso="virgen", referencia_virgen=escena.ref)
         do = pm.analizar(escena.pelicula, escena.puntos, _P(BASE_DOSIS, suavizado_perfil_mm=0.0), modo_piso="virgen", referencia_virgen=escena.ref, curva=lineal(escena.curva), cadena=escena.cadena)
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             for eje in EJES:
                 a, b = getattr(od.capas[c], eje), getattr(do.capas[c], eje)
                 assert a.ok and b.ok, (c, eje, a.estado, b.estado)
@@ -262,12 +263,12 @@ class TestLaCurvaLinealEsElControl:
     def test_con_el_suavizado_de_siempre_la_diferencia_es_solo_la_del_suavizado(self, escena):
         """CD6-D3: en dosis se suaviza la dosis (la imagen convertida) y en netOD el nivel (OD.1): con D = k x quedan a 0.005 mm (medido el 31-10: 0.0014 mm en el rojo, la capa mas saturada)."""
         do = _pm().analizar(escena.pelicula, escena.puntos, _P(BASE_DOSIS), modo_piso="virgen", referencia_virgen=escena.ref, curva=lineal(escena.curva), cadena=escena.cadena)
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             for eje in EJES:
                 assert getattr(do.capas[c], eje).fwhm_mm == pytest.approx(getattr(escena.od.capas[c], eje).fwhm_mm, abs=0.005), (c, eje)
 
     def test_con_la_curva_de_devic_no_lo_es(self, escena):
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             for eje in EJES:
                 assert getattr(escena.od.capas[c], eje).fwhm_mm - getattr(escena.do.capas[c], eje).fwhm_mm > 0.9, (c, eje)
 
@@ -276,11 +277,11 @@ class TestLaCurvaLinealEsElControl:
 
 class TestLaVerdadEnDosis:
     def test_la_curva_de_la_escena_es_valida_y_cubre_la_meseta(self, escena):
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             assert escena.curva.estado(c) == "válida" and escena.curva.rango(c) == 600.0, (c, escena.curva.estado(c))
         assert escena.curva.cero["fuente"] == "piezas_de_0_cgy" and escena.curva.cadena == escena.cadena
 
-    @pytest.mark.parametrize("capa", TODAS)
+    @pytest.mark.parametrize("capa", DE_LA_CURVA)
     def test_el_fwhm_en_dosis_es_el_de_la_placa(self, escena, capa):
         m = escena.do.capas[capa]
         assert escena.do.base == BASE_DOSIS and m.ok and m.base == BASE_DOSIS and m.motivo_de_la_base is None, (capa, m.estado)
@@ -288,7 +289,7 @@ class TestLaVerdadEnDosis:
         assert m.crossplane.fwhm_mm == pytest.approx(100.0, abs=0.05), capa
         assert m.inplane.fwhm_mm == pytest.approx(99.0, abs=0.05), capa
 
-    @pytest.mark.parametrize("capa", TODAS)
+    @pytest.mark.parametrize("capa", DE_LA_CURVA)
     def test_los_desfases_en_dosis_son_los_de_la_placa(self, escena, capa):
         exceso = escena.verdad.exceso
         lados = {"izquierdo": "L", "derecho": "R", "superior": "T", "inferior": "B"}
@@ -301,7 +302,7 @@ class TestLaVerdadEnDosis:
             assert ancho - 100.0 > 0.9, (c, ancho)
         assert anchos["R"] > anchos["G"] > anchos["B"], anchos
 
-    @pytest.mark.parametrize("capa", TODAS)
+    @pytest.mark.parametrize("capa", DE_LA_CURVA)
     def test_la_dosis_de_la_meseta_es_la_de_la_placa_con_su_u(self, escena, capa):
         m = escena.do.capas[capa]
         assert m.dosis_meseta_cgy == pytest.approx(DOSIS_MESETA, rel=0.01), capa
@@ -342,7 +343,7 @@ class TestLaVerdadEnDosis:
         sin_dispersion = dict(perfiles, inplane=dataclasses.replace(perfiles["inplane"], desviacion_meseta=None))
         assert pm._dosis_de_la_meseta(pm.curva_de_la_capa(escena.curva, "G"), piso, sin_dispersion) == (None, None), "sin la dispersion de un perfil no hay dosis de la meseta"
 
-    @pytest.mark.parametrize("capa", TODAS)
+    @pytest.mark.parametrize("capa", DE_LA_CURVA)
     def test_los_niveles_de_la_altura_media_y_la_penumbra_son_los_de_la_dosis(self, escena, capa):
         """Los niveles que se dibujan (`altura_media`, `nivel_penumbra_alta` y `_baja`) tienen el 50, el 80 y el 20 % de la DOSIS de la meseta (la inversa de la curva, `nivel_de_la_base`)."""
         pm = _pm()
@@ -362,7 +363,7 @@ class TestLaVerdadEnDosis:
     def test_el_barrido_en_dosis_mide_en_dosis(self, escena):
         b = _pm().barrido(escena.do)
         assert b.ok
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             central = b.ejes["crossplane"].capas[c].central
             assert central.fwhm_mm == escena.do.capas[c].crossplane.fwhm_mm, c
             assert b.ejes["crossplane"].capas[c].estadistica.media_mm == pytest.approx(100.0, abs=0.05), c
@@ -372,7 +373,7 @@ class TestLaVerdadEnDosis:
 
 class TestCadaMotivoDeLaRegla:
     def test_con_todo_en_orden_es_dosis(self, escena):
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             assert _pm().base_de_la_capa(escena.curva, c, escena.od.piso, escena.cadena) == (BASE_DOSIS, None)
 
     def test_sin_curva(self, escena):
@@ -469,7 +470,7 @@ class TestLaBandaEnDosisEsLaImagenConvertida:
     def test_los_valores_de_la_banda_llevan_la_media_de_la_dosis_de_cada_pixel(self, escena):
         pm = _pm()
         r = escena.do
-        for c in ("G", "gris"):
+        for c in ("G", "B"):      # CD.5b (01-11, DA-94): el gris no tiene curva
             cc = pm.curva_de_la_capa(escena.curva, c)
             capa = r.girada.capa(c)
             piso = r.capas[c].piso
@@ -508,7 +509,7 @@ class TestLaBandaEnDosisEsLaImagenConvertida:
             pytest.skip(f"HI-0: la pelicula real {clave} no esta")
         r = pm.analizar(_pel().leer_pelicula(Path(ruta).read_bytes()), CLICS[clave], _P(), modo_piso="automatico")
         curva = ancha(escena.curva)
-        for c in ("G", "B", "gris"):
+        for c in ("G", "B"):      # CD.5b (01-11, DA-94): el gris no tiene curva
             cc = pm.curva_de_la_capa(curva, c)
             original = r.girada.capa(c)
             piso = r.capas[c].piso
@@ -536,7 +537,7 @@ class TestLaBandaEnDosisEsLaImagenConvertida:
 
 class TestLaReglaDelBoton:
     def test_con_las_cinco_condiciones_se_puede(self, escena):
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             assert _pm().se_puede_pasar_a_dosis(escena.od, efectiva_de(escena.curva), c, escena.cadena) == (True, None), c
 
     def test_sin_curva_dice_el_motivo_de_la_curva_efectiva(self, escena):
@@ -634,7 +635,7 @@ class TestLaCurvaEfectiva:
         """Defensa: la lista viene de `vigentes_validas` (que ya filtra), pero el motor no confia en quien llama."""
         pm = _pm()
         ninguna = escena.curva
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             ninguna = con_capa(ninguna, c, estado="incompleta: falta la película virgen (0 cGy)")
         e = pm.curva_efectiva([self.registro(ninguna, 5), self.registro(escena.curva, 4)], escena.cadena)
         assert e.id == 4
@@ -651,18 +652,18 @@ class TestLaCurvaEfectiva:
         e = _pm().curva_efectiva([self.registro(escena.curva, 4)], None)
         assert e.curva is None and e.motivo == f"{SIN_CURVA}: no se conoce la cadena de captura de la película ({REGLA})"
 
-    @pytest.mark.parametrize("validas", [("G",), ("R",), ("gris",), ("R", "B"), ("G", "B", "gris")], ids="_".join)
+    @pytest.mark.parametrize("validas", [("G",), ("R",), ("B",), ("R", "B"), ("G", "B")], ids="_".join)
     def test_una_calibracion_con_al_menos_una_capa_valida_se_elige(self, escena, validas):
         """La regla dice «con al menos una capa válida», no con las cuatro (CD6-REV-PRU-02): una calibracion real con una capa saturada (la roja) o incompleta sigue siendo la vigente para las demas, y el boton juzga
         despues la capa reportada con ESA curva. Las curvas de las demas pruebas tenian las cuatro capas validas o ninguna, y exigir las cuatro (`all` en lugar de `any`) no lo notaba."""
         pm = _pm()
         curva = escena.curva
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             if c not in validas:
                 curva = con_capa(curva, c, estado="no válida: el ajuste no converge")
         e = pm.curva_efectiva([self.registro(curva, 4)], escena.cadena)
         assert e.id == 4 and e.curva is not None and e.motivo is None
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             esperado = (True, None) if c in validas else (False, NO_VALIDA.format(nombre=NOMBRE[c], estado=curva.estado(c)))
             assert pm.se_puede_pasar_a_dosis(escena.od, e, c, escena.cadena) == esperado, c
 
@@ -800,15 +801,15 @@ class TestElAvisoDeLaPeliculaVirgen:
         cero la virgen montada SI avisa (el control)."""
         pm = _pm()
         cero = copy.deepcopy(escena.curva.cero)
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             cero["capas"][c]["i0"] *= 1.05                    # el cero de otra sesion de escaneo de la virgen: a una virgen montada le avisaria en las cuatro capas
         otra = dataclasses.replace(escena.curva, cero=cero)
-        assert len(pm.avisos_de_la_virgen(otra, escena.od.piso, 2.0)) == 4, "el control: la virgen montada SI avisa"
+        assert len(pm.avisos_de_la_virgen(otra, escena.od.piso, 2.0)) == len(DE_LA_CURVA), "el control: la virgen montada SI avisa"      # CD.5b (01-11, DA-94): en las capas de la curva
         if origen in ("automatico", "sin_modo_ni_referencia"):
             modo = {"modo_piso": "automatico"} if origen == "automatico" else {}
             do = pm.analizar(escena.pelicula, escena.puntos, _P(BASE_DOSIS), curva=otra, cadena=escena.cadena, **modo)
             assert do.piso.estado == "ok" and do.piso.origen == "automatico"
-            for c in TODAS:
+            for c in DE_LA_CURVA:
                 assert do.capas[c].estado == PREFIJO + PISO_NO_VIRGEN.format(origen="el de las esquinas de la película"), c
             assert do.avisos_de_la_dosis == () and do.como_dict()["avisos_de_la_dosis"] == []
             piso = do.piso
@@ -821,7 +822,7 @@ class TestElAvisoDeLaPeliculaVirgen:
         (CD6-REV-P1) para todo piso posible: sin piso, un piso que no se midio, el de las esquinas, el del punto marcado y la virgen montada."""
         pm = _pm()
         cero = copy.deepcopy(escena.curva.cero)
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             cero["capas"][c]["i0"] *= 1.05
         otra = dataclasses.replace(escena.curva, cero=cero)
         pisos = {"sin piso": None, "sin medir": dataclasses.replace(escena.od.piso, estado="no medible: no hay película virgen de referencia"),
@@ -891,9 +892,9 @@ class TestLasDefensas:
         valores = {c: v * 1.10 for c, v in PISO_DE_LA_PLACA.items()}
         piso = pm.analizar(escena.pelicula, escena.puntos, _P(), modo_piso="virgen", referencia_virgen=referencia(16, valores)).piso
         avisos = pm.avisos_de_la_virgen(curva, piso, 2.0)
-        assert len(avisos) == 3 and not any("capa verde" in a for a in avisos), avisos
+        assert len(avisos) == 2 and not any("capa verde" in a for a in avisos), avisos      # CD.5b (01-11, DA-94): la roja y la azul (el gris no tiene cero)
         sin_valor = dataclasses.replace(piso, capas={**piso.capas, "R": dataclasses.replace(piso.capas["R"], mediana=None)})
-        assert len(pm.avisos_de_la_virgen(curva, sin_valor, 2.0)) == 2
+        assert len(pm.avisos_de_la_virgen(curva, sin_valor, 2.0)) == 1
         assert pm.avisos_de_la_virgen(None, piso, 2.0) == () and pm.avisos_de_la_virgen(curva, None, 2.0) == ()
 
 

@@ -38,7 +38,8 @@ resto de la aplicación) y cuántas son. El barrido se muestra y no se guarda: q
 CD.6 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md; DA-92) agrega la TERCERA base, `BASE_DOSIS`: con la curva de dosis de una calibración (`analisisImagenes.curva_dosis`, CD.3) cada perfil se mide en DOSIS,
 convertida píxel a píxel desde la netOD con la curva de SU capa (`curva_de_la_capa`), y el borde está donde la dosis vale la mitad de la de la meseta (H4: no es el borde a la mitad de la netOD). Se pide
 con `parametros["base_de_la_medida"] = BASE_DOSIS` y `analizar(..., curva=, cadena=)`; una capa se mide en dosis solo si cumple las cinco condiciones de DC8 (`base_de_la_capa`, UNA regla) y, si no,
-queda «no medible en dosis: <motivo>» (una vista nunca mezcla las dos bases: sus números en netOD son los del análisis en netOD). `se_puede_pasar_a_dosis` es la regla del botón «Ver en dosis» sobre la
+queda «no medible en dosis: <motivo>» (una vista nunca mezcla las dos bases: sus números en netOD son los del análisis en netOD). DA-94: la curva calibra solo `CAPAS_DE_LA_CURVA` (R, G y B), así
+que en un análisis en dosis el gris queda siempre «no medible en dosis» (`MOTIVO_CAPA_FUERA_DE_LA_CURVA`), y ni los avisos de la virgen ni `curva_efectiva` lo miran. `se_puede_pasar_a_dosis` es la regla del botón «Ver en dosis» sobre la
 capa reportada y `curva_efectiva` la curva que usa un análisis (la válida más reciente con la cadena de captura de la película). Sin curva y con las bases de siempre, todo es idéntico a OD.1 bit a bit.
 El motor no lee la base: las calibraciones le llegan como argumento.
 
@@ -73,7 +74,7 @@ from scipy import ndimage as ndi
 
 from analisisImagenes.pelicula import CAPAS_DEL_PISO, CLAVES_DE_LA_ESCALA, ESQUINAS, FRACCION_DE_RECORTE_MAXIMA, MARGEN_DEL_RECORTE, MOTIVO_MESETA_RECORTADA, NIVEL_DE_RECORTE, PARAMETROS_DEL_PISO, escala_mm, meseta_recortada, piso_de_pelicula
 from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, _abrir_con_pillow, _equipo_de_la_imagen, leer_pelicula          # CD.6: el nombre de cada capa en los motivos y la cadena de captura de la película
-from analisisImagenes.curva_dosis import ESTADO_VALIDA, PREFIJO_GUIA, CurvaDeDosis, _texto_de_la_cadena, cadena_de_captura, curva_desde_dict          # CD.6: la curva de dosis (CD.3), su ÚNICA definición
+from analisisImagenes.curva_dosis import CAPAS_DE_LA_CURVA, ESTADO_VALIDA, PREFIJO_GUIA, CurvaDeDosis, _texto_de_la_cadena, cadena_de_captura, curva_desde_dict          # CD.6: la curva de dosis (CD.3), su ÚNICA definición
 
 VERSION_ALGORITMO = "PM-1"
 
@@ -1697,11 +1698,23 @@ def _exigir_la_capa(capa):
     raise ValueError(f"La capa es una de {CAPAS_DEL_PISO}, no {capa!r}.")
 
 
+def _texto_de_las_capas_de_la_curva():
+    """«roja, verde y azul»: las capas de la curva (`CAPAS_DE_LA_CURVA`, DA-94) con su adjetivo, para los motivos."""
+    nombres = [ADJETIVO_DE_LA_CAPA[c] for c in CAPAS_DE_LA_CURVA]
+    return ", ".join(nombres[:-1]) + " y " + nombres[-1] if len(nombres) > 1 else nombres[0]
+
+
+MOTIVO_CAPA_FUERA_DE_LA_CURVA = "la curva de dosis no calibra la capa {nombre}: solo calibra las capas {capas}"          # DA-94: el gris, en un análisis en dosis
+
+
 def curva_de_la_capa(curva, capa):
-    """La `CurvaDeLaCapa` de `capa` (R, G, B o gris) en la `CurvaDeDosis` `curva`. `ValueError` si no es una curva, la capa no existe o la curva no tiene parámetros en esa capa."""
+    """La `CurvaDeLaCapa` de `capa` (R, G o B: `CAPAS_DE_LA_CURVA`, DA-94) en la `CurvaDeDosis` `curva`. `ValueError` si no es una curva, la capa no existe o no es de la curva (el gris), o la curva
+    no tiene parámetros en esa capa."""
     if not isinstance(curva, CurvaDeDosis):
         raise ValueError(f"La curva de dosis es una `CurvaDeDosis`, no {type(curva).__name__}.")
     _exigir_la_capa(capa)
+    if capa not in CAPAS_DE_LA_CURVA:
+        raise ValueError(MOTIVO_CAPA_FUERA_DE_LA_CURVA.format(nombre=ADJETIVO_DE_LA_CAPA[capa], capas=_texto_de_las_capas_de_la_curva()) + ".")
     if curva.capas[capa]["parametros"] is None:
         raise ValueError(f"La curva de la capa {ADJETIVO_DE_LA_CAPA[capa]} no tiene parámetros: {curva.estado(capa)}.")
     return CurvaDeLaCapa(curva, capa)
@@ -1720,13 +1733,15 @@ def motivo_del_rango(curva, netod_meseta):
 
 def base_de_la_capa(curva, capa, piso, cadena, netod_meseta=None):
     """LA regla de la base de una capa (DC8, UNA): (`BASE_DOSIS`, None) si la capa se puede medir en dosis, o (`BASE_DENSIDAD_OPTICA`, motivo) con el motivo de la PRIMERA condición que falla, en
-    este orden: hay curva; la curva de esa capa es «válida» (una «guía» lo dice así); su cero es una pieza de 0 cGy o la película virgen montada (condición 5); el piso es el de la película virgen
+    este orden: hay curva; la capa es de la curva (DA-94: el gris no lo es, `MOTIVO_CAPA_FUERA_DE_LA_CURVA`); la curva de esa capa es «válida» (una «guía» lo dice así); su cero es una pieza de 0 cGy o la película virgen montada (condición 5); el piso es el de la película virgen
     (condición 2, P8); la cadena de captura de la película (`cadena_de_la_pelicula`) es la de la calibración (condición 3); y, si se da `netod_meseta`, la meseta no pasa el rango útil (condición 4,
     `motivo_del_rango`; sin ella la juzga `medir_perfil` perfil a perfil). `curva`: una `CurvaDeDosis` o None; `piso`: el `Piso` del análisis; `cadena`: un diccionario de `cadena_de_captura` o None."""
     _exigir_la_capa(capa)
     nombre = ADJETIVO_DE_LA_CAPA[capa]
     if curva is None:
         return BASE_DENSIDAD_OPTICA, MOTIVO_SIN_CURVA
+    if capa not in CAPAS_DE_LA_CURVA:
+        return BASE_DENSIDAD_OPTICA, MOTIVO_CAPA_FUERA_DE_LA_CURVA.format(nombre=nombre, capas=_texto_de_las_capas_de_la_curva())
     estado = curva.estado(capa)
     if estado.startswith(PREFIJO_GUIA):
         return BASE_DENSIDAD_OPTICA, f"la curva de la capa {nombre} es una guía: {estado[len(PREFIJO_GUIA):]}"
@@ -1786,7 +1801,7 @@ def avisos_de_la_virgen(curva, piso, maximo_pct):
     if curva is None or curva.cero is None or piso is None or piso.estado != "ok" or piso.origen != "virgen":
         return ()
     avisos = []
-    for c in CAPAS_DEL_PISO:
+    for c in CAPAS_DE_LA_CURVA:          # DA-94: el cero de la curva no tiene gris
         i0 = curva.cero["capas"][c]["i0"]
         valor = piso.capas[c].mediana
         if valor is None or not i0:
@@ -1823,7 +1838,7 @@ def curva_efectiva(calibraciones, cadena):
         except ValueError:
             danadas += 1
             continue
-        if any(curva.estado(c) == ESTADO_VALIDA for c in CAPAS_DEL_PISO):
+        if any(curva.estado(c) == ESTADO_VALIDA for c in CAPAS_DE_LA_CURVA):
             leidas.append((registro, curva))
     for registro, curva in leidas:
         if curva.cadena == dict(cadena):

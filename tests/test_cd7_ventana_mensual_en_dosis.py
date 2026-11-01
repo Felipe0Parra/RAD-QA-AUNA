@@ -51,6 +51,7 @@ DOSIS = (0, 50, 100, 150, 200, 300, 400, 500, 600)
 V = dict(zip(("B", "G", "R"), gen.CALIB["virgen_bgr"]))
 PISO_DE_LA_PLACA = {"R": V["R"], "G": V["G"], "B": V["B"], "gris": 0.299 * V["R"] + 0.587 * V["G"] + 0.114 * V["B"]}
 TODAS = ("R", "G", "B", "gris")
+DE_LA_CURVA = ("R", "G", "B")      # CD.5b (01-11, DA-94): las capas de la curva (el gris no tiene curva ni pasa a dosis)
 EJE_Y_DOSIS = "dosis [cGy]"
 EJE_Y_OD = "densidad óptica neta [1]"
 COLUMNAS_DE_SIEMPRE = ("Capa", "Eje", "Estado", "FWHM [mm]", "Desfase izquierdo o superior [mm]", "Desfase derecho o inferior [mm]", "Penumbra izquierda o superior [mm]",
@@ -539,23 +540,24 @@ def medidos(escena):
 class TestElDibujoEnDosis:
     def test_el_eje_de_la_dosis_sale_solo_de_la_curva(self, escena):
         d = dibujo_mod()
-        rangos = [escena.curva.rango(c) for c in TODAS if escena.curva.estado(c) == "válida"]
+        rangos = [escena.curva.rango(c) for c in DE_LA_CURVA if escena.curva.estado(c) == "válida"]
         assert d.eje_de_la_dosis(escena.curva) == 50.0 * math.ceil(max(rangos) / 50.0) and d.PASO_DEL_EJE_DE_LA_DOSIS_CGY == 50.0
         mas = con_capa(escena.curva, "G", rango_cgy=612.0)
         assert d.eje_de_la_dosis(mas) == 650.0, "redondeado hacia ARRIBA a 50 cGy"
         nada = escena.curva
-        for c in TODAS:
+        for c in DE_LA_CURVA:
             nada = con_capa(nada, c, estado="no válida: de prueba")
         assert d.eje_de_la_dosis(nada) is None
 
-    def test_el_gris_entra_en_el_eje_fijo_de_la_dosis_y_una_capa_no_valida_no(self, escena):
-        """CD7-REV1-R1-P3. CD7-D7 (P27 de la curva): el eje fijo va hasta la mayor dosis util de las capas validas, el gris INCLUIDO (aunque desde CD7-D16 ningun perfil gris se muestre). Las cuatro capas de la
-        curva sintetica tienen el mismo rango (600 cGy), asi que la prueba anterior no distinguia `CAPAS_DEL_PISO` (R, G, B y gris) de `CAPAS` (sin el gris)."""
+    def test_la_capa_valida_de_mayor_rango_manda_en_el_eje_fijo_y_una_no_valida_no(self, escena):
+        """CD7-REV1-R1-P3. CD7-D7: el eje fijo va hasta la mayor dosis util de las capas validas de la curva. Las capas de la curva sintetica tienen el mismo rango (600 cGy), asi que la prueba
+        anterior no distinguia una capa de otra. CD.5b (01-11, DA-94): era «el gris entra en el eje» (P27 de la curva); el gris ya no tiene curva y no cuenta (lo fija test_cd5b), y la prueba se queda con
+        su intencion sobre la azul."""
         d = dibujo_mod()
         assert d.eje_de_la_dosis(escena.curva) == 600.0
-        con_gris = con_capa(escena.curva, "gris", rango_cgy=712.0)
-        assert d.eje_de_la_dosis(con_gris) == 750.0, "el gris tiene el mayor rango util de la curva: el eje llega hasta el, redondeado hacia arriba a 50 cGy"
-        gris_no_valido = con_capa(con_gris, "gris", estado="no válida: de prueba")
+        con_gris = con_capa(escena.curva, "B", rango_cgy=712.0)
+        assert d.eje_de_la_dosis(con_gris) == 750.0, "la azul tiene el mayor rango util de la curva: el eje llega hasta ella, redondeado hacia arriba a 50 cGy"
+        gris_no_valido = con_capa(con_gris, "B", estado="no válida: de prueba")
         assert d.eje_de_la_dosis(gris_no_valido) == 600.0, "una capa que no es valida no cuenta para el eje"
         assert d.eje_de_la_dosis(con_capa(escena.curva, "R", rango_cgy=712.0)) == 750.0
 
@@ -564,7 +566,7 @@ class TestElDibujoEnDosis:
         d = dibujo_mod()
         tope = d.eje_de_la_dosis(escena.curva)
         limites = set()
-        for capa in TODAS:
+        for capa in DE_LA_CURVA:      # CD.5b (01-11, DA-94): el gris en dosis es «no medible en dosis» (no tiene curva)
             for eje in ("crossplane", "inplane"):
                 ax = Figure().add_subplot(111)
                 d.dibujar_perfil(ax, getattr(medidos.do.capas[capa], eje), capa, medidos.do.parametros, curva=medidos.do.curva)

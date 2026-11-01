@@ -1,6 +1,6 @@
 """CD.3 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md): el motor de la curva de dosis de las películas radiocrómicas. Sin Qt y sin base de datos: funciones puras y dataclasses congeladas.
 
-De unas piezas de película irradiadas a dosis conocidas (medidas con la cámara de ionización) y medidas con LA medición de CD.2 (`pelicula.medir_pieza_uniforme`), sale para cada capa (R, G, B y gris)
+De unas piezas de película irradiadas a dosis conocidas (medidas con la cámara de ionización) y medidas con LA medición de CD.2 (`pelicula.medir_pieza_uniforme`), sale para cada capa de color (R, G y B; DA-94: el gris no tiene curva)
 la curva que lleva la densidad óptica neta a dosis, y dice hasta dónde se le puede creer:
 
   - el CERO (DC3, CD-Z1 del 23-10, una sola regla y en este orden): las piezas de 0 cGy de la calibración; si no hay, la película virgen montada (la referencia de OD.1) si es válida, se escaneó con la
@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 from scipy.optimize import minimize_scalar, nnls
 
-from analisisImagenes.pelicula import (CAPAS_DEL_PISO, PROFUNDIDAD_MAXIMA_DE_LO_LIBRE, MedidaDePieza, ReferenciaVirgen, _anida_mas_de, _es_entero, _es_numero, _json_normal)
+from analisisImagenes.pelicula import (CAPAS, PROFUNDIDAD_MAXIMA_DE_LO_LIBRE, MedidaDePieza, ReferenciaVirgen, _anida_mas_de, _es_entero, _es_numero, _json_normal)
 
 # ============================================================================================================================================ los parámetros (PD1)
 
@@ -65,6 +65,13 @@ PARAMETROS_DE_LA_CURVA = {
 VALORES_DE_LA_CURVA = {nombre: _json_normal(parametro["valor"]) for nombre, parametro in PARAMETROS_DE_LA_CURVA.items()}
 VERSION_CURVA = PARAMETROS_DE_LA_CURVA["version"]["valor"]
 MODELO_DEVIC = PARAMETROS_DE_LA_CURVA["modelo"]["valor"]
+
+# DA-94 (01-11, el físico: «En esta parte de dosis tampoco incluyas curvas para la capa gris de ningun tipo»): las capas que calibra la curva, la ÚNICA definición. Son las de color, las que ofrece el
+# menú «Capa reportada» (DA-85); el gris no tiene curva: ni cero, ni ajuste, ni estado, ni netOD en las piezas, ni copia guardada. De esta tupla salen el cero, el ajuste, la copia y su lectura, el
+# servicio, la ventana de calibración, la regla de la base, `curva_efectiva`, los avisos de la virgen y el eje de la dosis. El piso de la película y la medida de una pieza (CD.2) siguen con las
+# cuatro capas del piso de `pelicula`: no son una curva.
+CAPAS_DE_LA_CURVA = CAPAS
+MOTIVO_CAPA_SIN_CURVA = "la curva de dosis calibra solo las capas {capas}; {capa!r} no tiene curva"          # DA-94: lo que dice `CurvaDeDosis` si se le pide otra capa
 
 # El modelo mismo (DC4), no umbrales que CD.10 recalibre: las cotas de n y los arranques fijos del ajuste.
 COTAS_DE_N = (1.0, 4.0)
@@ -115,7 +122,7 @@ _SIN_FONDO = "no se ve fondo del escáner; no se juzga"
 @dataclass(frozen=True, eq=False)
 class PiezaDeCalibracion:
     """Una pieza de una calibración (DC1, CD.3): su `orden` (la fila del formulario), su `dosis_nominal_cgy` (0 para la película sin irradiar) y su `dosis_medida_cgy` (la de la cámara de ionización;
-    None si no se dio), el `estado` de su medida (el de CD.2: «ok» o «no medible: …») y, por capa (R, G, B y gris), `capas[capa]` = {"valor": I, la media de su región central de 10 × 10 mm (DC2);
+    None si no se dio), el `estado` de su medida (el de CD.2: «ok» o «no medible: …») y, por capa de la curva (`CAPAS_DE_LA_CURVA`: R, G y B), `capas[capa]` = {"valor": I, la media de su región central de 10 × 10 mm (DC2);
     "u": su incertidumbre (DC2: la desviación estándar de las medias de sus cinco regiones de uniformidad si caben, y si no la de los píxeles del centro); "recortada": la fracción en el negro del
     escáner o None (CD2-D5); "netod" y "u_netod": su densidad óptica neta contra el cero de la curva y su u (DC3), None hasta que `ajustar` la pone o si no se pudo calcular; "dosis_cgy": la dosis contada
     desde el cero con que entra al ajuste; "residuo_pct": (D(x) − D) / D en %, o None; "en_el_rango": si está dentro del rango útil de esa capa}. `posicion_mm`: {"x", "y"}, el centro de la pieza en
@@ -177,7 +184,7 @@ def pieza_de_calibracion(orden, dosis_nominal_cgy, dosis_medida_cgy, medida):
         raise ValueError("La medida de una pieza es la `MedidaDePieza` de `pelicula.medir_pieza_uniforme`.")
     ok = medida.estado == "ok"
     capas = {}
-    for c in CAPAS_DEL_PISO:
+    for c in CAPAS_DE_LA_CURVA:
         capas[c] = dict.fromkeys(_CLAVES_DE_LA_CAPA_DE_UNA_PIEZA)
         if ok:
             capas[c].update(valor=float(medida.valor(c)), u=_incertidumbre_del_valor(medida.uniformidad, medida.centro[c]["desviacion"], c),
@@ -262,7 +269,13 @@ class CurvaDeDosis:
     u_dosis_medida_pct: float | None
     cadena: dict | None
 
+    def _exige_la_capa(self, capa):
+        """DA-94: `ValueError` si `capa` no es una de `CAPAS_DE_LA_CURVA` (el gris no tiene curva), con la regla entera."""
+        if capa not in CAPAS_DE_LA_CURVA:
+            raise ValueError(MOTIVO_CAPA_SIN_CURVA.format(capas=", ".join(CAPAS_DE_LA_CURVA), capa=capa))
+
     def _parametros_de(self, capa):
+        self._exige_la_capa(capa)
         p = self.capas[capa]["parametros"]
         if p is None:
             raise ValueError(f"La capa {capa} no tiene curva: {self.capas[capa]['estado']}.")
@@ -297,11 +310,13 @@ class CurvaDeDosis:
         return float(x) if np.ndim(x) == 0 else x
 
     def rango(self, capa):
-        """La dosis más alta del rango útil de una capa (cGy, contada desde el cero; el rango va de 0 a ella), o None si la capa no tiene rango útil (DC5)."""
+        """La dosis más alta del rango útil de una capa (cGy, contada desde el cero; el rango va de 0 a ella), o None si la capa no tiene rango útil (DC5). `ValueError` si no es de la curva."""
+        self._exige_la_capa(capa)
         return self.capas[capa]["rango_cgy"]
 
     def estado(self, capa):
-        """El estado de la curva de una capa: «válida», «guía: …», «incompleta: …» o «no válida: …» (DC5, DC3)."""
+        """El estado de la curva de una capa: «válida», «guía: …», «incompleta: …» o «no válida: …» (DC5, DC3). `ValueError` si no es de la curva (DA-94: el gris)."""
+        self._exige_la_capa(capa)
         return self.capas[capa]["estado"]
 
     def incertidumbre(self, capa, x, u_x):
@@ -324,9 +339,9 @@ class CurvaDeDosis:
 
 
 def _capas_sin_valor_positivo(valores):
-    """CD3-PROD-D1: las capas (en el orden de `CAPAS_DEL_PISO`, como texto «R, G, B, gris») en que una medida no tiene un valor positivo, o None si lo tiene en las cuatro. Una medida sirve de cero solo
-    si lo tiene en las cuatro: netOD = log10(I0 / I) pide I0 > 0, y un escaneo negro mide «ok» con valor 0 en CD.2."""
-    capas = [c for c in CAPAS_DEL_PISO if not (_es_numero(valores[c]) and valores[c] > 0)]
+    """CD3-PROD-D1: las capas (en el orden de `CAPAS_DE_LA_CURVA`, como texto «R, G, B») en que una medida no tiene un valor positivo, o None si lo tiene en las tres. Una medida sirve de cero solo
+    si lo tiene en las capas de la curva (DA-94: el gris no cuenta): netOD = log10(I0 / I) pide I0 > 0, y un escaneo negro mide «ok» con valor 0 en CD.2."""
+    capas = [c for c in CAPAS_DE_LA_CURVA if not (_es_numero(valores[c]) and valores[c] > 0)]
     return ", ".join(capas) if capas else None
 
 
@@ -334,20 +349,20 @@ def _cero(piezas_ok, virgen, cadena):
     """El cero de la calibración (DC3, CD-Z1): (fuente, detalle, dosis del cero, {capa: (I0, u_I0)}, la pieza que hace de cero o None, avisos), o None si no hay con qué. Una sola regla y en este
     orden: las piezas de 0 cGy (I0 = la media de sus valores; u = la raíz de la media de sus u al cuadrado), la película virgen montada si es válida, de la misma cadena de captura y con la región central
     de su tabla de uniformidad (su u, DC2: sin ella no sirve y se avisa, CD3-REV1-01), o la pieza irradiada de menor dosis medida. CD3-PROD-D1: una medida sirve de cero solo si su valor es positivo en las
-    cuatro capas (`_capas_sin_valor_positivo`): una pieza de 0 cGy que no lo cumple no entra en la media y deja `AVISO_NO_SIRVE_DE_CERO`, y la pieza de menor dosis se escoge entre las que lo cumplen; la virgen no lleva
+    capas de la curva (`_capas_sin_valor_positivo`): una pieza de 0 cGy que no lo cumple no entra en la media y deja `AVISO_NO_SIRVE_DE_CERO`, y la pieza de menor dosis se escoge entre las que lo cumplen; la virgen no lleva
     esta condición (A.3 ya rechaza una virgen negra, CD3-PROD-D4)."""
     avisos = []
     ceros = []
     for p in piezas_ok:
         if p.dosis_nominal_cgy != 0:
             continue
-        sin_valor = _capas_sin_valor_positivo({c: p.capas[c]["valor"] for c in CAPAS_DEL_PISO})
+        sin_valor = _capas_sin_valor_positivo({c: p.capas[c]["valor"] for c in CAPAS_DE_LA_CURVA})
         if sin_valor is None:
             ceros.append(p)
         else:
             avisos.append(AVISO_NO_SIRVE_DE_CERO.format(orden=p.orden, nominal=p.dosis_nominal_cgy, motivo=MOTIVO_SIN_VALOR_POSITIVO.format(capas=sin_valor)))
     if ceros:
-        capas = {c: (float(np.mean([p.capas[c]["valor"] for p in ceros])), float(np.sqrt(np.mean([p.capas[c]["u"] ** 2 for p in ceros])))) for c in CAPAS_DEL_PISO}
+        capas = {c: (float(np.mean([p.capas[c]["valor"] for p in ceros])), float(np.sqrt(np.mean([p.capas[c]["u"] ** 2 for p in ceros])))) for c in CAPAS_DE_LA_CURVA}
         detalle = "las piezas de 0 cGy (" + ", ".join(f"pieza {p.orden}" for p in ceros) + ")"
         return "piezas_de_0_cgy", detalle, 0.0, capas, None, avisos
     if virgen is not None:
@@ -359,19 +374,19 @@ def _cero(piezas_ok, virgen, cadena):
                       + ("" if cadena is None else f" contra {_texto_de_la_cadena(cadena)}") + ")")
         if motivo is None:
             tabla = virgen.uniformidad
-            incertidumbres = {c: _incertidumbre_del_valor(tabla, tabla["capas"][c]["ruido"] if tabla else None, c) for c in CAPAS_DEL_PISO}
+            incertidumbres = {c: _incertidumbre_del_valor(tabla, tabla["capas"][c]["ruido"] if tabla else None, c) for c in CAPAS_DE_LA_CURVA}
             if any(u is None for u in incertidumbres.values()):
                 motivo = MOTIVO_VIRGEN_SIN_CENTRO
         if motivo is None:
-            capas = {c: (float(virgen.valor(c)), incertidumbres[c]) for c in CAPAS_DEL_PISO}
+            capas = {c: (float(virgen.valor(c)), incertidumbres[c]) for c in CAPAS_DE_LA_CURVA}
             nombre = virgen.procedencia.get("archivo") or "sin nombre"
             return "pelicula_virgen", f"la película virgen montada «{nombre}» (huella {virgen.procedencia['sha256'][:8]})", 0.0, capas, None, avisos
         avisos.append(AVISO_VIRGEN_NO_SIRVE.format(motivo=motivo))
     irradiadas = [p for p in piezas_ok if p.dosis_nominal_cgy > 0 and p.dosis_medida_cgy is not None and p.dosis_medida_cgy > 0
-                  and _capas_sin_valor_positivo({c: p.capas[c]["valor"] for c in CAPAS_DEL_PISO}) is None]
+                  and _capas_sin_valor_positivo({c: p.capas[c]["valor"] for c in CAPAS_DE_LA_CURVA}) is None]
     if irradiadas:
         menor = min(irradiadas, key=lambda p: (p.dosis_medida_cgy, p.orden))
-        capas = {c: (menor.capas[c]["valor"], menor.capas[c]["u"]) for c in CAPAS_DEL_PISO}
+        capas = {c: (menor.capas[c]["valor"], menor.capas[c]["u"]) for c in CAPAS_DE_LA_CURVA}
         medida = "" if menor.dosis_medida_cgy == menor.dosis_nominal_cgy else f"medida en {menor.dosis_medida_cgy:g} cGy, "      # CD3-REV1-04: la dosis con que se cuentan las demás, si no es la nominal
         return ("pieza_de_menor_dosis", f"la pieza {menor.orden} ({menor.dosis_nominal_cgy:g} cGy, {medida}la de menor dosis): solo guía", float(menor.dosis_medida_cgy), capas, menor, avisos)
     return None, None, None, None, None, avisos
@@ -382,7 +397,7 @@ def _con_netod(pieza, cero_capas, dosis_cero):
     si está en el rango) se rehace desde lo MEDIDO (valor, u y recorte) y no se hereda de la pieza: una pieza que viene de una copia guardada (`curva_desde_dict`, CD.4) o de una curva anterior puede traerlo
     desfasado o inconsistente con su valor (CD3-REV1-03)."""
     capas = {}
-    for c in CAPAS_DEL_PISO:
+    for c in CAPAS_DE_LA_CURVA:
         fila = {**dict.fromkeys(_CLAVES_DE_LA_CAPA_DE_UNA_PIEZA), "valor": pieza.capas[c]["valor"], "u": pieza.capas[c]["u"], "recortada": pieza.capas[c]["recortada"], "en_el_rango": False}
         i0, u0 = cero_capas[c]
         if fila["valor"] is not None and fila["valor"] > 0 and i0 > 0:
@@ -469,12 +484,12 @@ def ajustar(piezas, P=None, virgen=None, u_dosis_medida_pct=None):
     `PARAMETROS_DE_LA_CURVA` (los que falten, de fábrica); `virgen`: la `ReferenciaVirgen` montada (OD.1), que hace de cero solo si no hay piezas de 0 cGy, es válida, se escaneó con la misma cadena
     que las piezas (DC3) y trae la región central de su tabla de uniformidad (si no, se avisa y no sirve, CD3-REV1-01); `u_dosis_medida_pct`: la incertidumbre declarada de la dosis medida con la cámara (k = 1, %), o None (P13).
 
-    Por capa (R, G, B y gris): la netOD de cada pieza contra el cero, el ajuste de Devic (DC4) con sus parámetros, el residuo de cada pieza en %, el rango útil (DC5: de 0 a la dosis más alta que
+    Por capa de la curva (`CAPAS_DE_LA_CURVA`: R, G y B; DA-94): la netOD de cada pieza contra el cero, el ajuste de Devic (DC4) con sus parámetros, el residuo de cada pieza en %, el rango útil (DC5: de 0 a la dosis más alta que
     cumple (a) sin recorte, (b) se distingue de la anterior y (c) su resolución en dosis no pasa de `resolucion_maxima_pct`; el ajuste se hace con las piezas del rango) y el estado, en este orden de
     precedencia: «incompleta: …» (sin cero, una dosis medida que falta o no es positiva, o menos de `piezas_minimas` dosis en el rango útil), «no válida: …» (piezas de otra cadena de captura, datos
     no monótonos, un ajuste que no converge o un residuo fuera de la tolerancia), «guía: el cero es la pieza de N cGy» (N, su dosis nominal; una curva que sería válida pero cuyo cero es la pieza de menor dosis: nunca pasa
     a dosis) o «válida». Una pieza «no medible» no entra en la curva y se avisa. Además avisa, sin cambiar ningún estado, de una pieza cuyo fondo del escáner se aparta del del cero (el escáner pudo
-    ajustar la exposición) o que está a más de `distancia_en_el_vidrio_mm` del cero en el vidrio (H2). CD3-PROD-D1: una medida sirve de cero solo con valor positivo en las cuatro capas (si no, se
+    ajustar la exposición) o que está a más de `distancia_en_el_vidrio_mm` del cero en el vidrio (H2). CD3-PROD-D1: una medida sirve de cero solo con valor positivo en las capas de la curva (si no, se
     avisa y sigue la regla del cero). CD3-PROD-D2 y D3: en el modo guía, las réplicas de la pieza que hace de cero (la misma dosis nominal) y lo que no supera su dosis medida no entran al ajuste, no traen
     residuo y se avisan. NUNCA lanza por el contenido; `ValueError` si `piezas` no son `PiezaDeCalibracion`."""
     if any(not isinstance(p, PiezaDeCalibracion) for p in piezas):
@@ -501,7 +516,7 @@ def ajustar(piezas, P=None, virgen=None, u_dosis_medida_pct=None):
     avisos += avisos_del_cero
     if fuente is None:
         capas = {c: {"estado": PREFIJO_INCOMPLETA + MOTIVO_SIN_CERO, "parametros": None, "rango_cgy": None, "netod_maxima": None, "rms_pct": None, "costo": None, "dosis_en_el_rango": 0,
-                     "limite": None} for c in CAPAS_DEL_PISO}
+                     "limite": None} for c in CAPAS_DE_LA_CURVA}
         return CurvaDeDosis(VERSION_CURVA, MODELO_DEVIC, None, capas, tuple(piezas), tuple(avisos), dict(v), u_dosis_medida_pct, cadena)
     cero = {"fuente": fuente, "detalle": detalle, "dosis_cgy": dosis_cero, "capas": {c: {"i0": i0, "u_i0": u0} for c, (i0, u0) in cero_capas.items()}}
     medidas = [_con_netod(p, cero_capas, dosis_cero) if p.estado == "ok" else p for p in piezas]
@@ -517,7 +532,7 @@ def ajustar(piezas, P=None, virgen=None, u_dosis_medida_pct=None):
             avisos.append(AVISO_FUERA_DE_LA_CURVA.format(orden=p.orden, nominal=p.dosis_nominal_cgy, estado=motivo))
     avisos += _avisos_del_escaneo(medidas, pieza_cero, fuente, virgen, v)
     capas, rangos = {}, {}
-    for c in CAPAS_DEL_PISO:
+    for c in CAPAS_DE_LA_CURVA:
         u_relativa_del_cero = cero_capas[c][1] / cero_capas[c][0]
         niveles = _niveles([p for p in en_juego if p.capas[c]["netod"] is not None or p.capas[c]["recortada"] is not None], c)
         ajuste, rango_niveles, limite, no_monotonos = _ajustar_la_capa(niveles, c, u_relativa_del_cero, v)
@@ -540,7 +555,7 @@ def ajustar(piezas, P=None, virgen=None, u_dosis_medida_pct=None):
             final.append(p)
             continue
         filas = {}
-        for c in CAPAS_DEL_PISO:
+        for c in CAPAS_DE_LA_CURVA:
             fila = dict(p.capas[c])
             parametros = capas[c]["parametros"]
             if parametros is not None and fila["netod"] is not None and fila["dosis_cgy"] and any(p is q for q in en_juego) and fila["dosis_cgy"] > 0:
@@ -576,7 +591,7 @@ def _avisos_del_escaneo(medidas, pieza_cero, fuente, virgen, v):
     """Los dos avisos que no cambian el estado (CD.3), cada uno con su pieza: el fondo del escáner que se aparta del del cero (el escáner pudo ajustar la exposición) y el lugar del vidrio a más de
     `distancia_en_el_vidrio_mm` del cero. La referencia es el cero de la curva: la media de las piezas de 0 cGy, la película virgen montada o la pieza de menor dosis."""
     if fuente == "piezas_de_0_cgy":
-        referencias = [p for p in medidas if p.estado == "ok" and p.dosis_nominal_cgy == 0 and _capas_sin_valor_positivo({c: p.capas[c]["valor"] for c in CAPAS_DEL_PISO}) is None]
+        referencias = [p for p in medidas if p.estado == "ok" and p.dosis_nominal_cgy == 0 and _capas_sin_valor_positivo({c: p.capas[c]["valor"] for c in CAPAS_DE_LA_CURVA}) is None]
         fondos = [p.fondo_blanco for p in referencias if p.fondo_blanco is not None]
         posiciones = [p.posicion_mm for p in referencias if p.posicion_mm is not None]
     elif fuente == "pelicula_virgen":
@@ -666,11 +681,11 @@ def curva_desde_dict(d):
         _exige_la_curva(cero["fuente"] in FUENTES_DEL_CERO, f"la fuente del cero no es una de {', '.join(FUENTES_DEL_CERO)}")
         _exige_la_curva(isinstance(cero["detalle"], str), "el detalle del cero no es un texto")
         _exige_la_curva(_es_numero(cero["dosis_cgy"]) and cero["dosis_cgy"] >= 0, "la dosis del cero no es un número de 0 o más")
-        _exige_las_claves(cero["capas"], CAPAS_DEL_PISO, "las capas del cero")
+        _exige_las_claves(cero["capas"], CAPAS_DE_LA_CURVA, "las capas del cero")
         for c, fila in cero["capas"].items():
             _exige_las_claves(fila, ("i0", "u_i0"), f"el cero de la capa {c}")
             _exige_la_curva(_es_numero(fila["i0"]) and fila["i0"] > 0 and _es_numero(fila["u_i0"]) and fila["u_i0"] >= 0, f"el I0 o su u de la capa {c} no son números válidos")
-    _exige_las_claves(d["capas"], CAPAS_DEL_PISO, "las capas")
+    _exige_las_claves(d["capas"], CAPAS_DE_LA_CURVA, "las capas")
     for c, fila in d["capas"].items():
         _exige_las_claves(fila, _CLAVES_DE_LA_CAPA, f"la capa {c}")
         _exige_la_curva(isinstance(fila["estado"], str) and fila["estado"] != "", f"el estado de la capa {c} no es un texto")
@@ -702,7 +717,7 @@ def curva_desde_dict(d):
         if q["cadena"] is not None:
             _exige_la_curva(not _anida_mas_de(q["cadena"], PROFUNDIDAD_MAXIMA_DE_LO_LIBRE), f"la cadena de captura de {que} anida demasiados niveles (más de {PROFUNDIDAD_MAXIMA_DE_LO_LIBRE})")
             _exige_la_cadena(q["cadena"], f"la cadena de captura de {que}")
-        _exige_las_claves(q["capas"], CAPAS_DEL_PISO, f"las capas de {que}")
+        _exige_las_claves(q["capas"], CAPAS_DE_LA_CURVA, f"las capas de {que}")
         for c, fila in q["capas"].items():
             _exige_las_claves(fila, _CLAVES_DE_LA_CAPA_DE_UNA_PIEZA, f"la capa {c} de {que}")
             _exige_la_curva(all(_numero_o_nada(fila[k]) for k in _CLAVES_DE_LA_CAPA_DE_UNA_PIEZA if k != "en_el_rango") and isinstance(fila["en_el_rango"], bool),

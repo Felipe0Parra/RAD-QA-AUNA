@@ -50,7 +50,7 @@ VENTANA_PY = RAIZ / "ui" / "paginasControles" / "PruebasMensuales" / "curva_dosi
 DIBUJO_PY = RAIZ / "analisisImagenes" / "dibujo_curva_dosis.py"
 BUILD_PY = RAIZ / "build_exe.py"
 USUARIO = "Fisico de prueba"
-CAPAS = ("R", "G", "B", "gris")
+CAPAS = ("R", "G", "B")      # CD.5b (01-11, DA-94): la ventana muestra solo las capas de la curva (la tabla, el grafico, los residuos y las columnas)
 PLANTILLA = (0, 50, 100, 150, 200, 300, 400, 500, 600, 800, 1000)
 DEVIC = (gen.RespuestaDevic(700.0, 3300.0, 2.06), gen.RespuestaDevic(1100.0, 4600.0, 2.19), gen.RespuestaDevic(1750.0, 8200.0, 1.58))
 GRANDE = 50.0                                     # piezas de 5 x 5 cm: con el ruido de EPSON179 las cuatro capas salen «válidas» (como en CD.4)
@@ -393,14 +393,14 @@ class TestElCaminoDeUnaPersona:
     def test_cargar_once_piezas_escribir_las_dosis_ver_la_curva_guardar_abrir_y_anular(self, ventana, dialogos, tmp_path, escaneos, bd):
         d = dibujo_mod()
         cargar_todas(ventana, dialogos, tmp_path, escaneos)
-        assert ventana._curva is not None and [ventana._curva.estado(c) for c in CAPAS] == [VALIDA] * 4
+        assert ventana._curva is not None and [ventana._curva.estado(c) for c in CAPAS] == [VALIDA] * len(CAPAS)
         tabla = celdas(ventana.tabla_piezas)
         assert all(tabla[i][d.COLUMNA_ARCHIVO] == escaneos[i + 1][1] for i in range(11))
         assert all(re.fullmatch(r"\d\.\d{4} ± \d\.\d{4}", tabla[i][d.COLUMNA_DE_LA_CAPA[c]]) for i in range(11) for c in CAPAS), tabla
         gids = {l.get_gid() for l in ventana.eje_curva.lines}
         assert {f"curva_{c}_dentro" for c in CAPAS} <= gids
         assert ventana.eje_curva.get_legend() is not None and any(l.get_visible() for l in ventana.eje_curva.get_xgridlines())
-        assert [f[7] for f in celdas(ventana.tabla_curva)] == [VALIDA] * 4
+        assert [f[7] for f in celdas(ventana.tabla_curva)] == [VALIDA] * len(CAPAS)
         llenar_el_encabezado(ventana)
         ventana.boton_guardar.click()
         assert ventana.estado == "registro"
@@ -481,7 +481,7 @@ class TestLoQueSeVeEsLoDelMotor:
             assert all(l.get_markerfacecolor() == "none" for l in huecas) and all(l.get_markerfacecolor() != "none" for l in rellenas)
         assert fuera >= 1, "el juego saturante debe dejar piezas fuera del rango útil (no vacuidad)"
         rotulos = ventana.eje_curva.get_legend_handles_labels()[1]
-        assert [r for r in rotulos if r in ("capa roja", "capa verde", "capa azul", "gris")] == ["capa roja", "capa verde", "capa azul", "gris"]          # cada capa una vez en la leyenda
+        assert [r for r in rotulos if r in ("capa roja", "capa verde", "capa azul", "gris")] == ["capa roja", "capa verde", "capa azul"]          # cada capa una vez en la leyenda (CD.5b (01-11, DA-94): y el gris ninguna)
 
 
 # ===================================================================================================== (3) una pieza dañada dice por qué
@@ -493,7 +493,7 @@ class TestUnaPiezaDanadaDicePorQue:
         medida = pel().medir_pieza_uniforme(datos, _P(), "sin_ppp.tif", "2026-10-30", escala="declarada")
         assert medida.estado.startswith("no medible")
         fila = celdas(ventana.tabla_piezas)[1]
-        assert [fila[dibujo_mod().COLUMNA_DE_LA_CAPA[c]] for c in CAPAS] == [medida.estado] * 4
+        assert [fila[dibujo_mod().COLUMNA_DE_LA_CAPA[c]] for c in CAPAS] == [medida.estado] * len(CAPAS)
 
     def test_la_capa_recortada_lo_dice(self, ventana, dialogos, tmp_path, escaneos_con_el_rojo_recortado):
         cargar_todas(ventana, dialogos, tmp_path, escaneos_con_el_rojo_recortado)
@@ -808,7 +808,7 @@ class TestLaTablaDePiezas:
         escribir(ventana, 11, d.COLUMNA_MEDIDA, "100")
         piezas, problemas = ventana.piezas()
         assert problemas == [] and [p["orden"] for p in piezas] == list(range(1, 13)) and [p["dosis_nominal_cgy"] for p in piezas].count(100.0) == 2
-        assert [p.orden for p in ventana._curva.piezas] == list(range(1, 13)) and [ventana._curva.estado(c) for c in CAPAS] == [VALIDA] * 4
+        assert [p.orden for p in ventana._curva.piezas] == list(range(1, 13)) and [ventana._curva.estado(c) for c in CAPAS] == [VALIDA] * len(CAPAS)
 
     def test_editar_la_dosis_nominal_cambia_la_fila_la_curva_y_lo_que_se_manda_al_servicio(self, ventana, dialogos, tmp_path, escaneos):
         d = dibujo_mod()
@@ -852,7 +852,7 @@ class TestLaTablaDePiezas:
         assert ventana._curva is not None                                             # con la dosis medida vacía la pieza entra y la curva queda incompleta
         escribir(ventana, 1, d.COLUMNA_MEDIDA, "abc")
         assert ventana._curva is None and ventana.boton_guardar.isEnabled()
-        assert [celdas(ventana.tabla_piezas)[1][d.COLUMNA_DE_LA_CAPA[c]] for c in CAPAS] == [""] * 4
+        assert [celdas(ventana.tabla_piezas)[1][d.COLUMNA_DE_LA_CAPA[c]] for c in CAPAS] == [""] * len(CAPAS)
         assert "No entra en la curva: la dosis medida de la fila 2 no es un número: 'abc'." in ventana.etiqueta_curva.text().split("\n")
 
     def test_una_incertidumbre_que_no_es_un_numero_no_entra_en_la_curva_ni_llega_al_servicio(self, ventana, dialogos, tmp_path, escaneos, monkeypatch):
@@ -1147,8 +1147,8 @@ class TestLaCurvaSinCero:
         cargar(ventana, dialogos, tmp_path, 2, escaneos[3][1], escaneos[3][2])        # la de 100 cGy, sola: la curva todavía no tiene cero
         assert ventana._curva.cero is None and ventana._pieza_de_la_curva(3).estado == "ok"
         sin_cero = [celdas(ventana.tabla_piezas)[2][d.COLUMNA_DE_LA_CAPA[c]] for c in CAPAS]
-        assert sin_cero != [d.NO_MEDIBLE] * 4, "una pieza que se midió bien dice «no medible» solo porque la curva todavía no tiene cero"
-        assert sin_cero == [d.SIN_CERO] * 4 and d.SIN_CERO != d.NO_MEDIBLE and "cero" in d.SIN_CERO
+        assert sin_cero != [d.NO_MEDIBLE] * len(CAPAS), "una pieza que se midió bien dice «no medible» solo porque la curva todavía no tiene cero"
+        assert sin_cero == [d.SIN_CERO] * len(CAPAS) and d.SIN_CERO != d.NO_MEDIBLE and "cero" in d.SIN_CERO
         cargar(ventana, dialogos, tmp_path, 0, escaneos[1][1], escaneos[1][2])        # la película virgen (0 cGy): ahora hay cero y la misma fila da su netOD
         assert all(re.fullmatch(r"\d\.\d{4} ± \d\.\d{4}", celdas(ventana.tabla_piezas)[2][d.COLUMNA_DE_LA_CAPA[c]]) for c in CAPAS)
 

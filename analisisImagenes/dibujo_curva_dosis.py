@@ -6,7 +6,7 @@ evalúa con `CurvaDeDosis.dosis`, la ÚNICA definición del modelo (CD.9). La ú
 
 El gráfico (DA-92, «todo eso en un mismo gráfico en esa ventana con grid y leyenda»): los pares (densidad óptica neta, dosis) de cada pieza con su ±u en netOD y la curva de Devic de cada capa, en su color
 (los de la ventana mensual, `COLOR_CAPA`), con rejilla y leyenda. La curva llega hasta la netOD de la última pieza de esa capa, sin extrapolar; el tramo fuera de su rango útil va punteado y sus piezas,
-huecas. Debajo, en un gráfico pequeño, los residuos de las cuatro capas en %. La dosis de cada par es la que entró al ajuste (`dosis_cgy`: la medida, contada desde el cero de la curva), la misma con la que
+huecas. Debajo, en un gráfico pequeño, los residuos de las tres capas en %. DA-94: solo las capas de la curva (`motor.CAPAS_DE_LA_CURVA`, R, G y B): ninguna curva, par, residuo, fila ni columna del gris. La dosis de cada par es la que entró al ajuste (`dosis_cgy`: la medida, contada desde el cero de la curva), la misma con la que
 el motor calculó el residuo.
 
 Sin Qt ni `pyplot`. Sin símbolos de correcto o incorrecto (DA-18) y con las unidades entre corchetes. Lo que viene del usuario (las condiciones, los textos libres) se escribe con `texto_seguro`, que no
@@ -18,9 +18,9 @@ import numpy as np
 
 from analisisImagenes import curva_dosis as motor
 from analisisImagenes.dibujo_placa_mensual import COLOR_CAPA, COLOR_REJILLA, NO_MEDIBLE, TINTA, TINTA_SUAVE
-from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, CAPAS_DEL_PISO
+from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA
 
-CAPAS = CAPAS_DEL_PISO                                   # R, G, B y el gris: las cuatro que calibra la curva (DC1)
+CAPAS = motor.CAPAS_DE_LA_CURVA                          # DA-94: las capas que calibra la curva (R, G y B), de su ÚNICA definición; todo lo que sigue sale de ella
 PLANTILLA_DE_DOSIS = (0.0, 50.0, 100.0, 150.0, 200.0, 300.0, 400.0, 500.0, 600.0, 800.0, 1000.0)     # P12 de la curva: la plantilla con que arranca la tabla (0 = la película virgen)
 TIPOS_DE_PELICULA = ("EBT3", "EBT4", "EBT-XD")          # el menú es editable: «u otro»
 ENERGIAS = ("6 MV", "10 MV", "15 MV", "6 MV FFF", "10 MV FFF")
@@ -39,12 +39,12 @@ RECORTADA = "recortada por el escáner"
 SIN_IMAGEN = "sin imagen"
 SIN_IMAGEN_VIRGEN = "sin imagen (película virgen)"
 TEXTO_FUERA_DEL_RANGO = "fuera del rango útil: punteado, piezas huecas"
-NOMBRE_EN_EL_GRAFICO = {c: (f"capa {ADJETIVO_DE_LA_CAPA[c]}" if c != "gris" else "gris") for c in CAPAS}
+NOMBRE_EN_EL_GRAFICO = {c: f"capa {ADJETIVO_DE_LA_CAPA[c]}" for c in CAPAS}
 
-COLUMNAS_DE_LAS_PIEZAS = ("Dosis nominal [cGy]", "Imagen", "Archivo", "Dosis medida [cGy]", "netOD roja [1]", "netOD verde [1]", "netOD azul [1]", "netOD gris [1]", "Quitar")
+COLUMNAS_DE_LAS_PIEZAS = ("Dosis nominal [cGy]", "Imagen", "Archivo", "Dosis medida [cGy]", *(f"netOD {ADJETIVO_DE_LA_CAPA[c]} [1]" for c in CAPAS), "Quitar")
 COLUMNA_NOMINAL, COLUMNA_CARGAR, COLUMNA_ARCHIVO, COLUMNA_MEDIDA = 0, 1, 2, 3
-COLUMNA_DE_LA_CAPA = {"R": 4, "G": 5, "B": 6, "gris": 7}
-COLUMNA_QUITAR = 8
+COLUMNA_DE_LA_CAPA = {c: COLUMNA_MEDIDA + 1 + i for i, c in enumerate(CAPAS)}
+COLUMNA_QUITAR = len(COLUMNAS_DE_LAS_PIEZAS) - 1
 COLUMNAS_DE_LA_CURVA = ("Capa", "a [cGy]", "b [cGy]", "n [1]", "Rango útil [cGy]", "Residuo máximo [%]", "RMS [%]", "Estado")          # el estado (un texto largo) al final: los números se ven sin desplazar
 
 
@@ -279,7 +279,7 @@ def dibujar_curva(eje, curva):
 
 
 def dibujar_residuos(eje, curva):
-    """Los residuos de las piezas, en %, de las cuatro capas en un mismo gráfico pequeño (DA-92), contra la dosis con que entraron al ajuste; las bandas de la tolerancia del motor (±`residuo_maximo_pct` y,
+    """Los residuos de las piezas, en %, de las capas de la curva en un mismo gráfico pequeño (DA-92; DA-94: sin el gris), contra la dosis con que entraron al ajuste; las bandas de la tolerancia del motor (±`residuo_maximo_pct` y,
     por debajo de `dosis_baja_cgy`, ±`residuo_maximo_bajas_pct`). Rellenos en el rango útil, huecos fuera."""
     eje.clear()
     eje.grid(True, color=COLOR_REJILLA)

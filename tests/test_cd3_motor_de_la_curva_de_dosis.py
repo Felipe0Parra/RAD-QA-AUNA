@@ -47,7 +47,7 @@ import _piezas_de_calibracion_sinteticas as gen
 
 RAIZ = Path(__file__).resolve().parent.parent
 FECHA = "2026-10-29"
-CAPAS = ("R", "G", "B", "gris")
+CAPAS = ("R", "G", "B")      # CD.5b (01-11, DA-94): la curva calibra solo las capas de color (`CAPAS_DE_LA_CURVA`); el gris no tiene curva
 LAS_TRES = ("R", "G", "B")
 DOSIS = (50, 100, 150, 200, 300, 400, 500, 600, 800, 1000)            # la plantilla del §7 del plan (sin la de 0 cGy)
 DEVIC = (gen.RespuestaDevic(700.0, 3300.0, 2.06), gen.RespuestaDevic(1100.0, 4600.0, 2.19), gen.RespuestaDevic(1750.0, 8200.0, 1.58))      # una por capa (R, G, B), del orden de las de H9
@@ -90,9 +90,9 @@ H9_ESTADOS = {
     "R": "guía: el cero es la pieza de 5 cGy",
     "G": "no válida: el residuo de la pieza de 350 cGy es +3.19 % (la tolerancia es ±3 %)",
     "B": "incompleta: quedan 0 dosis en el rango útil (hacen falta 6)",
-    "gris": "no válida: el residuo de la pieza de 350 cGy es +3.60 % (la tolerancia es ±3 %)",
+    # CD.5b (01-11, DA-94): el gris ya no tiene curva (era «no válida: el residuo de la pieza de 350 cGy es +3.60 %»)
 }
-H9_RANGOS = {"R": 445.0, "G": 645.0, "B": None, "gris": 645.0}
+H9_RANGOS = {"R": 445.0, "G": 645.0, "B": None}      # CD.5b (01-11, DA-94): sin el gris (era 645.0)
 
 
 # ===================================================================================================== ayudas
@@ -626,7 +626,8 @@ DANADAS = [
     ("cero_otra_fuente", lambda d: _danada(d, ["cero", "fuente"], "el_aire"), "la fuente del cero no es una de"),
     ("cero_i0_nan", lambda d: _danada(d, ["cero", "capas", "G", "i0"], float("nan")), "el I0 o su u de la capa G no son números válidos"),
     ("cero_i0_cero", lambda d: _danada(d, ["cero", "capas", "R", "i0"], 0.0), "el I0 o su u de la capa R no son números válidos"),
-    ("cero_sin_gris", lambda d: _danada(d, ["cero", "capas", "gris"], quitar=True), "las capas del cero no trae exactamente sus claves"),
+    ("cero_con_el_gris", lambda d: _danada(d, ["cero", "capas", "gris"], {"i0": 150.0, "u_i0": 0.2}), "las capas del cero no trae exactamente sus claves: R, G, B"),      # CD.5b (01-11, DA-94): una copia de cuatro capas
+    ("cero_sin_azul", lambda d: _danada(d, ["cero", "capas", "B"], quitar=True), "las capas del cero no trae exactamente sus claves"),
     ("capa_de_menos", lambda d: _danada(d, ["capas", "B"], quitar=True), "las capas no trae exactamente sus claves"),
     ("estado_numero", lambda d: _danada(d, ["capas", "G", "estado"], 1), "el estado de la capa G no es un texto"),
     ("a_negativo", lambda d: _danada(d, ["capas", "G", "parametros", "a"], -1.0), "los parámetros de la capa G no son los de una curva monótona por el origen"),
@@ -658,7 +659,8 @@ DANADAS = [
     ("pieza_nominal_negativa", lambda d: _danada(d, ["piezas", 1, "dosis_nominal_cgy"], -5.0), "la dosis nominal de la pieza 2 de la lista no es un número de 0 o más"),
     ("pieza_medida_texto", lambda d: _danada(d, ["piezas", 1, "dosis_medida_cgy"], "50"), "la dosis medida de la pieza 2 de la lista no es un número"),
     ("pieza_archivo_numero", lambda d: _danada(d, ["piezas", 0, "archivo"], 3), "el estado, el archivo o la huella de la pieza 1 de la lista no son textos"),
-    ("pieza_sin_capa_gris", lambda d: _danada(d, ["piezas", 0, "capas", "gris"], quitar=True), "las capas de la pieza 1 de la lista no trae exactamente sus claves"),
+    ("pieza_con_capa_gris", lambda d: _danada(d, ["piezas", 0, "capas", "gris"], copy.deepcopy(d["piezas"][0]["capas"]["R"])), "las capas de la pieza 1 de la lista no trae exactamente sus claves: R, G, B"),      # CD.5b (01-11, DA-94)
+    ("pieza_sin_capa_azul", lambda d: _danada(d, ["piezas", 0, "capas", "B"], quitar=True), "las capas de la pieza 1 de la lista no trae exactamente sus claves"),
     ("pieza_capa_con_clave_de_mas", lambda d: _danada(d, ["piezas", 0, "capas", "G", "otra"], 1), "la capa G de la pieza 1 de la lista no trae exactamente sus claves"),
     ("pieza_posicion_sin_y", lambda d: _danada(d, ["piezas", 0, "posicion_mm", "y"], quitar=True), "la posición de la pieza 1 de la lista no trae exactamente sus claves"),
     ("pieza_posicion_texto", lambda d: _danada(d, ["piezas", 0, "posicion_mm", "x"], "izquierda"), "la posición de la pieza 1 de la lista no son números"),
@@ -679,7 +681,7 @@ DANADAS = [
     ("pieza_ok_sin_valor", lambda d: _danada(d, ["piezas", 0, "capas", "G", "valor"], None), "la capa G de la pieza 1 de la lista " + OK_SIN_VALOR),
     ("pieza_ok_sin_u", lambda d: _danada(d, ["piezas", 3, "capas", "R", "u"], None), "la capa R de la pieza 4 de la lista " + OK_SIN_VALOR),
     ("pieza_ok_valor_negativo", lambda d: _danada(d, ["piezas", 3, "capas", "B", "valor"], -1.0), "la capa B de la pieza 4 de la lista " + OK_SIN_VALOR),
-    ("pieza_ok_u_negativa", lambda d: _danada(d, ["piezas", 3, "capas", "gris", "u"], -0.5), "la capa gris de la pieza 4 de la lista " + OK_SIN_VALOR),
+    ("pieza_ok_u_negativa", lambda d: _danada(d, ["piezas", 3, "capas", "B", "u"], -0.5), "la capa B de la pieza 4 de la lista " + OK_SIN_VALOR),      # CD.5b (01-11, DA-94): la azul (el gris no esta)
 ]
 
 
@@ -725,7 +727,7 @@ class TestLaEstructura:
     def test_el_motor_de_la_pelicula_es_el_de_cd2(self):
         arbol = self._arbol()
         desde = [n for n in arbol.body if isinstance(n, ast.ImportFrom) and n.module == "analisisImagenes.pelicula"]
-        assert len(desde) == 1 and {"MedidaDePieza", "ReferenciaVirgen", "CAPAS_DEL_PISO"} <= {a.name for a in desde[0].names}
+        assert len(desde) == 1 and {"MedidaDePieza", "ReferenciaVirgen", "CAPAS"} <= {a.name for a in desde[0].names}
         llamadas = {n.func.id for n in ast.walk(arbol) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
         assert not {"leer_pelicula", "medir_pieza_uniforme", "piso_de_pelicula_virgen"} & llamadas, "la curva no mide: recibe la medida de CD.2"
 
@@ -1143,7 +1145,7 @@ class TestElContenidoNoHaceLanzarAAjustar:
         piezas[0] = a_mano(1, 0, 0.0, 0.0, 0.1)
         c = _cd().ajustar(piezas)
         assert c.cero["fuente"] == "pieza_de_menor_dosis" and c.cero["dosis_cgy"] == 50.0, c.cero
-        assert NO_SIRVE_DE_CERO.format(orden=1, nominal=0, capas="R, G, B, gris") in c.avisos, c.avisos
+        assert NO_SIRVE_DE_CERO.format(orden=1, nominal=0, capas="R, G, B") in c.avisos, c.avisos
         assert all(c.cero["capas"][k]["i0"] > 0 for k in CAPAS), c.cero["capas"]
         assert _cd().curva_desde_dict(json.loads(json.dumps(c.como_dict()))).como_dict() == c.como_dict()
 
@@ -1153,7 +1155,7 @@ class TestElContenidoNoHaceLanzarAAjustar:
         c = _cd().ajustar(piezas)
         assert c.cero["fuente"] == "piezas_de_0_cgy" and c.cero["detalle"] == "las piezas de 0 cGy (pieza 1)", c.cero
         assert all(c.cero["capas"][k]["i0"] == 200.0 and c.cero["capas"][k]["u_i0"] == pytest.approx(0.2, rel=1e-12) for k in CAPAS), c.cero["capas"]
-        assert NO_SIRVE_DE_CERO.format(orden=20, nominal=0, capas="R, G, B, gris") in c.avisos, c.avisos
+        assert NO_SIRVE_DE_CERO.format(orden=20, nominal=0, capas="R, G, B") in c.avisos, c.avisos
 
     def test_una_pieza_de_0_cgy_de_valor_0_no_es_referencia_de_los_avisos(self):
         """CD3-D12: la referencia de los avisos es el cero de la curva; la pieza negra (en x = 100 mm) no es parte de el y no mueve el centro (las demas estan en x = 0)."""
@@ -1237,9 +1239,9 @@ class TestLasGuardasDeLaDecisionSobreElCero:
         piezas = [a_mano(1, 0, 3.0, 0.0, 0.1)] + [_devic_g(k + 2, d, float(d)) for k, d in enumerate((50, 100, 150, 200, 300, 400, 500, 600))]
         c = _cd().ajustar(piezas)
         assert c.cero["fuente"] == "pieza_de_menor_dosis" and c.cero["dosis_cgy"] == 50.0, c.cero
-        assert [a for a in c.avisos if a.startswith("la pieza 1 ")] == [NO_SIRVE_DE_CERO.format(orden=1, nominal=0, capas="R, G, B, gris")], c.avisos
+        assert [a for a in c.avisos if a.startswith("la pieza 1 ")] == [NO_SIRVE_DE_CERO.format(orden=1, nominal=0, capas="R, G, B")], c.avisos
 
-    @pytest.mark.parametrize("capas,texto", [(("G",), "G"), (("R", "gris"), "R, gris"), (("B", "R"), "R, B")])
+    @pytest.mark.parametrize("capas,texto", [(("G",), "G"), (("R", "G"), "R, G"), (("B", "R"), "R, B")])
     def test_la_pieza_de_0_cgy_con_valor_0_en_algunas_capas_no_sirve_y_el_aviso_nombra_solo_esas_en_el_orden_de_las_capas(self, capas, texto):
         """Basta una capa sin valor positivo para que la pieza no sirva de cero (netOD = log10(I0 / I) pide I0 > 0 en cada capa), y el aviso nombra EXACTAMENTE las que fallan, en el orden de `CAPAS_DEL_PISO`."""
         piezas = por_netod(DOSIS_DE_LA_SEPARACION, NETODS_DE_LA_SEPARACION)

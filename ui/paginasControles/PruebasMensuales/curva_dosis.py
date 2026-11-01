@@ -3,7 +3,7 @@
 Lo pidió el físico: «un pequeño botón por dosis donde se cargue la imagen de la película irradiada de forma uniforme a esa dosis, al lado la dosis real medida con una cámara de ionización y así debajo
 diferentes dosis». Una fila por dosis (arranca con la plantilla de P12, que se edita; «Agregar dosis» y «Quitar»; se aceptan réplicas), el encabezado de la calibración (lote, tipo de película, fecha y hora
 de irradiación, acelerador, energía, profundidad, DFS, campo, cámara y electrómetro del catálogo con su copia, la incertidumbre de la dosis medida, el escáner declarado y el modo de escaneo, observaciones), y
-el gráfico ÚNICO de las cuatro capas con los residuos debajo y la tabla de la curva (DA-92). Al cargar cada imagen la pieza se mide (CD.2) con el cursor de espera y la curva se vuelve a ajustar (CD.3).
+el gráfico ÚNICO de las capas de la curva (R, G y B; DA-94: sin el gris) con los residuos debajo y la tabla de la curva (DA-92). Al cargar cada imagen la pieza se mide (CD.2) con el cursor de espera y la curva se vuelve a ajustar (CD.3).
 
 SIN SQL: todo lo que se guarda y se lee pasa por `services/curva_dosis.py` (la ÚNICA puerta a las dos tablas de CD.4), el catálogo de equipos por `EquiposService` y la película virgen montada por
 `pelicula.leer_referencia_virgen`. Lo que se mide y se ajusta lo dicen el motor de CD.2 y el de CD.3; los dibujos y los textos son funciones puras de `analisisImagenes/dibujo_curva_dosis.py`.

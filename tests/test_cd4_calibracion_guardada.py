@@ -71,7 +71,7 @@ from scripts.indices_bloque_qc import crear_indices
 
 RAIZ = Path(__file__).resolve().parent.parent
 TABLA, PIEZAS = "calibracion_pelicula", "calibracion_pelicula_pieza"
-CAPAS = ("R", "G", "B", "gris")
+CAPAS = ("R", "G", "B")      # CD.5b (01-11, DA-94): la curva calibra solo las capas de color; el estado guardado no tiene el gris
 DOSIS = (50, 100, 150, 200, 300, 400, 500, 600, 800, 1000)
 DEVIC = (gen.RespuestaDevic(700.0, 3300.0, 2.06), gen.RespuestaDevic(1100.0, 4600.0, 2.19), gen.RespuestaDevic(1750.0, 8200.0, 1.58))
 GRANDE = 50.0                                                       # piezas de 5 x 5 cm: con el ruido de EPSON179 las cuatro capas salen «válidas» (CD.3)
@@ -282,7 +282,7 @@ class TestGuardarYLeer:
         assert len(filas) == 1
         accion, tabla, ref, detalle, usuario = filas[0]
         assert (accion, tabla, ref, usuario) == ("guardar", TABLA, str(nuevo), "fisico")
-        assert detalle == "lote L-01, irradiada el 2026-10-20, 6 MV; 11 piezas; R: válida; G: válida; B: válida; gris: válida"
+        assert detalle == "lote L-01, irradiada el 2026-10-20, 6 MV; 11 piezas; R: válida; G: válida; B: válida"      # CD.5b (01-11, DA-94): la auditoria nombra el estado de las capas de la curva
 
     def test_guardar_devuelve_el_id_de_la_raiz_no_el_de_la_auditoria(self, bd, escaneos):
         nuevo = _svc().guardar("fisico", ENCABEZADO, _piezas(escaneos))
@@ -755,7 +755,7 @@ class TestLasPiezasDeH9:
                 piezas.append({"orden": k, "dosis_nominal_cgy": float(dosis), "dosis_medida_cgy": float(dosis), "datos": f.read(), "nombre_archivo": archivo})
         r = _svc().leer(_svc().guardar("fisico", {**ENCABEZADO, "escaner_declarado": "Epson 12000XL (declarado por el físico)", "modo_de_escaneo": "transmisión"}, piezas))
         assert r["estado"] == {"R": "guía: el cero es la pieza de 5 cGy", "G": "no válida: el residuo de la pieza de 350 cGy es +3.19 % (la tolerancia es ±3 %)",
-                               "B": "incompleta: quedan 0 dosis en el rango útil (hacen falta 6)", "gris": "no válida: el residuo de la pieza de 350 cGy es +3.60 % (la tolerancia es ±3 %)"}
+                               "B": "incompleta: quedan 0 dosis en el rango útil (hacen falta 6)"}      # CD.5b (01-11, DA-94): sin el gris (era «no válida ... +3.60 %»)
         assert r["cero"]["fuente"] == "pieza_de_menor_dosis" and {p["bits"] for p in r["piezas"]} == {16} and {p["dpi_declarado"] for p in r["piezas"]} == {150.0}
         assert _svc().vigentes_validas() == [] and _svc().diferencias(r, _svc().recalcular(r)) == []
 
@@ -995,7 +995,7 @@ class TestLaAmpliacionDelImplementador:
 @pytest.fixture(scope="module")
 def escaneos_con_el_rojo_recortado():
     """Las 11 piezas de `escaneos` (0 y de 50 a 1000 cGy, las mismas semillas) con el ROJO en el negro del escaner desde 300 cGy: el caso real del plan, el rojo que se recorta (a 800 UM). El verde y el azul siguen
-    dando una curva «valida»; el rojo y el gris no (CD.3)."""
+    dando una curva «valida»; el rojo no (CD.3; CD.5b (01-11, DA-94): el gris no tiene curva)."""
     return {o: (d, f"{d}.tif", gen.pieza_de_dosis(d, DEVIC, lado_mm=GRANDE, semilla=o, negro_desde_cgy={"R": 300}).datos) for o, d in enumerate((0,) + DOSIS, 1)}
 
 
@@ -1008,7 +1008,7 @@ class TestLosHuecosQueMostroLaRonda1:
         mixta = _svc().guardar("fisico", {**ENCABEZADO, "fecha_irradiacion": "2026-10-20"}, _piezas(escaneos_con_el_rojo_recortado))
         ninguna = _svc().guardar("fisico", {**ENCABEZADO, "fecha_irradiacion": "2026-10-25"}, _piezas(escaneos, {1, 2, 3}))
         estados = _svc().leer(mixta)["estado"]
-        assert estados["G"] == VALIDA and estados["B"] == VALIDA and estados["R"].startswith("incompleta: ") and estados["gris"] != VALIDA, estados          # unas validas y otras no
+        assert estados["G"] == VALIDA and estados["B"] == VALIDA and estados["R"].startswith("incompleta: ") and "gris" not in estados, estados          # unas validas y otras no (CD.5b (01-11, DA-94): y ningun estado del gris)
         assert {c: _svc().leer(completa)["estado"][c] for c in CAPAS} == {c: VALIDA for c in CAPAS}                                                         # las cuatro
         assert not any(e == VALIDA for e in _svc().leer(ninguna)["estado"].values())                                                                       # ninguna
         assert [r["id"] for r in _svc().listar()] == [ninguna, mixta, completa]

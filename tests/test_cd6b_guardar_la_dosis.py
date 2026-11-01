@@ -264,7 +264,9 @@ class TestGuardarConDosis:
         import importlib
         assert importlib.import_module("analisisImagenes.curva_dosis").curva_desde_dict(copia["curva"]).como_dict() == json.loads(json.dumps(escena.curva.como_dict()))
         assert copia["cadena"] == en_dosis.cadena
-        assert copia["bases"] == {c: {"base": "dosis", "motivo": None} for c in ("R", "G", "B", "gris")}
+        # CD.5b (01-11, DA-94): el gris no tiene curva: en el analisis en dosis queda en netOD con su motivo, y la copia lo dice (CD5b-D5)
+        assert copia["bases"] == {**{c: {"base": "dosis", "motivo": None} for c in ("R", "G", "B")},
+                                  "gris": {"base": "densidad óptica neta", "motivo": "la curva de dosis no calibra la capa gris: solo calibra las capas roja, verde y azul"}}
 
     def test_la_auditoria_nombra_la_curva(self, bd, escena):
         ref = _control(bd)

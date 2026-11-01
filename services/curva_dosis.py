@@ -46,7 +46,7 @@ import sys
 from datetime import datetime
 
 from analisisImagenes import curva_dosis as motor
-from analisisImagenes.pelicula import (CAPAS_DEL_PISO, ReferenciaVirgen, _copiar_el_escaneo, _extension_del_escaneo, _json_normal, medir_pieza_uniforme,
+from analisisImagenes.pelicula import (ReferenciaVirgen, _copiar_el_escaneo, _extension_del_escaneo, _json_normal, medir_pieza_uniforme,
                                        referencia_virgen_desde_dict)
 from analisisImagenes.placa_mensual import VALORES_DE_LA_GEOMETRIA
 from data.ManejoDatos import conection as _conection
@@ -367,7 +367,7 @@ def _cadena_de_la_calibracion(curva, encabezado):
 
 
 def _estado_por_capa(curva):
-    return {c: curva.estado(c) for c in CAPAS_DEL_PISO}
+    return {c: curva.estado(c) for c in motor.CAPAS_DE_LA_CURVA}
 
 
 def _medida_de_la_pieza(pieza):
@@ -444,7 +444,7 @@ def _copiar_y_verificar(medida, datos):
 
 
 def _detalle(encabezado, curva, n_piezas):
-    estados = "; ".join(f"{c}: {curva.estado(c)}" for c in CAPAS_DEL_PISO)
+    estados = "; ".join(f"{c}: {curva.estado(c)}" for c in motor.CAPAS_DE_LA_CURVA)
     return f"{TEXTO_DE_LA_CALIBRACION.format(lote=encabezado['lote'], fecha=encabezado['fecha_irradiacion'], energia=encabezado['energia'])}; {n_piezas} piezas; {estados}"
 
 
@@ -560,7 +560,7 @@ def listar():
 def vigentes_validas():
     """Las calibraciones VIGENTES con al menos una capa «válida» (DC5), completas (lo que da `leer`: el ajuste ya convertido de JSON y sus piezas), en el orden de `listar`: la más reciente primero. Es lo
     que leerá `curva_efectiva` (CD.6), que elige por la cadena de captura y la capa. Sale de `listar` (la lectura del bloque, que filtra la vigencia, DA-47) y de `leer` de cada una: sin SQL propio."""
-    validas = [f["id"] for f in listar() if any(estado == motor.ESTADO_VALIDA for estado in f["estado"].values())]
+    validas = [f["id"] for f in listar() if any(f["estado"].get(c) == motor.ESTADO_VALIDA for c in motor.CAPAS_DE_LA_CURVA)]          # DA-94: una capa que no es de la curva no cuenta
     return [r for r in (leer(i) for i in validas) if r is not None]
 
 
@@ -587,7 +587,7 @@ def leer(id_calibracion):
 def _pieza_desde_la_fila(fila):
     """La `PiezaDeCalibracion` de una pieza guardada, sin su escaneo: lo medido (`medida["pieza"]`), su dosis y su archivo. La netOD y lo que sale del ajuste los vuelve a poner `ajustar`."""
     guardada = fila["medida"]["pieza"]
-    capas = {c: {**guardada["capas"][c], "netod": None, "u_netod": None, "dosis_cgy": None, "residuo_pct": None, "en_el_rango": False} for c in CAPAS_DEL_PISO}
+    capas = {c: {**guardada["capas"][c], "netod": None, "u_netod": None, "dosis_cgy": None, "residuo_pct": None, "en_el_rango": False} for c in motor.CAPAS_DE_LA_CURVA}
     return motor.PiezaDeCalibracion(fila["orden"], float(fila["dosis_nominal_cgy"]), fila["dosis_medida_cgy"], fila["estado"], capas, guardada["posicion_mm"], guardada["fondo_blanco"],
                                     fila["nombre_archivo"] or "", fila["sha256"], guardada["cadena"])
 
