@@ -23,6 +23,18 @@ Reglas de este servicio, cada una con su motivo:
     la reemplazada en el detalle); si algo falla a mitad no queda nada (DA-52). La fila de auditoría nombra la capa y el piso (`texto_breve_del_piso`, la única definición de esa línea).
   - Lecturas con `{filtro_activo(...)}` dentro del f-string (Trampa 6: AN1/ES1/RT1 solo lo reconocen así), por la clave de bloque `ref` (DA-47: una lectura por clave de bloque filtra la vigencia).
 
+CD.6b (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, DA-92, DC16): se guarda SIEMPRE la netOD, como arriba, y, cuando se puede, TAMBIÉN la dosis de la capa reportada:
+  - La curva llega como ARGUMENTO (`curva`: la `CurvaEfectiva` que la ventana juzga, la de `curva_efectiva`; None = sin curva): este servicio no lee las calibraciones (no hay lecturas nuevas de la base).
+  - `guardar` decide con LA regla del botón (`motor.se_puede_pasar_a_dosis`, sobre SU análisis en netOD, la capa reportada y la cadena de captura de los bytes) y, si se puede, ANALIZA él mismo en dosis
+    (los mismos bytes, las mismas marcas, el mismo piso y los mismos parámetros con la base dosis): no recibe un resultado en dosis ajeno (la regla de IM3 de arriba). Por eso el botón «Ver en dosis» no
+    cambia lo que se guarda: la ventana no le pasa nada que dependa de él.
+  - Con dosis: `valores_medidos_en_dosis` (la ÚNICA definición de lo que se guarda en dosis) en las columnas de `COLUMNAS_DE_LA_DOSIS` y la copia de la curva en `curva` (JSON estricto, D1-PROD-03):
+    la curva (`CurvaDeDosis.como_dict()`), su calibración (id, lote y fecha de irradiación), la cadena de captura de la película y la base de cada capa. Sin dosis, por el motivo que sea, TODAS quedan en
+    NULL (nunca cero, DA-88): la fila de la netOD es byte a byte la de antes de CD.6b. La fila de auditoría nombra la curva o dice «sin dosis» con el motivo (`texto_de_la_dosis_en_la_auditoria`).
+  - Reabrir: `recalcular` mide la netOD como siempre; `curva_guardada`, `cadena_guardada` y `recalcular_en_dosis` usan la COPIA guardada, nunca la curva vigente (DA-81) ni la cadena de los bytes (CD6b-D4), y
+    `diferencias_en_dosis` compara lo guardado en dosis. La copia se lee en UN solo lugar, `_leer_la_copia` (estricta, como `curva_desde_dict`: una copia que es JSON válido pero no tiene la forma que escribe
+    `_la_dosis` es una copia DAÑADA con su motivo, nunca una excepción: la ventana abre el registro en netOD con el botón gris y el motivo, y no abre la copia por su cuenta).
+
 Sin Qt."""
 import hashlib
 import json
@@ -30,6 +42,7 @@ import numbers
 from datetime import datetime
 
 from analisisImagenes import placa_mensual as motor
+from analisisImagenes.curva_dosis import curva_desde_dict
 from analisisImagenes.pelicula import (ADJETIVO_DE_LA_CAPA, CAPAS, CAPAS_DEL_PISO, MODOS_DEL_PISO, clase_resolucion, escala_mm, leer_pelicula, referencia_virgen_desde_dict,
                                        texto_breve_del_piso)
 from data.ManejoDatos.conection import Conexion
@@ -53,6 +66,11 @@ _COLUMNAS_ANTES_DE_LAS_MEDIDAS = ("ref", "imagen", "nombre_archivo", "sha256", "
                                   "piso", "capa")
 _COLUMNAS_DESPUES_DE_LAS_MEDIDAS = ("usuario", "fecha_registro")
 _COLUMNAS_JSON = ("parametros", "puntos", "piso")
+COLUMNA_DE_LA_CURVA = medidas.COLUMNA_DE_LA_CURVA.nombre          # CD.6b: la copia de la curva (JSON; NULL sin dosis)
+TEXTO_DE_LA_CURVA_EN_LA_AUDITORIA = "en dosis con la curva del lote «{lote}» irradiada el {fecha} (calibración {id})"      # CD.6b: lo que la auditoría dice de la curva
+TEXTO_SIN_DOSIS_EN_LA_AUDITORIA = "sin dosis ({motivo})"                                                                     # CD.6b: o por qué no se guardó la dosis
+_CLAVES_DE_LA_COPIA = ("calibracion", "curva", "cadena", "bases")          # CD.6b: exactamente lo que `_la_dosis` escribe en `curva` y lo que `_leer_la_copia` exige, ni más ni menos
+_CLAVES_DE_LA_CALIBRACION = ("id", "lote", "fecha_irradiacion")
 
 
 class PlacaMensualError(ValueError):
@@ -67,8 +85,12 @@ def _columnas_de_las_medidas():
     return tuple(m.nombre for m in medidas.MEDIDAS_GUARDADAS)
 
 
+def _columnas_de_la_dosis():
+    return tuple(m.nombre for m in medidas.COLUMNAS_DE_LA_DOSIS)
+
+
 def _columnas_de_la_fila():
-    return _COLUMNAS_ANTES_DE_LAS_MEDIDAS + _columnas_de_las_medidas() + _COLUMNAS_DESPUES_DE_LAS_MEDIDAS
+    return _COLUMNAS_ANTES_DE_LAS_MEDIDAS + _columnas_de_las_medidas() + _COLUMNAS_DESPUES_DE_LAS_MEDIDAS + _columnas_de_la_dosis()
 
 
 def sql_insert():
@@ -125,7 +147,34 @@ def motivo_para_no_guardar(resultado, capa):
     return f"la capa {ADJETIVO_DE_LA_CAPA[capa]} no es medible y no se guarda, sea cual sea el motivo; el análisis dice «{estado}»"
 
 
-def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, punto_manual=None, referencia_virgen=None):
+def _sin_dosis():
+    return {n: None for n in _columnas_de_la_dosis()}
+
+
+def _la_dosis(pelicula, imagen, marcas, resultado, capa, curva, modo_piso, punto_manual, referencia_virgen):
+    """CD.6b: (lo que va a las columnas de la dosis, el texto de la auditoría). LA regla del botón (`motor.se_puede_pasar_a_dosis`) sobre el análisis en netOD `resultado` de ESTE guardado y la capa
+    reportada; si se puede, el análisis en dosis por el mismo camino (los mismos bytes, marcas, piso y parámetros, con la base dosis) y sus valores (`valores_medidos_en_dosis`) con la copia de la curva.
+    Si no, todas en NULL y el motivo. `curva`: la `CurvaEfectiva` que juzga la ventana, o None (sin curva)."""
+    if curva is None:
+        return _sin_dosis(), TEXTO_SIN_DOSIS_EN_LA_AUDITORIA.format(motivo=motor.MOTIVO_SIN_CURVA)
+    if resultado.base != motor.BASE_DENSIDAD_OPTICA:
+        return _sin_dosis(), TEXTO_SIN_DOSIS_EN_LA_AUDITORIA.format(motivo=f"el análisis no está en {motor.BASE_DENSIDAD_OPTICA}, sino en {resultado.base}")
+    cadena = None if curva.curva is None else motor.cadena_de_la_pelicula(imagen, pelicula)
+    puede, motivo = motor.se_puede_pasar_a_dosis(resultado, curva, capa, cadena)
+    if not puede:
+        return _sin_dosis(), TEXTO_SIN_DOSIS_EN_LA_AUDITORIA.format(motivo=motivo)
+    P = dict(resultado.parametros)          # los MISMOS con que se midió (y se guardan) la netOD, con la base dosis: los que usa `recalcular_en_dosis`
+    P["base_de_la_medida"] = motor.BASE_DOSIS
+    en_dosis = motor.analizar(pelicula, marcas, P, modo_piso=modo_piso, punto_manual=punto_manual, referencia_virgen=referencia_virgen, curva=curva.curva, cadena=cadena)
+    valores = motor.valores_medidos_en_dosis(en_dosis, capa)
+    copia = {"calibracion": {"id": curva.id, "lote": curva.lote, "fecha_irradiacion": curva.fecha_irradiacion}, "curva": curva.curva.como_dict(), "cadena": cadena,
+             "bases": {c: {"base": m.base, "motivo": m.motivo_de_la_base} for c, m in en_dosis.capas.items()}}
+    fila = {n: valores[n] for n in _columnas_de_la_dosis() if n != COLUMNA_DE_LA_CURVA}
+    fila[COLUMNA_DE_LA_CURVA] = _json_estricto(copia, COLUMNA_DE_LA_CURVA, sort_keys=True)
+    return fila, TEXTO_DE_LA_CURVA_EN_LA_AUDITORIA.format(lote=curva.lote, fecha=curva.fecha_irradiacion, id=curva.id)
+
+
+def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, punto_manual=None, referencia_virgen=None, curva=None):
     """Guarda el análisis de la película de un control y devuelve el `id` nuevo. ANALIZA desde los bytes y los clics (ver el docstring del módulo). Rechaza con `PlacaMensualError` (que es un `ValueError`) y SIN
     escribir nada: ref que no es un control, usuario, capa que no es R, G ni B, modo del piso que no existe, imagen vacía o que no se lee, puntos que no son los cinco, parámetros incompletos, un punto marcado
     con un modo que no es «punto_manual», un análisis que no llegó a tomar el piso, lo que no cabe en JSON válido (un número no finito, NaN o infinito, o un escalar de numpy, en los parámetros o en el punto
@@ -138,8 +187,13 @@ def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, pu
     `capa`: la que el físico reporta (`R`, `G` o `B`, mayúscula exacta; el gris no se ofrece), SIN valor por omisión. `modo_piso`: «automatico», «punto_manual» o «virgen», SIN valor por omisión;
     `punto_manual` (x, y) es el sexto clic del modo «punto_manual»; `referencia_virgen` es la `ReferenciaVirgen` del modo «virgen». Si la capa elegida no es medible, por el motivo que sea, no se guarda.
 
-    UNA transacción (`reemplazar_bloque`): anula el análisis vigente del control, inserta el nuevo y escribe UNA fila de auditoría (`guardar`, o `reemplazo` si había uno, con el `id` de la reemplazada)."""
+    UNA transacción (`reemplazar_bloque`): anula el análisis vigente del control, inserta el nuevo y escribe UNA fila de auditoría (`guardar`, o `reemplazo` si había uno, con el `id` de la reemplazada).
+
+    CD.6b: `curva` es la `CurvaEfectiva` de la curva vigente que juzga la ventana (`motor.curva_efectiva`), o None. Si la regla del botón lo permite para `capa`, se guarda TAMBIÉN la dosis (ver el
+    docstring del módulo); si no, las columnas de la dosis quedan en NULL. Una `curva` que no es una `CurvaEfectiva`, o cuya copia no cabe en JSON válido, se rechaza sin escribir nada."""
     ref = _ref_valido(ref)
+    if curva is not None and not isinstance(curva, motor.CurvaEfectiva):
+        raise PlacaMensualError(f"la curva de dosis que se guarda es una `CurvaEfectiva` (la de `curva_efectiva`) o None, no {type(curva).__name__}")
     if usuario is None or not str(usuario).strip():
         raise PlacaMensualError("falta el usuario que guarda el análisis")
     if not (isinstance(capa, str) and capa in CAPAS):
@@ -180,6 +234,11 @@ def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, pu
     motivo = motivo_para_no_guardar(resultado, capa)          # después de armar la fila (lo que no cabe en JSON se dice como tal) y ANTES de W1 y de la transacción
     if motivo is not None:
         raise PlacaMensualError(motivo)
+    try:
+        de_la_dosis, texto_de_la_dosis = _la_dosis(pelicula, imagen, marcas, resultado, capa, curva, modo_piso, punto_manual, referencia_virgen)
+    except ValueError as error:                          # incluye el JSON de la copia que no es válido: no se escribe nada
+        raise PlacaMensualError(str(error)) from error
+    fila.update(de_la_dosis)
     if not puede_editarse(ref):
         raise ControlNoEditable(mensaje_bloqueo_edicion(ref))
     with Conexion().conectar() as db:
@@ -187,6 +246,7 @@ def guardar(ref, usuario, datos, nombre, puntos, parametros, capa, modo_piso, pu
         cursor.execute(f"SELECT id FROM analisis_placa_mensual WHERE ref = ?{filtro_activo('analisis_placa_mensual')} ORDER BY id DESC", (ref,))
         previa = cursor.fetchone()
         detalle = f"control {ref}; {nombre_del_archivo or 'sin nombre de archivo'}; {resultado.version}; {TEXTO_DE_LA_CAPA_EN_LA_AUDITORIA.format(capa)}; {texto_breve_del_piso(piso, capa)}"
+        detalle += f"; {texto_de_la_dosis}"          # CD.6b: la curva con que se guardó la dosis, o «sin dosis» con el motivo
         if previa is not None:
             detalle += f"; reemplaza id={previa[0]}"
         reemplazar_bloque(cursor, TABLA, [("ref", ref)], sql_insert(), [tuple(fila[c] for c in _columnas_de_la_fila())], usuario, ref=ref, detalle=detalle,
@@ -208,6 +268,8 @@ def leer(ref):
         registro = {descripcion[0]: valor for descripcion, valor in zip(cursor.description, fila)}
     for columna in _COLUMNAS_JSON:
         registro[columna] = json.loads(registro[columna])
+    copia = registro.get(COLUMNA_DE_LA_CURVA)
+    registro[COLUMNA_DE_LA_CURVA] = None if copia is None else json.loads(copia)      # CD.6b: un registro sin dosis (o de antes de CD.6b) no tiene copia
     return registro
 
 
@@ -256,3 +318,78 @@ def diferencias(registro, resultado):
         if not _iguales(viejo.get("mediana"), nuevo.mediana):
             encontradas.append(f"piso (capa {ADJETIVO_DE_LA_CAPA[capa]}), valor: guardado {viejo.get('mediana')!r}, recalculado {nuevo.mediana!r}")
     return encontradas
+
+
+def _exige_la_copia(condicion, que):
+    """`ValueError` con el motivo si no se cumple `condicion`: una copia guardada que no es como la escribe `_la_dosis` está dañada."""
+    if not condicion:
+        raise ValueError(f"La copia guardada está dañada: {que}.")
+
+
+def _leer_la_copia(copia):
+    """CD.6b (revisión de la ronda 1, CD6b-REV1-PROD-01 y PROD-02): LA lectura de la copia que `_la_dosis` guarda en `curva` -- la ÚNICA: `curva_guardada`, `cadena_guardada` y `recalcular_en_dosis` pasan por
+    aquí y la ventana no abre la copia -- con la validación estricta de `curva_desde_dict`. -> (la `CurvaEfectiva` de la copia, la cadena de captura de la película con que se guardó la dosis). Una copia
+    que es JSON válido pero no tiene la forma que `_la_dosis` escribe (no es un diccionario con exactamente sus claves, la calibración no es un diccionario con las suyas, las bases no son un diccionario, la
+    curva no se puede leer, o la cadena falta o no es una cadena de captura: esta se lee con LA regla de la de la curva, la de `curva_desde_dict`, porque las dos las escribe `cadena_de_captura`) está dañada y
+    NO lanza: da una `CurvaEfectiva` SIN curva, con el motivo, y la cadena None (CD6b-D8: la ventana abre el registro en netOD con el botón gris y el motivo)."""
+    calibracion = copia.get("calibracion") if isinstance(copia, dict) else None
+    ident = calibracion if isinstance(calibracion, dict) else {}
+    try:
+        _exige_la_copia(isinstance(copia, dict) and set(copia) == set(_CLAVES_DE_LA_COPIA), f"no es un diccionario con exactamente sus claves ({', '.join(_CLAVES_DE_LA_COPIA)})")
+        _exige_la_copia(isinstance(calibracion, dict) and set(calibracion) == set(_CLAVES_DE_LA_CALIBRACION),
+                        f"la calibración no es un diccionario con exactamente sus claves ({', '.join(_CLAVES_DE_LA_CALIBRACION)})")
+        _exige_la_copia(isinstance(copia["bases"], dict), "las bases no son un diccionario")
+        leida = curva_desde_dict(copia["curva"])
+        cadena = copia["cadena"]
+        _exige_la_copia(cadena is not None, "falta la cadena de captura de la película")
+        curva_desde_dict(dict(copia["curva"], cadena=cadena))          # la cadena de la película con la forma de la de la curva (las dos las escribe `cadena_de_captura`): LA misma regla
+    except ValueError as error:
+        return motor.CurvaEfectiva(None, ident.get("id"), ident.get("lote"), ident.get("fecha_irradiacion"),
+                                   motivo=f"la copia de la curva guardada con el registro no se puede leer: {error}"), None
+    return motor.CurvaEfectiva(leida, ident["id"], ident["lote"], ident["fecha_irradiacion"]), cadena
+
+
+def curva_guardada(registro):
+    """CD.6b: la curva con que se guardó la dosis de `registro` (lo que devuelve `leer`) como una `motor.CurvaEfectiva` (la copia, leída por `_leer_la_copia`: nunca la vigente, DA-81), o None si el
+    registro se guardó sin dosis. Una copia que no se puede leer, por su curva o por cualquier otra parte de su forma, da una `CurvaEfectiva` SIN curva con el motivo (la ventana lo dice y no pasa a dosis);
+    nunca lanza."""
+    copia = registro.get(COLUMNA_DE_LA_CURVA)
+    return None if copia is None else _leer_la_copia(copia)[0]
+
+
+def cadena_guardada(registro):
+    """CD.6b: la cadena de captura de la película con que se guardó la dosis de `registro` (la de su copia, leída por `_leer_la_copia`), o None si el registro se guardó sin dosis o su copia no se puede leer.
+    Es la que usa `recalcular_en_dosis` y la que juzga el botón de un registro: nunca se vuelve a leer de los bytes (CD6b-D4)."""
+    copia = registro.get(COLUMNA_DE_LA_CURVA)
+    return None if copia is None else _leer_la_copia(copia)[1]
+
+
+def recalcular_en_dosis(registro):
+    """CD.6b: vuelve a medir EN DOSIS lo guardado (`registro`, de `leer`) con la COPIA de la curva y de la cadena de captura guardadas con él (nunca la curva vigente, DA-81, ni la cadena de los bytes,
+    CD6b-D4), por el mismo camino que `recalcular` (la imagen, los puntos ya refinados, los parámetros y el piso guardados), con la base dosis -> `ResultadoPlacaMensual`, o None si el registro se guardó
+    sin dosis. `PlacaMensualError` si la copia de la curva, la imagen o la referencia guardadas ya no se pueden leer."""
+    copia = registro.get(COLUMNA_DE_LA_CURVA)
+    if copia is None:
+        return None
+    efectiva, cadena = _leer_la_copia(copia)
+    if efectiva.curva is None:
+        raise PlacaMensualError(efectiva.motivo)
+    piso = registro["piso"]
+    P = dict(registro["parametros"])
+    P["base_de_la_medida"] = motor.BASE_DOSIS
+    try:
+        virgen = None if piso.get("referencia_virgen") is None else referencia_virgen_desde_dict(piso["referencia_virgen"])
+        marcado = None if piso.get("punto") is None else tuple(piso["punto"])
+        return motor.analizar(leer_pelicula(registro["imagen"]), registro["puntos"], P, modo_piso=piso["modo"], punto_manual=marcado, referencia_virgen=virgen, curva=efectiva.curva,
+                              cadena=cadena)
+    except ValueError as error:
+        raise PlacaMensualError(str(error)) from error
+
+
+def diferencias_en_dosis(registro, resultado_en_dosis):
+    """CD.6b: lo recalculado en dosis (`recalcular_en_dosis`) contra lo guardado en dosis: una lista de textos, vacía si no hay ninguna diferencia (o si el registro se guardó sin dosis y no hay
+    nada recalculado). Compara cada valor de `MEDIDAS_GUARDADAS_EN_DOSIS` de la capa guardada a `TOLERANCIA_AL_RECALCULAR`. Sin símbolos."""
+    if resultado_en_dosis is None:
+        return [] if registro.get(COLUMNA_DE_LA_CURVA) is None else ["la dosis: guardada, recalculada sin dosis"]
+    nuevos = motor.valores_medidos_en_dosis(resultado_en_dosis, registro["capa"])
+    return [f"{n}: guardado {registro.get(n)!r}, recalculado {nuevos.get(n)!r}" for n in nuevos if not _iguales(registro.get(n), nuevos.get(n))]

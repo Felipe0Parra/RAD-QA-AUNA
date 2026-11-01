@@ -80,7 +80,9 @@ MEDIDAS_DEL_PLAN = ("estado", "fwhm_crossplane_mm", "fwhm_inplane_mm", "desfase_
 COLUMNAS_DE_DATOS = ("ref", "imagen", "nombre_archivo", "sha256", "formato", "bits", "transparentes", "dpi_declarado", "clase_resolucion", "tamano_pixel_mm", "version", "parametros", "puntos", "piso",
                      "capa") + MEDIDAS_DEL_PLAN + ("usuario", "fecha_registro")
 OBLIGATORIAS = ("ref", "imagen", "sha256", "version", "parametros", "puntos", "piso", "capa", "estado", "usuario", "fecha_registro")
-CLAVES_DE_LEER = frozenset(("id",) + COLUMNAS_DE_DATOS + ("activo",))
+COLUMNAS_DE_LA_DOSIS = ("estado_dosis", "fwhm_crossplane_dosis_mm", "fwhm_inplane_dosis_mm", "desfase_izquierdo_dosis_mm", "desfase_derecho_dosis_mm", "desfase_superior_dosis_mm",
+                        "desfase_inferior_dosis_mm", "curva")      # CD.6b (31-10, DC16, DA-92): las ocho de la dosis y la copia de la curva, al final de la tabla (las nombra el plan; las agrega la migracion aditiva)
+CLAVES_DE_LEER = frozenset(("id",) + COLUMNAS_DE_DATOS + ("activo",) + COLUMNAS_DE_LA_DOSIS)
 
 
 def _svc():
@@ -1533,9 +1535,10 @@ class TestRecalcularYDiferencias:
 class TestElServicioPorDentro:
     def test_la_firma_del_plan_con_capa_y_modo_sin_valor_por_omision(self):
         parametros = inspect.signature(_svc().guardar).parameters
-        assert list(parametros) == ["ref", "usuario", "datos", "nombre", "puntos", "parametros", "capa", "modo_piso", "punto_manual", "referencia_virgen"]
+        assert list(parametros) == ["ref", "usuario", "datos", "nombre", "puntos", "parametros", "capa", "modo_piso", "punto_manual", "referencia_virgen", "curva"]
         con_valor = {n: p.default for n, p in parametros.items() if p.default is not inspect.Parameter.empty}
-        assert con_valor == {"punto_manual": None, "referencia_virgen": None}      # ningun valor por omision para lo que decide el numero: ni la capa ni el modo del piso
+        # CD.6b (31-10, DC16, DA-92): `curva` (la `CurvaEfectiva` que juzga la ventana) decide solo las columnas de la dosis; None las deja en NULL, como antes de CD.6b
+        assert con_valor == {"punto_manual": None, "referencia_virgen": None, "curva": None}      # ningun valor por omision para lo que decide el numero: ni la capa ni el modo del piso
 
     def test_las_cuatro_funciones_publicas(self):
         svc = _svc()

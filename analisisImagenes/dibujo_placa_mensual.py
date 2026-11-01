@@ -247,8 +247,8 @@ def texto_se_guarda(capa, reportada, motivo, registro=False, en_dosis=False):
         return ""
     if registro:
         return "guardada" if motivo is None else "guardada; en lo recalculado no es medible"
-    if en_dosis:                                # CD.7: «Guardar» guarda la netOD aunque la vista esté en dosis (guardar la dosis es CD.6b)
-        return ("se guarda" if motivo is None else "no se guarda: no es medible") + " (en densidad óptica neta)"
+    if en_dosis:                                # CD.6b: con la vista en dosis la regla del botón se cumple: «Guardar» guarda la netOD y también la dosis de la capa reportada
+        return "se guarda (en densidad óptica neta y en dosis)" if motivo is None else "no se guarda: no es medible (en densidad óptica neta)"
     return "se guarda" if motivo is None else "no se guarda: no es medible"
 
 

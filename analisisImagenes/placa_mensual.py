@@ -1871,3 +1871,20 @@ def cadena_de_la_pelicula(datos, pelicula=None):
     imagen = _abrir_con_pillow(datos)
     return cadena_de_captura({"equipo": None if imagen is None else _equipo_de_la_imagen(imagen), "bits": pel.bits, "dpi_declarado": None if pel.dpi is None else float(pel.dpi),
                               "formato": pel.formato})
+
+
+# ============================================================================= CD.6b: lo que se guarda en dosis
+
+CLAVES_DE_VALORES_MEDIDOS_EN_DOSIS = ("estado_dosis", "fwhm_crossplane_dosis_mm", "fwhm_inplane_dosis_mm", "desfase_izquierdo_dosis_mm", "desfase_derecho_dosis_mm", "desfase_superior_dosis_mm",
+                                      "desfase_inferior_dosis_mm")      # lo que se guarda en dosis (CD.6b), clave a clave el par de `CLAVES_DE_VALORES_MEDIDOS`
+
+
+def valores_medidos_en_dosis(resultado, capa):
+    """El par de `valores_medidos` (CD.6b, DA-92, DC16): la ÚNICA definición de lo que se guarda EN DOSIS de un análisis -- de la capa que se le pasa, su estado («ok», o «no medible en dosis: <motivo>»)
+    y, si se midió, el FWHM crossplane e inplane y el desfase de cada lado medidos sobre la DOSIS (milímetros; None lo que no se midió, nunca cero), en `CLAVES_DE_VALORES_MEDIDOS_EN_DOSIS`. Son los mismos
+    valores que `valores_medidos` del análisis en dosis, con su nombre de columna. `ValueError` si `resultado` no es un análisis en dosis (un análisis en netOD no tiene valores en dosis: guardarlos con este
+    nombre sería mezclar bases) o la capa no existe."""
+    if not isinstance(resultado, ResultadoPlacaMensual) or resultado.base != BASE_DOSIS:
+        raise ValueError(f"Los valores en dosis salen de un análisis en «{BASE_DOSIS}», no de uno en «{getattr(resultado, 'base', None)}».")
+    valores = valores_medidos(resultado, capa)
+    return {nuevo: valores[viejo] for nuevo, viejo in zip(CLAVES_DE_VALORES_MEDIDOS_EN_DOSIS, CLAVES_DE_VALORES_MEDIDOS)}

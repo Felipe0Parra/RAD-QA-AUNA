@@ -276,13 +276,14 @@ class TestElCaminoDeUnaPersona:
         assert v.boton_guardar.isEnabled()
         filas = tabla(v.tabla_perfiles)
         verde = [f for f in filas[1:] if f[0] == "Capa verde"]
-        assert verde[0][-1] == "se guarda (en densidad óptica neta)"
+        assert verde[0][-1] == "se guarda (en densidad óptica neta y en dosis)"      # CD.6b (31-10, DC16, DA-92): con la vista en dosis la regla se cumple y se guardan las dos
         v.boton_guardar.click()
         assert v.estado == "registro"
         guardado = svc().leer(v.ref)
         assert guardado["capa"] == "G" and guardado["parametros"]["base_de_la_medida"] == "densidad óptica neta"
-        assert svc().diferencias(guardado, v._resultado) == [], "lo guardado son los valores en netOD de la vista de netOD (guardar la dosis es CD.6b)"
-        assert not v.boton_dosis.isChecked() and not v.boton_dosis.isEnabled() and v.linea_dosis.text() == REGISTRO
+        assert svc().diferencias(guardado, v._resultado) == [], "lo guardado en netOD son los valores de la vista de netOD"
+        # CD.6b (31-10, DC16, DA-92): el registro guardo tambien la dosis con la copia de la curva: el boton queda apagado y puede pasar a dosis con ella
+        assert not v.boton_dosis.isChecked() and v.boton_dosis.isEnabled() and guardado["estado_dosis"] == "ok" and guardado["curva"] is not None
         assert set(ejes_y(v._fig_perfiles)) == {EJE_Y_OD}, "un registro se ve en netOD"
 
 
@@ -458,7 +459,10 @@ class TestLoQueLoDejaApagado:
 
     def test_abrir_un_registro_lo_deja_gris_aunque_haya_una_curva_vigente_valida(self, abierta, fabrica, mundo):
         v = abierta
+        vigentes, mundo.calibraciones = mundo.calibraciones, []      # CD.6b (31-10, DC16, DA-92): un registro guardado SIN dosis (no habia curva al guardar); el que la tiene lo prueba test_cd6b
+        v.refrescar()
         v.boton_guardar.click()
+        mundo.calibraciones = vigentes
         assert v.estado == "registro"
         lecturas = mundo.lecturas
         otra = fabrica(ref=v.ref, usuario=Usuario())
@@ -491,7 +495,10 @@ class TestLaVentanaDeCalibracion:
         """CD7-REV1-R1-P5. El protocolo de CD.7: «anular la curva vigente (al cerrar la calibracion) deja el boton gris en un analisis de la sesion y no cambia un registro». Las otras pruebas que abren la
         calibracion lo hacen con un analisis de la sesion, nunca con un registro a la vista: con el la ventana ni busca la curva vigente (DA-81: la copia guardada manda; CD.6b) ni cambia nada de lo que muestra."""
         v = abierta
+        vigentes, mundo.calibraciones = mundo.calibraciones, []      # CD.6b (31-10, DC16, DA-92): un registro guardado SIN dosis (no habia curva al guardar); el que la tiene lo prueba test_cd6b
+        v.refrescar()
         v.boton_guardar.click()
+        mundo.calibraciones = vigentes
         otra = fabrica(ref=v.ref, usuario=Usuario())
         assert otra.estado == "registro" and otra.linea_dosis.text() == REGISTRO
         antes, lecturas = vista_del_registro(otra), mundo.lecturas

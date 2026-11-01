@@ -662,7 +662,8 @@ class TestGuardar:
         (args, kwargs), = espias["guardar"]
         assert args[0] == v.ref_de_prueba and args[1] == USUARIO and args[2] == placa.datos and args[3] == "placa.png"
         assert args[4] == [m.clic for m in v.marcas] and all(m.estado == "refinada" and m.punto != m.clic for m in v.marcas), "los clics SIN refinar: el servicio los refina el mismo"
-        assert args[5] == parametros() and len(args[5]) == len(pm().VALORES_DE_LA_GEOMETRIA) == 43 and args[6] == "G" and args[7] == "automatico" and kwargs == {"punto_manual": None, "referencia_virgen": None}      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %)
+        assert args[5] == parametros() and len(args[5]) == len(pm().VALORES_DE_LA_GEOMETRIA) == 43 and args[6] == "G" and args[7] == "automatico" and {k: x for k, x in kwargs.items() if k != "curva"} == {"punto_manual": None, "referencia_virgen": None}      # CD.7 (ajuste del 01-11): el 43 es `nivel_de_llegada_al_piso` (`PARAMETROS_DEL_LARGO`, el piso del largo por debajo del 20 %)
+        assert kwargs["curva"].curva is None and kwargs["curva"].motivo      # CD.6b (31-10, DC16, DA-92): y la curva que juzga el boton (aqui ninguna: la placa no tiene cadena ni hay calibraciones; la netOD se guarda como antes)
 
     def test_guardar_llamado_por_codigo_sin_un_analisis_de_esta_sesion_no_hace_nada(self, fabrica, dialogos, archivo_placa, clics, espias):
         v = fabrica()
@@ -1258,7 +1259,7 @@ class TestLaVentanaNoHaceLoQueNoDebe:
     def test_guardar_se_llama_con_la_capa_y_el_modo_sin_valor_por_omision(self, arbol_de_la_ventana):
         llamadas = [c for c in ast.walk(arbol_de_la_ventana) if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr == "guardar" and isinstance(c.func.value, ast.Name)
                     and c.func.value.id == "svc"]
-        assert len(llamadas) == 1 and len(llamadas[0].args) == 8 and {k.arg for k in llamadas[0].keywords} == {"punto_manual", "referencia_virgen"}
+        assert len(llamadas) == 1 and len(llamadas[0].args) == 8 and {k.arg for k in llamadas[0].keywords} == {"punto_manual", "referencia_virgen", "curva"}      # CD.6b (31-10, DC16, DA-92): la curva, por nombre
         nombres = [a.id if isinstance(a, ast.Name) else None for a in llamadas[0].args]
         assert nombres[-2:] == ["capa", "modo"], "la capa y el modo llegan como argumentos de la llamada, no como constantes"
 

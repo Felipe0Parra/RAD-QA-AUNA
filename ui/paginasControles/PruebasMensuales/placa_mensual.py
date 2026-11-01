@@ -92,8 +92,8 @@ TEXTO_DE_LA_CURVA = "Curva de dosis..."
 TEXTO_PASANDO_A_DOSIS = "Pasando a dosis..."
 AYUDA_DE_LA_CURVA = "Abre la calibración de las películas (la curva de dosis): al cerrarla, la ventana vuelve a buscar la curva vigente más reciente de la cadena de captura de esta película."
 AYUDA_VER_EN_DOSIS = ("Muestra el análisis en dosis [cGy] con la curva de calibración vigente más reciente de la cadena de captura de la película: todo salvo la imagen con lo dibujado encima. "
-                      f"{motor.CONDICIONES_PARA_PASAR_A_DOSIS} Apagado, la ventana muestra la {motor.BASE_DENSIDAD_OPTICA}. «Guardar» guarda la {motor.BASE_DENSIDAD_OPTICA} en los dos casos.")      # OD.1: el nombre de una base lo dice el motor
-MOTIVO_REGISTRO_SIN_DOSIS = "el registro se guardó sin dosis"
+                      f"{motor.CONDICIONES_PARA_PASAR_A_DOSIS} Apagado, la ventana muestra la {motor.BASE_DENSIDAD_OPTICA}. «Guardar» guarda la {motor.BASE_DENSIDAD_OPTICA} y, si la capa reportada se puede medir en dosis, también su dosis con la copia de la curva, esté o no pulsado.")      # OD.1: el nombre de una base lo dice el motor
+MOTIVO_REGISTRO_SIN_DOSIS = "el registro se guardó sin dosis"      # CD.6b: el de un registro sin la copia de la curva (uno con ella pasa a dosis con ESA copia)
 TEXTO_DE_LA_INFO = "Info"
 TITULO_DE_LA_INFO = "Info del análisis de la película"
 AYUDA_DE_LA_INFO = ("Abre, en un cuadro aparte que no bloquea la ventana, las explicaciones del análisis: las marcas (cuántas van, cuáles se refinaron y, si alguna quedó sin refinar, por qué: por ejemplo, "
@@ -1151,6 +1151,8 @@ class VentanaPlacaMensual(QWidget):
     def _leer_la_curva(self):
         """La curva que le toca a la película abierta: `motor.curva_efectiva` (LA regla, DC7) sobre `svc_curva.vigentes_validas()` (la ventana no lee la base: lo hace el servicio) y la cadena de la
         película. Sin película, o con un registro a la vista, no se busca. Si la curva cambió (otra calibración, otra copia o ninguna), el análisis en dosis se descarta y, si estaba a la vista, se vuelve a netOD."""
+        if self._bytes is not None and self._registro is not None:      # CD.6b: un registro usa la copia de la curva guardada con él (la pone `abrir_guardado`) y nunca busca la vigente (DA-81)
+            return
         if self._bytes is None or self._registro is not None:
             self._efectiva = None
             return
@@ -1179,7 +1181,7 @@ class VentanaPlacaMensual(QWidget):
         `_leer_la_curva` y la cadena de la película. Sin análisis, (False, None); con un registro a la vista, (False, `MOTIVO_REGISTRO_SIN_DOSIS`): un registro abre en netOD y nunca usa la curva vigente."""
         if self._resultado is None or self._estado not in ("analizada", "registro"):
             return False, None
-        if self._estado == "registro":
+        if self._estado == "registro" and self._efectiva is None:      # CD.6b: un registro SIN la copia de la curva no pasa a dosis; con ella, LA regla de siempre con ESA copia y su cadena
             return False, MOTIVO_REGISTRO_SIN_DOSIS
         if self._resultado.base != motor.BASE_DENSIDAD_OPTICA:
             return False, f"el análisis no está en {motor.BASE_DENSIDAD_OPTICA} ({self._resultado.base})"
@@ -1199,7 +1201,10 @@ class VentanaPlacaMensual(QWidget):
 
     def _medir_en_dosis(self):
         """El análisis en dosis por el MISMO camino que `_medir` (la película de los bytes, las mismas marcas, el mismo modo del piso, el mismo sexto clic y la misma referencia) con la base dosis, la
-        curva de `_leer_la_curva` y la cadena de la película. Devuelve (resultado, barrido)."""
+        curva de `_leer_la_curva` y la cadena de la película. Devuelve (resultado, barrido). CD.6b: con un registro a la vista, `svc.recalcular_en_dosis` (lo guardado con la copia de la curva)."""
+        if self._registro is not None:
+            resultado = svc.recalcular_en_dosis(self._registro)
+            return resultado, motor.barrido(resultado)
         modo = self.modo_del_piso
         P = self._parametros()
         P["base_de_la_medida"] = motor.BASE_DOSIS
@@ -1232,6 +1237,10 @@ class VentanaPlacaMensual(QWidget):
                 self._aplicar_la_regla()
                 return
             self._resultado_en_dosis, self._barrido_en_dosis = medido
+            if self._registro is not None:              # CD.6b: lo recalculado en dosis contra lo guardado en dosis, en la línea del registro (como la netOD al abrir)
+                diferencias = svc.diferencias_en_dosis(self._registro, self._resultado_en_dosis)
+                if diferencias:
+                    _poner_texto(self.etiqueta_registro, self.etiqueta_registro.text() + "\nEn dosis, lo recalculado no coincide con lo guardado:\n" + "\n".join(diferencias))
         self._mostrar()
 
     @_protegido("Curva de dosis")
@@ -1287,6 +1296,9 @@ class VentanaPlacaMensual(QWidget):
         self._descartar_resultado()
         self._quitar_artistas_de_la_imagen()
         self._apagar_herramientas()
+        if self._registro is not None:                  # CD.6b: tras «Recalcular» es un análisis nuevo: la copia de la curva del registro no le sirve (se busca la vigente y la cadena de los bytes)
+            self._efectiva = None
+            self._cadena = None
         self._marcas = []
         self._sexto = None
         self._registro = None
@@ -1326,9 +1338,11 @@ class VentanaPlacaMensual(QWidget):
         if existe and QMessageBox.question(self, "Guardar", RESPUESTA_AL_REEMPLAZAR, QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
         modo = self.modo_del_piso
+        if self._efectiva is None:                       # CD.6b: la curva que juzga el botón (la misma que dice la línea de la dosis); el servicio no la busca
+            self._leer_la_curva()
         try:
             # `guardar` vuelve a analizar desde los bytes y los CLICS sin refinar (el servicio no confía en un resultado ajeno), así que va dentro de la misma espera.
-            nuevo = self._con_espera("Guardando...", lambda: svc.guardar(self.ref, self.usuario, self._bytes, self._nombre, [m.clic for m in self._marcas], self._parametros(), capa, modo,
+            nuevo = self._con_espera("Guardando...", lambda: svc.guardar(self.ref, self.usuario, self._bytes, self._nombre, [m.clic for m in self._marcas], self._parametros(), capa, modo, curva=self._efectiva,
                                                                          punto_manual=self._sexto if modo == "punto_manual" else None,
                                                                          referencia_virgen=self._referencia_utilizable() if modo == "virgen" else None))
         except svc.PlacaMensualError as error:                # incluye `ControlNoEditable`: el mensaje del servicio, tal cual
@@ -1338,6 +1352,12 @@ class VentanaPlacaMensual(QWidget):
         self._capa_guardada = capa
         self._estado = "registro"
         self._aplicar_la_regla()
+        self._efectiva = svc.curva_guardada(self._registro)       # CD.6b: desde aquí es un registro: su copia de la curva (o ninguna) manda; en dosis se vuelve a medir con ella
+        if self._efectiva is not None:
+            self._cadena = svc.cadena_guardada(self._registro)
+        self._resultado_en_dosis = None                  # CD.6b: lo calculado en la sesión no es lo guardado: en dosis, un registro se mide con `svc.recalcular_en_dosis`
+        self._barrido_en_dosis = None
+        self._aplicar_la_regla()                         # CD.6b: la regla del registro, con su copia
         if self.boton_dosis.isChecked():                 # CD.7: lo guardado es la netOD y un registro se ve en netOD
             self._poner_dosis(False)
             self._mostrar()
@@ -1359,6 +1379,8 @@ class VentanaPlacaMensual(QWidget):
             del pelicula
             resultado = self._con_espera("Abriendo el análisis guardado...", lambda: svc.recalcular(registro))
             barrido = motor.barrido(resultado)
+            efectiva = svc.curva_guardada(registro)          # CD.6b: la copia de la curva guardada con él (None si se guardó sin dosis); nunca la vigente
+            cadena = svc.cadena_guardada(registro)           # CD.6b: y la cadena de captura guardada con ella (None sin copia o con la copia dañada): el servicio lee la copia, la ventana no, y antes de tocarla
         except ValueError as error:                       # incluye `PlacaMensualError`
             QMessageBox.warning(self, "Abrir", f"No se pudo abrir el análisis guardado: {error}")
             return False
@@ -1369,8 +1391,8 @@ class VentanaPlacaMensual(QWidget):
         dibujo.dibujar_imagen(self.eje_imagen, rgb)
         self._bytes, self._nombre, self._forma = registro["imagen"], registro["nombre_archivo"] or "", rgb.shape[:2]
         self._pelicula = None
-        self._cadena = None                             # CD.7: un registro abre en netOD y, hasta CD.6b, ninguno guardó la dosis: no se busca curva
-        self._efectiva = None
+        self._cadena = cadena       # CD.6b: un registro abre en netOD; con la copia de la curva el botón pasa a dosis con ESA copia y ESA cadena (la guardada, nunca la de los bytes)
+        self._efectiva = efectiva
         self._marcas = list(registro["puntos"])
         piso = registro["piso"]
         self._sexto = None if piso.get("punto") is None else tuple(piso["punto"])

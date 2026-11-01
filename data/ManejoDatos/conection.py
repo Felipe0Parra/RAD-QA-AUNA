@@ -2802,6 +2802,7 @@ class Conexion():
         from services import medidas_placa_mensual
         medidas = medidas_placa_mensual.MEDIDAS_GUARDADAS
         columnas_de_las_medidas = ",\n                ".join(f"{m.nombre} {m.tipo}{'' if m.admite_nulo else ' NOT NULL'}" for m in medidas)
+        medidas = medidas + medidas_placa_mensual.COLUMNAS_DE_LA_DOSIS      # CD.6b (DA-92, DC16): las de la dosis y la copia de la curva NO van en el CREATE: las agrega el mismo bucle, en una base nueva y en una desplegada, al FINAL y admitiendo NULL
         tabla = f"""
             CREATE TABLE IF NOT EXISTS analisis_placa_mensual (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
