@@ -5,15 +5,22 @@ Es el par de `models/PDF/bloque_posicion_inicial.py` (B.6): el servicio (`servic
 `analisisImagenes/dibujo_placa_mensual.py` (E.1: una sola definicion de que muestra un perfil y de como se escribe un numero); y ESTE modulo arma las cinco tablas de la seccion con la disposicion propia del
 PDF. No calcula un milimetro: no importa el motor mas que para la version del algoritmo, el recuadro del campo luminoso, el barrido y los ejes. Sin Qt, sin `pyplot` y sin `matplotlib.use`.
 
-Las cinco tablas (`CLAVES`, en el orden de `orden_tablas` del PDF), que `reportes_mensuales._secciones_de_la_placa` pone con el analisis nuevo en el lugar de las dos de siempre:
+Las tablas (`CLAVES`, en el orden de `orden_tablas` del PDF; CD.8: cinco, sin la de los parametros y con la de la dosis), que `reportes_mensuales._secciones_de_la_placa` pone con el analisis nuevo en el lugar de las dos de siempre:
   1. `placa_mensual_valores`: la capa, la base de la medida, el FWHM crossplane e inplane y el desfase de cada lado (radiacion - luz, positivo hacia afuera) -- lo GUARDADO, nunca lo recalculado --, el piso
      (`texto_breve_del_piso`), la referencia TG-142 (sin veredicto: lo evalua el fisico) y, si algo no se imprime, la frase que dice por que. «Estado» solo si la capa no se midio (F1R-7); lo que no se midio
      dice «no medible» (adenda 3, DA-88), nunca «sin dato»;
   2. `placa_mensual_barrido`: por eje, el corte central, la media, la mediana y la desviacion del FWHM del barrido y cuantas bandas se midieron, de ESA capa (las filas de la ventana, `filas_de_los_barridos`);
   3. `placa_mensual_perfiles`: los perfiles crossplane e inplane de ESA capa, apilados, con todo lo que se uso para medirlos (`dibujar_perfil` de E.1, el mismo de la ventana);
   4. `placa_mensual_pelicula`: la pelicula tal como se guardo con el recuadro del campo luminoso encima (`pelicula_con_recuadro.py`) y una linea que dice que es o por que no hay recuadro;
-  5. `placa_mensual_parametros`: los parametros fijos con que se midio, como texto (el pie de la ventana; dentro de la figura no se lee: son mas de 1500 caracteres).
-Las tablas 2, 3 y 5 se reconstruyen -las gráficas y las medidas estadisticas no se guardan (DA-84)- volviendo a medir la pelicula guardada con sus puntos, sus parametros y su piso guardados, y SOLO si la
+  ~~5. `placa_mensual_parametros`: los parametros fijos con que se midio, como texto (el pie de la ventana; dentro de la figura no se lee: son mas de 1500 caracteres).~~ -> CD.8 (DA-93, 31-10, el fisico:
+     «quiero que remuevas tambien el cuadro explicativo del pdf»; «SI a todo»): sale, sin dejar ninguna linea. Los parametros siguen guardados con cada analisis y se ven en «Info» de la ventana.
+CD.8 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, DA-92, DA-93, DC12, DC16, DC17): la tabla de valores gana, del analisis RECONSTRUIDO, las filas de la tabla de la pestana 1 de la ventana
+(`filas_de_la_capa_reportada`, una sola definicion) que no son una medida guardada: los dos desfases de centro, la meseta, las cuatro penumbras y los cuatro largos de cada lado hasta el piso. Lo guardado
+(el FWHM y el desfase de cada lado) se sigue imprimiendo DE LO GUARDADO, con sus rotulos de F.1: no se repite. Si el registro guardo la dosis (CD.6b), una tabla mas, `placa_mensual_dosis`, con la base, la
+linea de la curva (la COPIA guardada con el registro, nunca la vigente: DA-81), lo guardado en dosis y, reconstruido con esa copia, el resto de las filas en dosis; y el grafico de los perfiles sale en
+dosis, con el eje fijo de esa copia (`dibujar_perfil(curva=)`, el mismo de la ventana). Sin dosis el grafico sale en netOD y la seccion es la de F.1 menos el cuadro de parametros y mas esas filas.
+Sin veredicto y sin comparar capas (DA-83).
+Las tablas 2 y 3 (y las filas nuevas de la 1) se reconstruyen -las gráficas y las medidas estadisticas no se guardan (DA-84)- volviendo a medir la pelicula guardada con sus puntos, sus parametros y su piso guardados, y SOLO si la
 version del algoritmo guardada es la de hoy y volver a medir da exactamente lo guardado (F1R-2, el criterio de B.6). Si no, el PDF trae los valores guardados, dice por que no trae lo demas y deja el detalle
 en `error_log.txt`. La pelicula y su recuadro salen igual: son de los puntos guardados, no del motor.
 
@@ -31,20 +38,20 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import Image, Paragraph
 
 from analisisImagenes import placa_mensual as motor
-from analisisImagenes.dibujo_placa_mensual import base_de, dibujar_perfil, filas_de_los_barridos, nombre_de_la_capa, numero, texto_de_parametros
+from analisisImagenes.curva_dosis import MODELO_DEVIC
+from analisisImagenes.dibujo_placa_mensual import ROTULO_DEL_LADO, base_de, dibujar_perfil, filas_de_la_capa_reportada, filas_de_los_barridos, nombre_de_la_capa, numero
 from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, texto_breve_del_piso
 from models.PDF.Mensuales.pelicula_con_recuadro import PeliculaConRecuadro
 from services import placa_mensual as svc
-from services.medidas_placa_mensual import MEDIDAS_GUARDADAS
+from services.medidas_placa_mensual import MEDIDAS_GUARDADAS, MEDIDAS_GUARDADAS_EN_DOSIS
 from services.registro_errores import registrar_error
 
-CLAVES = ("placa_mensual_valores", "placa_mensual_barrido", "placa_mensual_perfiles", "placa_mensual_pelicula", "placa_mensual_parametros")
+CLAVES = ("placa_mensual_valores", "placa_mensual_dosis", "placa_mensual_barrido", "placa_mensual_perfiles", "placa_mensual_pelicula")       # CD.8: sin `placa_mensual_parametros`; con la de la dosis
 
 TITULO = "Coincidencia del campo luz-radiación (película)"
 REFERENCIA_TG142 = "TG-142: 2 mm o 1 % por lado; lo evalúa el físico"
 LEYENDA_DEL_RECUADRO = "Recuadro: el campo luminoso, entre las cuatro esquinas marcadas en la película"
 TITULO_DE_LA_PELICULA = "La película, tal como se guardó"
-TITULO_DE_LOS_PARAMETROS = "Parámetros fijos del análisis guardado"
 # DA-89 (23-10): el analisis viejo se desconecto del PDF. Un control con franjas del analisis viejo y sin el analisis nuevo dice esta linea en lugar de la tabla vieja (el texto, lectura de Opus, vetable: F1-D-DA89).
 LINEA_SIN_ANALISIS_NUEVO = "Análisis de la película: pendiente con la herramienta actual (el anterior quedó retirado)"
 
@@ -58,18 +65,38 @@ ROTULOS = {
     "desfase_superior_mm": "Desfase del lado superior [mm]",
     "desfase_inferior_mm": "Desfase del lado inferior [mm]"}
 CONVENCION_DEL_DESFASE = "radiación − luz; positivo hacia afuera"
+# CD.8: el rotulo que cada medida guardada tiene en la tabla de la pestana 1 (`filas_de_la_capa_reportada`): esas filas NO se repiten (la medida ya sale, guardada, con su rotulo de `ROTULOS`). Una prueba
+# exige que cada uno este entre las filas de la ventana: si la ventana cambia un rotulo, cae alli y no se imprime la medida dos veces.
+ROTULOS_DE_LA_VENTANA = {
+    **{nombre: ROTULOS[nombre] for nombre in ("fwhm_crossplane_mm", "fwhm_inplane_mm")},          # el FWHM se llama igual en las dos tablas
+    **{f"desfase_{lado}_mm": ROTULO_DEL_LADO.format(lado=lado) for lado in ("izquierdo", "derecho", "superior", "inferior")}}          # H-CD9-5: el rótulo del dibujo, sin copiarlo
+FILAS_QUE_YA_ESTAN = ("Capa reportada", "Estado")          # de la ventana: la tabla de valores ya las trae, de lo guardado
+SUFIJO_EN_DOSIS = "_dosis_mm"                                # `fwhm_crossplane_dosis_mm` es la de `fwhm_crossplane_mm` en dosis (CD6b-D1): el mismo rotulo, en la tabla en dosis
+TITULO_EN_DOSIS = "{titulo}, capa {adjetivo}, en " + motor.BASE_DOSIS          # la base la nombra el motor, nunca un literal (tripwire de la prueba de CD.8)
+ROTULO_DE_LA_CURVA = "Curva de dosis"
+NOMBRE_DEL_MODELO = {MODELO_DEVIC: "Devic"}
+TEXTO_DE_LA_CURVA = ("la copia guardada con el registro: lote «{lote}», irradiada el {fecha} (calibración {id}), modelo de {modelo}; la capa {adjetivo} es útil de 0 a {rango:g} [cGy]")
+TEXTO_DE_LA_CURVA_SIN_RANGO = ("la copia guardada con el registro: lote «{lote}», irradiada el {fecha} (calibración {id}), modelo de {modelo}; la capa {adjetivo} no tiene rango útil: {estado}")
+TEXTO_DE_LA_COPIA_ILEGIBLE = "lote «{lote}», irradiada el {fecha} (calibración {id}): {motivo}"
 
-_SIN_LO_DEMAS = "Las medidas estadísticas, los perfiles y los parámetros fijos no se imprimen: "
+LO_QUE_NO_SALE = "los desfases de centro, la meseta, las penumbras, el largo de cada lado hasta el piso, las medidas estadísticas y los perfiles"          # CD.8: lo que no sale, entero: UNA definicion para la nota del PDF y el error_log
+_SIN_LO_DEMAS = LO_QUE_NO_SALE[0].upper() + LO_QUE_NO_SALE[1:] + " no se imprimen: "
 FRASE_OTRA_VERSION = _SIN_LO_DEMAS + "el análisis se guardó con la versión {guardada} del algoritmo y la de hoy es {hoy}."
 FRASE_NO_COINCIDE = _SIN_LO_DEMAS + "al volver a medir la película guardada no salen los valores guardados."
 FRASE_NO_SE_PUDO_VOLVER_A_MEDIR = _SIN_LO_DEMAS + "la película guardada no se pudo volver a medir."
 FRASE_NO_SE_PUDO_EL_BARRIDO = "Las medidas estadísticas del barrido no se pudieron calcular."
 FRASE_NO_SE_PUDIERON_DIBUJAR = "Los perfiles no se imprimen: no se pudieron dibujar."
-FRASE_NO_SE_PUDO_EL_PIE = "Los parámetros fijos no se imprimen: no se pudieron escribir."
+FRASE_NO_SE_PUDIERON_LAS_FILAS = "Los desfases de centro, la meseta, las penumbras y el largo de cada lado hasta el piso no se imprimen: no se pudieron escribir."
+_SIN_LO_DEMAS_EN_DOSIS = (f"En {motor.BASE_DOSIS}, los desfases de centro, la dosis de la meseta con su U, las penumbras y el largo de cada lado hasta el piso no se imprimen (lo guardado en {motor.BASE_DOSIS} sí): ")
+FRASE_DOSIS_SIN_LA_NETOD = _SIN_LO_DEMAS_EN_DOSIS + f"el análisis tampoco se reconstruyó en {motor.BASE_DENSIDAD_OPTICA} (la tabla de arriba dice por qué)."
+FRASE_DOSIS_NO_SE_PUDO = _SIN_LO_DEMAS_EN_DOSIS + f"la película guardada no se pudo volver a medir en {motor.BASE_DOSIS} con la copia de la curva."
+FRASE_DOSIS_NO_COINCIDE = _SIN_LO_DEMAS_EN_DOSIS + f"al volver a medir en {motor.BASE_DOSIS} con la copia de la curva no salen los valores guardados en {motor.BASE_DOSIS}."
+FRASE_PERFILES_EN_NETOD = f"Los perfiles se imprimen en {motor.BASE_DENSIDAD_OPTICA} y no en {motor.BASE_DOSIS}."
+FRASE_NO_SE_PUDO_LA_DOSIS = f"Los valores en {motor.BASE_DOSIS} no se imprimen: no se pudieron escribir."
 FRASE_SIN_PELICULA = "La película guardada no se pudo incluir en el PDF."
 
 ANCHO_FIGURA_PT = 384
-ALTO_FIGURA_PT = 340
+ALTO_FIGURA_PT = 400          # CD.8 (DA-93: «se debe ajustar a la escala»): mas alto (antes 340); el ancho es el de la columna de la tabla en `pdf.py` (5.5 in menos el relleno)
 DPI_FIGURA = 200
 LETRA_DE_LA_FIGURA = {"font.size": 6, "axes.titlesize": 6.5, "axes.labelsize": 6, "xtick.labelsize": 5.5, "ytick.labelsize": 5.5, "legend.fontsize": 5.5}
 CARACTERES_POR_RENGLON_DE_LA_LEYENDA = 40
@@ -93,9 +120,27 @@ def reconstruir(registro):
         registrar_error(f"{contexto}: no se pudo volver a medir la película guardada; el PDF sale con lo guardado", error)
         return None, FRASE_NO_SE_PUDO_VOLVER_A_MEDIR
     if diferencias:
-        registrar_error(f"{contexto}: al volver a medir la película guardada no salen los valores guardados; el PDF sale con lo guardado, sin medidas estadísticas, perfiles ni parámetros",
-                        detalle="\n".join(diferencias))
+        registrar_error(f"{contexto}: al volver a medir la película guardada no salen los valores guardados; el PDF sale con lo guardado, sin {LO_QUE_NO_SALE}", detalle="\n".join(diferencias))
         return None, FRASE_NO_COINCIDE
+    return resultado, None
+
+
+def reconstruir_en_dosis(registro):
+    """CD.8: `(ResultadoPlacaMensual | None, frase | None)`: el analisis vuelto a medir EN DOSIS con la COPIA de la curva guardada con el registro (`svc.recalcular_en_dosis`, nunca la curva vigente, DA-81),
+    o `None` y la frase de por que no se imprime el resto en dosis. `(None, None)` si el registro se guardo sin dosis. Se llama solo si `reconstruir` dio el analisis en netOD (la misma version). Volver a
+    medir que falla (una copia danada, la imagen) o que no da lo guardado en dosis (`svc.diferencias_en_dosis`) no tumba el PDF: el detalle va a `error_log.txt`."""
+    if registro.get(svc.COLUMNA_DE_LA_CURVA) is None:
+        return None, None
+    contexto = f"CD.8: PDF mensual del control {registro.get('ref')}, capa {registro.get('capa')}, en {motor.BASE_DOSIS}"
+    try:
+        resultado = svc.recalcular_en_dosis(registro)
+        distintas = svc.diferencias_en_dosis(registro, resultado)
+    except Exception as error:
+        registrar_error(f"{contexto}: falló volver a medir en {motor.BASE_DOSIS} la película guardada; el PDF sale con lo guardado en {motor.BASE_DOSIS}", error)
+        return None, FRASE_DOSIS_NO_SE_PUDO
+    if distintas:
+        registrar_error(f"{contexto}: al volver a medir en {motor.BASE_DOSIS} no salen los valores guardados; el PDF sale con lo guardado en {motor.BASE_DOSIS}", detalle="\n".join(distintas))
+        return None, FRASE_DOSIS_NO_COINCIDE
     return resultado, None
 
 
@@ -109,7 +154,7 @@ def componer_figura(figura, resultado, capa):
     with matplotlib.rc_context(LETRA_DE_LA_FIGURA):
         ejes = list(figura.subplots(2, 1))
         for eje_, nombre in zip(ejes, motor.EJES):
-            dibujar_perfil(eje_, getattr(resultado.capas[capa], nombre), capa, resultado.parametros, reportada=True)
+            dibujar_perfil(eje_, getattr(resultado.capas[capa], nombre), capa, resultado.parametros, reportada=True, curva=resultado.curva)       # CD.8: en dosis, el eje fijo de SU curva (la copia)
         mejor = max(ejes, key=lambda a: len(a.get_legend_handles_labels()[0]))
         manejadores, etiquetas = mejor.get_legend_handles_labels()
         if manejadores:
@@ -144,7 +189,7 @@ def _parrafo(texto, estilo):
     return Paragraph(escape(str(texto)), estilo)
 
 
-def _tabla_de_valores(registro, notas, estilo):
+def _tabla_de_valores(registro, notas, estilo, nuevas=()):
     capa = registro["capa"]
     titulo = f"{TITULO}, capa {ADJETIVO_DE_LA_CAPA[capa]}"
     filas = [["Campo", "Valor"], ["Capa reportada", f"capa {ADJETIVO_DE_LA_CAPA[capa]}"], ["Base de la medida", base_de(registro["parametros"])]]
@@ -156,28 +201,69 @@ def _tabla_de_valores(registro, notas, estilo):
         if medida.nombre.startswith("desfase") and not any(f[0] == "Desfase de cada lado" for f in filas):
             filas.append(["Desfase de cada lado", CONVENCION_DEL_DESFASE])
         filas.append([ROTULOS[medida.nombre], numero(registro[medida.nombre], 3, medida.nombre.startswith("desfase"))])
+    filas += [list(f) for f in nuevas]                                         # CD.8: lo que el registro no guarda, del analisis reconstruido (`_filas_nuevas`)
     filas.append(["Piso", _parrafo(texto_breve_del_piso(registro["piso"], capa), estilo)])
     filas.append(["Referencia", _parrafo(REFERENCIA_TG142, estilo)])
     filas += [["Nota", _parrafo(nota, estilo)] for nota in notas]
     return pd.DataFrame(filas, columns=[titulo, ""])
 
 
-def _tabla_del_barrido(resultado, capa):
+def _tabla_del_barrido(resultado, capa, con_la_base=False):
     """Una fila por eje de la capa, de las filas de la ventana (`filas_de_los_barridos`: una sola manera de escribir un numero): (capa, eje, estado, bandas, bandas medidas, media, mediana, desviacion, corte central, ...)."""
     propias = [f for f in filas_de_los_barridos(motor.barrido(resultado)) if f[0] == nombre_de_la_capa(capa)]
     filas = [["Eje", "Corte central [mm]", "Media [mm]", "Mediana [mm]", "Desviación [mm]", "Bandas medidas"]]
     filas += [[f[1], f[8], f[5], f[6], f[7], f"{f[4]} de {f[3]}"] for f in propias]
-    return pd.DataFrame(filas, columns=[f"Medidas estadísticas del barrido, capa {ADJETIVO_DE_LA_CAPA[capa]}"] + [""] * 5)
+    titulo = f"Medidas estadísticas del barrido, capa {ADJETIVO_DE_LA_CAPA[capa]}" + (f", en {resultado.base}" if con_la_base else "")        # CD.8: con dosis en el registro, dice su base
+    return pd.DataFrame(filas, columns=[titulo] + [""] * 5)
 
 
 def _tabla_de_los_perfiles(resultado, capa):
     figura = Image(io.BytesIO(png_de_los_perfiles(resultado, capa)), width=ANCHO_FIGURA_PT, height=ALTO_FIGURA_PT)
-    return pd.DataFrame([[figura]], columns=[f"Perfiles de la capa {ADJETIVO_DE_LA_CAPA[capa]}"])
+    en_dosis = f", en {motor.BASE_DOSIS}" if resultado.base == motor.BASE_DOSIS else ""                       # CD.8: el grafico en dosis lo dice en su titulo
+    return pd.DataFrame([[figura]], columns=[f"Perfiles de la capa {ADJETIVO_DE_LA_CAPA[capa]}{en_dosis}"])
 
 
-def _tabla_de_los_parametros(registro, estilo):
-    texto = "<br/>".join(escape(linea) for linea in texto_de_parametros(registro["parametros"]).split("\n"))
-    return pd.DataFrame([[Paragraph(texto, estilo)]], columns=[TITULO_DE_LOS_PARAMETROS])
+def _filas_nuevas(resultado, capa):
+    """CD.8: las filas de la tabla de la pestana 1 (`filas_de_la_capa_reportada`, la MISMA funcion de la ventana) del analisis `resultado` que no son una medida guardada ni lo que la tabla ya trae
+    (`ROTULOS_DE_LA_VENTANA`, `FILAS_QUE_YA_ESTAN`): los dos desfases de centro, la meseta, las penumbras y el largo de cada lado hasta el piso, en el orden de la ventana."""
+    fuera = set(FILAS_QUE_YA_ESTAN) | set(ROTULOS_DE_LA_VENTANA.values())
+    return [list(f) for f in filas_de_la_capa_reportada(resultado, capa) if f[0] not in fuera]
+
+
+def texto_de_la_curva(registro):
+    """CD.8: la linea de la curva de un registro que guardo la dosis, de la COPIA guardada con el (`svc.curva_guardada`, DA-81): el lote, la fecha de irradiacion, la calibracion, el modelo y el rango util
+    de la capa reportada. Sin veredicto (DA-83). Una copia que no se puede leer lo dice con su motivo."""
+    capa = registro["capa"]
+    efectiva = svc.curva_guardada(registro)
+    datos = {"lote": efectiva.lote or "sin lote", "fecha": efectiva.fecha_irradiacion or "sin fecha", "id": "sin número" if efectiva.id is None else efectiva.id, "adjetivo": ADJETIVO_DE_LA_CAPA[capa]}
+    if efectiva.curva is None:
+        return TEXTO_DE_LA_COPIA_ILEGIBLE.format(motivo=efectiva.motivo, **datos)
+    curva = efectiva.curva
+    modelo = NOMBRE_DEL_MODELO.get(curva.modelo, curva.modelo)
+    rango = curva.rango(capa)
+    if rango is None:
+        return TEXTO_DE_LA_CURVA_SIN_RANGO.format(modelo=modelo, estado=curva.estado(capa), **datos)
+    return TEXTO_DE_LA_CURVA.format(modelo=modelo, rango=rango, **datos)
+
+
+def _tabla_de_la_dosis(registro, en_dosis, notas, estilo):
+    """CD.8: la tabla de un registro que guardo la dosis (CD.6b): la base, la linea de la curva, el estado si no es «ok», lo GUARDADO en dosis (con los rotulos de `ROTULOS`), las filas nuevas del analisis
+    reconstruido en dosis (`en_dosis`, si se reconstruyo) y las notas. Como la de valores, de la capa guardada y sin veredicto."""
+    capa = registro["capa"]
+    filas = [["Campo", "Valor"], ["Base de la medida", motor.BASE_DOSIS], [ROTULO_DE_LA_CURVA, _parrafo(texto_de_la_curva(registro), estilo)]]
+    if registro["estado_dosis"] != "ok":
+        filas.append(["Estado", _parrafo(registro["estado_dosis"], estilo)])
+    for medida in MEDIDAS_GUARDADAS_EN_DOSIS:
+        if medida.nombre == "estado_dosis":
+            continue
+        if medida.nombre.startswith("desfase") and not any(f[0] == "Desfase de cada lado" for f in filas):
+            filas.append(["Desfase de cada lado", CONVENCION_DEL_DESFASE])
+        valor = registro[medida.nombre]
+        filas.append([ROTULOS[medida.nombre.replace(SUFIJO_EN_DOSIS, "_mm")], numero(valor, 3, medida.nombre.startswith("desfase"))])
+    if en_dosis is not None:
+        filas += _filas_nuevas(en_dosis, capa)
+    filas += [["Nota", _parrafo(nota, estilo)] for nota in notas]
+    return pd.DataFrame(filas, columns=[TITULO_EN_DOSIS.format(titulo=TITULO, adjetivo=ADJETIVO_DE_LA_CAPA[capa]), ""])
 
 
 def _tabla_de_la_pelicula(registro, estilo):
@@ -205,23 +291,36 @@ def _intentar(registro, que, hacer):
 
 def tablas_de_la_seccion(registro):
     """`{clave: DataFrame}` de la seccion del analisis nuevo `registro` (lo que devuelve `svc.leer`), en el orden de `CLAVES` y solo con las partes que se pudieron armar: la de los valores va siempre (lo
-    GUARDADO, de la capa guardada); el barrido, los perfiles y los parametros solo si se reconstruyo el analisis (`reconstruir`) y se pudieron armar; la pelicula siempre que la imagen guardada se pueda
+    GUARDADO, de la capa guardada); el barrido y los perfiles solo si se reconstruyo el analisis (`reconstruir`) y se pudieron armar; la pelicula siempre que la imagen guardada se pueda
     incluir. Cada parte que no sale deja su frase en la tabla de los valores. Las celdas son texto, un `Paragraph` o una `Image`; las tablas son DataFrames de la forma que lee el generador de `pdf.py`:
     el titulo es el encabezado de la columna y la primera fila de las tablas de texto es su cabecera."""
     capa = registro["capa"]
     estilo = _estilo_del_texto()
     resultado, frase = reconstruir(registro)
     notas = [frase] if frase else []
-    barrido = perfiles = parametros = None
+    barrido = perfiles = dosis = None
+    nuevas, en_dosis, notas_de_la_dosis = [], None, []
+    con_dosis = registro.get(svc.COLUMNA_DE_LA_CURVA) is not None          # CD.8: el registro guardo la dosis (CD.6b)
     if resultado is not None:
-        barrido, fallo = _intentar(registro, "las medidas estadísticas del barrido", lambda: _tabla_del_barrido(resultado, capa))
+        barrido, fallo = _intentar(registro, "las medidas estadísticas del barrido", lambda: _tabla_del_barrido(resultado, capa, con_la_base=con_dosis))
         notas += [FRASE_NO_SE_PUDO_EL_BARRIDO] if fallo else []
-        perfiles, fallo = _intentar(registro, "la figura de los perfiles", lambda: _tabla_de_los_perfiles(resultado, capa))
+        filas, fallo = _intentar(registro, "las filas de la capa reportada", lambda: _filas_nuevas(resultado, capa))
+        nuevas = filas or []
+        notas += [FRASE_NO_SE_PUDIERON_LAS_FILAS] if fallo else []
+        if con_dosis:
+            en_dosis, frase_dosis = reconstruir_en_dosis(registro)
+            notas_de_la_dosis += [frase_dosis] if frase_dosis else []
+        dibujado = en_dosis if en_dosis is not None and en_dosis.capas[capa].ok else resultado          # la base GUARDADA: en dosis si se guardo y se reconstruye; si no, netOD
+        perfiles, fallo = _intentar(registro, "la figura de los perfiles", lambda: _tabla_de_los_perfiles(dibujado, capa))
         notas += [FRASE_NO_SE_PUDIERON_DIBUJAR] if fallo else []
-        parametros, fallo = _intentar(registro, "el pie de parámetros fijos", lambda: _tabla_de_los_parametros(registro, estilo))
-        notas += [FRASE_NO_SE_PUDO_EL_PIE] if fallo else []
+        notas_de_la_dosis += [FRASE_PERFILES_EN_NETOD] if con_dosis and dibujado is resultado and perfiles is not None else []          # la nota dice que se IMPRIMEN en netOD: solo si se imprimen
+    elif con_dosis:
+        notas_de_la_dosis.append(FRASE_DOSIS_SIN_LA_NETOD)
+    if con_dosis:
+        dosis, fallo = _intentar(registro, f"los valores en {motor.BASE_DOSIS}", lambda: _tabla_de_la_dosis(registro, en_dosis, notas_de_la_dosis, estilo))
+        notas += [FRASE_NO_SE_PUDO_LA_DOSIS] if fallo else []
     pelicula, fallo = _intentar(registro, "la película", lambda: _tabla_de_la_pelicula(registro, estilo))
     notas += [FRASE_SIN_PELICULA] if fallo else []
-    tablas = {"placa_mensual_valores": _tabla_de_valores(registro, notas, estilo), "placa_mensual_barrido": barrido, "placa_mensual_perfiles": perfiles,
-              "placa_mensual_pelicula": pelicula, "placa_mensual_parametros": parametros}
+    tablas = {"placa_mensual_valores": _tabla_de_valores(registro, notas, estilo, nuevas), "placa_mensual_dosis": dosis, "placa_mensual_barrido": barrido, "placa_mensual_perfiles": perfiles,
+              "placa_mensual_pelicula": pelicula}
     return {clave: tabla for clave, tabla in tablas.items() if tabla is not None}

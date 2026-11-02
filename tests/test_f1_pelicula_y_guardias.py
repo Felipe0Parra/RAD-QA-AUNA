@@ -536,12 +536,12 @@ class TestPaginacion:
         assert _juntos(pdf, "Medidas estadísticas del barrido, capa verde", "Corte central [mm]")
         assert _juntos(pdf, "Perfiles de la capa verde")
         assert _juntos(pdf, TITULO_DE_LA_PELICULA, LEYENDA_DEL_RECUADRO)
-        assert _juntos(pdf, TITULO_DE_LOS_PARAMETROS, "Parámetros fijos del método (se guardan")
+        assert not paginas_de(pdf, TITULO_DE_LOS_PARAMETROS), "CD.8 (DA-93): sin el cuadro de parametros"
 
     @pytest.mark.parametrize("nombre", ["ML0", "EPSON027"])
     def test_la_figura_esta_en_la_pagina_de_su_titulo_y_la_pelicula_en_la_de_su_leyenda(self, mundo, nombre):
         pdf = mundo.pdf(nombre)
-        figura = [i for i in imagenes_de(pdf) if abs(i[1].width - 384) < 1 and abs(i[1].height - 340) < 1]
+        figura = [i for i in imagenes_de(pdf) if abs(i[1].width - 384) < 1 and abs(i[1].height - 400) < 1]          # CD.8 (DA-93): de 340 a 400 pt
         assert len(figura) == 1 and figura[0][0] in paginas_de(pdf, "Perfiles de la capa verde")
         tamano = PILImage.open(io.BytesIO(mundo.datos[nombre])).size
         pelicula = _la_pelicula(pdf, tamano)
@@ -553,9 +553,9 @@ class TestPaginacion:
         junto a los valores, ni los perfiles junto al barrido, ni la pelicula junto a los perfiles): cinco paginas. Una regresion de paginacion que sume una pagina cae. (Las 3 o 4 paginas del informe son el
         crecimiento neto del PDF, que cambia las dos tablas viejas por esta seccion; no es esta medida.)"""
         pdf = mundo.pdf(nombre)
-        assert paginas_de(pdf, TITULO_DE_LA_SECCION) and paginas_de(pdf, TITULO_DE_LOS_PARAMETROS), "el PDF trae la seccion nueva"
+        assert paginas_de(pdf, TITULO_DE_LA_SECCION) and paginas_de(pdf, TITULO_DE_LA_PELICULA), "el PDF trae la seccion nueva (CD.8 (DA-93): termina en la pelicula)"
         primera = min(paginas_de(pdf, TITULO_DE_LA_SECCION))
-        ultima = max(paginas_de(pdf, TITULO_DE_LOS_PARAMETROS))
+        ultima = max(paginas_de(pdf, TITULO_DE_LA_PELICULA))
         assert ultima - primera + 1 <= 5, f"la seccion va de la pagina {primera} a la {ultima}"
 
     def test_las_tablas_de_la_seccion_siguen_el_orden_de_las_claves(self, mundo):
@@ -563,7 +563,7 @@ class TestPaginacion:
         doc = fitz.open(stream=pdf, filetype="pdf")
         try:
             posiciones = []
-            for marca in (f"{TITULO_DE_LA_SECCION}, capa verde", "Medidas estadísticas del barrido", "Perfiles de la capa verde", TITULO_DE_LA_PELICULA, TITULO_DE_LOS_PARAMETROS):
+            for marca in (f"{TITULO_DE_LA_SECCION}, capa verde", "Medidas estadísticas del barrido", "Perfiles de la capa verde", TITULO_DE_LA_PELICULA):          # CD.8 (DA-93): sin el cuadro
                 for p in doc:
                     r = p.search_for(marca)
                     if r:
@@ -571,7 +571,7 @@ class TestPaginacion:
                         break
         finally:
             doc.close()
-        assert len(posiciones) == 5 and posiciones == sorted(posiciones), posiciones
+        assert len(posiciones) == 4 and posiciones == sorted(posiciones), posiciones
 
 
 # ======================================================================================================================================================== los guardias
@@ -628,7 +628,7 @@ class TestLosGuardias:
 
     def test_las_tablas_de_texto_estan_en_la_lista_de_estilos_con_span_para_que_el_titulo_abarque_la_tabla(self):
         lista = _lista_de_estilos_de_analisis_imagen()
-        for clave in ("placa_mensual_valores", "placa_mensual_barrido", "placa_mensual_parametros"):
+        for clave in ("placa_mensual_valores", "placa_mensual_dosis", "placa_mensual_barrido"):          # CD.8 (DA-93): la de la dosis es de texto; la de los parametros salio
             assert clave in lista, clave
         for clave in ("placa_mensual_perfiles", "placa_mensual_pelicula"):
             assert clave not in lista, f"{clave} es una figura: su fila 1 no se resalta"
@@ -700,4 +700,4 @@ class TestLosGuardias:
         """La seccion usa el motor solo para `VERSION_ALGORITMO`, `recuadro_luminoso`, `barrido` y `EJES` (la API de las pistas)."""
         arbol = ast.parse(_fuente(SECCION_PY))
         usados = {n.attr for n in ast.walk(arbol) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "motor"}
-        assert usados <= {"VERSION_ALGORITMO", "recuadro_luminoso", "barrido", "EJES"}, usados
+        assert usados <= {"VERSION_ALGORITMO", "recuadro_luminoso", "barrido", "EJES", "BASE_DOSIS", "BASE_DENSIDAD_OPTICA"}, usados          # CD.8 (DA-93): las bases del motor (ninguna a mano)

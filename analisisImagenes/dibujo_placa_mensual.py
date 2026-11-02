@@ -119,6 +119,7 @@ TRAZO_DE_PARAMETRO = {
     "nivel_de_llegada_al_piso": ("largo", "el largo por debajo del 20 % llega al piso donde la señal baja al {} % (si la película se acaba antes, se marca cortado por el borde)"),
 }
 ROTULO_DEL_LARGO = "Largo bajo el {baja:g} %, lado {lado} [mm]"          # CD.7 (ajuste del 01-11): EL rótulo de la medida (una línea si el físico le da otro nombre)
+ROTULO_DEL_LADO = "Lado {lado} (radiación − luz) [mm]"          # CD.8 (H-CD9-5): EL rótulo del desfase de cada lado de la tabla de la capa reportada (la ventana y el PDF lo toman de aquí)
 TEXTO_DEL_LARGO_CORTADO = "≥ {valor} (cortado)"          # CD.7 (ajuste del 01-11): un lado que la película corta antes del piso: una cota mínima, nunca «hasta el piso»
 LARGO_DEL_PIE = 220                    # caracteres por línea del pie de parámetros fijos
 ETIQUETA_DEL_EJE_Y = {motor.BASE_DENSIDAD_OPTICA: f"{motor.BASE_DENSIDAD_OPTICA} [1]", motor.BASE_VALOR_DE_PIXEL: "valor de píxel [nivel]",
@@ -248,7 +249,7 @@ def texto_se_guarda(capa, reportada, motivo, registro=False, en_dosis=False):
     if registro:
         return "guardada" if motivo is None else "guardada; en lo recalculado no es medible"
     if en_dosis:                                # CD.6b: con la vista en dosis la regla del botón se cumple: «Guardar» guarda la netOD y también la dosis de la capa reportada
-        return "se guarda (en densidad óptica neta y en dosis)" if motivo is None else "no se guarda: no es medible (en densidad óptica neta)"
+        return f"se guarda (en {motor.BASE_DENSIDAD_OPTICA} y en {motor.BASE_DOSIS})" if motivo is None else f"no se guarda: no es medible (en {motor.BASE_DENSIDAD_OPTICA})"          # CD.8 (H-CD9-3): las bases salen del motor
     return "se guarda" if motivo is None else "no se guarda: no es medible"
 
 
@@ -316,7 +317,7 @@ def _meseta_de_la_capa(medida, base):
     else:
         valor = float(np.mean([p.meseta for p in perfiles]))
     if base == motor.BASE_DENSIDAD_OPTICA:
-        return [("Densidad óptica neta media de la meseta [1]", numero(valor, 3))]
+        return [(f"{motor.BASE_DENSIDAD_OPTICA.capitalize()} media de la meseta [1]", numero(valor, 3))]          # CD.8 (H-CD9-4): la base sale del motor (el mismo texto)
     return [("Meseta media [nivel]", numero(valor, 1))]
 
 
@@ -350,7 +351,7 @@ def filas_de_la_capa_reportada(resultado, capa):
     filas += [(f"FWHM {NOMBRE_DEL_EJE[eje]} [mm]", numero(getattr(medida, eje).fwhm_mm, 3)) for eje in motor.EJES]
     filas.append(("Radiación − cruce de diagonales (x; y) [mm]", _par(medida.radiacion_menos_luz_mm)))
     filas.append(("Radiación − retículo (x; y) [mm]", _par(medida.radiacion_menos_reticulo_mm)))
-    filas += [(f"Lado {lado} (radiación − luz) [mm]", numero(medida.coincidencia_mm.get(lado), 3, True)) for lado in motor.LADOS_DE_LA_COINCIDENCIA]
+    filas += [(ROTULO_DEL_LADO.format(lado=lado), numero(medida.coincidencia_mm.get(lado), 3, True)) for lado in motor.LADOS_DE_LA_COINCIDENCIA]
     filas += _meseta_de_la_capa(medida, motor.BASE_DOSIS if medida.base == motor.BASE_DOSIS else resultado.base)
     for eje in motor.EJES:
         perfil = getattr(medida, eje)

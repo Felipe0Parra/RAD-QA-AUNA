@@ -24,7 +24,7 @@ import pytest
 from PIL import Image as PILImage
 
 import _placa_mensual_sintetica as gen
-from _f1_ayudas import (CAPA_EN_UNA_FRASE, CAPAS, CLAVES_DE_LA_SECCION, ENCABEZADO_DE_LA_TABLA_VIEJA, LEYENDA_DEL_RECUADRO, LINEA_SIN_ANALISIS_NUEVO, NO_MEDIBLE, REFERENCIA_TG142,  # noqa: F401
+from _f1_ayudas import (CAPA_EN_UNA_FRASE, CAPAS, CLAVES_DE_LA_SECCION, CLAVES_SIN_LA_DOSIS, ENCABEZADO_DE_LA_TABLA_VIEJA, LEYENDA_DEL_RECUADRO, LINEA_SIN_ANALISIS_NUEVO, NO_MEDIBLE, REFERENCIA_TG142,  # noqa: F401
                         ROTULOS_ESPERADOS, SIMBOLOS_DA18, SIN_DATOS_DEL_ANALISIS_VIEJO, TITULO_DE_LA_PELICULA, TITULO_DE_LA_SECCION, TITULO_DE_LOS_PARAMETROS, aparece, cerrar_mundo, dibujo,
                         app, generar_pdf, imagenes_de, lineas_de, mundo_nuevo, n3, normal, oraculo, parametros, paginas_de, pdf_mod, pel, plantilla, pm, recuadro, rm, seccion, svc, texto_de)  # noqa: F401
 from reportlab.platypus import Paragraph
@@ -169,14 +169,14 @@ class TestLaReglaDeVIN:
     def test_con_n_la_seccion_nueva_y_solo_si_i_la_imagen_vieja_nunca_la_tabla_vieja(self, monkeypatch, maquina, v, i):
         tablas, llamadas = _procesar(monkeypatch, maquina, n=True, v=v, i=i)
         assert len(llamadas) == 1 and llamadas[0] == {"capa": "G"}, "la seccion se arma una vez, con el registro leido"
-        assert all(c in tablas for c in CLAVES_DE_LA_SECCION), sorted(tablas)
+        assert all(c in tablas for c in CLAVES_SIN_LA_DOSIS), sorted(tablas)          # CD.8 (DA-93): un registro sin dosis
         assert "analisis_imagen" not in tablas, "con N no sale ni la tabla vieja ni «No hay datos de analisis de imagen» (DA-89)"
         assert ("imagen" in tablas) == i, "la imagen vieja solo si la fila de preguntas trae imagen (I), nunca el recuadro vacio"
 
     @pytest.mark.parametrize("v", [False, True])
     def test_con_n_y_sin_fila_de_preguntas_solo_la_seccion(self, monkeypatch, v):
         tablas, _ = _procesar(monkeypatch, n=True, v=v, con_fila=False)
-        assert all(c in tablas for c in CLAVES_DE_LA_SECCION) and "imagen" not in tablas and "analisis_imagen" not in tablas
+        assert all(c in tablas for c in CLAVES_SIN_LA_DOSIS) and "imagen" not in tablas and "analisis_imagen" not in tablas
 
     @pytest.mark.parametrize("con_fila", [True, False])
     def test_la_imagen_vieja_se_decide_por_la_imagen_y_no_por_la_fila(self, monkeypatch, con_fila):
@@ -314,10 +314,10 @@ class TestLaSeccionDiceLaCapaQueGuardoElRegistro:
             fila = " ".join([eje, n3(b.central.fwhm_mm), n3(e.media_mm), n3(e.mediana_mm), n3(e.desviacion_mm), f"{e.n_medibles} de {e.n_bandas}"])
             assert fila in seccion_, fila
 
-    def test_los_perfiles_van_en_una_figura_de_384_x_340_pt_y_la_pelicula_en_otra(self, mundo, capa, placa):
+    def test_los_perfiles_van_en_una_figura_de_384_x_400_pt_y_la_pelicula_en_otra(self, mundo, capa, placa):
         pdf = mundo.pdf(f"capa_{capa}")
         medidas = [(r.width, r.height) for _, r, _, _, _ in imagenes_de(pdf)]
-        assert len([1 for w, h in medidas if abs(w - 384) < 1 and abs(h - 340) < 1]) == 1, medidas
+        assert len([1 for w, h in medidas if abs(w - 384) < 1 and abs(h - 400) < 1]) == 1, medidas          # CD.8 (DA-93): la figura crece de 340 a 400 pt de alto
         peliculas = _peliculas_nuevas(pdf, placa)
         assert len(peliculas) == 1, (peliculas, medidas)
         r = peliculas[0]
@@ -446,11 +446,11 @@ def _espiar_recalcular(monkeypatch):
 
 
 class TestLoGuardadoMandaYSoloSeReconstruyeConLaVersionDeHoyYLoGuardadoReproducido:
-    def test_un_analisis_reproducible_se_vuelve_a_medir_una_vez_y_trae_el_barrido_los_perfiles_y_los_parametros(self, mundo, monkeypatch):
+    def test_un_analisis_reproducible_se_vuelve_a_medir_una_vez_y_trae_el_barrido_y_los_perfiles(self, mundo, monkeypatch):
         llamadas = _espiar_recalcular(monkeypatch)
         tablas = seccion().tablas_de_la_seccion(_registro(mundo, "capa_G"))
         assert llamadas == [1]
-        assert list(tablas) == list(CLAVES_DE_LA_SECCION), "las cinco tablas, en el orden de las claves"
+        assert list(tablas) == list(CLAVES_SIN_LA_DOSIS), "las cuatro tablas de un registro sin dosis, en el orden de las claves (CD.8 (DA-93): sin el cuadro de parametros)"
 
     def test_con_otra_version_no_se_vuelve_a_medir_y_se_imprime_lo_guardado_y_una_frase(self, mundo, monkeypatch):
         """F1R-2 / F1-M08: `svc.recalcular` NO compara la version (mide con el motor de hoy): la compara F.1 antes de reconstruir."""
@@ -470,7 +470,7 @@ class TestLoGuardadoMandaYSoloSeReconstruyeConLaVersionDeHoyYLoGuardadoReproduci
         guardado = _valores_guardados(mundo, "otra_version")
         assert aparece(n3(guardado["fwhm_crossplane_mm"]), seccion_) and "PM-0" in seccion_
         assert "Medidas estadísticas del barrido" not in seccion_ and "Perfiles de la capa" not in seccion_ and "Parámetros fijos" not in seccion_
-        assert not [i for i in imagenes_de(pdf) if abs(i[1].width - 384) < 1 and abs(i[1].height - 340) < 1], "ninguna figura de perfiles"
+        assert not [i for i in imagenes_de(pdf) if abs(i[1].width - 384) < 1 and abs(i[1].height - 400) < 1], "ninguna figura de perfiles (CD.8 (DA-93): la de 400 pt)"
         assert len(_peliculas_nuevas(pdf, placa)) == 1, "la pelicula sale igual: es de lo guardado"
 
     def test_con_un_valor_guardado_alterado_se_imprime_el_alterado_y_no_se_reconstruye(self, mundo, monkeypatch, verdad):
@@ -576,7 +576,7 @@ class TestLasTablasDeLaSeccion:
         from matplotlib.backends.backend_agg import FigureCanvasAgg
         from matplotlib.figure import Figure
         sec = seccion()
-        figura = Figure(figsize=(384 / 72.0, 340 / 72.0), layout="constrained")
+        figura = Figure(figsize=(384 / 72.0, 400 / 72.0), layout="constrained")          # CD.8 (DA-93): el tamano del PDF
         FigureCanvasAgg(figura)
         sec.componer_figura(figura, verdad["resultado"], capa)
         ejes = [a for a in figura.axes if a.get_gid() != "leyenda"]
@@ -598,22 +598,23 @@ class TestLasTablasDeLaSeccion:
             sec.tablas_de_la_seccion(_registro(mundo, f"capa_{capa}"))
         assert pedidas == list(CAPAS)
 
-    def test_la_figura_de_los_perfiles_es_la_del_pdf_de_384_x_340_pt_a_200_dpi(self, mundo):
+    def test_la_figura_de_los_perfiles_es_la_del_pdf_de_384_x_400_pt_a_200_dpi(self, mundo):
         from PIL import Image as PILImage
         import io
         tablas = seccion().tablas_de_la_seccion(_registro(mundo, "capa_G"))
         figura = tablas["placa_mensual_perfiles"].iloc[0, 0]
-        assert abs(figura.drawWidth - 384) < 1e-6 and abs(figura.drawHeight - 340) < 1e-6
+        assert abs(figura.drawWidth - 384) < 1e-6 and abs(figura.drawHeight - 400) < 1e-6          # CD.8 (DA-93): de 340 a 400 pt
         png = PILImage.open(io.BytesIO(seccion().png_de_los_perfiles(_resultado_de(mundo, "capa_G"), "G")))
-        assert all(abs(a - b) <= 1 for a, b in zip(png.size, (384 / 72 * 200, 340 / 72 * 200))), png.size
+        assert all(abs(a - b) <= 1 for a, b in zip(png.size, (384 / 72 * 200, 400 / 72 * 200))), png.size
 
-    def test_el_pie_de_parametros_es_texto_de_los_parametros_guardados(self, mundo):
+    def test_el_pie_de_parametros_ya_no_se_imprime(self, mundo):
+        """CD.8 (DA-93), 31-10, el fisico: «quiero que remuevas tambien el cuadro explicativo del pdf»; «SI a todo»: sale sin dejar ninguna linea. Los parametros siguen guardados con el registro (y se ven
+        en «Info» de la ventana)."""
         registro = _registro(mundo, "capa_G")
-        filas = _filas(seccion().tablas_de_la_seccion(registro)["placa_mensual_parametros"])
-        assert filas[0][0] == TITULO_DE_LOS_PARAMETROS
-        texto = " ".join(filas[1]).replace("<br/>", " ")
-        assert normal(dibujo().texto_de_parametros(registro["parametros"]).replace("\n", " ")) in normal(texto), "el pie de la ventana, con los parametros GUARDADOS del registro"
-        assert len(texto) > 1000
+        tablas = seccion().tablas_de_la_seccion(registro)
+        assert "placa_mensual_parametros" not in tablas
+        assert not any(TITULO_DE_LOS_PARAMETROS in " ".join(" ".join(f) for f in _filas(t)) for t in tablas.values())
+        assert registro["parametros"].get("base_de_la_medida"), "los parametros siguen guardados"
 
     def test_el_barrido_se_arma_con_las_filas_de_la_ventana_de_esa_capa(self, mundo, verdad):
         """Una sola manera de escribir un numero: las cifras son las de `filas_de_los_barridos` (E.1)."""
@@ -661,13 +662,13 @@ class TestUnaParteQueFallaNoTumbaElPdf:
         assert "falla del motor" in (tmp_path / "error_log.txt").read_text(encoding="utf-8")
         assert "Perfiles de la capa" not in seccion_
 
-    def test_si_la_figura_falla_salen_el_barrido_y_los_parametros_y_la_frase(self, mundo, monkeypatch, tmp_path):
+    def test_si_la_figura_falla_salen_el_barrido_y_la_frase(self, mundo, monkeypatch, tmp_path):
         monkeypatch.setenv("RADQA_ERROR_LOG", str(tmp_path / "error_log.txt"))
         monkeypatch.setattr(seccion(), "png_de_los_perfiles", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no hay figura")))
         pdf, errores = generar_pdf(mundo.ruta, mundo.fechas["capa_G"], "Clinac 600", monkeypatch)
         assert not errores and pdf is not None
         seccion_ = _la_seccion(texto_de(pdf))
-        assert "Medidas estadísticas del barrido" in seccion_ and "Parámetros fijos" in seccion_ and "no se pudieron dibujar" in seccion_ and "no hay figura" not in seccion_
+        assert "Medidas estadísticas del barrido" in seccion_ and "Parámetros fijos" not in seccion_ and "no se pudieron dibujar" in seccion_ and "no hay figura" not in seccion_
         assert "Perfiles de la capa" not in seccion_
         assert "no hay figura" in (tmp_path / "error_log.txt").read_text(encoding="utf-8")
 

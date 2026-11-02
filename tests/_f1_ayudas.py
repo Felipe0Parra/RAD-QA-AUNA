@@ -43,7 +43,8 @@ REFERENCIA_TG142 = "TG-142: 2 mm o 1 % por lado; lo evalúa el físico"
 LEYENDA_DEL_RECUADRO = "Recuadro: el campo luminoso, entre las cuatro esquinas marcadas en la película"
 TITULO_DE_LA_PELICULA = "La película, tal como se guardó"
 TITULO_DE_LOS_PARAMETROS = "Parámetros fijos del análisis guardado"
-CLAVES_DE_LA_SECCION = ("placa_mensual_valores", "placa_mensual_barrido", "placa_mensual_perfiles", "placa_mensual_pelicula", "placa_mensual_parametros")
+CLAVES_DE_LA_SECCION = ("placa_mensual_valores", "placa_mensual_dosis", "placa_mensual_barrido", "placa_mensual_perfiles", "placa_mensual_pelicula")       # CD.8 (DA-93): sin el cuadro de parametros; con la tabla en dosis
+CLAVES_SIN_LA_DOSIS = tuple(c for c in CLAVES_DE_LA_SECCION if c != "placa_mensual_dosis")          # CD.8 (DA-93): las de un registro que no guardo la dosis (todos los de F.1)
 # Lo que cada medida guardada se llama en la tabla de valores (rotulo con su unidad entre corchetes): el ancla EXTERNA de `ROTULOS` del modulo.
 ROTULOS_ESPERADOS = {"fwhm_crossplane_mm": "FWHM crossplane [mm]", "fwhm_inplane_mm": "FWHM inplane [mm]", "desfase_izquierdo_mm": "Desfase del lado izquierdo [mm]",
                      "desfase_derecho_mm": "Desfase del lado derecho [mm]", "desfase_superior_mm": "Desfase del lado superior [mm]", "desfase_inferior_mm": "Desfase del lado inferior [mm]"}
