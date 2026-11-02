@@ -74,7 +74,7 @@ from scipy import ndimage as ndi
 
 from analisisImagenes.pelicula import CAPAS_DEL_PISO, CLAVES_DE_LA_ESCALA, ESQUINAS, FRACCION_DE_RECORTE_MAXIMA, MARGEN_DEL_RECORTE, MOTIVO_MESETA_RECORTADA, NIVEL_DE_RECORTE, PARAMETROS_DEL_PISO, escala_mm, meseta_recortada, piso_de_pelicula
 from analisisImagenes.pelicula import ADJETIVO_DE_LA_CAPA, _abrir_con_pillow, _equipo_de_la_imagen, leer_pelicula          # CD.6: el nombre de cada capa en los motivos y la cadena de captura de la película
-from analisisImagenes.curva_dosis import CAPAS_DE_LA_CURVA, ESTADO_VALIDA, PREFIJO_GUIA, CurvaDeDosis, _texto_de_la_cadena, cadena_de_captura, curva_desde_dict          # CD.6: la curva de dosis (CD.3), su ÚNICA definición
+from analisisImagenes.curva_dosis import CAPAS_DE_LA_CURVA, ESTADO_VALIDA, PREFIJO_GUIA, CurvaDeDosis, texto_de_la_cadena, cadena_de_captura, curva_desde_dict          # CD.6: la curva de dosis (CD.3), su ÚNICA definición
 
 VERSION_ALGORITMO = "PM-1"
 
@@ -1756,7 +1756,7 @@ def base_de_la_capa(curva, capa, piso, cadena, netod_meseta=None):
     if cadena is None:
         return BASE_DENSIDAD_OPTICA, "no se conoce la cadena de captura de la película"
     if dict(cadena) != curva.cadena:
-        return BASE_DENSIDAD_OPTICA, f"la película se escaneó con otra cadena de captura que la calibración: {_texto_de_la_cadena(cadena)} contra {_texto_de_la_cadena(curva.cadena)}"
+        return BASE_DENSIDAD_OPTICA, f"la película se escaneó con otra cadena de captura que la calibración: {texto_de_la_cadena(cadena)} contra {texto_de_la_cadena(curva.cadena)}"
     if netod_meseta is not None:
         fuera = motivo_del_rango(CurvaDeLaCapa(curva, capa), netod_meseta)
         if fuera is not None:
@@ -1846,8 +1846,8 @@ def curva_efectiva(calibraciones, cadena):
     if leidas:
         registro, curva = leidas[0]
         cuantas = f"{len(leidas)} calibración vigente con una capa válida, de otra cadena" if len(leidas) == 1 else f"{len(leidas)} calibraciones vigentes con una capa válida, todas de otra cadena"
-        motivo = (f"{MOTIVO_SIN_CURVA} para la cadena de captura de esta película ({_texto_de_la_cadena(cadena)}): hay {cuantas} (la más reciente, el lote «{registro['lote']}» irradiado el "
-                  f"{registro['fecha_irradiacion']}: {_texto_de_la_cadena(curva.cadena)})")
+        motivo = (f"{MOTIVO_SIN_CURVA} para la cadena de captura de esta película ({texto_de_la_cadena(cadena)}): hay {cuantas} (la más reciente, el lote «{registro['lote']}» irradiado el "
+                  f"{registro['fecha_irradiacion']}: {texto_de_la_cadena(curva.cadena)})")
     else:
         motivo = f"{MOTIVO_SIN_CURVA}: no hay ninguna calibración vigente con una capa válida (se hace con «Curva de dosis...»)"
     if danadas:

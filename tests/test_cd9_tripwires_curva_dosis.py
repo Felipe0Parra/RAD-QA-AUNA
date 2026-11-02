@@ -77,8 +77,8 @@ def _punteado(ruta):
 
 # --- las EXCEPCIONES declaradas, cada una con su motivo (una excepción sin motivo es una puerta abierta) ---------------------------------------------------------------------------------------
 PRIVADOS_PERMITIDOS = {
-    (MOTOR_PLACA, "_texto_de_la_cadena"): "H-CD9-2 (deuda de CD.6): el motor de la placa escribe con él la cadena de captura en el motivo de la condición 3 («la película se escaneó con otra "
-                                          "cadena: ...»); es TEXTO, no evalúa el modelo. Se retira cuando la primera tarea que edite el motor de la curva la haga pública (CD9-D3)",
+    # CD.10 (CD10-D12) retiro aqui la excepcion (MOTOR_PLACA, "_texto_de_la_cadena") de H-CD9-2: el motor de la curva la hizo publica (`texto_de_la_cadena`) y el
+    # motor de la placa ya no usa ningun privado suyo (deuda CD9-D3 cerrada en la primera tarea que edito el motor)
 }
 LLAMADORES_PERMITIDOS = {
     "base_de_la_capa": {},
@@ -569,7 +569,7 @@ class TestUnaSolaConversion:
 
     def test_no_vacuidad_los_privados_se_leen_del_motor(self, produccion):
         de_modulo, metodos = privados_del_motor(produccion)
-        assert {"_devic", "_derivada_de_devic", "_ajustar_devic", "_texto_de_la_cadena"} <= de_modulo and "_parametros_de" in metodos, (de_modulo, metodos)
+        assert {"_devic", "_derivada_de_devic", "_ajustar_devic"} <= de_modulo and "_parametros_de" in metodos, (de_modulo, metodos)
 
     def test_cada_privado_permitido_sigue_existiendo(self, produccion):
         usados = {(r, nombre) for r, nombre, _, _ in usos_de_privados_del_motor(produccion)}

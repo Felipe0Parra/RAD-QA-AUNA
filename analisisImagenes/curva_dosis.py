@@ -205,7 +205,7 @@ def cadena_de_captura(procedencia):
     return {"equipo": procedencia.get("equipo"), "bits": procedencia.get("bits"), "dpi": procedencia.get("dpi_declarado"), "formato": procedencia.get("formato")}
 
 
-def _texto_de_la_cadena(cadena):
+def texto_de_la_cadena(cadena):
     equipo = cadena["equipo"] or "escáner sin declarar"
     dpi = "sin resolución" if cadena["dpi"] is None else f"{cadena['dpi']:g} ppp"
     return f"{equipo}, {cadena['bits']} bits, {dpi}, {cadena['formato']}"
@@ -370,8 +370,8 @@ def _cero(piezas_ok, virgen, cadena):
         if virgen.estado != "ok":
             motivo = virgen.estado
         elif cadena is None or cadena_de_captura(virgen.procedencia) != cadena:
-            motivo = (f"se escaneó con otra cadena de captura ({_texto_de_la_cadena(cadena_de_captura(virgen.procedencia))}"
-                      + ("" if cadena is None else f" contra {_texto_de_la_cadena(cadena)}") + ")")
+            motivo = (f"se escaneó con otra cadena de captura ({texto_de_la_cadena(cadena_de_captura(virgen.procedencia))}"
+                      + ("" if cadena is None else f" contra {texto_de_la_cadena(cadena)}") + ")")
         if motivo is None:
             tabla = virgen.uniformidad
             incertidumbres = {c: _incertidumbre_del_valor(tabla, tabla["capas"][c]["ruido"] if tabla else None, c) for c in CAPAS_DE_LA_CURVA}
@@ -491,7 +491,7 @@ def ajustar(piezas, P=None, virgen=None, u_dosis_medida_pct=None):
     a dosis) o «válida». Una pieza «no medible» no entra en la curva y se avisa. Además avisa, sin cambiar ningún estado, de una pieza cuyo fondo del escáner se aparta del del cero (el escáner pudo
     ajustar la exposición) o que está a más de `distancia_en_el_vidrio_mm` del cero en el vidrio (H2). CD3-PROD-D1: una medida sirve de cero solo con valor positivo en las capas de la curva (si no, se
     avisa y sigue la regla del cero). CD3-PROD-D2 y D3: en el modo guía, las réplicas de la pieza que hace de cero (la misma dosis nominal) y lo que no supera su dosis medida no entran al ajuste, no traen
-    residuo y se avisan. NUNCA lanza por el contenido; `ValueError` si `piezas` no son `PiezaDeCalibracion`."""
+    residuo y se avisan. NUNCA lanza por el contenido de las piezas; `ValueError` si `piezas` no son `PiezaDeCalibracion` o `virgen` no es una `ReferenciaVirgen`. `P` NO se valida aquí: lo pasa y lo valida solo `services/curva_dosis.py` (`_parametros_de_la_curva`; la ventana de calibración llama sin `P`), y con un `P` de otro tipo puede lanzar `TypeError` (CD.10, decisión de la ronda 1 de CD.4)."""
     if any(not isinstance(p, PiezaDeCalibracion) for p in piezas):
         raise ValueError("Las piezas de una curva son `PiezaDeCalibracion` (`pieza_de_calibracion`).")
     if virgen is not None and not isinstance(virgen, ReferenciaVirgen):
@@ -511,7 +511,7 @@ def ajustar(piezas, P=None, virgen=None, u_dosis_medida_pct=None):
         if p.cadena not in cadenas:
             cadenas.append(p.cadena)
     cadena = cadenas[0] if len(cadenas) == 1 else None
-    otra_cadena = MOTIVO_OTRA_CADENA.format(cadenas="; ".join(_texto_de_la_cadena(c) for c in cadenas if c is not None)) if len(cadenas) > 1 else None
+    otra_cadena = MOTIVO_OTRA_CADENA.format(cadenas="; ".join(texto_de_la_cadena(c) for c in cadenas if c is not None)) if len(cadenas) > 1 else None
     fuente, detalle, dosis_cero, cero_capas, pieza_cero, avisos_del_cero = _cero(ok, virgen, cadena)
     avisos += avisos_del_cero
     if fuente is None:
@@ -646,7 +646,7 @@ _CLAVES_DE_LA_CADENA = ("equipo", "bits", "dpi", "formato")
 def _exige_la_cadena(cadena, que):
     """La forma de una cadena de captura guardada, la de la curva o la de una pieza, tal como `cadena_de_captura` la escribe (CD3-REV1-03): exactamente `_CLAVES_DE_LA_CADENA`; el escáner y el formato un texto
     o nada; los bits un entero positivo o nada; la resolución un número de 0 o más o nada. Con esa forma no queda nada libre que pueda anidarse (el tope de profundidad se revisa antes, donde `cadena` aún
-    puede ser cualquier cosa) y `_texto_de_la_cadena` puede escribirla: una copia que `ajustar(copia.piezas)` no pueda comparar se rechaza AQUÍ, no lejos de donde se leyó."""
+    puede ser cualquier cosa) y `texto_de_la_cadena` puede escribirla: una copia que `ajustar(copia.piezas)` no pueda comparar se rechaza AQUÍ, no lejos de donde se leyó."""
     _exige_las_claves(cadena, _CLAVES_DE_LA_CADENA, que)
     equipo, bits, dpi, formato = (cadena[k] for k in _CLAVES_DE_LA_CADENA)
     _exige_la_curva((equipo is None or isinstance(equipo, str)) and (formato is None or isinstance(formato, str)) and (bits is None or (_es_entero(bits) and bits > 0))
