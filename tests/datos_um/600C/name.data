@@ -1,0 +1,29 @@
+﻿machine: 600C, 6X
+algorithm: AAA_15606New
+beam data: CLINAC 600C
+add on: Standard Wedge - 15
+data: WedgeParameters
+beam: high energy photons
+energy [MV]: 6
+exporting date: Thursday, November 5, 2026
+Data parameters:
+Wedge length[mm]:400.0
+Wedge width[mm]:200.0
+Wedge material[]:Fe
+Wedge orientation in output factor table (IN/OUT/LEFT/RIGHT)[]:IN
+Wedge angle[deg]:15.0
+Reference dose for hard wedge at calibration depth[Gy]:0.662300
+Reference MU for hard wedge at calibration depth[MU]:100.000000
+Size of second source[mm]:30.00000
+Relative intensity of second source[]:0.00000
+Mean energy of second source[MeV]:1.00000
+Distance of wedge from primary source[mm]:576.00000
+Coefficient for wedge scatter sigma 1[]:0.16075
+Coefficient for wedge scatter sigma 2[]:0.56075
+Fraction of wedge scatter from first Gaussian[]:0.31075
+Relative intensity of wedge scatter source[]:0.19813
+Mean energy of wedge scatter source[MeV]:1.87680
+Version number for AAA configuration[]:20080923
+Version number of AAA configuration program[]:AAA 15.6.06.33
+Descriptor of wedge configuration capabilities.[]:FALSE
+Time when configuration finished[]:Tue Oct 06 08:20:31 2020
