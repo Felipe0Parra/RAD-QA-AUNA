@@ -257,9 +257,9 @@ def test_lo_que_dice_el_name_data(lector):
     t = texto(lector, NAME_DATA)
     assert lector.dosis_de_referencia_cuna(t) == pytest.approx(0.6623 * 100 / 100)      # 0.6623 Gy por 100 MU = 0.6623 cGy/MU
     assert lector.dosis_de_referencia_cuna(t.replace("calibration depth[Gy]:0.662300", "calibration depth[cGy]:66.23")) == pytest.approx(0.6623)
-    with pytest.raises(lector.ArchivoNoReconocido, match=r"viene en \[mGy\] por \[MU\]: se esperaba Gy o cGy por MU"):
+    with pytest.raises(lector.ArchivoNoReconocido, match=r"viene en \[mGy\] por \[MU\]: se esperaba \[Gy\] o \[cGy\] por \[MU\]"):
         lector.dosis_de_referencia_cuna(t.replace("calibration depth[Gy]", "calibration depth[mGy]"))
-    with pytest.raises(lector.ArchivoNoReconocido, match=r"viene en \[Gy\] por \[cGy\]: se esperaba Gy o cGy por MU"):       # (UM.1, implementador) las MU tambien deben venir en [MU]
+    with pytest.raises(lector.ArchivoNoReconocido, match=r"viene en \[Gy\] por \[cGy\]: se esperaba \[Gy\] o \[cGy\] por \[MU\]"):       # (UM.1, implementador) las MU tambien deben venir en [MU]
         lector.dosis_de_referencia_cuna(t.replace("[MU]:100.000000", "[cGy]:100.000000"))
     assert lector.orientacion_de_cuna(t) == "IN" and lector.orientacion_de_cuna(t.replace("RIGHT)[]:IN", "RIGHT)[]:left")) == "LEFT"
     assert lector.angulo_en_parametros(t) == 15.0
@@ -480,7 +480,7 @@ def test_una_tabla_con_lados_imposibles_se_rechaza(lector, viejo, nuevo):
         lector.leer_tabla_of(t.replace(viejo, nuevo, 1))
 
 
-@pytest.mark.parametrize("malo", ["nan", "inf", "-0.9", "9.0", "0.29", "2.01"])
+@pytest.mark.parametrize("malo", ["0.0", "1000", "-0.9", "9.0", "0.29", "2.01"])      # UM.1b: «nan» e «inf» ya no son numeros (tests/test_um1b_lector_estricto.py)
 def test_una_celda_imposible_se_rechaza(lector, malo):
     t = texto(lector, OF_ABIERTA).replace("0.870", malo, 1)
     with pytest.raises(lector.ArchivoNoReconocido, match="tiene un valor imposible \\(fuera de 0.3 a 2\\)"):
@@ -521,7 +521,7 @@ def test_una_tabla_sin_filas_o_con_una_linea_que_no_son_numeros_lo_dice(lector):
 
 def test_un_punto_negativo_o_no_numerico_en_una_curva_se_rechaza(lector):
     t = texto(lector, PDD_ABIERTO)
-    for malo, mensaje in (("-045.300", "cuatro números válidos"), ("abc", "no se puede leer"), ("nan", "cuatro números válidos"), ("inf", "cuatro números válidos")):
+    for malo, mensaje in (("-045.300", "cuatro números válidos"), ("abc", "cuatro números válidos"), ("nan", "cuatro números válidos"), ("inf", "cuatro números válidos")):
         with pytest.raises(lector.ArchivoNoReconocido, match=mensaje):
             lector.leer_curvas(t.replace("+045.300", malo, 1))
     assert lector.leer_curvas(t.replace("+045.300", "+000.000", 1))[0].valor[0] == 0.0     # un cero es un valor: lo juzga el armado, no el lector
@@ -638,7 +638,7 @@ def test_un_name_data_sin_la_linea_data_parameters_se_rechaza(lector):
 
 
 @pytest.mark.parametrize("eje", ["X", "Y"])
-@pytest.mark.parametrize("valor", ["inf", "nan", "1e9", "100.5", "101"])
+@pytest.mark.parametrize("valor", ["1000000000", "1000", "200", "100.5", "101"])      # UM.1b: «inf», «nan» y «1e9» ya no son numeros (tests/test_um1b_lector_estricto.py)
 def test_una_tabla_con_un_lado_infinito_o_desmedido_se_rechaza(lector, eje, valor):
     """R1-H2. Un lado «inf» o «1e9» se aceptaba: la rejilla de la tabla ya no era la medida, el motor calculaba el factor de 40 x 40 con -0.45 % de error y daba un numero a 60 x 40,
     donde la tabla real dice «fuera de la tabla». Un campo infinito o desmedido no existe (el plan, UM.1)."""
@@ -745,7 +745,7 @@ def test_un_campo_de_curva_con_tres_lados_no_es_un_campo(lector):
 @pytest.mark.parametrize("unidad", ["Gy", "A", "cGy", "mu", "MUs"])
 def test_unas_mu_en_otra_unidad_se_rechazan_sea_cual_sea_su_nombre(lector, unidad):
     """Las MU vienen en [MU]: ninguna otra unidad vale, ni la que se escribe antes ni la que se escribe despues de «MU» en el abecedario."""
-    with pytest.raises(lector.ArchivoNoReconocido, match=re.escape(f"viene en [Gy] por [{unidad}]: se esperaba Gy o cGy por MU")):
+    with pytest.raises(lector.ArchivoNoReconocido, match=re.escape(f"viene en [Gy] por [{unidad}]: se esperaba [Gy] o [cGy] por [MU]")):
         lector.dosis_de_referencia_cuna(texto(lector, NAME_DATA).replace("[MU]:100.000000", f"[{unidad}]:100.000000"))
 
 
@@ -795,16 +795,18 @@ def test_una_celda_que_se_aparta_justo_el_umbral_se_marca(lector):
 
 def test_los_espacios_de_mas_en_una_linea_no_cambian_lo_que_se_lee(lector):
     """Los espacios y tabuladores que un editor deja al final de una linea (o antes de un punto, o en un parametro del name.data) no son parte de lo que dice el archivo: ni cambian la
-    identidad, ni las curvas, ni la tabla, ni hacen que dos curvas que dicen lo mismo parezcan decir cosas distintas."""
+    identidad, ni las curvas, ni la tabla, ni hacen que dos curvas que dicen lo mismo parezcan decir cosas distintas. (UM.1b, ronda 1, clase b: SOLO los de una linea que no lleva un numero
+    hasta el final -- comentarios, marcadores, puntos tras su «>», lineas en blanco --; un blanco al final de «%CLAVE valor», de una fila de la tabla o de un parametro del name.data puede ser la
+    ultima cifra danada y se rechaza: ver tests/test_um1b_lector_estricto.py, R2.)"""
     t = texto(lector, PDD_ABIERTO)
-    sucio = "\n".join((" \t" + l if l.startswith("<") else l) + "  \t" if l else l for l in t.split("\n"))
+    sucio = "\n".join(((" \t" + l if l.startswith("<") else l) + ("" if l.startswith("%") else "  \t")) if l else l for l in t.split("\n"))
     assert sucio != t and lector.identidad(sucio) == lector.identidad(t)
     for a, b in zip(lector.leer_curvas(sucio), lector.leer_curvas(t)):
         assert a.campo_cm == b.campo_cm and a.ssd_cm == b.ssd_cm and np.array_equal(a.x_cm, b.x_cm) and np.array_equal(a.z_cm, b.z_cm) and np.array_equal(a.valor, b.valor)
     assert lector.identidad("# machine: 600C , 6X  \n# add on: Open Field - 00 \n# data: OPD\t\n") == lector.Identidad("600C", "6X", "Open Field - 00", "OPD")
     assert lector.leer_curvas(t.replace("%SSD 1000\n", "%SSD 1000\n%SSD  1000\n", 1))[0].ssd_cm == 100.0       # dicho dos veces con el MISMO valor y un espacio de mas: no contradice nada
     una_tabla = texto(lector, OF_ABIERTA)
-    con_linea_en_blanco = una_tabla.replace("# Data\n", "# Data\n  \t\n", 1).replace("0.908\n", "0.908  \n", 1)
+    con_linea_en_blanco = una_tabla.replace("# Data\n", "# Data  \t\n  \t\n", 1)
     assert con_linea_en_blanco != una_tabla and lector.leer_tabla_of(con_linea_en_blanco).m.tolist() == lector.leer_tabla_of(una_tabla).m.tolist()
-    parametros = lector.leer_parametros(texto(lector, NAME_DATA).replace("Wedge angle[deg]:15.0", "  Wedge angle [ deg ]:  15.0  "))
+    parametros = lector.leer_parametros(texto(lector, NAME_DATA).replace("Wedge angle[deg]:15.0", "  Wedge angle [ deg ]:  15.0"))
     assert parametros["Wedge angle"] == ("15.0", "deg")
