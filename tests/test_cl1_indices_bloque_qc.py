@@ -75,7 +75,9 @@ def test_crea_los_64_tras_mi1_mi3_eb6_r1_b1_pi2_d1(bd_temporal):
     # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md): +2 (calibracion_pelicula,
     # clave (lote, DATE(fecha_irradiacion), energia), y calibracion_pelicula_pieza,
     # clave (ref, orden)) = 66. La prueba conserva su nombre (CD4-D13).
-    assert len(resultado) == 66
+    # UM.3 (08-11, PLAN_CALCULADORA_UM_05-11.md): +2 (um_datos_haz, clave (equipo,
+    # energia), y um_archivo_haz, clave (ref, accesorio, dato)) = 68. La prueba conserva su nombre (UM3-D9).
+    assert len(resultado) == 68
     for tabla, r in resultado.items():
         assert r == "creado", (
             f"{tabla}: se esperaba 'creado' -- tras MI1/MI3/EB6/R1 las 61 "
@@ -191,4 +193,6 @@ def test_claves_coinciden_con_las_del_plan_para_las_8_de_h2():
     # (PLAN_ANALISIS_PELICULAS_08-10.md, 18-10) añadió analisis_placa_mensual = 64.
     # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md) añadió calibracion_pelicula
     # y calibracion_pelicula_pieza = 66. La prueba conserva su nombre (CD4-D13).
-    assert len(CLAVES_INDICE) == 66
+    # UM.3 (08-11, PLAN_CALCULADORA_UM_05-11.md) añadió um_datos_haz y um_archivo_haz
+    # = 68. La prueba conserva su nombre (UM3-D9).
+    assert len(CLAVES_INDICE) == 68

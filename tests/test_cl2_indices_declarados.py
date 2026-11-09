@@ -146,6 +146,12 @@ CLAVES_ESPERADAS_DEL_PLAN = {
     # formulario (hija por `ref`).
     "calibracion_pelicula": ("lote", "DATE(fecha_irradiacion)", "energia"),
     "calibracion_pelicula_pieza": ("ref", "orden"),
+    # UM.3 (08-11, PLAN_CALCULADORA_UM_05-11.md, DA-95): los datos de haz de la
+    # calculadora de UM -- UN conjunto vigente por acelerador y energia (octava
+    # raiz propia, sin FK) -- y, en el, UN archivo vigente por accesorio y dato
+    # (hija por `ref`; un `name.data` por cuna se distingue por su accesorio).
+    "um_datos_haz": ("equipo", "energia"),
+    "um_archivo_haz": ("ref", "accesorio", "dato"),
 }
 
 # Tablas del bloque de QC que YA estaban en TABLAS_ANULABLES antes de IV1

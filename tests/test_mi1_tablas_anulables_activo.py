@@ -102,8 +102,12 @@ class TestInventarioTrasMI1:
         # calibracion_pelicula_pieza, su hija por `ref`) sobre las 66 que dejó
         # D.1 -- 58 hijas + 10 raíces. La prueba conserva su nombre (CD4-D13): el
         # número que fija es el de la aserción.
-        assert len(TABLAS_ANULABLES) == 68, (
-            f"58 hijas + 10 raíces tras MI1+R1+B.1+PI.2+D.1+CD.4 -- hay "
+        # UM.3 (08-11, PLAN_CALCULADORA_UM_05-11.md): +2 (um_datos_haz, RAIZ propia
+        # sin FK -- también en RAICES_QC --, y um_archivo_haz, su hija por `ref`)
+        # sobre las 68 que dejó CD.4 -- 59 hijas + 11 raíces. La prueba conserva su
+        # nombre (UM3-D9).
+        assert len(TABLAS_ANULABLES) == 70, (
+            f"59 hijas + 11 raíces tras MI1+R1+B.1+PI.2+D.1+CD.4+UM.3 -- hay "
             f"{len(TABLAS_ANULABLES)}. Si el cambio es deliberado, "
             f"actualiza este número a la vez que TABLAS_ANULABLES.")
 

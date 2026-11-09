@@ -82,11 +82,15 @@ class TestSecciones:
         # `calibracion_pelicula_pieza` sale en su sección. La pantalla sigue con
         # su lista fija de 7 (DP-144): lo anulado de una calibración se ve por
         # esta capa de datos. La prueba conserva su nombre (CD4-D13).
+        # UM.3 (08-11, PLAN_CALCULADORA_UM_05-11.md): +1 (um_datos_haz, octava raíz
+        # propia -- RAICES_QC); su hija `um_archivo_haz` sale en su sección. La
+        # pantalla no cambia (DP-144). La prueba conserva su nombre (UM3-D9).
         secc = va.secciones()
         assert set(secc) == {
             "controles", "TipoCalibracion", "LinealidadBraquiterapia",
             "aceleradorlineal_600", "aceleradorlineal_ix", "halcyon", "braqui",
             "referencias_qc", "braqui_posicion_inicial", "calibracion_pelicula",
+            "um_datos_haz",
         }
 
     def test_cada_seccion_incluye_a_su_propia_raiz(self, bd_temporal):

@@ -55,7 +55,10 @@ def test_tablas_del_bloque_qc_cubre_el_bloque_entero_raices_incluidas():
     # CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md): +1 (calibracion_pelicula,
     # septima raiz propia -- sin FK: la usan por COPIA los analisis de muchos
     # controles, DA-81). La prueba conserva su nombre (CD4-D13).
-    assert len(lv.RAICES_QC) == 10
+    # UM.3 (08-11, PLAN_CALCULADORA_UM_05-11.md, DA-95): +1 (um_datos_haz, octava
+    # raiz propia -- sin FK: los datos de haz de un acelerador y una energia).
+    # La prueba conserva su nombre (UM3-D9).
+    assert len(lv.RAICES_QC) == 11
 
     # Las 3 tablas del rebuild del 18-08 -- deliberadamente FUERA del
     # TABLAS_EN_ALCANCE de 18 tablas que tenía LE4, y sin embargo D3
@@ -402,7 +405,9 @@ def test_claves_indice_coincide_con_el_fuente():
     # analisis_placa_mensual, PLAN_ANALISIS_PELICULAS_08-10.md: hija de controles)
     # + CD.4 (30-10, PLAN_CURVA_DOSIS_PELICULAS_22-10.md: 2, calibracion_pelicula
     # y calibracion_pelicula_pieza). La prueba conserva su nombre (CD4-D13).
-    assert len(claves) == 66
+    # + UM.3 (08-11, PLAN_CALCULADORA_UM_05-11.md: 2, um_datos_haz y um_archivo_haz).
+    # La prueba conserva su nombre (UM3-D9).
+    assert len(claves) == 68
     assert claves == {t: frozenset(c) for t, c in CLAVES_REALES.items()}
     # LF5: la premisa que hace seguro tratar "id"/"rowid" como identidad
     # física en cualquier tabla, sin mirar CLAVES_INDICE caso por caso.

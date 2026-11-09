@@ -374,6 +374,13 @@ ALLOWLIST = {
     # dentro de la transaccion.
     ("services/curva_dosis.py", "guardar"):
         "delegada-en:services/anulacion.py::reemplazar_bloque",
+    # UM.3 (PLAN_CALCULADORA_UM_05-11.md, 09-11): `services/um_datos_haz.py::guardar` guarda los datos de haz
+    # de un acelerador y una energia en UNA transaccion; la fila de auditoria de la accion (`guardar` o
+    # `reemplazo`) la escribe `_auditar` en esa misma transaccion y la COMPRUEBA (sin ella no se guarda nada), y
+    # la de una denegacion, `_auditar_denegacion`, por la conexion de la app (UM3-D18). La prueba nueva de UM.3
+    # fija las dos filas. (En la v1 la denegacion se auditaba dentro de `guardar` y el tripwire no la pedia.)
+    ("services/um_datos_haz.py", "guardar"):
+        "delegada-en:services/um_datos_haz.py::_auditar",
 
     # --- A6.7 (TAC / Catphan) cerrada 2026-08-04: guardar_prueba_completa_
     # catphan es el ÚNICO punto de entrada real de las 9 (los 2 llamadores

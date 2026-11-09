@@ -87,6 +87,9 @@ RAICES_QC = frozenset({
     # CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, DA-90): septima raiz propia -- una calibracion de pelicula no cuelga de un control puntual (la usan por COPIA los analisis de muchos controles, DA-81),
     # asi que a proposito no tiene FK. Misma razon que `referencias_qc` y `braqui_posicion_inicial`: sin clasificarla aqui, IV2 la marca «sobrante». Su hija `calibracion_pelicula_pieza` sale del cierre.
     "calibracion_pelicula",
+    # UM.3 (PLAN_CALCULADORA_UM_05-11.md, DA-95): octava raiz propia -- los datos de haz de un acelerador y una energia no cuelgan de un control puntual (los usan todos los calculos de UM de esa
+    # maquina), asi que a proposito no tienen FK. Misma razon que las anteriores: sin clasificarla aqui, IV2 la marca «sobrante». Su hija `um_archivo_haz` sale del cierre.
+    "um_datos_haz",
 })
 
 

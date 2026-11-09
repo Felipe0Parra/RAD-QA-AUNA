@@ -374,15 +374,19 @@ class TestDenominadorDeCobertura:
         #   104 -> 108 CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md, 30-10): `services/curva_dosis.py` -- cuatro funciones lectoras nuevas sobre `calibracion_pelicula` (septima raiz del bloque de QC):
         #             `guardar` (la vigente de la clave de bloque que reemplaza, con `filtro_activo`), `anular` (lee `activo` por identidad), `listar` (las vigentes, con `filtro_activo`) y `leer`
         #             (por identidad); `vigentes_validas` no tiene SQL propio (sale de `listar` y `leer`). Medido con `lectoras_del_bloque_qc()` sobre el arbol de CD.4 (108) y sobre un espejo de HEAD (104).
+        #   108 -> 114 UM.3 (PLAN_CALCULADORA_UM_05-11.md, 08-11): `services/um_datos_haz.py` -- seis funciones lectoras nuevas sobre `um_datos_haz` y `um_archivo_haz` (octava raiz del
+        #             bloque de QC): `guardar` (la vigente de la clave de bloque que reemplaza), `vigente`, `energias_cargadas` y `datos_del_haz` (las vigentes, con `filtro_activo`),
+        #             `historial` (las dos ramas a proposito, con `activo` como dato) y `_archivos_del_conjunto` (los archivos de un conjunto). Medido con `lectoras_del_bloque_qc()`
+        #             sobre el arbol de UM.3 (114) y sobre un espejo de 85f02a3 con la referencia de UM.2 (108).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 108, (
+        assert len(lectoras) == 114, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
             f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
             f"inicial, FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) y "
             f"FS.2 retiró la lectura propia de `actualizar_fisicos`, y BM.1 consolidó los ocho lectores por fecha del mensual de "
             f"braquiterapia en siete que leen por `ref`, D.1 sumó `services/placa_mensual.py` (`leer` y `guardar`), E.2 sumó "
             f"`imagen_del_campo.py::hay_franjas_vigentes` y G.1 retiró `crear_algo`, `mostrar_analisis_img`, `mostrar_analisis_franjas` y "
-            f"`mostrar_veri_corr`, y CD.4 sumó `services/curva_dosis.py` (`guardar`, `anular`, `listar` y `leer`) -- 108 funciones esperadas; ahora salen "
+            f"`mostrar_veri_corr`, CD.4 sumó `services/curva_dosis.py` (`guardar`, `anular`, `listar` y `leer`) y UM.3 sumó `services/um_datos_haz.py` (`guardar`, `vigente`, `energias_cargadas`, `historial`, `datos_del_haz` y `_archivos_del_conjunto`) -- 114 funciones esperadas; ahora salen "
             f"{len(lectoras)}. Si el cambio es deliberado, actualiza "
             f"el plan y este número a la vez; si no, alguien añadió una "
             f"lectura nueva sin enterarse.\n"

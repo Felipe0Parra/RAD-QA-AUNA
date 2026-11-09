@@ -184,6 +184,10 @@ TABLAS_ANULABLES = frozenset({
     # `calibracion_pelicula_pieza` su HIJA por `ref` (entra al cierre transitivo por FK que vigila IV2). Escribe solo `services/curva_dosis.py`.
     "calibracion_pelicula",
     "calibracion_pelicula_pieza",
+    # UM.3 (PLAN_CALCULADORA_UM_05-11.md, DA-95): los datos de haz de la calculadora de UM. `um_datos_haz` es RAIZ propia sin FK (tambien en `RAICES_QC`) y `um_archivo_haz` su HIJA por `ref`
+    # (entra al cierre transitivo por FK que vigila IV2). Escribe solo `services/um_datos_haz.py`.
+    "um_datos_haz",
+    "um_archivo_haz",
 })
 
 

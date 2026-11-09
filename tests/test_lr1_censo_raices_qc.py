@@ -136,6 +136,22 @@ CENSO_RAICES = {
         (CENSO, "historial: lee las filas vigentes E históricas de una clave "
          "de bloque A PROPÓSITO -- es el rastro de quién cambió qué y cuándo "
          "(paso 8 de la puerta de salida); filtrar activo lo dejaría vacío"),
+    # -- UM.3 (PLAN_CALCULADORA_UM_05-11.md, 08-11) ----------------
+    # `um_datos_haz` es la octava raiz propia (sin FK, tambien en RAICES_QC); su UNICA puerta es `services/um_datos_haz.py`. Las sentencias sobre su hija `um_archivo_haz` (que no es raiz)
+    # no entran a este censo; la prueba nueva de UM.3 fija lo que lee cada una. (09-11, implementador: las cinco lineas corren +1 (323->324, 379->380, 398->399, 410->411, 431->432) porque `guardar`
+    # abre su conexion de prueba con `_conexion()` y no con una asignacion pelada, que `test_r5_tripwire_conexiones_sin_cerrar.py` rechaza en una funcion que escribe.)
+    ("services/um_datos_haz.py", 324, "um_datos_haz"):
+        (LISTA, "guardar: SELECT id ... WHERE equipo = ? AND energia = ? -- la CLAVE DE BLOQUE completa del conjunto que el guardado reemplaza (no una fila fisica), asi que "
+         "filtra activo con filtro_activo() dentro del f-string; corre en la misma transaccion (BEGIN IMMEDIATE) que el reemplazo"),
+    ("services/um_datos_haz.py", 380, "um_datos_haz"):
+        (LISTA, "vigente: el conjunto VIGENTE de la clave de bloque (equipo, energia); filtra activo con filtro_activo() dentro del f-string"),
+    ("services/um_datos_haz.py", 399, "um_datos_haz"):
+        (LISTA, "energias_cargadas: las energias de un equipo con un conjunto VIGENTE, para el selector de la pantalla (UM.4); filtra activo con filtro_activo() dentro del f-string"),
+    ("services/um_datos_haz.py", 411, "um_datos_haz"):
+        (CENSO, "historial: lee los conjuntos vigentes E historicos de una clave de bloque A PROPOSITO -- el rastro de quien cargo que y cuando (paso 6 de la puerta de salida); "
+         "trae `activo` como dato; filtrar lo dejaria con un solo conjunto"),
+    ("services/um_datos_haz.py", 432, "um_datos_haz"):
+        (LISTA, "datos_del_haz: el conjunto VIGENTE de la clave de bloque, que arma el DatosHaz del calculo; filtra activo con filtro_activo() dentro del f-string"),
     # -- T.4 (PLAN_COPIA_GUARDADA_Y_REPORTES_16-09.md §5) ----------------
     ("services/contexto_auditoria.py", 133, "controles"):
         (IDENTIDAD, "visor de auditoría -- WHERE id IN (...) resuelve por "
@@ -390,16 +406,18 @@ CENSO_RAICES = {
 # quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
 # en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
 # 70 -> 73 sitios físicos.
-FILAS_ESPERADAS = 83      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`); FS.1 (06-10): -1 (-2 busquedas de create_control retiradas de load.py y seiscientos_anual.py, +1 la unica `identidad_control.py::buscar_control_vigente`); FS.2 (06-10): -1 (la consulta propia de `actualizar_fisicos` se retira: usa `buscar_control_vigente`)
+FILAS_ESPERADAS = 88      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`); FS.1 (06-10): -1 (-2 busquedas de create_control retiradas de load.py y seiscientos_anual.py, +1 la unica `identidad_control.py::buscar_control_vigente`); FS.2 (06-10): -1 (la consulta propia de `actualizar_fisicos` se retira: usa `buscar_control_vigente`)
                           # RC.2 (30-09): +1, `corregir_calibracion` (IDENTIDAD sobre TipoCalibracion)
                           # PI.3 (02-10): +6, `services/posicion_inicial_braqui.py` (3 LISTA y 3 IDENTIDAD)
                           # PI.9 (05-10): -3, los tres sitios de la clase retirada (`actualizar_ref_bd` y las dos series temporales; LISTA)
                           # CD.4 (30-10): +5, `services/curva_dosis.py` sobre `calibracion_pelicula` (2 LISTA: guardar y listar; 3 IDENTIDAD: anular x2 y leer)
-SITIOS_FISICOS_ESPERADOS = 81      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`); FS.1 (06-10): -1 (el mismo recuento de arriba); FS.2 (06-10): -1 (idem)
+                          # UM.3 (08-11): +5, `services/um_datos_haz.py` sobre `um_datos_haz` (4 LISTA: guardar, vigente, energias_cargadas y datos_del_haz; 1 CENSO: historial)
+SITIOS_FISICOS_ESPERADOS = 86      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`); FS.1 (06-10): -1 (el mismo recuento de arriba); FS.2 (06-10): -1 (idem)
                                     # RC.2 (30-09): +1 (corregir_calibracion, IDENTIDAD)
                                     # PI.3 (02-10): +6 (los seis del servicio, ninguno se resuelve a dos textos)
                                     # PI.9 (05-10): -3 (los mismos tres sitios; ninguno se resolvia a dos textos)
                                     # CD.4 (30-10): +5 (los cinco del servicio, ninguno se resuelve a dos textos)
+                                    # UM.3 (08-11): +5 (los cinco del servicio, ninguno se resuelve a dos textos)
 
 # La lista de trabajo de LR3, ya VACÍA: los 31 sitios de LISTA que no
 # llevaban filtro lo llevan desde LR3. Nunca fue una lista blanca

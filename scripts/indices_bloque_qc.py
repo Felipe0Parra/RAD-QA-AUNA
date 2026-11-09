@@ -167,6 +167,11 @@ CLAVES_INDICE = {
     # vigente por fila del formulario. `DATE(fecha_irradiacion)` es una expresion, como `DATE(date)` de las diarias (MI3).
     "calibracion_pelicula": ("lote", "DATE(fecha_irradiacion)", "energia"),
     "calibracion_pelicula_pieza": ("ref", "orden"),
+
+    # UM.3 (PLAN_CALCULADORA_UM_05-11.md, DA-95): UN conjunto de datos de haz vigente por acelerador y energia (cargar otra vez la misma energia lo reemplaza: `id` nuevo, la misma clave) y, en
+    # el, UN archivo vigente por accesorio y dato (varios `name.data`, uno por cuna, se distinguen por su accesorio).
+    "um_datos_haz": ("equipo", "energia"),
+    "um_archivo_haz": ("ref", "accesorio", "dato"),
 }
 
 _RE_EXPRESION_CLAVE = re.compile(r'^(\w+)\((\w+)\)$')

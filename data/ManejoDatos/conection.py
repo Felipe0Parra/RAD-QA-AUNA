@@ -294,6 +294,7 @@ class Conexion():
             self.crearTablaPosicionInicialBraqui()  # PI.2 (PLAN_POSICION_INICIAL_BRAQUI_01-10.md)
             self.crearTablaAnalisisPlacaMensual()  # D.1 (PLAN_ANALISIS_PELICULAS_08-10.md)
             self.crearTablasCalibracionPelicula()  # CD.4 (PLAN_CURVA_DOSIS_PELICULAS_22-10.md)
+            self.crearTablasDatosHazUM()  # UM.3 (PLAN_CALCULADORA_UM_05-11.md)
 
             # R1 (PLAN_INTEGRIDAD_MENSUAL_Y_RUTAS_23-07.md): DosisService.crear_tabla()
             # (que asegura columnas como "energia"/"vigente" via ALTER TABLE)
@@ -2943,3 +2944,51 @@ class Conexion():
         except Exception as e:
             print("Error al obtener conexión nueva:", e)
             return None
+
+    def crearTablasDatosHazUM(self):
+        """UM.3 (PLAN_CALCULADORA_UM_05-11.md, DC12, DA-95): los datos de haz de la calculadora de UM -- las tablas que exporta Eclipse de UN acelerador y UNA energia -- en DOS tablas del
+        contrato de QC. Las escribe y las lee SOLO `services/um_datos_haz.py`.
+
+        `um_datos_haz` es RAIZ PROPIA, SIN FK (como `referencias_qc`): un conjunto de datos de haz no es de un control puntual -- lo usan todos los calculos de esa maquina y esa energia --, asi que
+        entra en `RAICES_QC` (services/lectura_vigente.py). Clave de bloque (`equipo`, `energia`): cargar otra vez la misma energia anula el conjunto vigente y deja el historial. Guarda lo que se
+        ESCRIBE al cargar: D'0 en dmax o en las condiciones de la tabla (uno de los dos, DC1; el CHECK lo exige), su origen, los factores de cuna escritos y la curva de Sc propia (JSON; `curva_sc`
+        NULL es la curva de omision, DC3), quien y cuando.
+
+        `um_archivo_haz` es su HIJA (`ref`, RESTRICT): una fila por archivo que el calculo lee, clave (`ref`, `accesorio`, `dato`) -- varios archivos con el mismo nombre (un `name.data` por cuna) se
+        distinguen por su accesorio. Guarda el archivo TAL COMO SE EXPORTO (`contenido`, BLOB: sus bytes, con su BOM y sus finales de linea) y su `sha256`; NUNCA numeros ya interpretados (un
+        derivado no se almacena, regla del 09-09): el servicio los vuelve a leer con el lector de cada version.
+
+        Sin `activo`: la agrega sola `_asegurar_activo_bloque_qc` (las dos estan en TABLAS_ANULABLES desde que nacen). Los indices unicos parciales los crea `crear_indices` (la herramienta de
+        migracion), como los de las demas. `CREATE TABLE IF NOT EXISTS`: aditiva e idempotente, no toca ninguna otra tabla. Va al FINAL de la clase a proposito (Trampa 5): ninguna cita de linea
+        de este archivo se mueve salvo por la linea de su llamada."""
+        cursor = self.con.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS um_datos_haz (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                equipo TEXT NOT NULL,
+                energia TEXT NOT NULL,
+                d0_dmax REAL,
+                d0_tabla REAL,
+                d0_origen TEXT NOT NULL,
+                wf_escritos TEXT NOT NULL,
+                curva_sc TEXT,
+                sc_origen TEXT,
+                observaciones TEXT,
+                usuario TEXT NOT NULL,
+                fecha_registro TEXT NOT NULL,
+                CHECK ((d0_dmax IS NULL) + (d0_tabla IS NULL) = 1)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS um_archivo_haz (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref INTEGER NOT NULL,
+                accesorio TEXT NOT NULL,
+                dato TEXT NOT NULL,
+                nombre_archivo TEXT NOT NULL,
+                sha256 TEXT NOT NULL,
+                contenido BLOB NOT NULL,
+                FOREIGN KEY (ref) REFERENCES um_datos_haz(id) ON DELETE RESTRICT ON UPDATE CASCADE
+            )
+        """)
+        self.con.commit()
