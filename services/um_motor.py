@@ -75,17 +75,19 @@ def equivalente(x, y):
     return 2 * x * y / (x + y)
 
 
-def _cifras(valor, limite):
-    """El valor con los decimales que hagan falta para que no se lea igual que el límite que pasó (con .2f, 30.004 se leía «30.00» frente a «30»)."""
-    n = 2
-    while n < 10 and f"{valor:.{n}f}" == f"{limite:.{n}f}":
+def cifras(valor, limite, n=2, tipo="f"):
+    """El valor con las cifras que hagan falta para que no se lea igual que el límite que pasó (con .2f, 30.004 se leía «30.00» frente a «30»). `n` y `tipo`: el
+    formato con que se escribe lejos del límite («f», decimales; «g», cifras significativas). UM.2 v2 (C1): el único formato de un valor junto a su límite, en
+    los tres módulos. UM.2b (H-UM2b-1): un valor IGUAL al límite no tiene cifra que lo distinga y se escribe con el formato normal (sin la guarda, 4.0 frente a 4.0 daba
+    «4.00000000000000000»: dos cadenas iguales con cualquier número de decimales)."""
+    while n < 17 and valor != limite and f"{valor:.{n}{tipo}}" == f"{limite:.{n}{tipo}}":
         n += 1
-    return f"{valor:.{n}f}"
+    return f"{valor:.{n}{tipo}}"
 
 
 def _dentro(valor, minimo, maximo, que):
     if not minimo - 1e-9 <= valor <= maximo + 1e-9:
-        raise FueraDeTabla(f"{que} = {_cifras(valor, minimo if valor < minimo else maximo)} [cm] está fuera de la tabla ({minimo:g} a {maximo:g} [cm])")
+        raise FueraDeTabla(f"{que} = {cifras(valor, minimo if valor < minimo else maximo)} [cm] está fuera de la tabla ({minimo:g} a {maximo:g} [cm])")
 
 
 @dataclass(frozen=True, eq=False)
@@ -194,11 +196,12 @@ class PerfilesOAR:
     def __call__(self, d, x_iso):
         """OAR con el perfil del campo más grande, sin salir de lo que ese perfil mide dentro de su campo."""
         if not self.grandes[0].prof <= d <= self.grandes[-1].prof:
-            raise FueraDeTabla(f"Los perfiles van de {self.grandes[0].prof:g} a {self.grandes[-1].prof:g} [cm] y el punto está a {d:g} [cm] de profundidad: "
+            limite = self.grandes[0].prof if d < self.grandes[0].prof else self.grandes[-1].prof
+            raise FueraDeTabla(f"Los perfiles van de {self.grandes[0].prof:g} a {self.grandes[-1].prof:g} [cm] y el punto está a {cifras(d, limite, 6, 'g')} [cm] de profundidad: "
                                "escriba el OAR a mano")
         for p in _par_que_rodea(self.grandes, d):
             if x_iso > p.alcance:
-                raise FueraDeTabla(f"El punto está a {x_iso:.1f} [cm] del eje y el perfil de {p.lado:g} × {p.lado:g} [cm] a {p.prof:g} [cm] solo sirve hasta "
+                raise FueraDeTabla(f"El punto está a {cifras(x_iso, p.alcance, 1)} [cm] del eje y el perfil de {p.lado:g} × {p.lado:g} [cm] a {p.prof:g} [cm] solo sirve hasta "
                                    f"{p.alcance:g} [cm]: escriba el OAR a mano")
         return _entre_profundidades(self.grandes, d, x_iso)
 
@@ -424,7 +427,9 @@ def _comprobar_campo(datos, e, x_ef, y_ef):
     else:
         mayor = x_ef > e.x + TOLERANCIA_LADO_CM or y_ef > e.y + TOLERANCIA_LADO_CM
     if mayor:
-        raise FueraDelCampo(f"El campo efectivo ({x_ef:g} × {y_ef:g} [cm]) no puede ser mayor que las mandíbulas ({e.x:g} × {e.y:g} [cm])")
+        raise FueraDelCampo(f"El cuadrado equivalente del campo efectivo ({x_ef:g} [cm]) no puede ser mayor que el de las mandíbulas ({e.x:g} × {e.y:g} [cm], "
+                            f"{cifras(equivalente(e.x, e.y), x_ef)} [cm])" if x_ef == y_ef else
+                            f"El campo efectivo ({x_ef:g} × {y_ef:g} [cm]) no puede ser mayor que las mandíbulas ({e.x:g} × {e.y:g} [cm])")
     if _margen(e) <= 0:
         raise FueraDelCampo("El punto queda en el borde o fuera del campo de las mandíbulas: no hay número que comparar. Elija otro punto (TG-114: a 2 [cm] o más del borde)")
 
@@ -458,7 +463,7 @@ def _oar(datos, e, avisos):
         raise FaltaDato("No hay perfiles cargados: escriba el OAR a mano")
     oar = datos.perfiles(e.prof, x_r)
     if x_r > OAR_SIN_AVISO_CM:
-        avisos.append(f"El punto está a {x_r:.1f} [cm] del eje: la TG-71 advierte que el perfil de un campo grande puede errar más de 5 [%] cerca del borde.")
+        avisos.append(f"El punto está a {cifras(x_r, OAR_SIN_AVISO_CM, 1)} [cm] del eje: la TG-71 advierte que el perfil de un campo grande puede errar más de 5 [%] cerca del borde.")
     return oar, "tabla", x_r
 
 
@@ -498,7 +503,7 @@ def _factor_cuna(datos, e, x_ef, y_ef, r, avisos, lecturas):
     _dentro(y_m, cuna.tabla.y[0], cuna.tabla.y[-1], f"El lado de las mandíbulas a lo largo de la cuña de {e.cuna}°")
     por_campo = cuna.tabla(x_c, y_c, f"la tabla de la cuña de {e.cuna}°") / datos.of(x_c, y_c)
     if not cuna.lados_beta[0] <= r <= cuna.lados_beta[-1]:
-        avisos.append(f"La variación de la cuña con la profundidad se tomó del campo medido más cercano: el campo en la superficie ({r:.1f} [cm]) queda fuera de los medidos ({cuna.lados_beta[0]:g} a {cuna.lados_beta[-1]:g} [cm]).")
+        avisos.append(f"La variación de la cuña con la profundidad se tomó del campo medido más cercano: el campo en la superficie ({cifras(r, cuna.lados_beta[0] if r < cuna.lados_beta[0] else cuna.lados_beta[-1], 1)} [cm]) queda fuera de los medidos ({cuna.lados_beta[0]:g} a {cuna.lados_beta[-1]:g} [cm]).")
     if cuna.wf_origen:
         avisos.append(cuna.wf_origen)
     if cuna.celdas_a_revisar & cuna.tabla.celdas_usadas(x_c, y_c):
@@ -527,7 +532,7 @@ def calcular(datos, e, dentro=TOLERANCIA_DENTRO_PCT, fuera=TOLERANCIA_FUERA_PCT)
         # mandíbulas (2.A.2.a.ii): se lee el cuadrado, que no trae intercambio, y el de las mandíbulas se pone con E. Del rectángulo efectivo no se lee nada en la
         # tabla, así que sus lados no tienen que caber en ella; solo su lado corto no puede ser más estrecho que el campo más pequeño medido.
         if min(x_ef, y_ef) * k_of < min(datos.of.x[0], datos.of.y[0]) - 1e-9:      # UM.2 v2 (UM2-D19): más estrecho que lo medido no se calcula
-            raise FueraDeTabla(f"El campo efectivo tiene un lado de {_cifras(min(x_ef, y_ef) * k_of, min(datos.of.x[0], datos.of.y[0]))} [cm] en la tabla, más "
+            raise FueraDeTabla(f"El campo efectivo tiene un lado de {cifras(min(x_ef, y_ef) * k_of, min(datos.of.x[0], datos.of.y[0]))} [cm] en la tabla, más "
                                f"estrecho que el campo más pequeño medido ({min(datos.of.x[0], datos.of.y[0]):g} [cm]): no se calcula")
         # Ronda 1 (F2, DC3 «sin curva, vale 1»): el intercambio es parte de la corrección de Sc, así que con ella apagada vale 1, y sus dos lecturas de la tabla no pesan en el número.
         intercambio = intercambio_de_mandibulas(datos.of, e.x, e.y) if datos.sc else 1.0
@@ -554,28 +559,31 @@ def calcular(datos, e, dentro=TOLERANCIA_DENTRO_PCT, fuera=TOLERANCIA_FUERA_PCT)
         if not datos.sc:
             avisos.append("El campo que se lee en la tabla no es el de las mandíbulas y no hay curva de Sc: no se corrigió.")
         elif min(rc, r_lectura) < datos.sc[0][0] or max(rc, r_lectura) > datos.sc[-1][0]:
-            avisos.append(f"La curva de Sc va de {datos.sc[0][0]:g} a {datos.sc[-1][0]:g} [cm] y aquí hizo falta {min(rc, r_lectura):.1f} a {max(rc, r_lectura):.1f} [cm]: se usó su extremo y la corrección puede quedar corta.")
+            avisos.append(f"La curva de Sc va de {datos.sc[0][0]:g} a {datos.sc[-1][0]:g} [cm] y aquí hizo falta {cifras(min(rc, r_lectura), datos.sc[0][0], 1)} a {cifras(max(rc, r_lectura), datos.sc[-1][0], 1)} [cm]: se usó su extremo y la corrección puede quedar corta.")
     if laminas:
         sc_a_las_mandibulas = (f"el Sc se lleva al de las mandíbulas ({origen_de_sc(datos)}) con su intercambio X/Y de la tabla, {intercambio:.4f}" if datos.sc
                                else f"el Sc no se lleva al de las mandíbulas ({origen_de_sc(datos)})")
-        avisos.append(f"Hay un campo efectivo de lado equivalente {r_iso:.1f} [cm] dentro de unas mandíbulas de lado equivalente {rc:.1f} [cm]: el factor de campo se lee en el "
+        avisos.append(f"Hay un campo efectivo de lado equivalente {cifras(r_iso, rc, 1)} [cm] dentro de unas mandíbulas de lado equivalente {cifras(rc, r_iso, 1)} [cm]: el factor de campo se lee en el "
                       f"cuadrado equivalente del efectivo, y {sc_a_las_mandibulas}. "
                       "La calculadora no conoce las láminas: compruebe que el punto queda dentro de la abertura, a 2 [cm] o más del borde."
                       + (" Con cuña, su factor se lee con el rectángulo efectivo tal como se escribió: escribirlo girado o como su cuadrado equivalente cambia la UM."
                          if e.cuna is not None and e.wf_manual is None else ""))
     if min(d, e.prof) < datos.pdd.dmax(r_pdd):
-        avisos.append(f"La profundidad ({min(d, e.prof):.1f} [cm]) es menor que dmax ({datos.pdd.dmax(r_pdd):.1f} [cm]): la TG-71 pide verificar con medición.")
+        avisos.append(f"La profundidad ({cifras(min(d, e.prof), datos.pdd.dmax(r_pdd), 1)} [cm]) es menor que dmax ({cifras(datos.pdd.dmax(r_pdd), min(d, e.prof), 1)} [cm]): "
+                      "la TG-71 pide verificar con medición.")
     if d > datos.pdd.z_cm[-2]:     # UM.2 v2 (A5, UM2-D20): ahí la revisión de los archivos deja pasar una cifra dañada del último punto (hasta 6.3 [%] de UM)
-        avisos.append(f"La profundidad ({_cifras(d, datos.pdd.z_cm[-2])} [cm]) cae en el último tramo medido del PDD ({datos.pdd.z_cm[-2]:g} a {datos.pdd.z_cm[-1]:g} [cm]): "
+        avisos.append(f"La profundidad ({cifras(d, datos.pdd.z_cm[-2])} [cm]) cae en el último tramo medido del PDD ({datos.pdd.z_cm[-2]:g} a {datos.pdd.z_cm[-1]:g} [cm]): "
                       "la revisión de los archivos no atrapa ahí una cifra dañada del último punto; compruebe ese valor en el archivo.")
     if r < LADO_MINIMO_SIN_AVISO_CM:
-        avisos.append(f"Campo pequeño ({r:.1f} [cm] en la superficie): la TG-71 pide verificar con medición por debajo de 4 × 4.")
+        avisos.append(f"Campo pequeño ({cifras(r, LADO_MINIMO_SIN_AVISO_CM, 1)} [cm] en la superficie): la TG-71 pide verificar con medición por debajo de "
+                      f"{LADO_MINIMO_SIN_AVISO_CM:g} × {LADO_MINIMO_SIN_AVISO_CM:g}.")
     if _alargamiento(e, x_ef, y_ef) >= ALARGADO_AVISO:
         avisos.append("Campo muy alargado: se lee con su cuadrado equivalente (4A/P), que la TG-71 pide verificar en estos campos.")
     if not SSD_SIN_AVISO_CM[0] <= e.ssd <= SSD_SIN_AVISO_CM[1]:
         avisos.append(f"SSD de {e.ssd:g} [cm]: las tablas se midieron a {datos.ssd_pdd_cm:g} [cm], y pasar de una a otra supone que el TPR no depende de la distancia.")
     if _margen(e) < DISTANCIA_MINIMA_AL_BORDE_CM:
-        avisos.append(f"El punto queda a {_margen(e):.1f} [cm] del borde de las mandíbulas: la TG-114 pide 2 [cm] o más.")
+        avisos.append(f"El punto queda a {cifras(_margen(e), DISTANCIA_MINIMA_AL_BORDE_CM, 1)} [cm] del borde de las mandíbulas: la TG-114 pide "
+                      f"{DISTANCIA_MINIMA_AL_BORDE_CM:g} [cm] o más.")
     if abs(e.centro_x) >= e.x / 2 or abs(e.centro_y) >= e.y / 2:
         avisos.append("El eje queda en el borde o fuera del campo de las mandíbulas: compruebe x1, x2, y1 e y2, que van desde el eje y positivos hacia el lado abierto.")
     _aviso_de_perdida_junto_al_borde(datos, e, avisos, laminas)

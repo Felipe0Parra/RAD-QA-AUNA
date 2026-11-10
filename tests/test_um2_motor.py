@@ -729,7 +729,7 @@ def test_el_limite_del_borde_son_2_cm(datos):
 
 @pytest.mark.parametrize("entrada", [dict(x=10.0, y=10.0, x_ef=20.0, y_ef=20.0), dict(x=10.0, y=40.0, x_ef=20.0, y_ef=13.33), dict(x=10.0, y=10.0, x_ef=5.0, y_ef=20.0), dict(x=10.0, y=10.0, x_ef=20.0, y_ef=5.0), dict(x=10.0, y=20.0, x_ef=14.0, y_ef=14.0)])
 def test_efectivo_mayor_que_las_mandibulas_no_da_numero(datos, entrada):
-    with pytest.raises(motor.FueraDelCampo, match="mayor que las mandíbulas"):
+    with pytest.raises(motor.FueraDelCampo, match="mayor que (el de )?las mandíbulas"):
         motor.calcular(datos, E(100.0, ssd=100.0, prof=10.0, **entrada))
 
 
@@ -2061,7 +2061,7 @@ def test_un_valor_imposible_de_una_curva_o_una_tabla_impide_guardar(archivos, ar
     pares = _pares(archivos)
     r = um_armar.revisar_archivos(_cambiado(pares, archivo, _una_vez(dict(pares)[archivo], viejo, nuevo)), "Clinac 600", "6 MV", d0_dmax=1.0,
                                   wf_escritos={15: 0.77, 30: 0.6, 45: 0.5, 60: 0.4})
-    assert len(r.problemas) == 1 and re.search(motivo, r.problemas[0]), r.problemas
+    assert len(r.problemas) == 1 and r.problemas[0].startswith(archivo + ": ") and re.search(motivo, r.problemas[0][len(archivo) + 2:]), r.problemas   # B1: el archivo
 
 
 def test_las_barreras_que_los_datos_del_600c_no_alcanzan():
@@ -2150,22 +2150,27 @@ _UMBRALES = {   # (qué se revisa, cómo se arma con el umbral × f): a × 0.995
 }
 
 
-@pytest.mark.parametrize("f, pasa", [(0.995, True), (1.005, False)])
-@pytest.mark.parametrize("cual", list(_UMBRALES))
-def test_las_barreras_en_sus_umbrales(cual, f, pasa):
-    """Cada umbral de `um_plausibilidad` con una curva o una tabla armada a mano justo por debajo y justo por encima (las de los datos reales no llegan cerca)."""
+def _revision_de(cual, f):
+    """La función sin argumentos que revisa la curva, el perfil o la tabla de `_UMBRALES[cual]` armada con su umbral × f (UM.2b: la usan también las pruebas de C1)."""
     import services.um_plausibilidad as plausibilidad
     que, armar = _UMBRALES[cual]
     hecho = armar(f)
     if que in ("abiertos", "cuña"):
         v, z, cambio = hecho if isinstance(hecho, tuple) else (hecho, None, 0.0)
         curva = _pdd_de(_con_un_punto(v, -1, cambio) if cambio else v, z)
-        revisar = (lambda: plausibilidad.revisar_pdd_abiertos([curva])) if que == "abiertos" else (lambda: plausibilidad.revisar_pdd_con_cuna([curva], 15))
-    elif que == "perfil":
-        revisar = lambda: plausibilidad.revisar_perfil(_perfil_de(hecho))      # noqa: E731 - lado 20 a 10 cm: el borde, a 11 cm; el núcleo, hasta 9
-    else:
-        tabla = _tabla_de(hecho, _LADOS_RAROS, _LADOS_RAROS) if que == "tabla raro" else _tabla_de(hecho)
-        revisar = lambda: plausibilidad.revisar_tabla(tabla, "la tabla")      # noqa: E731
+        return (lambda: plausibilidad.revisar_pdd_abiertos([curva])) if que == "abiertos" else (lambda: plausibilidad.revisar_pdd_con_cuna([curva], 15))
+    if que == "perfil":
+        return lambda: plausibilidad.revisar_perfil(_perfil_de(hecho))      # noqa: E731 - lado 20 a 10 cm: el borde, a 11 cm; el núcleo, hasta 9
+    tabla = _tabla_de(hecho, _LADOS_RAROS, _LADOS_RAROS) if que == "tabla raro" else _tabla_de(hecho)
+    return lambda: plausibilidad.revisar_tabla(tabla, "la tabla")      # noqa: E731
+
+
+@pytest.mark.parametrize("f, pasa", [(0.995, True), (1.005, False)])
+@pytest.mark.parametrize("cual", list(_UMBRALES))
+def test_las_barreras_en_sus_umbrales(cual, f, pasa):
+    """Cada umbral de `um_plausibilidad` con una curva o una tabla armada a mano justo por debajo y justo por encima (las de los datos reales no llegan cerca)."""
+    import services.um_plausibilidad as plausibilidad
+    revisar = _revision_de(cual, f)
     if pasa:
         revisar()
     else:
@@ -2291,8 +2296,8 @@ def test_el_pdd_con_cuna_del_campo_entero_tambien_se_revisa(archivos):
     pares = _pares(archivos)
     roto = _tras(dict(pares)[WDD15], "%FLSZ 400*200", "+000.0 +000.0 +050.0 ", "+000.0 +000.0 +005.0 ")
     r = um_armar.revisar_archivos(_cambiado(pares, WDD15, roto), "Clinac 600", "6 MV", d0_dmax=1.0)
-    assert r.problemas == ("el PDD con la cuña de 15° de 40 × 20 [cm]: sus puntos no van en profundidad creciente (z = 4.8 [cm] y luego 0.5 [cm]): una profundidad "
-                           "está dañada",)
+    assert r.problemas == (f"{WDD15}: el PDD con la cuña de 15° de 40 × 20 [cm]: sus puntos no van en profundidad creciente (z = 4.8 [cm] y luego 0.5 [cm]): una "
+                           "profundidad está dañada",)     # UM.2 v2 (B1): con el nombre del archivo
 
 
 def test_un_pdd_con_su_maximo_en_99_6_da_las_mismas_um(archivos, datos):
@@ -2779,7 +2784,7 @@ def test_la_segunda_vuelta_de_los_valores_imposibles(archivos, archivo, viejo, n
     pares = _pares(archivos)
     r = um_armar.revisar_archivos(_cambiado(pares, archivo, _una_vez(dict(pares)[archivo], viejo, nuevo)), "Clinac 600", "6 MV", d0_dmax=1.0,
                                   wf_escritos={15: 0.77, 30: 0.6, 45: 0.5, 60: 0.4})
-    assert len(r.problemas) == 1 and re.search(motivo, r.problemas[0]), r.problemas
+    assert len(r.problemas) == 1 and r.problemas[0].startswith(archivo + ": ") and re.search(motivo, r.problemas[0][len(archivo) + 2:]), r.problemas   # B1: el archivo
 
 
 def test_con_cuna_y_laminas_el_aviso_dice_que_la_forma_escrita_pesa(datos):
@@ -2868,7 +2873,9 @@ def test_el_motivo_de_una_tabla_de_cuna_cortada_no_culpa_solo_al_pdd(archivos, a
               "de la cuña, que puede estar cortada al final de una fila")
     with pytest.raises(lector.ArchivoNoReconocido, match=re.escape(motivo) + "$"):
         um_armar.datos_haz(cambiar(archivos, tabla, cortada), "Clinac 600", "6 MV", d0_dmax=1.0)
-    assert um_armar.revisar_archivos(_pares(cambiar(archivos, tabla, cortada)), "Clinac 600", "6 MV", d0_dmax=1.0).problemas == (motivo,)
+    nombres = f"CLINAC 600C_Standard Wedge - {angulo}_Measured Wedge Depth Doses.txt y CLINAC 600C_Standard Wedge - {angulo}_Output Factors.txt"
+    assert um_armar.revisar_archivos(_pares(cambiar(archivos, tabla, cortada)), "Clinac 600", "6 MV", d0_dmax=1.0).problemas == (f"{nombres}: la cuña de {angulo}°: {motivo}",)
+    # clase b, a propósito (UM.2b, B1): la revisión antepone los dos archivos de los que sale el motivo y la cuña; el motivo es el de la ronda 1
 
 
 def test_la_revision_dice_hasta_donde_llega_la_tabla_de_cada_cuna(archivos):
@@ -2957,3 +2964,234 @@ def test_la_tabla_busca_cada_lado_en_su_propio_eje():
     assert not t.contiene(1.9, 5.0) and not t.contiene(16.1, 5.0) and not t.contiene(5.0, 2.9) and not t.contiene(5.0, 12.1)
     assert t.celdas_usadas(5.0, 9.0) == {(6.0, 4.0), (6.0, 8.0), (12.0, 4.0), (12.0, 8.0)}      # (fila = Y, columna = X)
     assert t.celdas_usadas(4.0, 6.0) == {(6.0, 4.0)} and t.celdas_usadas(16.0, 12.0) == {(12.0, 16.0)} and t.celdas_usadas(2.0, 3.0) == {(3.0, 2.0)}
+
+
+def test_cada_rechazo_del_armado_nombra_su_archivo_y_su_cuna(archivos):
+    """B1 (cuatro lentes de la segunda auditoría): un rechazo de `datos_haz` nombra en la revisión el archivo del que sale y, si es de una cuña, su ángulo (con las
+    cuatro cuñas del 600C, «un PDD con cuña está a SSD 110» no decía cuál de cuatro archivos exportar de nuevo); por el camino de UM.3 (sin la revisión), el
+    ángulo va en el motivo y el archivo en `fallo.archivo` (tipo de dato y accesorio)."""
+    pares, wdd30 = _pares(archivos), "CLINAC 600C_Standard Wedge - 30_Measured Wedge Depth Doses.txt"
+    otro = _cambiado(pares, wdd30, dict(pares)[wdd30].replace("%SSD 1000", "%SSD 1100"))
+    otro = [p for p in otro if p[0] != wdd30] + [p for p in otro if p[0] == wdd30]      # el archivo culpable, el último elegido
+    r = um_armar.revisar_archivos(otro, "Clinac 600", "6 MV", d0_dmax=1.0)
+    assert r.problemas == (f"{wdd30}: la cuña de 30°: un PDD con cuña está a SSD 110 [cm] y los abiertos a SSD 100 [cm]: no se pueden dividir",), r.problemas
+    with pytest.raises(lector.ArchivoNoReconocido) as fallo:
+        um_armar.datos_haz([t for _, t in otro], "Clinac 600", "6 MV", d0_dmax=1.0)
+    assert str(fallo.value).startswith("la cuña de 30°: ") and fallo.value.archivo == (um_armar.TIPO_WDD, "Standard Wedge - 30")
+
+
+def test_todo_lo_que_puede_rechazar_en_el_armado_va_dentro_de_su_archivo():
+    """B1, la clase: en `datos_haz`, toda llamada que lee o revisa un archivo y todo `raise` está dentro de un `with _de(tipo, accesorio)`, salvo la lista cerrada
+    de los rechazos que no son de un archivo (las claves pedidas, las máquinas, D'0, los factores escritos que sobran) y la comprobación del rango de un factor ESCRITO a mano
+    (`_factor_posible` sin `_de`: nadie exportó nada mal); el factor DEDUCIDO del name.data se comprueba dentro de su `_de` (UM2b-R1-B1-a): uno nuevo sin su archivo no entra."""
+    import ast
+    import inspect
+    arbol = ast.parse(inspect.getsource(um_armar)); f = next(n for n in arbol.body if isinstance(n, ast.FunctionDef) and n.name == "datos_haz")
+    padres = {h: p for p in ast.walk(f) for h in ast.iter_child_nodes(p)}
+    def dentro(n):
+        while n in padres:
+            n = padres[n]
+            if isinstance(n, ast.With) and any(isinstance(w.context_expr, ast.Call) and getattr(w.context_expr.func, "id", "") == "_de" for w in n.items):
+                return True
+        return False
+    lee = {"familia_pdd", "perfiles_oar", "betas_de_cuna", "_eje_del_gradiente", "leer_curvas", "leer_tabla_of", "orientacion_de_cuna", "angulo_en_parametros",
+           "dosis_de_referencia_cuna", "revisar_tabla", "revisar_pdd_abiertos", "revisar_pdd_con_cuna", "_factor_posible"}
+    llamadas = [n for n in ast.walk(f) if isinstance(n, ast.Call) and (getattr(n.func, "id", None) or getattr(n.func, "attr", None)) in lee]
+    fuera_de_un_archivo = [ast.unparse(n) for n in llamadas if not dentro(n)]
+    assert len(llamadas) == 18 and fuera_de_un_archivo == ["_factor_posible(angulo, wf)"], fuera_de_un_archivo      # el factor ESCRITO, y solo ese
+    assert sum(1 for n in llamadas if dentro(n) and getattr(n.func, "id", None) == "_factor_posible") == 1      # el DEDUCIDO va dentro de su `_de`
+    sin_archivo = sorted(ast.unparse(n.exc)[:60] for n in ast.walk(f) if isinstance(n, ast.Raise) and not dentro(n))
+    assert sin_archivo == [
+        "lector.ArchivoNoReconocido('faltan el PDD medido o la tabla ",
+        "lector.ArchivoNoReconocido('los archivos son de máquinas o e",
+        'lector.ArchivoNoReconocido(f"{\' y \'.join((f\'«{a}»\' for a in ',
+        "lector.ArchivoNoReconocido(f'los archivos dicen {que} {escri",
+        'motor.FaltaDato("Escriba D\'0 en dmax o en las condiciones de',
+        'motor.FaltaDato(f"D\'0 no es un valor posible (de {D0_RANGO[0',
+        'motor.FaltaDato(f"Hay un factor escrito para una cuña que no',
+        'motor.FaltaDato(f"La tabla de factores está a SSD {of_a.ssd_',
+    ], sin_archivo
+
+
+def test_un_valor_junto_a_su_limite_no_se_lee_igual_que_el_limite(datos, archivos):
+    """C1 (la clase de S-5 y H-UM2-25, en todos los sitios): el valor que pasó un límite se escribe con las cifras que lo distinguen de ese límite (`motor.cifras`),
+    en los avisos del motor, sus rechazos, el factor de cuña escrito y las barreras; lejos del límite, como antes."""
+    import services.um_plausibilidad as P
+    assert (motor.cifras(1.96, 2.0, 1), motor.cifras(1.5, 2.0, 1), motor.cifras(0.3004, 0.3, 3, "g"), motor.cifras(49.66, 0.3, 3, "g")) == ("1.96", "1.5", "0.3004", "49.7")
+    casos = [   # (avisos o motivo, lo que debe decir)
+        (avisos_de(datos, 100.0, 10.0, 10.0, 100.0, 10.0, punto_x=3.04), "a 1.96 [cm] del borde de las mandíbulas: la TG-114 pide 2 [cm] o más"),
+        (avisos_de(datos, 100.0, 3.98, 3.98, 100.0, 10.0), "Campo pequeño (3.98 [cm] en la superficie): la TG-71 pide verificar con medición por debajo de 4 × 4."),
+        (avisos_de(datos, 100.0, 30.0, 30.0, 100.0, 10.0, punto_x=10.04), "El punto está a 10.04 [cm] del eje"),
+        (avisos_de(datos, 100.0, 20.0, 10.0, 100.0, 10.0, x_ef=19.85, y_ef=9.95), "lado equivalente 13.26 [cm] dentro de unas mandíbulas de lado equivalente 13.33 [cm]"),
+    ]
+    for texto, debe in casos:
+        assert debe in texto, (debe, texto)
+    with pytest.raises(motor.FueraDelCampo, match=r"^El cuadrado equivalente del campo efectivo \(14 \[cm\]\) no puede ser mayor que el de las mandíbulas \(10 × 20 \[cm\], 13.33 \[cm\]\)$"):
+        motor.calcular(datos, E(100.0, 10.0, 20.0, 100.0, 10.0, x_ef=14.0, y_ef=14.0))
+    with pytest.raises(motor.FaltaDato, match=r"= 1.1000001 no es un valor posible \(de 0.1 a 1.1\)"):
+        um_armar.datos_haz(archivos, "Clinac 600", "6 MV", d0_dmax=1.0, wf_escritos={15: 1.1000001})
+    z = np.arange(1.5, 20.01, 0.5)
+    with pytest.raises(P.BarreraDePlausibilidad, match=r"sube 0.3001 \[%\] entre z = 10 \[cm\] y z = 10.5 \[cm\], pasado su máximo \(a 1.5 \[cm\]\); se admite 0.3 \[%\]"):
+        P.revisar_pdd_abiertos([lector.Curva((10.0, 10.0), 100.0, np.zeros(len(z)), z, np.where(z < 10.5, 100.0 - (z - 1.5), 100.0 - (10.0 - 1.5) + 0.3001 - (z - 10.5)))])
+    with pytest.raises(P.BarreraDePlausibilidad, match=r"tiene un OAR de 1.2001 en x = 1 \[cm\], y no puede pasar de 1.2"):
+        P.revisar_perfil(motor.PerfilOAR(10.0, 20.0, np.array([0.0, 1.0, 2.0, 3.0]), np.array([1.0, 1.2001, 1.0, 1.0])))
+
+
+FORMATOS_NUMERICOS = {   # C1: la lista cerrada de los valores escritos con un formato fijo, por función (lo que no es un valor junto a su límite: lados, profundidades, factores)
+    "um_motor": {'__call__': 6, '_aviso_de_perdida_junto_al_borde': 1, '_comprobar_campo': 7, '_dentro': 2, '_factor_cuna': 7, '_rango': 3, '_validar': 2,
+                 'calcular': 35, 'origen': 3},
+    "um_armar": {'_factor_posible': 2, 'betas_de_cuna': 16, 'datos_haz': 11, 'familia_pdd': 1, 'perfil_oar': 2, 'perfiles_oar': 5, 'revisar_archivos': 13},   # ronda 1: el factor deducido y el rango de cada tabla de cuña; UM.2b (B1): el rango del factor, en su ayudante
+    "um_plausibilidad": {'_lado': 2, '_revisar_pdd': 12, 'revisar_curvas_de_perfiles': 4, 'revisar_perfil': 12, 'revisar_tabla': 11},
+}
+
+
+def test_un_formato_numerico_nuevo_se_revisa():
+    """C1, la clase: un valor nuevo escrito con `:g`, `.1f` o `.3g` cambia esta cuenta. Si va junto al límite que pasó, se escribe con `motor.cifras`; si no (un
+    lado, una profundidad, un factor), se sube la cuenta de su función aquí."""
+    import ast
+    import collections
+    import services.um_plausibilidad as plausibilidad
+    for modulo in (motor, um_armar, plausibilidad):
+        with open(modulo.__file__, encoding="utf-8") as f:
+            arbol = ast.parse(f.read())
+        duenos = {id(h): f.name for f in ast.walk(arbol) if isinstance(f, (ast.FunctionDef, ast.ClassDef)) for h in ast.walk(f)}
+        cuenta = collections.Counter()
+        for n in ast.walk(arbol):
+            if isinstance(n, ast.FormattedValue) and n.format_spec is not None:
+                spec = "".join(v.value for v in n.format_spec.values if isinstance(v, ast.Constant))
+                if spec and spec[-1] in "fg":
+                    cuenta[duenos.get(id(n), "<módulo>")] += 1
+        assert dict(cuenta) == FORMATOS_NUMERICOS[modulo.__name__.split(".")[-1]], modulo.__name__
+
+
+def test_cifras_en_los_limites_de_su_formato(datos):
+    """El barrido de la entrega 2 (28 sobrevivientes): dos doubles vecinos se distinguen con 17 cifras significativas (el tope del bucle); y la profundidad que se sale
+    de los perfiles se escribe frente al límite que pasó, el de arriba o el de abajo (1.35 y 30 [cm] en el 600C)."""
+    assert motor.cifras(0.30000000000000004, 0.3, 3, "g") == "0.30000000000000004" and motor.cifras(2.4999999999999996, 2.5, 2) == "2.4999999999999996"
+    for d, dice in ((1.3499999, "1.3499999"), (30.0000001, "30.0000001")):
+        with pytest.raises(motor.FueraDeTabla, match=rf"^Los perfiles van de 1.35 a 30 \[cm\] y el punto está a {re.escape(dice)} \[cm\] de profundidad"):
+            datos.perfiles(d, 2.0)
+    # UM.2b, H-UM2b-1 (decisión del supervisor, 09-11) y UM2b-R1-C1-c (ronda 1): un valor IGUAL a su límite no tiene cifra que lo distinga y no se alarga (daba «4.00000000000000000»)
+    assert (motor.cifras(4.0, 4.0, 1), motor.cifras(40.0, 40.0, 1), motor.cifras(0.3, 0.3, 3, "g")) == ("4.0", "40.0", "0.3")
+    assert "aquí hizo falta 4.0 a 40.0 [cm]" in avisos_de(datos, 100.0, 40.0, 40.0, 100.0, 10.0, x_ef=4.0, y_ef=4.0)      # el aviso de la curva de Sc: su extremo de abajo es justo el 4 de la curva
+    for x, y, lado in ((10.0, 10.1, "10.0"), (12.0, 12.1, "12.0"), (20.0, 20.05, "20.0")):      # el rectángulo efectivo girado, dentro de la tolerancia: el MISMO lado equivalente que las mandíbulas
+        assert f"lado equivalente {lado} [cm] dentro de unas mandíbulas de lado equivalente {lado} [cm]" in avisos_de(datos, 100.0, x, y, 100.0, 10.0, x_ef=y, y_ef=x), (x, y)
+
+
+# ---------- UM.2b, ronda 1 de los revisores (09-11-2026): una prueba por hallazgo reproducido ----------
+# UM2b-R1-B1-a, UM2b-R1-B1-b y UM2b-R1-C1-c eran defectos de producción (el rojo fue contra el árbol sin corregir). UM2b-R1-PRU-1 y UM2b-R1-PRU-2 eran pruebas débiles: la
+# mutación con que sobrevivían (M2, M3 y M4 de los revisores, y la de cada sitio de `cifras`) está en `um2b_mutaciones.py` (Y01 en adelante), donde ahora cae.
+TABLA_15 = "CLINAC 600C_Standard Wedge - 15_Output Factors.txt"
+
+
+@pytest.mark.parametrize("viejo, nuevo, escritos, motivo, nombra", [
+    ("[Gy]:0.662300", "[Gy]:6.623000", None, "El factor de la cuña de 15° = 7.701 no es un valor posible (de 0.1 a 1.1)", True),      # la dosis de referencia con el punto corrido
+    ("[MU]:100.000000", "[MU]:10.000000", None, "El factor de la cuña de 15° = 7.701 no es un valor posible (de 0.1 a 1.1)", True),   # unas MU de referencia dañadas
+    (None, None, {15: 7.7}, "El factor de la cuña de 15° = 7.700 no es un valor posible (de 0.1 a 1.1)", False),                     # un factor ESCRITO: no es de ningún archivo
+], ids=["dosis con el punto corrido", "MU dañadas", "factor escrito"])
+def test_un_factor_de_cuna_fuera_de_rango_nombra_el_name_data_solo_si_se_dedujo_de_el(archivos, viejo, nuevo, escritos, motivo, nombra):
+    """UM2b-R1-B1-a: el factor de una cuña que se deduce de la dosis y las MU de referencia de su name.data (el del 15° del 600C) salía fuera de 0.1 a 1.1 con un dato dañado y el
+    rechazo no decía de qué archivo: quien no escribió ningún factor no sabía que debía exportar de nuevo el name.data (B1 existe para eso). El mismo motivo con un factor ESCRITO no
+    es de un archivo y no nombra ninguno. La revisión antepone «name.data: » y `datos_haz` marca `fallo.archivo` en el primer caso; en el segundo, ni lo uno ni lo otro."""
+    nd = es_de(archivos, "data: WedgeParameters")
+    cambiados = archivos if viejo is None else cambiar(archivos, nd, _una_vez(nd, viejo, nuevo))
+    r = um_armar.revisar_archivos(_pares(cambiados), "Clinac 600", "6 MV", d0_dmax=1.0, wf_escritos=escritos)
+    assert r.problemas == (("name.data: " if nombra else "") + motivo,), r.problemas
+    with pytest.raises(motor.FaltaDato) as fallo:
+        um_armar.datos_haz(cambiados, "Clinac 600", "6 MV", d0_dmax=1.0, wf_escritos=escritos)
+    assert str(fallo.value) == motivo and getattr(fallo.value, "archivo", None) == ((um_armar.TIPO_CUNA, "Standard Wedge - 15") if nombra else None)
+
+
+@pytest.mark.parametrize("viejo, nuevo, motivo", [
+    ("Wedge angle[deg]:15.0", "Wedge angle[deg]:30.0", "el name.data de la cuña de 15° dice otro ángulo: 30°"),
+    ("Wedge angle[deg]:15.0", "Wedge angle[rad]:15.0", "la cuña de 15°: el ángulo de la cuña viene en [rad]: se esperaba [deg]"),
+    ("Reference MU for hard wedge at calibration depth[MU]:100.000000\n", "", "la cuña de 15°: el name.data dice la dosis de referencia de la cuña y no sus MU: hacen falta las dos"),
+    ("calibration depth[Gy]:0.662300", "calibration depth[Sv]:0.662300", "la cuña de 15°: la dosis de referencia viene en [Sv] por [MU]: se esperaba [Gy] o [cGy] por [MU]"),
+], ids=["otro ángulo", "ángulo en radianes", "dosis sin MU", "unidad de la dosis"])
+def test_el_rechazo_que_sale_del_name_data_nombra_el_name_data_y_su_cuna(archivos, viejo, nuevo, motivo):
+    """UM2b-R1-PRU-1: ninguna prueba fijaba qué archivo nombra la revisión cuando el rechazo sale del name.data (el bloque `_de(TIPO_CUNA, ...)` de `datos_haz`): atribuirlo a la tabla de
+    la cuña (la mutación M2 de los revisores) dejaba las 759 pruebas verdes y la revisión culpaba a un archivo equivocado, que es lo contrario de lo que B1 promete. Las cuatro
+    lecturas del name.data que rechazan después de leerlo bien (el ángulo, su unidad, las MU que faltan y la unidad de la dosis) salen como «name.data: » y `fallo.archivo` lo marca."""
+    nd = es_de(archivos, "data: WedgeParameters")
+    cambiados = cambiar(archivos, nd, _una_vez(nd, viejo, nuevo))
+    assert um_armar.revisar_archivos(_pares(cambiados), "Clinac 600", "6 MV", d0_dmax=1.0).problemas == (f"name.data: {motivo}",)
+    with pytest.raises(lector.ArchivoNoReconocido) as fallo:
+        um_armar.datos_haz(cambiados, "Clinac 600", "6 MV", d0_dmax=1.0)
+    assert fallo.value.archivo == (um_armar.TIPO_CUNA, "Standard Wedge - 15") and str(fallo.value) == motivo
+
+
+@pytest.mark.parametrize("que, tipos, nombres, motivo", [
+    ("IM", um_armar.TIPO_CUNA, "name.data", "la cuña de 15° dice orientación IM, y se esperaba IN, OUT, LEFT, RIGHT"),
+    ("LEFT", (um_armar.TIPO_OF, um_armar.TIPO_CUNA), f"{TABLA_15} y name.data", "la cuña de 15° dice orientación LEFT y su tabla tiene el lado corto en Y: filas y columnas no cuadran"),
+    ("cuadrada y sin orientación", (um_armar.TIPO_OF, um_armar.TIPO_CUNA), f"{TABLA_15} y name.data",
+     "la tabla de la cuña de 15° es cuadrada y falta su name.data: no se sabe el eje del gradiente"),
+    ("cuadrada y sin name.data", (um_armar.TIPO_OF, um_armar.TIPO_CUNA), TABLA_15, "la tabla de la cuña de 15° es cuadrada y falta su name.data: no se sabe el eje del gradiente"),
+], ids=["orientación ilegible", "orientación contra la tabla", "tabla cuadrada, name.data sin orientación", "tabla cuadrada, sin name.data"])
+def test_el_rechazo_del_eje_del_gradiente_nombra_solo_los_archivos_que_lo_dicen(archivos, que, tipos, nombres, motivo):
+    """UM2b-R1-B1-b: los tres rechazos de `_eje_del_gradiente` iban en `_de(None, ...)`, que nombra TODOS los archivos de la cuña: el PDD con cuña, que no tiene nada que ver, la tabla y el
+    name.data (la mutación M1 de los revisores, `None` por `TIPO_CUNA`, sobrevivía). Una orientación ilegible es solo del name.data; que la orientación y la forma de la tabla se
+    contradigan, o que una tabla cuadrada no tenga orientación que la desempate, es de la tabla y del name.data (el que haya). UM2-D22: un motivo nombra sus archivos, no todos los
+    del accesorio."""
+    nd = es_de(archivos, "data: WedgeParameters")
+    if que in ("IM", "LEFT"):
+        pares = _pares(cambiar(archivos, nd, _una_vez(nd, "(IN/OUT/LEFT/RIGHT)[]:IN", f"(IN/OUT/LEFT/RIGHT)[]:{que}")))
+    else:
+        cuadrada = _con_la_tabla_de_15_cuadrada(archivos)
+        sin_orientacion = _una_vez(nd, "Wedge orientation in output factor table (IN/OUT/LEFT/RIGHT)[]:IN\n", "")
+        pares = _pares(cambiar(cuadrada, nd, sin_orientacion)) if que == "cuadrada y sin orientación" else [p for p in _pares(cuadrada) if p[0] != "name.data"]
+    assert um_armar.revisar_archivos(pares, "Clinac 600", "6 MV", d0_dmax=1.0).problemas == (f"{nombres}: {motivo}",)
+    with pytest.raises(lector.ArchivoNoReconocido) as fallo:
+        um_armar.datos_haz([t for _, t in pares], "Clinac 600", "6 MV", d0_dmax=1.0)
+    assert fallo.value.archivo == (tipos, "Standard Wedge - 15") and str(fallo.value) == motivo
+
+
+def _motivo(f):
+    """El motivo con que `f()` rechaza (un `NoCalculable` o un `ArchivoNoReconocido`, p. ej. una `BarreraDePlausibilidad`)."""
+    with pytest.raises((motor.NoCalculable, lector.ArchivoNoReconocido)) as fallo:
+        f()
+    return str(fallo.value)
+
+
+def _motivo_del_maximo(maximo):
+    import services.um_plausibilidad as plausibilidad
+    return _motivo(lambda: plausibilidad.revisar_pdd_abiertos([_pdd_de(_bajada(maximo=maximo))]))
+
+
+CIFRAS_JUNTO_AL_LIMITE = [      # (sitio, cómo sale su texto, lo que dice): cada valor un pelo más allá del límite que pasó, que `.1f`, `.3g`... escribirían igual que el límite
+    ("dmax", lambda d, a: avisos_de(d, 100.0, 10.0, 10.0, 100.0, 1.36), "La profundidad (1.36 [cm]) es menor que dmax (1.40 [cm])"),
+    ("variación de la cuña, campo mayor que los medidos", lambda d, a: avisos_de(d, 100.0, 20.0, 20.0, 100.2, 10.0, cuna=15, cuna_orientacion="IN"),
+     "el campo en la superficie (20.04 [cm]) queda fuera de los medidos (4 a 20 [cm])"),
+    ("variación de la cuña, campo menor que los medidos", lambda d, a: avisos_de(d, 100.0, 4.0, 4.0, 99.0, 10.0, cuna=15, cuna_orientacion="IN"),
+     "el campo en la superficie (3.96 [cm]) queda fuera de los medidos (4 a 20 [cm])"),
+    ("curva de Sc, por debajo", lambda d, a: avisos_de(d, 100.0, 10.0, 10.0, 100.0, 10.0, x_ef=3.96, y_ef=3.96), "aquí hizo falta 3.96 a 10.0 [cm]"),
+    ("curva de Sc, por encima", lambda d, a: avisos_de(d, 100.0, 38.1, 38.1, 100.0, 10.0, x_ef=30.0, y_ef=30.0), "aquí hizo falta 30.0 a 38.100 [cm]"),
+    ("campo efectivo más estrecho que lo medido", lambda d, a: _motivo(lambda: motor.calcular(d, E(200.0, 10.0, 10.0, 100.0, 10.0, x_ef=2.499, y_ef=8.0))),
+     "El campo efectivo tiene un lado de 2.499 [cm] en la tabla, más estrecho que el campo más pequeño medido (2.5 [cm])"),
+    ("mandíbulas por encima de la tabla", lambda d, a: _motivo(lambda: motor.calcular(d, E(100.0, 40.004, 20.0, 100.0, 10.0))),
+     "El lado X de las mandíbulas = 40.004 [cm] está fuera de la tabla (2.5 a 40 [cm])"),
+    ("mandíbulas por debajo de la tabla", lambda d, a: _motivo(lambda: motor.calcular(d, E(100.0, 2.496, 20.0, 100.0, 10.0))),
+     "El lado X de las mandíbulas = 2.496 [cm] está fuera de la tabla (2.5 a 40 [cm])"),
+    ("alcance de un perfil", lambda d, a: _motivo(lambda: d.perfiles(1.35, 18.04)), "El punto está a 18.04 [cm] del eje y el perfil de 40 × 40 [cm] a 1.35 [cm] solo sirve hasta 18 [cm]"),
+    ("factor de cuña escrito por debajo", lambda d, a: _motivo(lambda: um_armar.datos_haz(a, "Clinac 600", "6 MV", d0_dmax=1.0, wf_escritos={15: 0.0999999})),
+     "= 0.0999999 no es un valor posible (de 0.1 a 1.1)"),
+    ("máximo de un PDD por encima", lambda d, a: _motivo(_revision_de("máximo del PDD abierto", 1.0002)), "tiene su máximo en 100.5001 [%]"),
+    ("máximo de un PDD por debajo", lambda d, a: _motivo_del_maximo(99.4999), "tiene su máximo en 99.4999 [%]"),
+    ("máximo de un PDD con cuña", lambda d, a: _motivo(_revision_de("máximo del PDD con cuña", 1.0001)), "tiene su máximo en 101.0001 [%]"),
+    ("desvío en la cola de un PDD", lambda d, a: _motivo(_revision_de("desvío en la cola, abierto", 1.0005)), "se aparta 0.6003 [%] de la recta de sus vecinos"),
+    ("último punto de un PDD", lambda d, a: _motivo(_revision_de("último punto, abierto", 1.0005)), "se aparta 1.201 [%] de la tendencia de los dos anteriores"),
+    ("pico en el núcleo de un perfil", lambda d, a: _motivo(_revision_de("pico en el núcleo", 1.0005)), "el OAR se aparta 0.008004 de la recta de sus vecinos"),
+    ("pendiente de una tabla, hacia arriba", lambda d, a: _motivo(_revision_de("pendiente de la tabla, hacia arriba", 1.0002)), "el factor cambia como el lado elevado a 0.3501,"),
+    ("pendiente de una tabla, hacia abajo", lambda d, a: _motivo(_revision_de("pendiente de la tabla, hacia abajo", 1.0004)), "el factor cambia como el lado elevado a -0.08003,"),
+    ("celda de dentro de una tabla", lambda d, a: _motivo(_revision_de("celda de dentro fuera de la recta", 1.00012)), "se aparta 2.5003 [%] de lo que dicen sus dos vecinas"),
+    ("celda de borde de una tabla", lambda d, a: _motivo(_revision_de("celda de borde fuera de la recta", 1.00012)), "se aparta 7.001 [%] de lo que dicen las dos celdas de dentro"),
+]
+
+
+@pytest.mark.parametrize("sitio, texto_de, debe", CIFRAS_JUNTO_AL_LIMITE, ids=[c[0] for c in CIFRAS_JUNTO_AL_LIMITE])
+def test_cada_valor_que_paso_un_limite_se_escribe_con_las_cifras_que_lo_distinguen(datos, archivos, sitio, texto_de, debe):
+    """UM2b-R1-PRU-2: la prueba de C1 solo fijaba las cifras de ocho sitios, y la mutación que deja la cuenta de formatos intacta pero pone mal el límite de `cifras` (M3 y M4 de los
+    revisores, en el aviso de la variación de la cuña y en el de dmax) volvía a producir el defecto de C1 con las 759 pruebas verdes. El barrido de todas las llamadas a `cifras`
+    (`scripts/um2b_corr_barrido_cifras.py`, que ahora deriva `um2b_mutaciones.py` de cada llamada) dejó VIVAS 13 llamadas más: aquí cada una, con el valor un pelo más allá de su límite (de
+    los dos lados, si el límite depende del lado; la del último tramo del PDD ya la fija `test_el_ultimo_tramo_medido_del_pdd_se_avisa`). La del cuadrado equivalente mayor que el de las
+    mandíbulas no está: se rechaza a más de 0.1 [cm] del límite y nunca necesita más cifras (E47 de `um2b_mutaciones.py`)."""
+    assert debe in texto_de(datos, archivos), sitio

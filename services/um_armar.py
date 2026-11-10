@@ -1,4 +1,5 @@
 """Arma los datos del haz (`um_motor.DatosHaz`) desde los archivos exportados de Eclipse. Sin Qt ni base."""
+import contextlib
 import re
 from dataclasses import dataclass
 
@@ -108,8 +109,10 @@ def betas_de_cuna(curvas_cuna, pdd, d0, ssd_pdd, campo_entero):
         lado = c.campo_cm[0]
         if lado != c.campo_cm[1]:
             if c.campo_cm != campo_entero:
-                raise lector.ArchivoNoReconocido(f"hay un PDD con cuña de {lado:g} × {c.campo_cm[1]:g} [cm], que no es un cuadrado ni el campo entero de su tabla "
-                                                 f"({campo_entero[0]:g} × {campo_entero[1]:g} [cm]): revise ese PDD y la tabla de factores de la cuña, que puede estar cortada al final de una fila")
+                fallo = lector.ArchivoNoReconocido(f"hay un PDD con cuña de {lado:g} × {c.campo_cm[1]:g} [cm], que no es un cuadrado ni el campo entero de su tabla "
+                                                   f"({campo_entero[0]:g} × {campo_entero[1]:g} [cm]): revise ese PDD y la tabla de factores de la cuña, que puede estar cortada al final de una fila")
+                fallo.tipos_del_motivo = (TIPO_WDD, TIPO_OF)      # UM.2b (B1 con F3 de la ronda 1): el motivo es de dos archivos, el PDD y la tabla; la revisión nombra los dos
+                raise fallo
             continue
         if lado in lados:
             raise lector.ArchivoNoReconocido(f"hay dos PDD con cuña del campo de {lado:g} × {lado:g} [cm]: no se sabe cuál usar")
@@ -181,10 +184,18 @@ def _factores_escritos(wf_escritos):
     return escritos
 
 
+def _factor_posible(angulo, wf):
+    """UM.2b (B1): el factor de una cuña, escrito o deducido del `name.data`, dentro de lo posible (`motor.RANGO_FACTOR_CUNA`): la única definición. De qué archivo es el rechazo lo dice quien llama (`datos_haz`)."""
+    if not motor.RANGO_FACTOR_CUNA[0] <= wf <= motor.RANGO_FACTOR_CUNA[1]:
+        raise motor.FaltaDato(f"El factor de la cuña de {angulo}° = {motor.cifras(wf, motor.RANGO_FACTOR_CUNA[0] if wf < motor.RANGO_FACTOR_CUNA[0] else motor.RANGO_FACTOR_CUNA[1], 3)} no es un valor posible (de {motor.RANGO_FACTOR_CUNA[0]:g} a {motor.RANGO_FACTOR_CUNA[1]:g})")
+
+
 def _eje_del_gradiente(tabla, orientacion, angulo):
     """A lo largo de qué eje de la tabla va el gradiente: el lado corto de la tabla, comprobado con la orientación del `name.data`."""
     if orientacion is not None and orientacion not in motor.ORIENTACIONES:
-        raise lector.ArchivoNoReconocido(f"la cuña de {angulo}° dice orientación {orientacion}, y se esperaba {', '.join(motor.ORIENTACIONES)}")
+        fallo = lector.ArchivoNoReconocido(f"la cuña de {angulo}° dice orientación {orientacion}, y se esperaba {', '.join(motor.ORIENTACIONES)}")
+        fallo.tipos_del_motivo = TIPO_CUNA      # UM.2b (B1, UM2-D22): una orientación ilegible es solo del name.data (un solo tipo, como cualquier rechazo de un archivo); los otros dos motivos son de la tabla y del name.data a la vez (`datos_haz` los atribuye a esos dos)
+        raise fallo
     por_forma = "Y" if tabla.y[-1] < tabla.x[-1] else "X" if tabla.x[-1] < tabla.y[-1] else None
     por_nombre = None if orientacion is None else "X" if orientacion in motor.ORIENTACIONES_GRADIENTE_EN_X else "Y"
     if por_forma and por_nombre and por_forma != por_nombre:
@@ -192,6 +203,20 @@ def _eje_del_gradiente(tabla, orientacion, angulo):
     if not (por_forma or por_nombre):
         raise lector.ArchivoNoReconocido(f"la tabla de la cuña de {angulo}° es cuadrada y falta su name.data: no se sabe el eje del gradiente")
     return por_forma or por_nombre
+
+
+@contextlib.contextmanager
+def _de(tipo, accesorio, angulo=None):
+    """UM.2b (B1): un rechazo al armar lleva de qué archivo sale (`fallo.archivo` = (tipo de dato, accesorio); el tipo puede ser una tupla de tipos, la que da el sitio o,
+    si el motivo marca `tipos_del_motivo`, la del motivo, o `None`, todos los de ese accesorio), para que la revisión ponga su nombre, y, si es de una cuña y el motivo no
+    lo dice, su ángulo."""
+    try:
+        yield
+    except (lector.ArchivoNoReconocido, motor.NoCalculable) as fallo:
+        fallo.archivo = (getattr(fallo, "tipos_del_motivo", tipo), accesorio)
+        if angulo is not None and f"{angulo}°" not in str(fallo):
+            fallo.args = (f"la cuña de {angulo}°: {fallo}",)
+        raise
 
 
 def _uno(por_tipo, tipo, accesorio):
@@ -241,11 +266,13 @@ def datos_haz(archivos, equipo, energia, d0_dmax=None, d0_tabla=None, wf_escrito
             raise lector.ArchivoNoReconocido(f"{' y '.join(f'«{a}»' for a in sorted(accesorios))} son la misma cuña de {angulo}°: no se sabe cuál usar")
     if not _uno(por_tipo, TIPO_PDD, ABIERTO) or not _uno(por_tipo, TIPO_OF, ABIERTO):
         raise lector.ArchivoNoReconocido("faltan el PDD medido o la tabla de factores del campo abierto")
-    pdd, ssd_pdd = familia_pdd(lector.leer_curvas(_uno(por_tipo, TIPO_PDD, ABIERTO)))
-    of_a = lector.leer_tabla_of(_uno(por_tipo, TIPO_OF, ABIERTO))
-    if of_a.y[-1] != of_a.x[-1]:      # UM.2 (UM2-D5): una tabla no tiene marca de final; cortada al final de una fila se leía como una tabla más pequeña
-        raise lector.ArchivoNoReconocido(f"la tabla de factores abierta llega a {of_a.x[-1]:g} [cm] en X y a {of_a.y[-1]:g} [cm] en Y: parece cortada al final de una fila")
-    plausibilidad.revisar_tabla(of_a, "la tabla abierta")
+    with _de(TIPO_PDD, ABIERTO):
+        pdd, ssd_pdd = familia_pdd(lector.leer_curvas(_uno(por_tipo, TIPO_PDD, ABIERTO)))
+    with _de(TIPO_OF, ABIERTO):
+        of_a = lector.leer_tabla_of(_uno(por_tipo, TIPO_OF, ABIERTO))
+        if of_a.y[-1] != of_a.x[-1]:      # UM.2 (UM2-D5): una tabla no tiene marca de final; cortada al final de una fila se leía como una tabla más pequeña
+            raise lector.ArchivoNoReconocido(f"la tabla de factores abierta llega a {of_a.x[-1]:g} [cm] en X y a {of_a.y[-1]:g} [cm] en Y: parece cortada al final de una fila")
+        plausibilidad.revisar_tabla(of_a, "la tabla abierta")
     of = motor.TablaFactores(of_a.x, of_a.y, of_a.m)
     d0 = of_a.prof_cm
 
@@ -270,27 +297,35 @@ def datos_haz(archivos, equipo, energia, d0_dmax=None, d0_tabla=None, wf_escrito
         wdd = _uno(por_tipo, TIPO_WDD, i.accesorio)
         if angulo is None or not wdd:
             continue
-        tabla = lector.leer_tabla_of(texto)
-        if tabla.ssd_cm != of_a.ssd_cm or tabla.prof_cm != d0:
-            raise lector.ArchivoNoReconocido(f"la tabla de la cuña de {angulo}° no está en las mismas condiciones que la abierta")
-        plausibilidad.revisar_tabla(tabla, f"la tabla de la cuña de {angulo}°")
+        with _de(TIPO_OF, i.accesorio, angulo):
+            tabla = lector.leer_tabla_of(texto)
+            if tabla.ssd_cm != of_a.ssd_cm or tabla.prof_cm != d0:
+                raise lector.ArchivoNoReconocido(f"la tabla de la cuña de {angulo}° no está en las mismas condiciones que la abierta")
+            plausibilidad.revisar_tabla(tabla, f"la tabla de la cuña de {angulo}°")
         parametros = _uno(por_tipo, TIPO_CUNA, i.accesorio)
         wf, origen, orientacion = escritos.get(angulo), "", None
         if parametros:
-            orientacion = lector.orientacion_de_cuna(parametros)
-            if lector.angulo_en_parametros(parametros) not in (None, float(angulo)):
-                raise lector.ArchivoNoReconocido(f"el name.data de la cuña de {angulo}° dice otro ángulo: {lector.angulo_en_parametros(parametros):g}°")
-            dosis = lector.dosis_de_referencia_cuna(parametros)
+            with _de(TIPO_CUNA, i.accesorio, angulo):
+                orientacion = lector.orientacion_de_cuna(parametros)
+                if lector.angulo_en_parametros(parametros) not in (None, float(angulo)):
+                    raise lector.ArchivoNoReconocido(f"el name.data de la cuña de {angulo}° dice otro ángulo: {lector.angulo_en_parametros(parametros):g}°")
+                dosis = lector.dosis_de_referencia_cuna(parametros)
             if wf is None and dosis:
                 wf = dosis / d0_norm
                 origen = (f"El factor de la cuña de {angulo}° en 10 × 10 es {wf:.4f}: se dedujo de su dosis de referencia, {dosis:.4f} [cGy/UM], entre D'0, {d0_norm:.4f} [cGy/UM], "
                           f"suponiendo que esa dosis es a {d0:g} [cm]: falta confirmarlo.")      # ronda 1 (F1, DC13 2): con su valor y los dos datos de que sale; un dato dañado del name.data se ve aquí
-        gradiente = _eje_del_gradiente(tabla, orientacion, angulo)
-        if wf is not None and not motor.RANGO_FACTOR_CUNA[0] <= wf <= motor.RANGO_FACTOR_CUNA[1]:
-            raise motor.FaltaDato(f"El factor de la cuña de {angulo}° = {wf:.3f} no es un valor posible (de {motor.RANGO_FACTOR_CUNA[0]:g} a {motor.RANGO_FACTOR_CUNA[1]:g})")
-        curvas_cuna = lector.leer_curvas(wdd)
-        lados_beta, betas, prof_max = betas_de_cuna(curvas_cuna, pdd, d0, ssd_pdd, (float(tabla.x[-1]), float(tabla.y[-1])))
-        plausibilidad.revisar_pdd_con_cuna(curvas_cuna, angulo)      # después: los motivos de `betas_de_cuna` dicen más; esta mira también el campo entero
+        with _de((TIPO_OF, TIPO_CUNA), i.accesorio, angulo):      # la tabla y el name.data se contradicen: los dos archivos (la orientación ilegible, solo el name.data: lo marca `_eje_del_gradiente`)
+            gradiente = _eje_del_gradiente(tabla, orientacion, angulo)
+        # UM.2b (B1): el rango del factor, de dónde salga. Uno deducido sale del name.data, y es ese archivo el que hay que exportar de nuevo; uno escrito no es de ningún archivo (la lista cerrada de la prueba por AST)
+        if origen:
+            with _de(TIPO_CUNA, i.accesorio, angulo):
+                _factor_posible(angulo, wf)
+        elif wf is not None:
+            _factor_posible(angulo, wf)
+        with _de(TIPO_WDD, i.accesorio, angulo):
+            curvas_cuna = lector.leer_curvas(wdd)
+            lados_beta, betas, prof_max = betas_de_cuna(curvas_cuna, pdd, d0, ssd_pdd, (float(tabla.x[-1]), float(tabla.y[-1])))
+            plausibilidad.revisar_pdd_con_cuna(curvas_cuna, angulo)      # después: los motivos de `betas_de_cuna` dicen más; esta mira también el campo entero
         revisar = frozenset((y, x) for y, x, *_ in lector.valores_fuera_de_tendencia(tabla))
         cunas[angulo] = motor.DatosCuna(motor.TablaFactores(tabla.x, tabla.y, tabla.m), lados_beta, betas, prof_max, gradiente, wf, origen, revisar)
     sobran = sorted(set(escritos) - set(cunas))
@@ -299,9 +334,11 @@ def datos_haz(archivos, equipo, energia, d0_dmax=None, d0_tabla=None, wf_escrito
                               "agregue sus archivos")
 
     perfil = _uno(por_tipo, TIPO_PERFIL, ABIERTO)
+    with _de(TIPO_PERFIL, ABIERTO):
+        perfiles = perfiles_oar(lector.leer_curvas(perfil)) if perfil else None
     return motor.DatosHaz(
         equipo=equipo, energia=energia, ssd0_cm=of_a.ssd_cm, d0_cm=d0, d0_norm=d0_norm, pdd=pdd, of=of, ssd_pdd_cm=ssd_pdd, sc=sc, sc_origen=sc_origen,
-        perfiles=perfiles_oar(lector.leer_curvas(perfil)) if perfil else None, cunas=cunas,
+        perfiles=perfiles, cunas=cunas,
         celdas_a_revisar=frozenset((y, x) for y, x, *_ in lector.valores_fuera_de_tendencia(of_a)))
 
 
@@ -396,7 +433,10 @@ def revisar_archivos(archivos, equipo, energia, d0_dmax=None, d0_tabla=None, wf_
         try:
             datos = datos_haz(textos, equipo, energia, d0_dmax, d0_tabla, wf_escritos, sc, sc_origen)
         except (lector.ArchivoNoReconocido, motor.NoCalculable) as fallo:
-            problemas.append(str(fallo))
+            tipo, accesorio = getattr(fallo, "archivo", (None, None))     # UM.2 v2 (B1): el nombre de los archivos de los que sale el rechazo
+            tipos = (tipo,) if isinstance(tipo, str) else tipo
+            nombres = [n for n, _, i in candidatos if i.accesorio == accesorio and (tipos is None or i.dato in tipos)]      # todo archivo leído tiene accesorio (`identidad`)
+            problemas.append(f"{' y '.join(nombres)}: {fallo}" if nombres else str(fallo))
         except Exception as fallo:      # la frontera de la carga
             problemas.append(_error_inesperado("armar los datos del haz", fallo))
         else:

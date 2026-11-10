@@ -53,22 +53,22 @@ def _revisar_pdd(c, nombre, tolerancia, salto_fuera, desvio_cola, desvio_final):
         raise BarreraDePlausibilidad(f"el {nombre}: sus puntos no van en profundidad creciente (z = {z[i]:g} [cm] y luego {z[i + 1]:g} [cm]): una profundidad está dañada")
     k = int(np.argmax(v))
     if abs(v[k] - 100.0) > tolerancia:
-        raise BarreraDePlausibilidad(f"el {nombre} tiene su máximo en {v[k]:g} [%] (a {z[k]:g} [cm]) y debe valer 100 ± {tolerancia:g} [%]: no está normalizado como se "
+        raise BarreraDePlausibilidad(f"el {nombre} tiene su máximo en {motor.cifras(v[k], 100 + tolerancia if v[k] > 100 else 100 - tolerancia, 6, 'g')} [%] (a {z[k]:g} [cm]) y debe valer 100 ± {tolerancia:g} [%]: no está normalizado como se "
                                      "espera o un valor está dañado (¿un punto decimal perdido?)")
     for i in range(1, len(v)):
         contra = v[i - 1] - v[i] if i <= k else v[i] - v[i - 1]          # antes del máximo, bajar; pasado, subir
         umbral = SALTO_EN_LA_ZONA_PCT if min(abs(z[i] - z[k]), abs(z[i - 1] - z[k])) <= ZONA_DEL_MAXIMO_CM else salto_fuera
         if contra > umbral:
-            raise BarreraDePlausibilidad(f"el {nombre} {'baja' if i <= k else 'sube'} {contra:.3g} [%] entre z = {z[i - 1]:g} [cm] y z = {z[i]:g} [cm], {'antes de' if i <= k else 'pasado'} su "
+            raise BarreraDePlausibilidad(f"el {nombre} {'baja' if i <= k else 'sube'} {motor.cifras(contra, umbral, 3, 'g')} [%] entre z = {z[i - 1]:g} [cm] y z = {z[i]:g} [cm], {'antes de' if i <= k else 'pasado'} su "
                                          f"máximo (a {z[k]:g} [cm]); se admite {umbral:g} [%] de ruido: un valor está dañado")
     cola = [i for i in range(k + 1, len(v)) if z[i - 1] - z[k] > ZONA_DEL_MAXIMO_CM]
     for i in (q for q in cola if q + 1 < len(v)):
         if abs(v[i] - _recta(z, v, i, i - 1, i + 1)) > desvio_cola:
-            raise BarreraDePlausibilidad(f"el {nombre} se aparta {abs(v[i] - _recta(z, v, i, i - 1, i + 1)):.3g} [%] de la recta de sus vecinos en z = {z[i]:g} [cm] "
+            raise BarreraDePlausibilidad(f"el {nombre} se aparta {motor.cifras(abs(v[i] - _recta(z, v, i, i - 1, i + 1)), desvio_cola, 3, 'g')} [%] de la recta de sus vecinos en z = {z[i]:g} [cm] "
                                          f"(se admite {desvio_cola:g} [%]): un valor está dañado")
     n = len(v) - 1
     if len(cola) >= 2 and abs(v[n] - _recta(z, v, n, n - 2, n - 1)) > desvio_final:
-        raise BarreraDePlausibilidad(f"el último punto del {nombre} (z = {z[n]:g} [cm]) se aparta {abs(v[n] - _recta(z, v, n, n - 2, n - 1)):.3g} [%] de la tendencia "
+        raise BarreraDePlausibilidad(f"el último punto del {nombre} (z = {z[n]:g} [cm]) se aparta {motor.cifras(abs(v[n] - _recta(z, v, n, n - 2, n - 1)), desvio_final, 3, 'g')} [%] de la tendencia "
                                      f"de los dos anteriores (se admite {desvio_final:g} [%]): un valor está dañado")
 
 
@@ -107,7 +107,7 @@ def revisar_perfil(p):
     nombre = f"el perfil abierto de {p.lado:g} × {p.lado:g} [cm] a {p.prof:g} [cm] de profundidad"
     i = int(np.argmax(p.oar))
     if p.oar[i] > OAR_MAXIMO:
-        raise BarreraDePlausibilidad(f"{nombre} tiene un OAR de {p.oar[i]:.4g} en x = {p.x[i]:g} [cm], y no puede pasar de {OAR_MAXIMO:g}: un valor está dañado "
+        raise BarreraDePlausibilidad(f"{nombre} tiene un OAR de {motor.cifras(p.oar[i], OAR_MAXIMO, 4, 'g')} en x = {p.x[i]:g} [cm], y no puede pasar de {OAR_MAXIMO:g}: un valor está dañado "
                                      "(¿un punto decimal perdido?)")
     i = int(np.argmin(p.oar))
     if not p.oar[i] > 0:
@@ -118,7 +118,7 @@ def revisar_perfil(p):
         desvio = abs(p.oar[i] - _recta(p.x, p.oar, i, j, k))
         if p.x[i] <= borde - NUCLEO_HASTA_EL_BORDE_CM and i < len(p.x) - 1:
             if desvio > PICO_NUCLEO:
-                raise BarreraDePlausibilidad(f"{nombre} tiene un pico en x = {p.x[i]:g} [cm], dentro del campo: el OAR se aparta {desvio:.3g} de la recta de sus "
+                raise BarreraDePlausibilidad(f"{nombre} tiene un pico en x = {p.x[i]:g} [cm], dentro del campo: el OAR se aparta {motor.cifras(desvio, PICO_NUCLEO, 3, 'g')} de la recta de sus "
                                              f"vecinos (se admite {PICO_NUCLEO:g}): un valor está dañado")
         elif desvio - PICO_FRACCION_DE_LA_PENDIENTE * abs(p.oar[k] - p.oar[j]) > PICO_OAR:
             raise BarreraDePlausibilidad(f"{nombre} tiene un pico en x = {p.x[i]:g} [cm]: se aparta de sus vecinos {desvio:.3g}, más de lo que admite la pendiente "
@@ -138,13 +138,13 @@ def revisar_tabla(t, que):
                     (y0, x0), (y, x) = celda(o, i), celda(o, i + 1)     # UM.2 v2 (B3): las dos celdas; cuál está dañada no se sabe
                     raise BarreraDePlausibilidad(f"{que} salta entre la celda Y = {y0:g} [cm], X = {x0:g} [cm] (valor {math.exp(fila[i]):g}) y la Y = {y:g} [cm], "
                                                  f"X = {x:g} [cm] (valor {math.exp(fila[i + 1]):g}): entre celdas vecinas "
-                                                 f"el factor cambia como el lado elevado a {p:.3g}, y en un haz real va de {PENDIENTE_LOG_TABLA[0]:g} a "
+                                                 f"el factor cambia como el lado elevado a {motor.cifras(p, PENDIENTE_LOG_TABLA[0] if p < PENDIENTE_LOG_TABLA[0] else PENDIENTE_LOG_TABLA[1], 3, 'g')}, y en un haz real va de {PENDIENTE_LOG_TABLA[0]:g} a "
                                                  f"{PENDIENTE_LOG_TABLA[1]:g}: un valor está dañado")
             for i in range(len(fila) if len(fila) >= 3 else 0):
                 j, k = (i - 1, i + 1) if 0 < i < len(fila) - 1 else (1, 2) if i == 0 else (i - 2, i - 1)
                 umbral = DESVIO_LINEA_TABLA if 0 < i < len(fila) - 1 else DESVIO_BORDE_TABLA
                 if abs(fila[i] - _recta(ejes, fila, i, j, k)) > umbral:
                     y, x = celda(o, i)
-                    raise BarreraDePlausibilidad(f"{que}: el valor en Y = {y:g} [cm], X = {x:g} [cm] se aparta {100 * abs(fila[i] - _recta(ejes, fila, i, j, k)):.3g} [%] "
+                    raise BarreraDePlausibilidad(f"{que}: el valor en Y = {y:g} [cm], X = {x:g} [cm] se aparta {motor.cifras(100 * abs(fila[i] - _recta(ejes, fila, i, j, k)), 100 * umbral, 3, 'g')} [%] "
                                                  f"de lo que dicen {'sus dos vecinas' if 0 < i < len(fila) - 1 else 'las dos celdas de dentro'} de la misma fila o "
                                                  f"columna (se admite {100 * umbral:g} [%]): un valor está dañado")
