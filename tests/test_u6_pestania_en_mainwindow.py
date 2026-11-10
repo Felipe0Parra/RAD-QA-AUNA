@@ -9,6 +9,8 @@ cualquiera de ellas ponga este test en rojo -- no solo que aparezca
 C.2 (PLAN_REFERENCIAS_EDITABLES_21-09.md) añadió "Referencias" DESPUÉS de
 "Usuarios", por la misma razón: por eso ya no se afirma que Usuarios sea la
 última, sino que sigue en su índice y que las 9 previas no se movieron.
+UM.4 (PLAN_CALCULADORA_UM_05-11.md) añadió "Calculadora UM" al final: el total
+sube en uno.
 """
 import os
 import sqlite3
@@ -74,7 +76,7 @@ class TestPestanaUsuariosEnMainWindow:
     def test_usuarios_sigue_justo_despues_de_las_nueve_previas(self, app, bd_temporal):
         w = MainWindow(Usuario(username="lamaya", fullname="Luz Adriana Maya"))
         assert w.tabs.tabText(len(TITULOS_PREVIOS)) == "Usuarios"
-        assert w.tabs.count() == len(TITULOS_PREVIOS) + 2  # Usuarios + Referencias (C.2)
+        assert w.tabs.count() == len(TITULOS_PREVIOS) + 3  # Usuarios + Referencias (C.2) + Calculadora UM (UM.4)
 
     def test_la_pestana_usuarios_carga_el_widget_real_al_visitarla(
             self, app, bd_temporal):

@@ -559,6 +559,10 @@ class MainWindow(QMainWindow):
             # VER las referencias); fijarlas lo restringe la pantalla y,
             # sobre todo, el servicio (es_fisico_jefe).
             ("Referencias", lambda: self.Referencias()),
+            # UM.4 (PLAN_CALCULADORA_UM_05-11.md): también AL FINAL, por la
+            # misma razón -- ninguna de las 11 pestañas anteriores cambia de
+            # índice. Visible para todos: calcular no escribe nada en la base.
+            ("Calculadora UM", lambda: self.CalculadoraUM()),
         ]
         self._tab_instancias = {}
 
@@ -653,6 +657,20 @@ class MainWindow(QMainWindow):
             return Referencias(self.user_id)
         except Exception as e:
             print(f"Error pestaña de referencias: {e}")
+            return QWidget()  # Widget vacío como fallback
+
+    def CalculadoraUM(self):
+        """Importa y crea la pestaña de la calculadora de UM (UM.4,
+        PLAN_CALCULADORA_UM_05-11.md). Visible para CUALQUIER usuario
+        logueado: calcular no escribe nada. Recibe la identidad de la sesión
+        para que cargar tablas (UM.5) la use sin volver a tocar este archivo;
+        el permiso lo comprueba el servicio (es_fisico_jefe)."""
+        try:
+            modulo = importlib.import_module("ui.paginasGuia.calculadora_um")
+            CalculadoraUM = getattr(modulo, "CalculadoraUM")
+            return CalculadoraUM(self.user_id)
+        except Exception as e:
+            print(f"Error pestaña de la calculadora de UM: {e}")
             return QWidget()  # Widget vacío como fallback
 
     def _cargar_pestania_diferida(self, indice):

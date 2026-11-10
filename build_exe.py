@@ -56,6 +56,17 @@ hidden_imports = [
     "services.curva_dosis",
     "ui.paginasControles.PruebasMensuales.curva_dosis",
 
+    # UM.4 (PLAN_CALCULADORA_UM_05-11.md, DC16): la calculadora de UM. La
+    # pestana se crea con un import diferido (importlib, como Referencias) y
+    # trae los servicios de la calculadora; listados por la misma defensa de
+    # D4, I5 y E9. El lector del JSON (services.um_plan_json) llega en UM.6.
+    "services.um_lector_eclipse",
+    "services.um_motor",
+    "services.um_plausibilidad",
+    "services.um_armar",
+    "services.um_datos_haz",
+    "ui.paginasGuia.calculadora_um",
+
     # MODELOS
     "models.PDF.reportes",
 ]

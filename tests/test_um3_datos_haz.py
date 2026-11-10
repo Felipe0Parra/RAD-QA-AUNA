@@ -1041,7 +1041,8 @@ def test_dos_vigentes_de_la_misma_clave_se_dicen_y_no_se_elige_uno(bd, originale
 
 
 _PERMITIDOS = {"services/um_datos_haz.py": "la puerta", "data/ManejoDatos/conection.py": "el CREATE TABLE", "services/anulacion.py": "TABLAS_ANULABLES",
-               "services/lectura_vigente.py": "RAICES_QC", "scripts/indices_bloque_qc.py": "CLAVES_INDICE"}
+               "services/lectura_vigente.py": "RAICES_QC", "scripts/indices_bloque_qc.py": "CLAVES_INDICE",
+               "build_exe.py": "UM.4 lista el MÓDULO services.um_datos_haz en hidden_imports (no la tabla)"}
 
 
 PUERTA = "services/um_datos_haz.py"
@@ -1084,6 +1085,7 @@ def test_solo_la_puerta_lee_y_escribe_las_dos_tablas():
         assert all(texto in ("um_datos_haz", "um_archivo_haz") for _, texto in hallados.get(archivo, ())), archivo
     assert all("CREATE TABLE IF NOT EXISTS um_" in texto for _, texto in hallados["data/ManejoDatos/conection.py"])
     assert any("INSERT INTO um_archivo_haz" in texto for _, texto in hallados["services/um_datos_haz.py"])
+    assert [texto for _, texto in hallados.get("build_exe.py", ())] in ([], ["services.um_datos_haz"]), "build_exe.py solo nombra el módulo"   # UM.4 (clase b)
 
 
 @pytest.mark.parametrize("intruso", ['cursor.execute("INSERT INTO um_archivo_haz (ref) VALUES (1)")', 'reemplazar_bloque(c, "um_datos_haz", [], "", [], "x")',

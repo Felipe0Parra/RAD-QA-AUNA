@@ -6,6 +6,11 @@ que insertar en medio movería pestañas existentes (precedente: U6).
 Garantía: *"la pestaña nueva no mueve ninguna de las que ya estaban."* Lista
 literal de las 10 pestañas previas (las 9 de U6 más "Usuarios"): mover o
 reordenar cualquiera de ellas pone este test en rojo.
+
+UM.4 (PLAN_CALCULADORA_UM_05-11.md) añadió "Calculadora UM" DESPUÉS de
+"Referencias", por la misma razón: por eso ya no se afirma que Referencias sea
+la última, sino que sigue en su índice (10) y que solo la calculadora va
+después; las pruebas que la visitan la buscan por ese índice.
 """
 import os
 import sqlite3
@@ -68,10 +73,11 @@ class TestPestanaReferenciasEnMainWindow:
         titulos = [w.tabs.tabText(i) for i in range(len(TITULOS_PREVIOS))]
         assert titulos == TITULOS_PREVIOS
 
-    def test_referencias_es_la_ultima_y_no_hay_otra_nueva(self, app, bd_temporal):
+    def test_referencias_sigue_en_su_indice_y_solo_la_calculadora_va_despues(self, app, bd_temporal):
         w = _ventana()
-        assert w.tabs.tabText(w.tabs.count() - 1) == "Referencias"
-        assert w.tabs.count() == len(TITULOS_PREVIOS) + 1
+        assert w.tabs.tabText(len(TITULOS_PREVIOS)) == "Referencias"
+        assert w.tabs.tabText(w.tabs.count() - 1) == "Calculadora UM"  # UM.4
+        assert w.tabs.count() == len(TITULOS_PREVIOS) + 2
 
     def test_la_lista_de_definiciones_coincide_con_las_pestanas_visibles(
             self, app, bd_temporal):
@@ -87,13 +93,13 @@ class TestPestanaReferenciasEnMainWindow:
         from ui.paginasGuia.referencias import Referencias as PestanaReferencias
 
         w = _ventana()
-        indice = w.tabs.count() - 1
+        indice = len(TITULOS_PREVIOS)
         w._cargar_pestania_diferida(indice)
         assert isinstance(w._tab_instancias[indice], PestanaReferencias)
 
     def test_el_jefe_llega_con_los_controles_habilitados(self, app, bd_temporal):
         w = _ventana("lamaya", "Luz Adriana Maya")
-        indice = w.tabs.count() - 1
+        indice = len(TITULOS_PREVIOS)
         w._cargar_pestania_diferida(indice)
         assert w._tab_instancias[indice].btn_fijar.isEnabled()
 
@@ -101,7 +107,7 @@ class TestPestanaReferenciasEnMainWindow:
         """La identidad de la sesión llega a la pantalla (`self.user_id`),
         no solo el widget."""
         w = _ventana("jjcastillo", "Javier Castillo")
-        indice = w.tabs.count() - 1
+        indice = len(TITULOS_PREVIOS)
         w._cargar_pestania_diferida(indice)
         pantalla = w._tab_instancias[indice]
         assert not pantalla.btn_fijar.isEnabled()
@@ -111,5 +117,5 @@ class TestPestanaReferenciasEnMainWindow:
         """Carga diferida intacta: solo la visitada (y la inicial) se crean."""
         w = _ventana()
         antes = set(w._tab_instancias)
-        w._cargar_pestania_diferida(w.tabs.count() - 1)
-        assert set(w._tab_instancias) - antes == {w.tabs.count() - 1}
+        w._cargar_pestania_diferida(len(TITULOS_PREVIOS))
+        assert set(w._tab_instancias) - antes == {len(TITULOS_PREVIOS)}
