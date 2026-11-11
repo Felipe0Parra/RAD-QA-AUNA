@@ -66,6 +66,8 @@ hidden_imports = [
     "services.um_armar",
     "services.um_datos_haz",
     "ui.paginasGuia.calculadora_um",
+    # UM.5: el dialogo de "Cargar tablas" y el historial de la calculadora.
+    "ui.paginasGuia.calculadora_um_cargar",
 
     # MODELOS
     "models.PDF.reportes",

@@ -9,7 +9,8 @@ Lo que fija:
     `pyplot`; la pestaña al final de la ventana principal y los seis módulos en `build_exe.py`.
   - Lo que agregó la corrección de la revisión (10-11, ronda 1): el error se escribe con las cifras que piden los umbrales ESCRITOS; con cuña la orientación se elige (nunca se supone) y la elegida
     es la que llega al motor; un fallo pasajero de la base al abrir no se dice como un cambio de las tablas y el motivo de volver a leer el haz dice lo que pasó; el aviso de «sin tablas» dice lo
-    mismo que la ayuda del botón «Cargar tablas» (que la carga llega después y quién la hace) y no manda a un botón que no responde.
+    mismo que la ayuda del botón «Cargar tablas» (que la carga llega después y quién la hace) y no manda a un botón que no responde. (UM.5, clase b: el botón ya carga; el aviso dice quién
+    carga y con qué botón, y el botón se habilita para quien puede: lo fija tests/test_um5_cargar_tablas.py.)
 Trampa 2: todo cuadro de diálogo se parcha y un modal hace caer la prueba (bajo `offscreen` colgaría la suite). Trampa 9: cada pantalla se cierra con la receta completa. Nunca una base de
 BasesDeDatos/."""
 import ast
@@ -314,7 +315,7 @@ TEXTOS_FIJOS = {"SIN_CUNA": "Sin cuña", "ELIJA_ORIENTACION": "Elija la orientac
                                       r"\left(\dfrac{SSD_0 + d_0}{SSD + d_0}\right)^2}$"),
                 "LA_JSON_LLEGA_DESPUES": ("La parte automática, que calcula cada campo de un plan a partir de un JSON con la misma cuenta de la parte manual, llega en una próxima entrega "
                                           "de la calculadora."),
-                "CARGAR_TABLAS_LLEGA_DESPUES": "La carga de tablas se habilita en la próxima entrega de la calculadora; la hacen el físico jefe o el administrador.",
+                "QUIEN_CARGA": "Las cargan el físico jefe o el administrador con «Cargar tablas», una vez por energía y con los archivos que exporta Eclipse.",     # UM.5 (clase b)
                 "EQUIPOS": ("Clinac 600", "Clinac iX")}
 
 
@@ -462,14 +463,13 @@ def test_el_texto_para_copiar_trae_todo(datos_reales):
     assert lineas[20:] == ["", "Avisos"] + list(r.avisos) and len(r.avisos) >= 5
 
 
-def test_sin_tablas_dice_que_falta_quien_carga_y_que_la_carga_llega_despues():
-    """UM4-D1: el aviso dice lo mismo que la ayuda del botón «Cargar tablas» (que la carga se habilita en la próxima entrega y quién la hace) y no manda al botón, que en UM.4 no responde."""
+def test_sin_tablas_dice_que_falta_y_quien_carga():
+    """UM4-D1, con UM.5 (clase b: el botón ya carga): el aviso dice qué falta, quién carga las tablas y con qué botón; a quien no puede cargar no le pide pulsarlo."""
     for equipo in pantalla.EQUIPOS:
         texto = pantalla.texto_sin_tablas(equipo)
         assert f"No hay tablas cargadas del {equipo}: sin ellas no se puede calcular." in texto
-        assert pantalla.CARGAR_TABLAS_LLEGA_DESPUES in texto and "próxima entrega" in texto
+        assert pantalla.QUIEN_CARGA in texto and "próxima entrega" not in texto
         assert "el físico jefe o el administrador" in texto and "una vez por energía" in texto     # UM.3: guardar exige es_fisico_jefe; los demás ven y calculan
-        assert "«Cargar tablas»" not in texto
 
 
 # Por qué se detuvo `calcular` al volver a leer el haz (UM4-D9): lo que dice la pantalla es lo que pasó con esa lectura, nunca otra cosa.
@@ -670,13 +670,13 @@ def test_la_lista_de_cunas_sale_por_angulo_y_no_en_el_orden_en_que_llegaron(app,
     assert [p.combo_cuna.itemData(i) for i in range(p.combo_cuna.count())] == [None, 15, 30, 45, 60]
 
 
-def test_el_aviso_de_sin_tablas_no_manda_a_un_boton_que_no_se_puede_usar(bd_vacia, fabrica):
-    """El físico que abre la pestaña sin tablas lee el aviso: si nombrara el botón «Cargar tablas» (deshabilitado hasta la próxima entrega) lo mandaría a un control que no responde. El aviso y el
-    motivo al calcular dicen lo mismo que la ayuda del botón: que la carga llega después y quién la hace."""
+def test_el_aviso_de_sin_tablas_dice_quien_carga_y_lo_mismo_al_calcular(bd_vacia, fabrica):
+    """UM.5 (clase b): el aviso de la pestaña sin tablas y el motivo al calcular dicen lo mismo: qué falta y quién carga. La cuenta de la prueba es la del físico jefe, y para ella el botón responde
+    (los tres roles, en tests/test_um5_cargar_tablas.py)."""
     p = fabrica()
-    assert p.aviso_tablas.isVisibleTo(p) and not p.boton_cargar.isEnabled()
+    assert p.aviso_tablas.isVisibleTo(p) and p.boton_cargar.isEnabled()
     aviso = p.aviso_tablas.text()
-    assert p.boton_cargar.toolTip() in aviso and "próxima entrega" in aviso and "el físico jefe o el administrador" in aviso and "«Cargar tablas»" not in aviso
+    assert aviso == pantalla.texto_sin_tablas(EQUIPO) and "el físico jefe o el administrador" in aviso and "próxima entrega" not in aviso
     escribir(p, BASE)
     p.calcular()
     assert p.etiqueta_motivo.text() == aviso and sin_numero(p)
@@ -1012,9 +1012,9 @@ def test_el_desglose_se_puede_seleccionar_y_no_editar(p):
     assert all(t.item(i, j).toolTip() == t.item(i, j).text() for i in range(t.rowCount()) for j in range(t.columnCount()))
 
 
-def test_cargar_tablas_esta_y_espera_su_entrega_y_la_parte_json_tambien(p):
-    assert p.boton_cargar.text() == "Cargar tablas" and not p.boton_cargar.isEnabled() and p.boton_cargar.toolTip() == pantalla.CARGAR_TABLAS_LLEGA_DESPUES
-    assert "el físico jefe o el administrador" in p.boton_cargar.toolTip()
+def test_cargar_tablas_responde_a_quien_puede_y_la_parte_json_espera_su_entrega(p):
+    import ui.paginasGuia.calculadora_um_cargar as carga      # UM.5 (clase b): el botón ya carga; para la cuenta del físico jefe responde
+    assert p.boton_cargar.text() == "Cargar tablas" and p.boton_cargar.isEnabled() and p.boton_cargar.toolTip() == carga.AYUDA_DE_CARGAR
     assert [p.subpestanas.tabText(i) for i in range(p.subpestanas.count())] == ["Manual", "Desde JSON"]
     assert p.subpestanas.widget(1).text() == pantalla.LA_JSON_LLEGA_DESPUES and p.subpestanas.currentIndex() == 0
     assert not re.search(r"UM\.\d|DC\d|DA-\d|DP-\d", " ".join(_todos_los_textos(p))), "sin ids internos en lo que ve el físico"
@@ -1308,7 +1308,8 @@ def test_un_nombre_de_equipo_largo_no_ensancha_el_aviso_de_sin_tablas(bd_vacia, 
 
 @pytest.mark.parametrize("campo", pantalla.CAMPOS, ids=lambda c: c.clave)
 def test_el_texto_que_cita_un_motivo_de_lectura_se_acota(campo):
-    """E2: un token pegado en un campo no ensancha la ventana por el motivo que lo cita: se citan los 30 primeros caracteres y «…» (con 30 o menos, el texto entero)."""
+    """E2: un token pegado en un campo no ensancha la ventana por el motivo que lo cita: con 30 caracteres o menos se cita entero; con más, su comienzo (12), «…» y su final (8) (UM5-S4,
+    clase b: antes, los 30 primeros y «…», que escondían justo lo que estorba)."""
     for largo in ("9" * 400, "z" * 400):
         with pytest.raises(motor.FaltaDato) as fallo:
             pantalla.leer_numero(largo, campo)
@@ -1317,7 +1318,7 @@ def test_el_texto_que_cita_un_motivo_de_lectura_se_acota(campo):
         pantalla.leer_numero("a" * 30, campo)
     with pytest.raises(motor.FaltaDato) as de_mas:
         pantalla.leer_numero("a" * 31, campo)
-    assert "«" + "a" * 30 + "»" in str(justo.value) and "«" + "a" * 30 + "…»" in str(de_mas.value)
+    assert "«" + "a" * 30 + "»" in str(justo.value) and "«" + "a" * 12 + "…" + "a" * 8 + "»" in str(de_mas.value)
     with pytest.raises(motor.FaltaDato) as con_bordes:
         pantalla.leer_numero("   " + "a" * 30 + "   ", campo)
     assert "«" + "a" * 30 + "»" in str(con_bordes.value)      # los espacios de los bordes ni se citan ni cuentan en el límite
@@ -1583,3 +1584,207 @@ def test_copiar_sin_um_de_eclipse_ni_cuna_no_inventa_error_ni_estado(p):
     assert primera == f"Equipo: Clinac 600 | Energía: 6 MV | Cuña: Sin cuña | {pantalla.SIN_UM_DE_ECLIPSE}"
     assert "Error frente a" not in primera and "Estado:" not in primera and " | UM de Eclipse: " not in primera
     assert resto == pantalla.texto_para_copiar(p.resultado)
+
+
+# ================================================================================================================================== UM.5, suplemento: la segunda vuelta de la auditoría de UM.4 (S1 a S6)
+
+def _soltar_la_ventana_real(w):
+    """Trampa 9 y las figuras de las pestañas de QC: cada ventana principal real abre las de sus diarias con `pyplot`; se cierran con ella (sin esto, la tercera ventana del suplemento
+    pasaba de 20 figuras abiertas y matplotlib avisaba)."""
+    import matplotlib.pyplot as plt
+    cerrar(w, con_close=False)
+    plt.close("all")
+
+
+def _ventana_real(monkeypatch):
+    """La ventana principal REAL con la hoja de estilo de la app (cwd = el repositorio), la pestaña al tamaño de una pantalla de 1366 [px] y la base de la prueba ya cargada. Antes se cierran
+    las figuras de `pyplot` que dejaron las ventanas de las pruebas anteriores (ya destruidas): con más de 20 abiertas, matplotlib avisa."""
+    import matplotlib.pyplot as plt
+    plt.close("all")
+    monkeypatch.chdir(RAIZ)
+    from data.ManejoDatos.user import Usuario
+    from ui.mainpages import MainWindow
+    w = MainWindow(Usuario(username="jefa", fullname="Jefa de Física"))
+    assert w.styleSheet(), "la ventana lleva la hoja de estilo real"
+    w.showNormal()
+    w.resize(1366, 768)
+    w.tabs.setCurrentIndex(len(PREVIAS))
+    if len(PREVIAS) not in w._tab_instancias:
+        w._cargar_pestania_diferida(len(PREVIAS))
+    _pasos()
+    return w, w._tab_instancias[len(PREVIAS)]
+
+
+def test_s1_un_numero_de_cientos_de_cifras_que_escribe_el_motor_no_ensancha_la_ventana(bd_arrancada, app, monkeypatch):
+    """UM5-S1 (E2-residual): un número finito de 53 a 308 cifras en X o en Y pasa el lector y el motor lo escribe en su motivo; antes, el mínimo de la ventana real pasaba de 1194 a 1260–3260
+    [px] y no volvía solo. Ahora el mínimo de la ventana y el de la pestaña NO cambian, y el motivo se ve acortado con su final («está fuera de la tabla...»)."""
+    w, p = _ventana_real(monkeypatch)
+    try:
+        escribir(p, BASE, por_teclado=False)
+        p.calcular()
+        _pasos()
+        base = (w.minimumSizeHint().width(), p.minimumSizeHint().width())
+        for clave in ("x", "y"):
+            for cifras in (53, 60, 80, 100, 308):
+                escribir(p, dict(BASE, **{clave: "1" + "0" * (cifras - 1)}), por_teclado=False)
+                p.calcular()
+                _pasos()
+                motivo = p.etiqueta_motivo.text()
+                assert (w.minimumSizeHint().width(), p.minimumSizeHint().width()) == base, (clave, cifras, w.minimumSizeHint().width(), base)
+                assert "…" in motivo and "está fuera de la tabla" in motivo and max(len(palabra) for palabra in motivo.split()) <= pantalla.PALABRA_ENORME, motivo[:120]
+    finally:
+        _soltar_la_ventana_real(w)
+
+
+def test_s1_treinta_caracteres_anchos_en_un_umbral_no_ensanchan_la_ventana(bd_arrancada, app, monkeypatch):
+    """UM5-S1 (b): 30 «W», «M», «@» o «—» en un umbral subían el mínimo de la pestaña por encima de 1200 [px]: lo citado va acotado (comienzo y final, 21 caracteres)."""
+    w, p = _ventana_real(monkeypatch)
+    try:
+        escribir(p, dict(BASE, um_planeador="302"), por_teclado=False)
+        p.calcular()
+        _pasos()
+        base = (w.minimumSizeHint().width(), p.minimumSizeHint().width())
+        for clave in ("dentro", "fuera"):
+            for ancho in ("W", "M", "@", "—"):
+                _umbrales_de_omision(p)
+                p.umbrales[clave].setText(ancho * 30)
+                p.umbrales[clave].textEdited.emit(ancho * 30)
+                _pasos()
+                assert p.etiqueta_estado.text().startswith("Estado sin evaluar") and (w.minimumSizeHint().width(), p.minimumSizeHint().width()) == base, (clave, ancho)
+    finally:
+        _soltar_la_ventana_real(w)
+
+
+def test_s1_un_fallo_de_la_base_sin_espacios_no_ensancha_el_aviso(bd_vacia, fabrica, monkeypatch):
+    """UM5-S1 (c): el texto de un fallo de la base, sin espacios, en el aviso de las tablas."""
+    p = fabrica()
+    p.resize(1366, 700)
+    p.show()
+    _pasos()
+    base = p.minimumSizeHint().width()
+
+    def roto(equipo):
+        raise RuntimeError("x" * 400)
+    monkeypatch.setattr(um_datos_haz, "energias_cargadas", roto)
+    p._al_cambiar_equipo()
+    _pasos()
+    assert "…" in p.aviso_tablas.text() and p.minimumSizeHint().width() == base
+
+
+def test_s1_sin_palabras_enormes_acorta_solo_las_palabras_enormes():
+    assert pantalla.sin_palabras_enormes("un texto normal, con [cm] y 12.50") == "un texto normal, con [cm] y 12.50"
+    palabra = "1" * 10 + "2" * 300 + "3" * 10
+    assert pantalla.sin_palabras_enormes(f"X = {palabra} [cm] fuera") == "X = " + "1" * 10 + "…" + "3" * 10 + " [cm] fuera"
+    justa = "a" * pantalla.PALABRA_ENORME
+    assert pantalla.sin_palabras_enormes(justa) == justa and pantalla.sin_palabras_enormes(justa + "b") == "a" * 10 + "…" + "a" * 9 + "b"
+
+
+def test_s1_toda_etiqueta_que_cambia_esta_en_la_lista_y_se_ajusta_con_la_regla_comun(p):
+    """UM5-S1: una sola lista (`etiquetas_que_cambian`) y una sola regla (`que_no_fije_el_ancho`): cada etiqueta cuyo texto cambia entre un estado y otro está en la lista."""
+    etiquetas = p.findChildren(QLabel)
+    fotos = [{e: e.text() for e in etiquetas}]
+    for paso in (_umbrales_escritos("2", "3"), _umbrales_escritos("3", "2"), _cinco_motivos, lambda q: q.combo_equipo.setCurrentIndex(q.combo_equipo.findText("Clinac iX"))):
+        paso(p)
+        fotos.append({e: e.text() for e in etiquetas})
+    dinamicas = {e for e in etiquetas if len({foto[e] for foto in fotos}) > 1}
+    assert dinamicas <= set(p.etiquetas_que_cambian) and len(p.etiquetas_que_cambian) == 8
+    assert all(e.wordWrap() and e.sizePolicy().horizontalPolicy() == QSizePolicy.Expanding for e in p.etiquetas_que_cambian)
+
+
+def test_s2_el_divisor_del_formulario_y_el_resultado_no_se_colapsa(p):
+    """UM5-S2 (P2-2): un arrastre del asa ya no deja en cero el formulario ni el resultado (UM, estado, desglose, avisos y «Copiar el desglose»)."""
+    p.resize(1366, 700)
+    p.show()
+    _pasos()
+    divisor = p.divisor_del_formulario
+    assert not divisor.childrenCollapsible()
+    total = sum(divisor.sizes())
+    for extremo in ([total, 0], [0, total]):
+        divisor.setSizes(extremo)
+        _pasos()
+        assert min(divisor.sizes()) > 0, divisor.sizes()
+
+
+def _lineas(etiqueta):
+    return max(1, round(etiqueta.heightForWidth(etiqueta.width()) / etiqueta.fontMetrics().lineSpacing())) if etiqueta.wordWrap() else 1
+
+
+def test_s3_las_um_d_um_y_el_error_caben_en_una_linea_desde_el_ancho_minimo(bd_arrancada, app, monkeypatch):
+    """UM5-S3 (REG-1): de a dos con pesos 3:2, a 1194–1280 [px] la UM, D/UM y el error se partían en dos líneas y «[cGy/UM]» se cortaba; una por fila, caben en una línea a todo ancho,
+    con UM de 3, 4 y 5 cifras, y el mínimo de la ventana no cambia."""
+    w, p = _ventana_real(monkeypatch)
+    try:
+        base = w.minimumSizeHint().width()
+        for dosis in ("200", "2000", "13000"):
+            for ancho in (1194, 1250, 1280, 1300, 1366, 1920):
+                escribir(p, dict(BASE, dosis=dosis, um_planeador="300"), por_teclado=False)
+                w.resize(ancho, 931)
+                _pasos()
+                p.calcular()
+                _pasos()
+                assert [_lineas(e) for e in (p.etiqueta_um, p.etiqueta_d_um, p.etiqueta_error)] == [1, 1, 1], (dosis, ancho, p.etiqueta_um.text())
+        assert w.minimumSizeHint().width() == base
+    finally:
+        _soltar_la_ventana_real(w)
+
+
+def test_s4_lo_que_se_cita_muestra_el_comienzo_y_el_final():
+    """UM5-S4 (REG-2): con más de 30 caracteres se citaba el comienzo y se escondía justo lo que estorba (la «x», el « cm»)."""
+    for texto, final in (("1" * 31 + "x", "1111111x»"), ("0." + "1" * 40 + " cm", "11111 cm»")):
+        with pytest.raises(motor.FaltaDato) as fallo:
+            _leer_dosis(texto)
+        cita = str(fallo.value).split("«", 1)[1].split("»", 1)[0]
+        assert final in str(fallo.value) and cita.startswith(texto.strip()[:12]) and "…" in cita and len(cita) == 21, str(fallo.value)
+
+
+@pytest.mark.parametrize("valor, texto", [(12345.67, "12345.67"), (1234.567, "1234.567"), (302.5, "302.5"), (245.0, "245"), (20000.0, "20000"), (0.000001, "0.000001"),
+                                          (19999.99, "19999.99")])
+def test_s5_las_um_de_eclipse_se_copian_sin_perder_cifras(valor, texto):
+    """UM5-S5 (REG-3): con `:g`, 12345.67 se copiaba «12345.7» y el error de al lado se había calculado con 12345.67."""
+    assert pantalla.texto_sin_perder(valor) == texto
+    assert f"UM de Eclipse: {texto} [UM]" in pantalla.texto_del_contexto(EQUIPO, ENERGIA, None, None, valor, "Error frente a Eclipse: +0.00 [%]", "Estado: Dentro")
+
+
+NO_SE_VEN_NUEVOS = (" ", " ", "ㅤ", "ᅟ", "ᅠ", "ﾠ", "⠀", "️", "͏", "́")
+
+
+@pytest.mark.parametrize("raro", NO_SE_VEN_NUEVOS, ids=lambda c: f"U+{ord(c):04X}")
+def test_s6_un_caracter_que_no_se_ve_de_otra_clase_tambien_se_dice(raro):
+    """UM5-S6 (REG-4): separadores de línea y de párrafo, rellenos Hangul, el braille en blanco, selectores y marcas que se montan sobre otro carácter: antes, el motivo genérico."""
+    with pytest.raises(motor.FaltaDato) as fallo:
+        _leer_dosis(f"2{raro}00")
+    assert FRASE_NO_SE_VE in str(fallo.value)
+
+
+@pytest.mark.parametrize("visible", ["10 cm", "1,5x", "ñ", "2a00", "1/2", "2°"])
+def test_s6_lo_que_si_se_ve_sigue_pidiendo_solo_el_numero(visible):
+    with pytest.raises(motor.FaltaDato) as fallo:
+        _leer_dosis(visible)
+    assert FRASE_NO_SE_VE not in str(fallo.value) and "sin unidades" in str(fallo.value)
+
+
+def _no_se_ve_de_referencia(caracter):
+    """La referencia independiente de UM5-S6: por la categoría y el NOMBRE de Unicode (no por la lista de la pantalla)."""
+    import unicodedata
+    if caracter in "0123456789.,+-− ":
+        return False
+    nombre = unicodedata.name(caracter, "")
+    return unicodedata.category(caracter)[0] in "ZCM" or unicodedata.category(caracter) == "Pd" or "FILLER" in nombre or nombre in ("BRAILLE PATTERN BLANK", "MONGOLIAN VOWEL SEPARATOR")
+
+
+def test_s6_veinte_mil_textos_al_azar_coinciden_con_la_referencia_y_nunca_dan_un_numero_raro():
+    import random
+    import unicodedata
+    azar = random.Random(20261110)
+    piscina = "0123456789.,+-− " + "".join(NO_SE_VEN_NUEVOS) + " ​‌‍‎‏﻿­⁠  　\u0085\u007f–—" \
+        + "abcñxyzW°/%@—" + "".join(chr(azar.randrange(0x20, 0x3000)) for _ in range(300))
+    for _ in range(20000):
+        texto = "".join(azar.choice(piscina) for _ in range(azar.randint(1, 6)))
+        limpio = texto.strip().replace("−", "-")
+        try:
+            valor = _leer_dosis(texto)
+        except motor.FaltaDato as fallo:
+            if limpio and not pantalla._NUMERO.fullmatch(limpio):
+                assert (FRASE_NO_SE_VE in str(fallo)) == any(_no_se_ve_de_referencia(c) for c in limpio), (texto, [unicodedata.name(c, hex(ord(c))) for c in limpio])
+            continue
+        assert pantalla._NUMERO.fullmatch(limpio) and valor == float(limpio.replace(",", ".")), texto

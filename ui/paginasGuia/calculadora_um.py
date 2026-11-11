@@ -16,6 +16,7 @@ plano del punto; al volver a leer las tablas la cuña elegida se conserva si sig
 Enter calcula también desde el botón y las listas; lo copiado empieza con el contexto."""
 import math
 import re
+from decimal import Decimal
 import unicodedata
 from dataclasses import dataclass
 
@@ -42,9 +43,15 @@ SIN_RESULTADO = "Sin resultado"
 SIN_UM_DE_ECLIPSE = "Sin UM de Eclipse: no hay error ni estado."
 LA_JSON_LLEGA_DESPUES = ("La parte automática, que calcula cada campo de un plan a partir de un JSON con la misma cuenta de la parte manual, llega en una próxima entrega "
                          "de la calculadora.")
-CARGAR_TABLAS_LLEGA_DESPUES = "La carga de tablas se habilita en la próxima entrega de la calculadora; la hacen el físico jefe o el administrador."
+QUIEN_CARGA = "Las cargan el físico jefe o el administrador con «Cargar tablas», una vez por energía y con los archivos que exporta Eclipse."      # UM.5
 _NUMERO = re.compile(r"[+-]?(?:[0-9]+(?:[.,][0-9]*)?|[.,][0-9]+)")      # cifras ASCII, un punto o una coma decimal; nada más (ni exponente, ni unidades, ni separadores de miles)
 MAXIMO_CITADO = 30               # caracteres del texto escrito que un motivo cita: un token enorme pegado en un campo no ensancha la ventana (E2)
+CITA_COMIENZO, CITA_FINAL = 12, 8     # UM5-S4: de un texto más largo, su comienzo y su final (lo que estorba suele estar al final: «x», « cm»); 21 caracteres, menos que una palabra enorme
+PALABRA_ENORME = 24              # UM5-S1: una palabra sin espacios de más caracteres se ve acortada (sus 10 primeros, «…», sus 10 últimos): 24 «W» caben en el panel del resultado a 1194 [px]
+MITAD_DE_LA_PALABRA = 10
+# UM5-S6: lo único que el lector acepta (`_NUMERO`, el menos tipográfico y los espacios del borde); cualquier otro carácter que no se ve (sin forma visible) se dice como tal
+_ACEPTADOS = frozenset("0123456789.,+-\u2212 ")
+_EN_BLANCO = frozenset("\u115f\u1160\u3164\uffa0\u2800\u180e")      # letras de relleno (Hangul) y el braille en blanco: tienen categoría de letra o símbolo, pero no se ven
 
 
 @dataclass(frozen=True)
@@ -151,16 +158,27 @@ INFO = (
 
 
 def _citar(texto):
-    """El texto escrito, para que un motivo lo cite: los `MAXIMO_CITADO` primeros caracteres y «…» si hay más (un token enorme no ensancha la ventana)."""
+    """El texto escrito, para que un motivo lo cite: entero si tiene `MAXIMO_CITADO` caracteres o menos; si no, su comienzo, «…» y su final (UM5-S4: lo que estorba suele estar al final, y
+    un token enorme no ensancha la ventana)."""
     texto = texto.strip()
-    return texto if len(texto) <= MAXIMO_CITADO else texto[:MAXIMO_CITADO] + "…"
+    return texto if len(texto) <= MAXIMO_CITADO else texto[:CITA_COMIENZO] + "…" + texto[-CITA_FINAL:]
+
+
+def sin_palabras_enormes(texto):
+    """UM5-S1: el texto para MOSTRARLO en una etiqueta, con cada palabra sin espacios de más de `PALABRA_ENORME` caracteres acortada a su comienzo, «…» y su final (un número de cientos de
+    cifras que escribe el motor en un motivo); lo demás, tal cual. El motivo del motor no cambia: solo cómo se ve."""
+    return re.sub(rf"\S{{{PALABRA_ENORME + 1},}}", lambda m: m.group(0)[:MITAD_DE_LA_PALABRA] + "…" + m.group(0)[-MITAD_DE_LA_PALABRA:], texto)
 
 
 def _no_se_ve(texto):
-    """Si `texto` lleva un carácter que no se ve (formato Cf, control Cc o un espacio Zs que no es el normal) o un guion que no es el signo menos (categoría Pd distinta de «-»)."""
+    """Si `texto` lleva, fuera de lo que el lector acepta (`_ACEPTADOS`), un carácter que no se ve o un guion que no es el signo menos (UM5-S6, por lo que el lector ACEPTA y no por una lista de
+    categorías): todo separador (Z*: espacios raros, U+2028, U+2029), control, formato o sin asignar (C*), marca que se monta sobre otro carácter (M*: U+0301, U+FE0F, U+034F), guion (Pd) y las
+    letras y símbolos que se dibujan en blanco (`_EN_BLANCO`). Una letra o un símbolo visible («10 cm», «1,5x», «ñ») no: ahí el motivo pide escribir solo el número."""
     for caracter in texto:
+        if caracter in _ACEPTADOS:
+            continue
         categoria = unicodedata.category(caracter)
-        if categoria in ("Cf", "Cc") or (categoria == "Zs" and caracter != " ") or (categoria == "Pd" and caracter != "-"):
+        if categoria[0] in "ZCM" or categoria == "Pd" or caracter in _EN_BLANCO:
             return True
     return False
 
@@ -213,9 +231,9 @@ def umbrales_desde_textos(texto_dentro, texto_fuera):
 
 
 def texto_sin_tablas(equipo):
-    """El aviso de «sin tablas». Dice lo mismo que la ayuda de «Cargar tablas» (`CARGAR_TABLAS_LLEGA_DESPUES`: la carga llega en la próxima entrega, y quién la hace) y no manda a ese botón mientras
-    esté deshabilitado."""
-    return f"No hay tablas cargadas del {equipo}: sin ellas no se puede calcular. {CARGAR_TABLAS_LLEGA_DESPUES} Se hace una vez por energía, con los archivos que exporta Eclipse."
+    """El aviso de «sin tablas»: qué falta y quién las carga y cómo (`QUIEN_CARGA`, UM.5). Es el mismo para toda cuenta: a quien no puede cargar no le pide pulsar el botón, le dice quién lo
+    hace."""
+    return f"No hay tablas cargadas del {equipo}: sin ellas no se puede calcular. {QUIEN_CARGA}"
 
 
 def texto_de_la_relectura(id_antes, id_ahora, aviso, cuna_perdida=None):
@@ -236,6 +254,18 @@ def texto_de_las_tablas_nuevas(equipo, id_ahora, aviso):
     if id_ahora is None:
         return aviso
     return f"Ahora hay tablas cargadas del {equipo}. Elija la energía y la cuña y pulse Calcular otra vez."
+
+
+def que_no_fije_el_ancho(*etiquetas, vertical=QSizePolicy.Minimum):
+    """UM5-S1 (E2 y P2-1 de la auditoría de UM.4): una etiqueta cuyo texto cambia con lo escrito, lo cargado o el resultado ajusta la línea y se reparte el ancho de su fila. Con ajuste de
+    línea `QLabel` no parte una palabra sin espacios y su mínimo es el de la más larga: por eso todo texto que puede traer una palabra enorme (el motivo, con el número que escribe el motor
+    o lo escrito que cita, hasta 30 caracteres; el estado, con lo citado de un umbral; el aviso de las tablas con el texto de un fallo; un rechazo o un fallo del servicio en los diálogos) se
+    pone con `sin_palabras_enormes`, y ninguna palabra que se ve pasa de `PALABRA_ENORME` caracteres. (Un mínimo de 1 [px] no sirve: con él la ventana calcula su alto mínimo para un ancho de 1 [px] y crece.)
+    La usan la pestaña y los diálogos de la carga y del historial: una sola definición. `vertical`: la política vertical (la pestaña, la de E2; los diálogos, `Preferred`: con
+    `Minimum` su alto mínimo se calculaba con el ancho más angosto y el diálogo de la carga crecía de 545 a 706 [px])."""
+    for etiqueta in etiquetas:
+        etiqueta.setWordWrap(True)
+        etiqueta.setSizePolicy(QSizePolicy.Expanding, vertical)
 
 
 def _cuatro(valor):
@@ -286,12 +316,18 @@ def texto_del_estado(error_pct, textos_de_umbrales):
     return f"Estado: {um_motor.estado_de(error_pct, dentro, fuera)}"
 
 
+def texto_sin_perder(valor):
+    """UM5-S5: un número tal como se escribió, sin perder cifras ni agregar ceros (12345.67 -> «12345.67», 245 -> «245», 302.5 -> «302.5»): el decimal más corto que vuelve al mismo número
+    (`repr`), en notación fija."""
+    return format(Decimal(repr(float(valor))).normalize(), "f")
+
+
 def texto_del_contexto(equipo, energia, cuna, orientacion, um_planeador, texto_error, texto_estado):
     """La primera línea de lo que se copia (UM4-D11): a qué haz y a qué cuña corresponde el desglose, las UM de Eclipse y cómo quedó frente a ellas, con los mismos textos que la pantalla
     (`texto_error` y `texto_estado` son los de sus etiquetas: sin UM de Eclipse dicen que no hay error ni estado, y no se inventan)."""
     partes = [f"Equipo: {equipo}", f"Energía: {energia}", "Cuña: " + (SIN_CUNA if cuna is None else f"{cuna}° ({orientacion})")]
     if um_planeador is not None:
-        partes.append(f"UM de Eclipse: {um_planeador:g} [UM]")
+        partes.append(f"UM de Eclipse: {texto_sin_perder(um_planeador)} [UM]")
     return " | ".join(partes + [texto for texto in (texto_error, texto_estado) if texto])
 
 
@@ -399,12 +435,10 @@ class CalculadoraUM(QWidget):
         self.combo_equipo, self.combo_energia = QComboBox(), QComboBox()
         self.combo_equipo.addItems(EQUIPOS)
         self.boton_cargar, self.boton_info = QPushButton("Cargar tablas"), QPushButton("Info")
-        self.boton_cargar.setEnabled(False)
-        self.boton_cargar.setToolTip(CARGAR_TABLAS_LLEGA_DESPUES)
         for texto, widget in (("Equipo", self.combo_equipo), ("Energía", self.combo_energia)):
             barra.addWidget(QLabel(texto))
             barra.addWidget(widget)
-        barra.addWidget(self.boton_cargar)
+        barra.addLayout(self._armar_la_carga())
         self.ecuacion = QLabel()
         dibujo = dibujar_ecuacion()
         if dibujo is None:
@@ -470,12 +504,9 @@ class CalculadoraUM(QWidget):
         capa = QVBoxLayout(derecha)
         self.etiqueta_um, self.etiqueta_d_um, self.etiqueta_error, self.etiqueta_estado = QLabel(), QLabel(), QLabel(), QLabel()
         self.etiqueta_motivo, self.etiqueta_campos = QLabel(), QLabel()
-        for etiquetas in ((self.etiqueta_um, self.etiqueta_d_um), (self.etiqueta_error, self.etiqueta_estado), (self.etiqueta_motivo,), (self.etiqueta_campos,)):
-            linea = QHBoxLayout()
-            for etiqueta, peso in zip(etiquetas, (3, 2)):      # en una fila de dos, la primera (la UM, el error) lleva más ancho: cabe en una línea
-                etiqueta.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                linea.addWidget(etiqueta, peso)
-            capa.addLayout(linea)
+        for etiqueta in (self.etiqueta_um, self.etiqueta_d_um, self.etiqueta_error, self.etiqueta_estado, self.etiqueta_motivo, self.etiqueta_campos):
+            etiqueta.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            capa.addWidget(etiqueta)        # UM5-S3: una por fila; de a dos, a 1194 [px] la UM, D/UM y el error se partían en dos líneas y «[cGy/UM]» se cortaba
         self.etiqueta_um.setStyleSheet("font-size: 14pt; font-weight: bold;")
         self.etiqueta_campos.setToolTip("rc: el campo de las mandíbulas en el isocentro; r: el campo efectivo en la superficie; rd0: el mismo a la profundidad d0 de la tabla. "
                                         "OF en las mandíbulas: la tabla leída directamente en las mandíbulas, sin corregir, para comparar (ver Info).")
@@ -484,10 +515,10 @@ class CalculadoraUM(QWidget):
         self.lista_avisos.setWordWrap(True)
         self.lista_avisos.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)      # TP-1: por ítem, un aviso más alto que el panel quedaba cortado y sin barra
         self.titulo_avisos = QLabel()
-        # E2: cada etiqueta cuyo texto cambia con lo escrito o con el resultado ajusta la línea y se reparte el ancho de su fila: ninguna fija el ancho mínimo de la pestaña según su texto
-        for etiqueta in (self.etiqueta_um, self.etiqueta_d_um, self.etiqueta_error, self.etiqueta_estado, self.etiqueta_motivo, self.etiqueta_campos, self.aviso_tablas, self.titulo_avisos):
-            etiqueta.setWordWrap(True)
-            etiqueta.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        # E2 y UM5-S1: cada etiqueta cuyo texto cambia con lo escrito o con el resultado (una sola lista): ninguna fija el ancho mínimo de la pestaña según su texto
+        self.etiquetas_que_cambian = (self.etiqueta_um, self.etiqueta_d_um, self.etiqueta_error, self.etiqueta_estado, self.etiqueta_motivo, self.etiqueta_campos, self.aviso_tablas,
+                                      self.titulo_avisos)
+        que_no_fije_el_ancho(*self.etiquetas_que_cambian)
         avisos = QWidget()
         capa_avisos = QVBoxLayout(avisos)
         capa_avisos.setContentsMargins(0, 0, 0, 0)
@@ -504,6 +535,8 @@ class CalculadoraUM(QWidget):
         capa.addWidget(self.boton_copiar)
 
         divisor = QSplitter(Qt.Horizontal)
+        divisor.setChildrenCollapsible(False)      # UM5-S2: un arrastre del asa no esconde el formulario ni el resultado
+        self.divisor_del_formulario = divisor
         divisor.addWidget(izquierda)
         divisor.addWidget(derecha)
         divisor.setStretchFactor(0, 0)
@@ -593,7 +626,7 @@ class CalculadoraUM(QWidget):
                 if elegida in datos.cunas:
                     self.combo_cuna.setCurrentIndex(self.combo_cuna.findData(elegida))
         self.combo_cuna.blockSignals(False)
-        self.aviso_tablas.setText(texto)
+        self.aviso_tablas.setText(sin_palabras_enormes(texto))
         self.aviso_tablas.setVisible(bool(texto))
         self._al_cambiar_cuna()
 
@@ -659,7 +692,7 @@ class CalculadoraUM(QWidget):
         self._mostrar_estado()
 
     def _poner_motivo(self, texto):
-        self.etiqueta_motivo.setText(texto)
+        self.etiqueta_motivo.setText(sin_palabras_enormes(texto))
         self.etiqueta_motivo.setVisible(True)
 
     def _mostrar_estado(self, *_):
@@ -676,7 +709,7 @@ class CalculadoraUM(QWidget):
         except um_motor.FaltaDato:
             umbrales = ()        # sin umbrales que sirvan, el error va con dos decimales y el estado dice el motivo
         self.etiqueta_error.setText(texto_del_error(self.resultado.error_pct, umbrales))
-        self.etiqueta_estado.setText(texto_del_estado(self.resultado.error_pct, textos))
+        self.etiqueta_estado.setText(sin_palabras_enormes(texto_del_estado(self.resultado.error_pct, textos)))
 
     def copiar(self):
         if self.resultado is not None:
@@ -688,3 +721,53 @@ class CalculadoraUM(QWidget):
             self.dialogo_info = _DialogoInfo(self)
         self.dialogo_info.show()
         self.dialogo_info.raise_()
+
+    # ------------------------------------------------------------------ UM.5: cargar tablas e historial (los diálogos y su capa pura, en `calculadora_um_cargar`)
+    def _armar_la_carga(self):
+        """«Cargar tablas», habilitado solo para quien puede cargar (el servicio lo vuelve a comprobar al guardar, DA-81), con una ayuda que a los demás les dice quién carga; e «Historial»,
+        para todos, DEBAJO de él: uno sobre otro caben en el alto de la ecuación y la fila de arriba no se ensancha (lado a lado, el mínimo de la ventana pasaba de 1194 a 1280 [px])."""
+        from ui.paginasGuia import calculadora_um_cargar as carga      # diferido: ese módulo importa de éste
+        self.login = carga.login_de_la_sesion(self.usuario)
+        puede = carga.puede_cargar(self.login)
+        self.boton_cargar.setEnabled(puede)
+        self.boton_cargar.setToolTip(carga.AYUDA_DE_CARGAR if puede else carga.AYUDA_SIN_PERMISO)
+        self.boton_historial = QPushButton("Historial")
+        self.boton_historial.setToolTip(carga.AYUDA_DEL_HISTORIAL)
+        self.dialogo_carga = self.dialogo_historial = None
+        self.boton_cargar.clicked.connect(self.abrir_carga)
+        self.boton_historial.clicked.connect(self.abrir_historial)
+        botones = QVBoxLayout()
+        botones.setSpacing(2)
+        for boton in (self.boton_cargar, self.boton_historial):
+            botones.addWidget(boton)
+        return botones
+
+    def _soltar(self, dialogo):
+        if dialogo is not None:
+            dialogo.hide()
+            dialogo.deleteLater()
+
+    def abrir_carga(self):
+        from ui.paginasGuia import calculadora_um_cargar as carga
+        self._soltar(self.dialogo_carga)
+        self.dialogo_carga = carga.DialogoCargarTablas(self)
+        self.dialogo_carga.show()
+
+    def abrir_historial(self):
+        from ui.paginasGuia import calculadora_um_cargar as carga
+        self._soltar(self.dialogo_historial)
+        self.dialogo_historial = carga.DialogoHistorial(self, *self._equipo_y_energia())
+        self.dialogo_historial.show()
+
+    def tablas_guardadas(self, equipo, energia):
+        """Tras guardar: el equipo y la energía de la carga quedan elegidos y la lista de energías y el haz se vuelven a leer sin reiniciar. Releer la energía borra el resultado de antes, como
+        cualquier cambio de energía (UM4-D6 y UM4-D9: nunca un número de otro conjunto); los haces armados con los conjuntos anteriores se sueltan."""
+        self._haces.clear()
+        indice = self.combo_equipo.findText(equipo)
+        if indice >= 0 and indice != self.combo_equipo.currentIndex():
+            self.combo_equipo.setCurrentIndex(indice)        # su señal relee las energías
+        else:
+            self._al_cambiar_equipo()
+        indice = self.combo_energia.findData(energia)
+        if indice >= 0:
+            self.combo_energia.setCurrentIndex(indice)
