@@ -59,12 +59,13 @@ hidden_imports = [
     # UM.4 (PLAN_CALCULADORA_UM_05-11.md, DC16): la calculadora de UM. La
     # pestana se crea con un import diferido (importlib, como Referencias) y
     # trae los servicios de la calculadora; listados por la misma defensa de
-    # D4, I5 y E9. El lector del JSON (services.um_plan_json) llega en UM.6.
+    # D4, I5 y E9. El lector del JSON (services.um_plan_json) llego en UM.6a.
     "services.um_lector_eclipse",
     "services.um_motor",
     "services.um_plausibilidad",
     "services.um_armar",
     "services.um_datos_haz",
+    "services.um_plan_json",
     "ui.paginasGuia.calculadora_um",
     # UM.5: el dialogo de "Cargar tablas" y el historial de la calculadora.
     "ui.paginasGuia.calculadora_um_cargar",
