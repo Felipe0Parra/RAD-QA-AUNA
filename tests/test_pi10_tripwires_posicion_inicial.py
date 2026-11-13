@@ -6,7 +6,7 @@ del ÁRBOL de producción (AST), no una lista escrita a mano:
   1. UNA SOLA FORMA DE MEDIR. (a) Fuera de `analisisImagenes/posicion_inicial_braqui.py` nadie define una función con el nombre Y los parámetros de
      `analizar`, `mesetas_por_fila` o `lado_del_transito` (los parámetros se leen del propio motor: los homónimos de otros módulos, como el `analizar`
      del motor de Catphan o el del censo de SQL, tienen otra firma y no cuentan); (b) solo la página y el servicio importan el motor; (c) UN solo lector
-     de la resolución declarada de una imagen (`resolucion_declarada`; excepción declarada: `Analisis_PlacaRC.metadata`, zona ROJA, DP-141); (d) UNA sola
+     de la resolución declarada de una imagen (`resolucion_declarada`; la excepción de `Analisis_PlacaRC.metadata` salió con PD.1, que cerró DP-141); (d) UNA sola
      función vuelve una resolución en escala (`escala_mm`, que A.1 mudó de aquel motor a `analisisImagenes/pelicula.py`, el lector único de películas: nadie más
      divide 25.4 entre un dpi en `pelicula.py`, el motor, el servicio, la página ni los PDF; las otras tres divisiones del motor están declaradas, cada una con su motivo).
   2. LA PÁGINA NO TIENE SQL: ni `execute`, ni `cursor`, ni `commit`, ni `Conexion`, ni `sqlite3`, ni `QtSql`.
@@ -47,13 +47,13 @@ DIBUJO = "analisisImagenes/dibujo_posicion_inicial.py"      # B.6: las funciones
 BLOQUE_PDF = "models/PDF/bloque_posicion_inicial.py"        # B.6: la figura y las tablas del bloque de los dos PDF (sin motor, sin Qt, sin pyplot)
 CARGA_DE_LA_PRUEBA = "data/ManejoDatos/load.py"
 FUNCIONES_DEL_MOTOR = ("analizar", "mesetas_por_fila", "lado_del_transito")
-MODULOS_DE_LA_FUNCION = (PELICULA, MOTOR, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL, RESOLUCION, DIBUJO, BLOQUE_PDF)
+DIARIO = "analisisImagenes/Analisis_PlacaRC.py"       # PD.1: la película diaria; su escala sale de `escala_mm`
+MODULOS_DE_LA_FUNCION = (PELICULA, MOTOR, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL, RESOLUCION, DIBUJO, BLOQUE_PDF, DIARIO)
 
 # --- las EXCEPCIONES declaradas, cada una con su motivo (una excepción sin motivo es una puerta abierta) ---------------------------------------------
 LECTORES_DE_DPI_PERMITIDOS = {
     (RESOLUCION, "resolucion_declarada"): "el ÚNICO lector: Pillow rellena `info['dpi']` (72 en un JPEG con EXIF, 1 en un TIFF sin la etiqueta), así que solo se lee lo que el archivo declara",
-    ("analisisImagenes/Analisis_PlacaRC.py", "metadata"): "DP-141: el análisis de la placa del diario (zona ROJA, no se toca en este plan) lee la resolución con el defecto que PI.1 corrigió",
-}
+}   # PD.1 (13-11, PLAN_PELICULA_DIARIA_BRAQUI_13-11): sale la excepción de DP-141; el diario lee con `leer_pelicula` y su escala es `escala_mm`
 DIVISIONES_DE_25_4_PERMITIDAS = {
     (PELICULA, "escala_mm"): "la ÚNICA función que vuelve una resolución en escala (siempre la del procedimiento de escaneo, nunca la declarada); A.1 la mudó del motor a "
                               "`pelicula.py`, que es ahora el sitio único (el motor la re-exporta con el mismo nombre)",
@@ -103,7 +103,7 @@ ARCHIVOS_VIGILADOS = {
     BLOQUE_PDF: ("el bloque de los dos PDF (B.6): compone la figura y arma las filas y las tablas", 4),
     CARGA_DE_LA_PRUEBA: ("el guardado del mensual: el único `INSERT INTO CondicionesMedicion` que nombra `desplazamiento_ini`", 60),
     "data/ManejoDatos/conection.py": ("la definición de la tabla (nombra la columna y trae `ON UPDATE`: no es una escritura)", 30),
-    "analisisImagenes/Analisis_PlacaRC.py": ("la excepción declarada de DP-141 (lee `info['dpi']`)", 5),   # G.1 (26-10): 20 -> 5; el archivo pasa de 24 funciones a las 10 que alcanza `analizar_lineas` (la regla de este diccionario: la mitad de lo que hay)
+    DIARIO: ("la película diaria (PD.1): ni lee `info['dpi']` ni divide 25.4", 5),   # G.1 (26-10): 20 -> 5; el archivo pasa de 24 funciones a las 10 que alcanza `analizar_lineas` (la regla de este diccionario: la mitad de lo que hay)
 }
 
 
@@ -324,7 +324,7 @@ class TestUnaSolaFormaDeMedir:
         fuera = _fuera_de_lo_permitido(lectores_de_dpi(produccion), LECTORES_DE_DPI_PERMITIDOS)
         assert not fuera, f"otro sitio lee `info['dpi']` de una imagen (use `resolucion_declarada`): {fuera}"
 
-    def test_no_vacuidad_los_dos_lectores_permitidos_existen(self, produccion):
+    def test_no_vacuidad_el_lector_permitido_existe(self, produccion):
         hallados = {(r, f) for r, f, _ in lectores_de_dpi(produccion)}
         assert hallados == set(LECTORES_DE_DPI_PERMITIDOS), f"los lectores permitidos ya no son los que hay (¿se retiró uno?): {sorted(hallados)}"
 
@@ -334,6 +334,12 @@ class TestUnaSolaFormaDeMedir:
         fuentes = {**produccion, **_fuente("def leer(imagen):\n    return imagen.info['dpi']\n", "ui/otra_pantalla.py")}
         assert _fuera_de_lo_permitido(lectores_de_dpi(fuentes), LECTORES_DE_DPI_PERMITIDOS) == [("ui/otra_pantalla.py", "leer", 2)]
 
+    def test_el_metadata_de_96d2129_ya_no_pasa(self, produccion):
+        """PD.1: la lectura que cerró DP-141 (`Image.open(...).info.get("dpi")` y 300 si falta) vuelve a caer en el diario."""
+        viejo = "from PIL import Image\ndef metadata(imagen_path):\n    dpi = Image.open(imagen_path).info.get('dpi')\n    return 2.54 / (dpi[0] if dpi else 300)\n"
+        fuentes = {**produccion, **_fuente(viejo, DIARIO)}
+        assert _fuera_de_lo_permitido(lectores_de_dpi(fuentes), LECTORES_DE_DPI_PERMITIDOS) == [(DIARIO, "metadata", 3)]
+
     def test_una_sola_funcion_vuelve_una_resolucion_en_escala(self, produccion):
         fuera = _fuera_de_lo_permitido(divisiones_de_25_4(produccion), DIVISIONES_DE_25_4_PERMITIDAS)
         assert not fuera, f"otra función divide 25.4 entre un dpi (use `escala_mm`): {fuera}"
@@ -342,7 +348,7 @@ class TestUnaSolaFormaDeMedir:
         hallados = {(r, f) for r, f, _ in divisiones_de_25_4(produccion)}
         assert hallados == set(DIVISIONES_DE_25_4_PERMITIDAS), f"las divisiones declaradas ya no son las que hay: {sorted(hallados)}"
 
-    @pytest.mark.parametrize("modulo", [PELICULA, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL])
+    @pytest.mark.parametrize("modulo", [PELICULA, SERVICIO, PAGINA, PDF_DIARIO, PDF_MENSUAL, DIARIO])
     @pytest.mark.parametrize("expresion", ["25.4 / dpi", "(25.4 * 2) / dpi", "dpi / 25.4"])
     def test_discrimina_una_division_nueva_en_cada_modulo_vigilado_y_en_cada_forma(self, produccion, modulo, expresion):
         texto = produccion[modulo][0] + f"\n\ndef _escala_a_mano(dpi):\n    return {expresion}\n"

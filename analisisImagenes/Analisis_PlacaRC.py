@@ -1,9 +1,11 @@
 from resources.utils.matplotlib_lazy import get_matplotlib_components
 from scipy.signal import find_peaks, peak_widths
-from PIL import Image
+from analisisImagenes.pelicula import clase_resolucion, escala_mm, leer_pelicula
 from scipy.ndimage import gaussian_filter1d
 from scipy import interpolate
 import numpy as np
+# La escala del escaneo, la misma de la posición inicial y del mensual; la cabecera solo se clasifica
+ESCALA_DEL_PROCEDIMIENTO = {"resolucion_escaneo_dpi": 600.0, "resoluciones_de_editor_dpi": [72.0, 96.0], "tolerancia_dpi_relativa": 0.01}
 # Helper para obtener componentes matplotlib cuando se necesiten
 def _get_mpl():
     """Obtiene componentes matplotlib de forma diferida"""
@@ -11,23 +13,18 @@ def _get_mpl():
     return mpl['plt'], mpl['Figure'], mpl['GridSpec']
 
 def metadata(imagen_path):
-    imagen = Image.open(imagen_path)
-    dpi = imagen.info.get("dpi")
-    cm_por_pixel = None
-
-    if dpi:
-        x_dpi = dpi[0]
-        cm_por_pixel = 2.54 / x_dpi  # 2.54 cm por pulgada
-        print("DPI: ", x_dpi)
-        #print(f"DPI: {dpi[0]} x {dpi[1]}")
-        #print(f"Cada píxel mide aproximadamente {cm_por_pixel:.4f} cm")
-    else:
-        x_dpi = 300 
-        cm_por_pixel = 2.54/x_dpi
-        print("No se encontró información de DPI en la imagen.")
-    
-
-    return cm_por_pixel
+    """(cm por píxel, aviso): la escala es la del procedimiento (`escala_mm`) y el aviso, el texto de la cabecera si no coincide; con una resolución «otra», (None, aviso)."""
+    with open(imagen_path, "rb") as archivo:
+        pelicula = leer_pelicula(archivo.read())
+    P = ESCALA_DEL_PROCEDIMIENTO
+    clase = clase_resolucion(pelicula.dpi, P)
+    aviso = None
+    if clase != "coincide":
+        from analisisImagenes.dibujo_placa_mensual import texto_de_la_imagen
+        aviso = texto_de_la_imagen(pelicula.formato, pelicula.bits, pelicula.validos.shape, pelicula.dpi, clase, pelicula.fecha_escaneo,
+                                   0, P["resolucion_escaneo_dpi"])  # el diario mide los transparentes como película: no se dicen sin dato
+    escala = escala_mm(pelicula.dpi, P)
+    return (None if escala is None else escala / 10), aviso
 
 def preprocesar_imagen(imagen_bgr, filtro='clahe'):
     import cv2
@@ -263,10 +260,14 @@ def generar_reporte(
     picos, distancias_px, cm_por_pixel=None, control="B", interceptos=None, anchura=None, diferencias=None,
     centro_calculado_h=None, centro_calculado_v=None, desplazamiento_h=None, desplazamiento_v=None,
     exceso_arriba=None, exceso_abajo=None, exceso_izquierda=None, exceso_derecha=None,
-    penumbra_izquierda=None, penumbra_derecha=None, cruz=None):  
+    penumbra_izquierda=None, penumbra_derecha=None, cruz=None, aviso=None):
     import numpy as np
     reporte = []
     reporte.append("<b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RESULTADO DE ANÁLISIS DE LA IMAGEN</b>")
+    if aviso:  # la cabecera no declara los 600 ppp del procedimiento
+        reporte.append(f"<br>{aviso}<br>")
+        if not cm_por_pixel:  # «otra»: sin la escala no hay medidas
+            return "".join(reporte)
 
     conversion = cm_por_pixel * 10 if cm_por_pixel else None
 
@@ -386,7 +387,12 @@ def analizar_lineas(imagen_path, metodo=True, fila_especifica=None, umbral_relat
     distancias = np.array([])
     if len(picos) > 1:
         distancias = calcular_distancias(picos)
-    cm_por_pixel = metadata(imagen_path)
+    cm_por_pixel, aviso = metadata(imagen_path)
+    if cm_por_pixel is None:  # resolución «otra»: no se mide ni se dibuja, y el lienzo no conserva la película anterior
+        if canvas is not None:
+            canvas.figure.clear()
+            canvas.draw()
+        return generar_reporte(picos, distancias, aviso=aviso)
 
     # Invertir el perfil
     max_val = np.max(perfil)
@@ -433,5 +439,5 @@ def analizar_lineas(imagen_path, metodo=True, fila_especifica=None, umbral_relat
             perfil_interpolado = perfil_interpolado, picos2 = picos2, izq_ips = izq_ips, der_ips = der_ips
         )
 
-    reporte = generar_reporte(picos, distancias, cm_por_pixel, control="B", interceptos=None, anchura=None, diferencias=diferencias)
+    reporte = generar_reporte(picos, distancias, cm_por_pixel, control="B", interceptos=None, anchura=None, diferencias=diferencias, aviso=aviso)
     return reporte

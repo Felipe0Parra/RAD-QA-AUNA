@@ -78,7 +78,7 @@ BASELINE_D1_PENDIENTE = {
     # de migrar a services/unidades_qc.py + corchetes -- D.1 fase 1.
     # EXCEPCION PERMANENTE conocida, incluida a proposito en este conjunto
     # para que jamas se convierta por accidente:
-    #   ('analisisImagenes/Analisis_PlacaRC.py', 249, 'V') -- label='Interceptos (V)',; G.1 (26-10): 279->249
+    #   ('analisisImagenes/Analisis_PlacaRC.py', 246, 'V') -- label='Interceptos (V)',; G.1 (26-10): 279->249; PD.1 (13-11): 249->246
     #   la V es "vertical", no voltios (SS0.13 del plan). Object Qt de conversion
     #   automatica la volveria una unidad falsa con aspecto de correcta.
     # G.1 (26-10-2026): salen 14 entradas porque el codigo que las contenia se retiro con el analisis mensual viejo (no se migraron a corchetes): las 2 de
@@ -92,11 +92,11 @@ BASELINE_D1_PENDIENTE = {
     ('analisisImagenes/ActividadFuente.py', 153, 's'),  # V.1 (28-09): 140->153
     ('analisisImagenes/ActividadFuente.py', 154, 's'),  # V.1 (28-09): 141->154
     ('analisisImagenes/Analisis_Catphan_TAC.py', 1047, 'HU'),  # D.0 (23-09): 1008->1017; D.1 (23-09): 1017->1063; B.1 (23-09): 1063->1085; G.3 (24-09): 1085->1093; E.1 (24-09): 1093->1057; OR.1 (08-10): 1057->1042; GI.8c (08-10): 1042->1047
-    ('analisisImagenes/Analisis_PlacaRC.py', 183, 'mm'),  # G.1 (26-10): 213->183
-    ('analisisImagenes/Analisis_PlacaRC.py', 249, 'V'),  # G.1 (26-10): 279->249
-    ('analisisImagenes/Analisis_PlacaRC.py', 251, 'mm'),  # G.1 (26-10): 281->251
-    ('analisisImagenes/Analisis_PlacaRC.py', 288, 'mm'),  # G.1 (26-10): 318->288
-    ('analisisImagenes/Analisis_PlacaRC.py', 293, 'px'),  # G.1 (26-10): 323->293
+    ('analisisImagenes/Analisis_PlacaRC.py', 180, 'mm'),  # G.1 (26-10): 213->183; PD.1 (13-11): 183->180
+    ('analisisImagenes/Analisis_PlacaRC.py', 246, 'V'),  # G.1 (26-10): 279->249; PD.1 (13-11): 249->246
+    ('analisisImagenes/Analisis_PlacaRC.py', 248, 'mm'),  # G.1 (26-10): 281->251; PD.1 (13-11): 251->248
+    ('analisisImagenes/Analisis_PlacaRC.py', 289, 'mm'),  # G.1 (26-10): 318->288; PD.1 (13-11): 288->289
+    ('analisisImagenes/Analisis_PlacaRC.py', 294, 'px'),  # G.1 (26-10): 323->293; PD.1 (13-11): 293->294
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 250, 'mm'),
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 255, 'cm'),
     ('data/ManejoDatos/Tablas_Anuales/tablas_anuales.py', 256, '%'),
