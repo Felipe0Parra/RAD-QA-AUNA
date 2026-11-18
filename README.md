@@ -270,7 +270,7 @@ RAD-QA-AUNA/
 │   └── PDF/                      Generación de reportes con ReportLab y visor de PDF
 ├── resources/                    Estilos, iconos, imágenes y datos de apoyo en JSON
 ├── mcc_PTW_read/                 Lector de archivos .mcc de PTW
-├── scripts/                      Herramientas de línea de comandos, entre ellas la migración de la base
+├── scripts/                      Herramientas de línea de comandos, entre ellas la migración de la base y el corredor de pruebas
 └── tests/                        Suite de pruebas con pytest
 ```
 
@@ -293,26 +293,83 @@ RAD-QA-AUNA/
 
 ### Pruebas automáticas
 
-La suite usa pytest e incluye más de 16 000 pruebas, repartidas en cientos de archivos dentro de `tests/`.
+La suite usa pytest e incluye más de 16 000 pruebas, repartidas en cientos de archivos dentro de `tests/`. Para correrla completa se usa `scripts/correr_pruebas.py`. Ejecuta cada archivo en su propio proceso, muestra el resultado de cada prueba y deja un informe al final.
 
-En Linux:
+Instalar las dependencias de desarrollo, en Linux:
 
 ```bash
 .venv/bin/python -m pip install -r requirements-dev.txt
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
 En Windows (PowerShell):
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-$env:QT_QPA_PLATFORM='offscreen'; .\.venv\Scripts\python.exe -m pytest
 ```
 
-- `QT_QPA_PLATFORM=offscreen` permite ejecutar los componentes gráficos sin pantalla.
+**Toda la suite, en vivo.** Corre un archivo a la vez y muestra cada prueba a medida que termina. Tarda unas 2 horas. Es un estimado: se midieron 250 archivos en 90 minutos y el resto se calculó. No se midió una corrida completa.
+
+En Linux:
+
+```bash
+.venv/bin/python scripts/correr_pruebas.py
+```
+
+En Windows (PowerShell):
+
+```powershell
+.\.venv\Scripts\python.exe scripts\correr_pruebas.py
+```
+
+**Toda la suite, repartida.** Corre varios archivos a la vez, cada uno en su proceso, y muestra una línea por archivo. Con 12 procesos, en un equipo de 24 hilos y 47 GB de memoria, tardó 34 minutos. Con menos procesos tarda más. El pico de memoria total medido con 12 procesos fue de 17.9 GB. Por archivo va de menos de 10 MB hasta 4.9 GB, y los archivos de películas son los más pesados. En equipos con menos de 16 GB conviene bajar `--procesos`. El ejemplo usa 8.
+
+En Linux:
+
+```bash
+.venv/bin/python scripts/correr_pruebas.py --procesos 8
+```
+
+En Windows (PowerShell):
+
+```powershell
+.\.venv\Scripts\python.exe scripts\correr_pruebas.py --procesos 8
+```
+
+**Uno o varios archivos.** Se dan como argumentos. Puede ser cualquier archivo `.py` bajo la raíz: pytest decide si trae pruebas. En Linux:
+
+```bash
+.venv/bin/python scripts/correr_pruebas.py tests/test_x.py tests/test_y.py
+```
+
+En Windows (PowerShell):
+
+```powershell
+.\.venv\Scripts\python.exe scripts\correr_pruebas.py tests\test_x.py tests\test_y.py
+```
+
+Un archivo suelto también se puede correr con pytest. En Linux:
+
+```bash
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/test_x.py
+```
+
+En Windows (PowerShell):
+
+```powershell
+$env:QT_QPA_PLATFORM='offscreen'; .\.venv\Scripts\python.exe -m pytest tests\test_x.py
+```
+
+- **Qué se ve en pantalla:** al empezar, el corredor dice cuántas pruebas y archivos recoge pytest. En vivo, al empezar cada archivo salen su número y su nombre. Después sale cada prueba con PASSED, FAILED o SKIPPED y, al terminar, una línea con las cifras del archivo. En el modo repartido no sale nada al empezar un archivo. Al terminar sale una línea con su número (en el orden en que terminan), su nombre y sus cifras. Si pasa un minuto sin que termine ninguno, un aviso nombra los archivos que siguen corriendo. Cuando un archivo termina con problema, se imprimen además sus últimas 80 líneas. El color de pytest lo fija el corredor, sin depender de `FORCE_COLOR`, `PY_COLORS` ni `NO_COLOR`. La cabecera de pytest no se muestra nunca. De un archivo sin fallas tampoco se muestran la sección PASSES ni el informe de cobertura. De uno con fallas sí. El registro de cada archivo guarda siempre todo.
+- **El informe:** al final se imprime y se guarda en `resultados_pruebas/<fecha_hora>/informe.txt`. Trae los totales, lo que pytest recogió frente a lo que terminó, las pruebas que fallaron, las omitidas con su motivo, las fallas esperadas (xfail) cuando las hay, los archivos con problema, los avisos, los diez archivos más lentos y el veredicto. En la misma carpeta quedan el registro completo de cada archivo (`.log`), su resultado en JUnit (`.xml`) y `recoleccion.log`, con la lista que dio pytest antes de correr. La carpeta se cambia con `--salida DIR`. Si ya existe, se usa otra con un sufijo (`_2`, `_3`). No se borra nada, y la carpeta está ignorada por git.
+- **Cómo se cuentan las cifras:** salen del XML de cada archivo. Coinciden con las de pytest, salvo en una cosa. Una xfail no estricta que pasa (xpassed) cuenta como pasada, porque el XML no la distingue.
+- **Que se corrieron todas las pruebas:** antes de correr, el corredor le pide a pytest cuántas pruebas recoge en cada archivo. Al final comprueba que terminaron todas. El informe trae la línea «Pruebas recogidas por pytest: N; corridas: M; faltan: K». Si faltan, el archivo queda con problema aunque pytest haya salido con 0. Sin argumentos también se corren los archivos que pytest recoge y no se llaman `test_*.py`, como `*_test.py` o los de subcarpetas. La variable `PYTEST_ADDOPTS` se ignora, porque puede dejar pruebas sin correr, y el informe lo avisa. `PYTEST_PLUGINS` se conserva, pero también se avisa, y las pruebas que pytest deja sin seleccionar salen en los avisos del informe. Un error al recoger que no es de un archivo que se corra, como un `conftest.py` roto en una carpeta, o pruebas que pytest lista en algo que no es un `.py` bajo la raíz (una carpeta, un archivo de datos o una ruta que no existe), también deja la comprobación sin hacer. Los errores al recoger se leen del texto de pytest (las líneas «ERROR ruta» y «Interrupted: N errors»), no solo de su código de salida: un `conftest.py` puede forzar el 0 y `--continue-on-collection-errors` quita la línea «Interrupted». Un error de una clase («ruta.py::Clase») cuenta como error de su archivo. La recolección se hace con `--capture=fd`, así que lo que un módulo imprima al importarse no entra en la lista aunque el ini apague la captura con `-s`. Cada archivo y la recolección se corren con la misma raíz y la misma configuración: `--rootdir <raíz>` y, si la raíz tiene `pytest.ini`, `pyproject.toml` con `[tool.pytest]`, `tox.ini` con `[pytest]` o `setup.cfg` con `[tool:pytest]`, también `-c` con ese archivo. Así un `pytest.ini` anidado en una subcarpeta no cambia la configuración con que se corre un archivo. Si la raíz no tiene configuración, solo se fija la raíz y un ini anidado sí cambiaría la de los archivos de su subcarpeta. Si no se puede obtener la lista de pytest, las pruebas se corren igual. El veredicto es entonces «TODAS LAS PRUEBAS CORRIDAS PASARON, SIN COMPROBAR QUE SE CORRIERAN TODAS» y el código de salida es 1. Pasa lo mismo si pytest no puede recoger un archivo junto con los demás pero ese archivo corre bien solo: el informe lo anota como sin comprobar. Si todo lo pedido se omite entero, por ejemplo un archivo que pide las bases de referencia, el veredicto es «NINGUNA PRUEBA FALLÓ; NO CORRIÓ NINGUNA: TODO LO PEDIDO SE OMITIÓ ENTERO» y el código de salida es 0.
+- **Código de salida:** 0 si todo pasó (o todo lo pedido se omitió entero) y se comprobó que se corrieron todas las pruebas que pytest recoge. 1 si hubo fallas, errores o archivos con problema, o si no se pudo comprobar eso. 2 si el uso es incorrecto, por ejemplo un archivo que no existe o una carpeta de resultados que no se puede preparar. 3 si el corredor tuvo un error interno: se detienen los grupos de procesos, se guarda un informe parcial y la traza sale por la salida de errores. 130 si se interrumpió con Ctrl+C (en Linux, también con SIGTERM o al cerrarse la terminal): se detienen los grupos de procesos de los archivos en curso y el informe queda marcado como interrumpido.
+- **Archivo con problema:** el que no deja resultados legibles. También el que termina con un código de pytest distinto de 0 y 1, por ejemplo por una señal como una caída. También el que termina con un código que no cuadra con su resultado: 1 sin ninguna falla (algo falló fuera de las pruebas, como un gancho del `conftest.py`) o 0 con fallas. También el que se corta a mitad, con una prueba que empezó y no terminó, o termina con 0 sin correr ninguna prueba. También el que deja sin terminar pruebas que pytest había recogido. Y el que pasa 600 segundos sin escribir nada. Este último se detiene con todo su grupo de procesos, se informa con sus últimas líneas y la corrida sigue. El plazo se cambia con `--silencio-max SEG`. El aviso del modo repartido se cambia con `--aviso-cada SEG`. El plazo de la recolección previa de pytest, de 600 segundos, se cambia con `--plazo-recoleccion SEG`. `--help` muestra todas las opciones.
+- **Lo que el corredor no detiene:** solo detiene el grupo de procesos de cada archivo. Un proceso que una prueba saque de su grupo, por ejemplo con una sesión nueva, sigue vivo. Si además mantiene abierta la salida, el archivo se informa con el aviso «un proceso fuera del grupo mantiene abierta la salida». Su veredicto no cambia. En Windows tampoco se detiene un proceso que dejó una prueba que terminó bien. Además, una suspensión del equipo más larga que el plazo de silencio puede marcar un archivo como detenido. Esto no se probó en un equipo Windows.
+- **Por qué no se recomienda `pytest` sobre toda la suite en un solo proceso:** lo que deja vivo un archivo (páginas, temporizadores) lo hereda el siguiente. Una ventana modal bajo `offscreen` puede dejar la corrida esperando para siempre, sin avisar. Además tarda unas 3 horas. El corredor en vivo tarda unas 2 horas, pero cada archivo corre aparte, el que se traba se detiene y la corrida siempre termina con su informe. Para ir rápido está `--procesos`.
+- **Omitidas:** parte de las pruebas usa bases de referencia y archivos clínicos reales que no se publican. Esas pruebas se omiten y aparecen en el informe con su motivo. Que haya omitidas es normal. Un archivo que se omite entero (`pytest.skip` de módulo o `importorskip`) cuenta como omitido, no como problema. Con las bases de referencia a mano, en Linux deben ser cuatro. En Windows se omiten unas 38 más, o sea unas 42 en total, por lectura; no medido en Windows: 32 pruebas del corredor con señales, grupos de procesos o `/proc` de Linux y 6 de los respaldos diarios (zona horaria y permisos).
+- `QT_QPA_PLATFORM=offscreen` permite ejecutar los componentes gráficos sin pantalla. El corredor lo fija en cada archivo; con `pytest` directo hay que definirlo, como en los comandos de arriba.
 - `tests/conftest.py` sustituye la base real por una temporal y registra las lecturas de las tablas de control de calidad para comprobar que distinguen siempre el registro vigente.
-- Un archivo suelto se ejecuta con `pytest tests/test_x.py`.
-- Parte de las pruebas usa bases de referencia y archivos clínicos reales que no se publican; en un clon limpio esas pruebas se omiten.
 - El repositorio usa pre-commit con tres controles activos: validación de YAML, límite de tamaño de archivos (500 KB, y 1 MB en `tests/datos/`) y búsqueda de secretos con gitleaks. Requiere tener instalados `pre-commit` y el binario `gitleaks`.
 
 ### Guía de trabajo
@@ -355,7 +412,7 @@ $env:QT_QPA_PLATFORM='offscreen'; .\.venv\Scripts\python.exe -m pytest
 - **La aplicación se cierra o una acción no hace nada:** revisar `error_log.txt` (ver [Ejecución](#ejecución)); ahí quedan las excepciones no capturadas y los errores que la aplicación atrapa sin avisar.
 - **No se puede compilar el ejecutable:** ver [Compilar el ejecutable](#compilar-el-ejecutable-solo-windows). La versión de PyInstaller está fijada en 6.21.0.
 - **Una copia de la base parece incompleta:** ver [Base de datos, trazabilidad y respaldos](#base-de-datos-trazabilidad-y-respaldos), punto sobre copias manuales.
-- **Las pruebas gráficas se quedan esperando:** una ventana modal bajo `offscreen` bloquea el proceso sin lanzar una excepción. En las pruebas, los cuadros de diálogo se sustituyen por versiones simuladas.
+- **Las pruebas gráficas se quedan esperando:** una ventana modal bajo `offscreen` bloquea el proceso sin lanzar una excepción. En las pruebas, los cuadros de diálogo se sustituyen por versiones simuladas. Un caso conocido: al correr muchos archivos en un solo proceso, las páginas del diario de braquiterapia que deja vivas un archivo disparan un reanálisis diferido y abren un cuadro real en un archivo posterior. Para evitarlo, correr la suite con `scripts/correr_pruebas.py` (ver [Pruebas automáticas](#pruebas-automáticas)): cada archivo tiene su proceso y, si pasa 600 segundos sin escribir nada, se detiene y se informa.
 - **El análisis del fantoma Catphan no detecta la geometría:** revisar que la carpeta DICOM sea una serie completa y que el contraste de la imagen sea suficiente. La geometría se detecta en `data/ManejoDatos/catphan_TAC/leer_dicom.py` y el motor basado en pylinac está en `analisisImagenes/catphan/`.
 
 ---
