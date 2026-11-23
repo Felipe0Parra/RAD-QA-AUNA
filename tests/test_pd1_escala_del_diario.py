@@ -1,6 +1,9 @@
 """PD.1 (PLAN_PELICULA_DIARIA_BRAQUI_13-11.md, cierra DP-141): la película diaria se mide con la escala del escaneo (600 ppp), no con la que escribe el editor.
 La verdad la da un generador independiente del motor (11 líneas cada 236 px, 9.99 mm a 600 ppp); las listas `*_600` son lo que mide `analizar_lineas` con 600 declarados, igual en 96d2129 y con PD.1.
-Rojo contra 96d2129: caen todas salvo las de 600 declarados, la del texto de la ventana del mensual y la de los transparentes (la base no avisa)."""
+Rojo contra 96d2129: caen todas salvo las de 600 declarados, la del texto de la ventana del mensual y la de los transparentes (la base no avisa).
+PD.2 revisada (22-11, clase b): la resolución real la decide la regla de la tira (`metadata(ruta, distancias)`), así que el aviso ya no es el texto de la ventana del mensual sino el que
+arma `metadata` con su decisión; un TIFF de 300 declarados con píxeles de 600 se mide con 600 y lo dice; la «otra» sin milímetros es ahora una tira de 3 líneas a 300 declarados
+(2 distancias, menos de las 3 de la regla) y el informe lleva la capa medida (aquí «gris con CLAHE»: la prueba sigue pasando `filtro="clahe"`, y sus listas `*_600` no cambian)."""
 import gc
 import os
 
@@ -24,7 +27,8 @@ DISTANCIAS_600 = [9.95, 10.03, 9.99, 9.99, 10.12, 9.86, 9.99, 9.99, 9.99, 9.99]
 ALINEACION_600 = [0.34, 0.59, 0.47, 0.25, 0.68, 0.47, 0.47, 0.13, 0.55, 0.38, 0.3]
 TITULO = "<b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RESULTADO DE ANÁLISIS DE LA IMAGEN</b>"
 NADA_GUARDADO = ("", None, None, "", None, None)
-FRASE_DE_LA_CLASE = {"editor": "lo que escribe un editor", "sin_dato": "no declara su resolución", "otra": "sin esa escala no hay milímetros"}
+FRASE_DE_LA_CLASE = {"editor": "lo que escribe un editor", "sin_dato": "no declara su resolución", "otra": "no hay líneas suficientes"}
+CAPA = "<br><b>Capa medida:</b> gris con CLAHE<br>"
 
 
 def tira():
@@ -52,7 +56,7 @@ def tira_con_esquina_transparente():
     return np.dstack([rgb, np.where(esquina, 0, 255).astype(np.uint8)]), rgb
 
 
-def _guardar(ruta, formato, dpi=None, exif_sin_resolucion=False, fecha=False):
+def _guardar(ruta, formato, dpi=None, exif_sin_resolucion=False, fecha=False, lineas=None):
     kw = {} if dpi is None else {"dpi": (dpi, dpi)}
     if fecha:                            # etiqueta 306 del TIFF: la fecha del escaneo
         kw["tiffinfo"] = {306: "2026:03:05 09:30:00"}
@@ -62,7 +66,8 @@ def _guardar(ruta, formato, dpi=None, exif_sin_resolucion=False, fecha=False):
             exif = Image.Exif()
             exif[0x010F], exif[0x0110] = "EPSON", "WF-6590 Series"
             kw["exif"] = exif.tobytes()
-    Image.fromarray(tira()).save(ruta, format=formato, **kw)
+    rgb = tira() if lineas is None else tira()[:, :170 + (lineas - 1) * PASO_PX + 118]
+    Image.fromarray(rgb).save(ruta, format=formato, **kw)
     return str(ruta)
 
 
@@ -89,7 +94,8 @@ def archivos(tmp_path_factory):
         "png_opaco": str(d / "png_opaco.png"),
         "t96": _guardar(d / "t96.tif", "TIFF", 96.012),
         "t72": _guardar(d / "t72.tif", "TIFF", 72),
-        "t300": _guardar(d / "t300.tif", "TIFF", 300),
+        "t300": _guardar(d / "t300.tif", "TIFF", 300, lineas=3),
+        "t300_600": _guardar(d / "t300_600.tif", "TIFF", 300),
         "png_sin": _guardar(d / "png_sin.png", "PNG"),
         "png600": _guardar(d / "png600.png", "PNG", 600),
         "jpg600": _guardar(d / "jpg600.jpg", "JPEG", 600),
@@ -121,11 +127,14 @@ def promedios(informe):
 
 
 def aviso_esperado(ruta):
-    """El texto de la ventana del mensual para ese archivo (la misma función, con lo que lee `leer_pelicula`)."""
+    """El aviso del informe de ese archivo: lo que el archivo declara (lo que lee `leer_pelicula`, como en la ventana del mensual) y la decisión de la regla de la tira."""
     with open(ruta, "rb") as f:
         p = pelicula.leer_pelicula(f.read())
     P = {"resolucion_escaneo_dpi": 600.0, "resoluciones_de_editor_dpi": [72.0, 96.0], "tolerancia_dpi_relativa": 0.01}
-    return texto_de_la_imagen(p.formato, p.bits, p.validos.shape, p.dpi, pelicula.clase_resolucion(p.dpi, P), p.fecha_escaneo, p.transparentes, 600.0)
+    mensual = texto_de_la_imagen(p.formato, p.bits, p.validos.shape, p.dpi, pelicula.clase_resolucion(p.dpi, P), p.fecha_escaneo, 0, 600.0)
+    m = re.match(re.escape(TITULO) + r"<br>(.*?)<br>", analizar(ruta))
+    assert m and m.group(1).startswith(mensual.split(".")[0] + "."), (mensual, m and m.group(1))
+    return m.group(1)
 
 
 def sin_el_aviso(informe, ruta):
@@ -162,7 +171,7 @@ class TestLaEscalaEsLaDelEscaneo:
     def test_la_misma_tira_con_600_declarados_no_cambia_y_no_lleva_aviso(self, archivos):
         informe = analizar(archivos["t600"])
         assert (distancias(informe), alineacion(informe)) == (DISTANCIAS_600, ALINEACION_600)
-        assert informe.startswith(TITULO + "<br><b>Líneas Detectadas:</b><br>") and "dpi" not in informe
+        assert informe.startswith(TITULO + CAPA + "<br><b>Líneas Detectadas:</b><br>") and "dpi" not in informe
 
     def test_un_png_de_600_ppp_declara_599_9988_y_cuenta_como_600(self, archivos):
         informe = analizar(archivos["png600"])
@@ -188,8 +197,14 @@ class TestLaEscalaEsLaDelEscaneo:
         assert (distancias(sin), alineacion(sin), promedios(sin)) == (distancias(con_600), alineacion(con_600), promedios(con_600))
         assert promedios(sin)[0] == pytest.approx(VERDAD_MM, abs=0.05)
 
-    def test_un_tiff_de_300_ppp_declarados_no_da_milimetros_ni_medidas(self, archivos):
+    def test_un_tiff_de_300_ppp_declarados_con_tres_lineas_no_da_milimetros_ni_medidas(self, archivos):
         assert analizar(archivos["t300"]) == TITULO + f"<br>{aviso_esperado(archivos['t300'])}<br>"
+        assert "sin una resolución confirmada no hay milímetros ni medidas" in aviso_esperado(archivos["t300"])
+
+    def test_un_tiff_de_300_ppp_declarados_con_pixeles_de_600_se_mide_con_600_y_lo_dice(self, archivos):
+        informe = analizar(archivos["t300_600"])
+        assert (distancias(informe), alineacion(informe)) == (DISTANCIAS_600, ALINEACION_600)
+        assert "confirma 600 dpi, la resolución real" in aviso_esperado(archivos["t300_600"])
 
 
 class TestElAvisoEsElTextoDeLaVentanaDelMensual:
@@ -199,6 +214,7 @@ class TestElAvisoEsElTextoDeLaVentanaDelMensual:
         esperado = aviso_esperado(archivos[nombre])
         assert FRASE_DE_LA_CLASE[clase] in esperado, esperado
         assert analizar(archivos[nombre]).startswith(TITULO + f"<br>{esperado}<br>")
+        assert clase == "otra" or "la regla de la tira confirma 600 dpi" in esperado, esperado
 
     @pytest.mark.parametrize("nombre", ["t96", "t72", "png_sin"])
     def test_sin_el_aviso_el_informe_es_el_de_600_ppp_byte_a_byte(self, archivos, nombre):
@@ -217,9 +233,9 @@ class TestElAvisoEsElTextoDeLaVentanaDelMensual:
         assert informe == analizar(archivos["png_opaco"])
 
     def test_el_aviso_no_trae_lo_que_la_pagina_raspa(self, archivos):
-        for nombre in ("t96", "png_sin", "jpg_exif", "t300"):
+        for nombre in ("t96", "png_sin", "jpg_exif", "t300", "t300_600"):
             texto = aviso_esperado(archivos[nombre])
-            assert not re.search(r"Promedio|Desviaci|Distancias|Desplazamientos|\bmm\b", texto), texto
+            assert not re.search(r"Promedio|Desviaci|Distancias entre líneas\s*\(mm\)|Desplazamientos", texto), texto
 
 
 class TestLaFiguraUsaLaMismaEscala:

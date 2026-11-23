@@ -1024,21 +1024,24 @@ class TestElPdfDiceLoMismo:
 
 DPI_DE_LA_PLACA = 600
 MM_POR_PIXEL = 25.4 / DPI_DE_LA_PLACA
-CENTROS_DE_LAS_LINEAS = (100, 230, 360, 490, 620)                 # en pixeles: cinco lineas oscuras de 5 px de ancho, separadas 130 px
+CENTROS_DE_LAS_LINEAS = (150, 386, 622, 858, 1094)                # en pixeles: cinco lineas oscuras de 5 px de ancho, separadas 236 px (9.99 mm), cada una con su mancha
 
 
 class TestElDiarioDeBraquiSigueAnalizandoTrasElRecorte:
     """`analizar_lineas` (y las 9 funciones que alcanza) es lo que el diario de braquiterapia usa y G.1 NO toca; si el recorte de `Analisis_PlacaRC.py` se llevara de mas una de las 10 (por ejemplo
-    `detectar_picos`), el diario dejaria de analizar. La verdad conocida la fija un GENERADOR independiente del motor: cinco lineas oscuras a 130 px, a 600 ppp, son 4 distancias de 130 x 25.4 / 600 =
-    5.503 mm (la placa real de las pruebas de B.2 es otra cosa: aqui se prueba que la funcion CORRE y mide)."""
+    `detectar_picos`), el diario dejaria de analizar. La verdad conocida la fija un GENERADOR independiente del motor: cinco lineas oscuras a 236 px, a 600 ppp, son 4 distancias de 236 x 25.4 / 600 =
+    9.991 mm (la placa real de las pruebas de B.2 es otra cosa: aqui se prueba que la funcion CORRE y mide). PD.2 revisada (22-11, clase b): la placa era de lineas solas cada 130 px (5.503 mm);
+    con la regla de la tira una tira de lineas cada 5.5 mm no confirma ninguna resolucion y una linea sin mancha no es una parada, asi que cada linea lleva ahora su mancha y van cada 10 mm."""
 
     @pytest.fixture
     def placa(self, tmp_path):
         import numpy as np
         from PIL import Image
-        imagen = np.full((120, 700), 235, dtype=np.uint8)
-        for x in CENTROS_DE_LAS_LINEAS:
-            imagen[:, x - 2:x + 3] = 25
+        x = np.arange(1250, dtype=float)
+        fila = 235.0 - sum(80.0 * np.exp(-0.5 * ((x - c - 5) / 38.0) ** 2) for c in CENTROS_DE_LAS_LINEAS)
+        imagen = np.repeat(np.clip(np.rint(fila), 0, 255).astype(np.uint8)[None, :], 120, axis=0)
+        for c in CENTROS_DE_LAS_LINEAS:
+            imagen[:, c - 2:c + 3] = 25
         ruta = tmp_path / "lineas.png"
         Image.fromarray(imagen).save(ruta, dpi=(DPI_DE_LA_PLACA, DPI_DE_LA_PLACA))
         return str(ruta)
@@ -1053,7 +1056,7 @@ class TestElDiarioDeBraquiSigueAnalizandoTrasElRecorte:
         from analisisImagenes.Analisis_PlacaRC import analizar_lineas
         informe = analizar_lineas(placa, metodo=True, umbral_relativo=1.0, distancia_minima=30, mostrar=False, filtro="clahe")
         distancias = self._distancias(informe)
-        verdad = 130 * MM_POR_PIXEL
+        verdad = 236 * MM_POR_PIXEL
         assert len(distancias) == len(CENTROS_DE_LAS_LINEAS) - 1
         assert all(abs(d - verdad) < 0.05 for d in distancias), (distancias, verdad)
         assert f"{verdad:.2f} mm" in informe, "el promedio"

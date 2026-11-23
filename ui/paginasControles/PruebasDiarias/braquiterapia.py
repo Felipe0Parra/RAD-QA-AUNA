@@ -1314,7 +1314,7 @@ class PruebaDiariaBraq(PruebaBasico):
                 umbral_relativo=umbral,
                 distancia_minima=distancia,
                 mostrar=True,
-                filtro="clahe",
+                filtro="verde",
                 canvas=self.canvas
             )
         except Exception as e:
@@ -1590,7 +1590,7 @@ class PruebaDiariaBraq(PruebaBasico):
                 umbral_relativo=umbral,
                 distancia_minima=distancia,
                 mostrar=True,
-                filtro="clahe",
+                filtro="verde",
                 canvas=self.canvas
             )
             if tiene_parametros_guardados:

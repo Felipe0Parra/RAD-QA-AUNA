@@ -6,28 +6,62 @@ from scipy import interpolate
 import numpy as np
 # La escala del escaneo, la misma de la posición inicial y del mensual; la cabecera solo se clasifica
 ESCALA_DEL_PROCEDIMIENTO = {"resolucion_escaneo_dpi": 600.0, "resoluciones_de_editor_dpi": [72.0, 96.0], "tolerancia_dpi_relativa": 0.01}
+# La regla de la tira: las líneas van cada 10 mm; la resolución real pone al menos 3 distancias entre líneas, y la mitad o más, a 10 mm ±10 %
+REGLA_DE_LA_TIRA = {"paso_mm": 10.0, "tolerancia_relativa": 0.10, "distancias_minimas": 3, "resoluciones_candidatas_dpi": [200.0, 300.0, 600.0]}
+# La capa que mide cada filtro: la que dicen la figura y el informe
+CAPA_DEL_FILTRO = {"verde": "capa verde con CLAHE", "clahe": "gris con CLAHE", "bilateral": "gris binarizado", None: "capa roja"}
 # Helper para obtener componentes matplotlib cuando se necesiten
 def _get_mpl():
     """Obtiene componentes matplotlib de forma diferida"""
     mpl = get_matplotlib_components()
     return mpl['plt'], mpl['Figure'], mpl['GridSpec']
 
-def metadata(imagen_path):
-    """(cm por píxel, aviso): la escala es la del procedimiento (`escala_mm`) y el aviso, el texto de la cabecera si no coincide; con una resolución «otra», (None, aviso)."""
+def metadata(imagen_path, distancias_px=None):
+    """(cm por píxel, aviso): la resolución real es la declarada si la regla de la tira la confirma o, si no, la única candidata que la confirme; sin ninguna, (None, aviso con el motivo).
+    Una resolución se confirma si al menos 3 distancias entre líneas, y la mitad o más de ellas, salen a 10 mm ±10 % con ella. Con 600 declarados y menos de 3 distancias, 600 sin comprobar."""
     with open(imagen_path, "rb") as archivo:
         pelicula = leer_pelicula(archivo.read())
-    P = ESCALA_DEL_PROCEDIMIENTO
+    P, R = ESCALA_DEL_PROCEDIMIENTO, REGLA_DE_LA_TIRA
     clase = clase_resolucion(pelicula.dpi, P)
-    aviso = None
-    if clase != "coincide":
-        from analisisImagenes.dibujo_placa_mensual import texto_de_la_imagen
-        aviso = texto_de_la_imagen(pelicula.formato, pelicula.bits, pelicula.validos.shape, pelicula.dpi, clase, pelicula.fecha_escaneo,
-                                   0, P["resolucion_escaneo_dpi"])  # el diario mide los transparentes como película: no se dicen sin dato
-    escala = escala_mm(pelicula.dpi, P)
-    return (None if escala is None else escala / 10), aviso
+    declarada = {"coincide": P["resolucion_escaneo_dpi"], "otra": pelicula.dpi}.get(clase)
+    alto, ancho = pelicula.validos.shape
+    partes = [f"{pelicula.formato or 'formato desconocido'}, {pelicula.bits} bits por canal, {ancho} × {alto} px",
+              {"editor": f"el archivo declara {pelicula.dpi or 0:.4g} dpi, lo que escribe un editor al guardar un recorte",
+               "sin_dato": "el archivo no declara su resolución"}.get(clase, f"resolución declarada {pelicula.dpi or 0:.4g} dpi")]
+    if pelicula.fecha_escaneo is not None:
+        partes.append(f"escaneada el {pelicula.fecha_escaneo.isoformat()}")
+    distancias = np.asarray([] if distancias_px is None else distancias_px, dtype=float)
+    n = len(distancias)
+    escala = lambda dpi: escala_mm(dpi, {**P, "resolucion_escaneo_dpi": dpi})  # la única conversión de una resolución en escala
+    if n < R["distancias_minimas"]:
+        if clase == "coincide":  # la cabecera declara los 600 del procedimiento y no hay líneas para contradecirla
+            return escala(declarada) / 10, None
+        partes.append(f"no hay líneas suficientes para decidir la resolución con la regla de la tira (líneas cada {R['paso_mm']:g} mm): hacen falta {R['distancias_minimas']} distancias entre líneas y hay {n}")
+        partes.append("sin una resolución confirmada no hay milímetros ni medidas")
+        return None, ". ".join(partes) + "."
+    en_regla = lambda dpi: int(np.sum(np.abs(distancias * escala(dpi) - R["paso_mm"]) <= R["tolerancia_relativa"] * R["paso_mm"]))
+    confirma = lambda dpi: en_regla(dpi) >= max(R["distancias_minimas"], n / 2)
+    regla = lambda dpi: (f"con {dpi:g} dpi, {en_regla(dpi)} de las {n} distancias entre líneas salen a {R['paso_mm']:g} mm ±{R['tolerancia_relativa'] * 100:g} %"
+                         f" (la mediana, {float(np.median(distancias)) * escala(dpi):.2f} mm)")
+    confirmadas = [c for c in R["resoluciones_candidatas_dpi"] if confirma(c)]
+    elegida = declarada if declarada and confirma(declarada) else (confirmadas[0] if len(confirmadas) == 1 else None)
+    if elegida is not None and clase == "coincide" and elegida == declarada:
+        return escala(elegida) / 10, None
+    if elegida is not None:
+        partes.append(regla(elegida) + (": la regla de la tira confirma la declarada y se mide con ella" if elegida == declarada else
+                                         f": la regla de la tira confirma {elegida:g} dpi, la resolución real, y se mide con ella"))
+        return escala(elegida) / 10, ". ".join(partes) + "."
+    if declarada:
+        partes.append(regla(declarada) + ": la regla de la tira no confirma la declarada")
+    partes.append(f"las líneas cuadran con {' y '.join(f'{c:g}' for c in confirmadas)} dpi: la resolución es ambigua" if confirmadas else
+                  f"ninguna resolución candidata ({', '.join(f'{c:g}' for c in R['resoluciones_candidatas_dpi'])} dpi) cumple la regla de la tira")
+    partes.append("sin una resolución confirmada no hay milímetros ni medidas")
+    return None, ". ".join(partes) + "."
 
-def preprocesar_imagen(imagen_bgr, filtro='clahe'):
+def preprocesar_imagen(imagen_bgr, filtro='verde'):
     import cv2
+    if filtro == 'verde':  # la capa verde con el mismo CLAHE de siempre
+        return cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(cv2.split(imagen_bgr)[1])
     gray = cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2GRAY)
     
     if filtro == 'clahe':
@@ -45,7 +79,7 @@ def preprocesar_imagen(imagen_bgr, filtro='clahe'):
         img_B, img_G, img_R = cv2.split(imagen_bgr)
         return img_R  # Retorna la imagen original en un solo canal si no se aplica filtro
     else:
-        raise ValueError("Filtro no reconocido. Usa 'clahe' o 'bilateral'.")
+        raise ValueError("Filtro no reconocido. Usa 'verde', 'clahe' o 'bilateral'.")
 
 def obtener_perfil(imagen_gray_eq, metodo, fila_especifica):
     import numpy as np
@@ -66,7 +100,7 @@ def detectar_picos(perfil, umbral_relativo=1.0, distancia_minima=30):
     picos, _ = find_peaks(perfil_invertido, height=umbral, distance=distancia_minima)
     return picos
 
-def analizar_circulos_perfil(perfil_invertido, picos, izq_ips, der_ips, umbral, rel=7, dist=45, sigma=2):
+def analizar_circulos_perfil(perfil_invertido, picos, izq_ips, der_ips, umbral, rel=7, dist=45, sigma=2, ventana=None):
     """
     Detecta los máximos circulares (campos irradiados) tras eliminar los picos duros del perfil.
     
@@ -85,11 +119,13 @@ def analizar_circulos_perfil(perfil_invertido, picos, izq_ips, der_ips, umbral, 
             Distancia mínima entre picos secundarios (default: 45).
         sigma : float
             Sigma para el suavizado (default: 4).
+        ventana : float
+            Distancia máxima entre una línea y su mancha [px]; sin mancha en ella, None.
 
     Retorna:
         perfil_interpolado : np.ndarray
         picos_circulos : np.ndarray
-        diferencias : list[int]
+        diferencias : list[int | None], una por línea: la distancia a la mancha más cercana
     """
     # Copiamos y vaciamos el perfil en los anchos de los picos fuertes
     import numpy as np
@@ -115,8 +151,11 @@ def analizar_circulos_perfil(perfil_invertido, picos, izq_ips, der_ips, umbral, 
     # Detección de los nuevos picos (círculos suaves)
     picos_circulos, _ = find_peaks(perfil_interpolado, height=umbral - rel, distance=dist, prominence=5)
 
-    # Comparación con los picos originales
-    diferencias = [abs(p2 - p1) for p1, p2 in zip(picos, picos_circulos)]
+    # Cada línea con la mancha más cercana dentro de su ventana; sin mancha, None (no medible)
+    diferencias = []
+    for p1 in picos:
+        cerca = [abs(p2 - p1) for p2 in picos_circulos if ventana is None or abs(p2 - p1) <= ventana]
+        diferencias.append(min(cerca) if cerca else None)
 
     # Mensajes opcionales
     #print(f"Líneas detectadas: {len(picos)}")
@@ -176,7 +215,7 @@ def graficar_resultados(img_original, perfil, picos, metodo, fila_especifica, fi
             for x in np.array(der_ips)* cm_por_pixel * 10:
                 ax_res.axvline(x, linestyle=":", color='gray', alpha=0.5)
 
-        ax_res.set_title("Perfil de intensidad invertido (canal rojo)")
+        ax_res.set_title(f"Perfil de intensidad invertido ({CAPA_DEL_FILTRO.get(filtro, filtro)})")
         ax_res.set_xlabel("Posición (mm)")
         ax_res.set_ylabel("Intensidad")
         ax_res.legend()
@@ -260,7 +299,7 @@ def generar_reporte(
     picos, distancias_px, cm_por_pixel=None, control="B", interceptos=None, anchura=None, diferencias=None,
     centro_calculado_h=None, centro_calculado_v=None, desplazamiento_h=None, desplazamiento_v=None,
     exceso_arriba=None, exceso_abajo=None, exceso_izquierda=None, exceso_derecha=None,
-    penumbra_izquierda=None, penumbra_derecha=None, cruz=None, aviso=None):
+    penumbra_izquierda=None, penumbra_derecha=None, cruz=None, aviso=None, capa=None, paradas=None, no_medibles=None):
     import numpy as np
     reporte = []
     reporte.append("<b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;RESULTADO DE ANÁLISIS DE LA IMAGEN</b>")
@@ -270,10 +309,14 @@ def generar_reporte(
             return "".join(reporte)
 
     conversion = cm_por_pixel * 10 if cm_por_pixel else None
-
+    hay_distancias = bool(cm_por_pixel and distancias_px is not None and len(distancias_px) > 0)
     if control == "B":
+        if capa:  # la capa que de verdad se midió
+            reporte.append(f"<br><b>Capa medida:</b> {capa}<br>")
         reporte.append("<br><b>Líneas Detectadas:</b><br>")
-        if cm_por_pixel and distancias_px is not None and len(distancias_px) > 0:
+        if paradas is not None:
+            reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Paradas en la tira:</b> <span style='font-weight:normal'>{paradas}</span><br>")
+        if hay_distancias:
             distancias_mm = distancias_px * conversion
             distancias_mm_list = [round(float(d), 2) for d in distancias_mm]
             reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Distancias entre líneas(mm):</b> <span style='font-weight:normal'>{distancias_mm_list}</span><br>")
@@ -281,14 +324,17 @@ def generar_reporte(
             reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Desviación estándar =</b> <span style='font-weight:normal'>{np.std(distancias_mm):.2f} mm</span><br>")
         else:
             reporte.append("&nbsp;&nbsp;<b>No se puede convertir a milímetros o no hay distancias detectadas.</b><br>")
+        for texto in no_medibles or []:
+            reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<span style='font-weight:normal'>No medible, fuera de los promedios: {texto}</span><br>")
 
         reporte.append("<br><b>Alineación del campo con las líneas</b><br>")
         if diferencias is not None and len(diferencias) > 0:
             if cm_por_pixel:
                 diferencias_mm = [round(float(d * conversion), 2) for d in diferencias]
                 reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Desplazamientos entre líneas y centros circulares (mm):</b> <span style='font-weight:normal'>{diferencias_mm}</span><br>")
-                reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Promedio =</b> <span style='font-weight:normal'>{np.mean(diferencias_mm):.2f} mm</span><br>")
-                reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Desviación estándar =</b> <span style='font-weight:normal'>{np.std(diferencias_mm):.2f} mm</span><br>")
+                if hay_distancias:  # la página lee los pares «Promedio»/«Desviación estándar» por orden: sin el de las distancias, este se leería como suyo
+                    reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Promedio =</b> <span style='font-weight:normal'>{np.mean(diferencias_mm):.2f} mm</span><br>")
+                    reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Desviación estándar =</b> <span style='font-weight:normal'>{np.std(diferencias_mm):.2f} mm</span><br>")
             else:
                 diferencias_list = [float(d) for d in diferencias]
                 reporte.append(f"&nbsp;&nbsp;&nbsp;&nbsp;<b>Desplazamientos entre líneas y centros circulares (px):</b> <span style='font-weight:normal'>{diferencias_list}</span><br>")
@@ -372,7 +418,7 @@ def generar_reporte(
     return "".join(reporte)
 
 def analizar_lineas(imagen_path, metodo=True, fila_especifica=None, umbral_relativo=1.0, distancia_minima=None, mostrar=True,
-                    filtro='clahe', canvas=None):    
+                    filtro='verde', canvas=None):    
     import cv2
     import numpy as np
     img = cv2.imread(imagen_path)
@@ -387,12 +433,17 @@ def analizar_lineas(imagen_path, metodo=True, fila_especifica=None, umbral_relat
     distancias = np.array([])
     if len(picos) > 1:
         distancias = calcular_distancias(picos)
-    cm_por_pixel, aviso = metadata(imagen_path)
-    if cm_por_pixel is None:  # resolución «otra»: no se mide ni se dibuja, y el lienzo no conserva la película anterior
+    cm_por_pixel, aviso = metadata(imagen_path, distancias)
+    if cm_por_pixel is None:  # la resolución no se confirma: no se mide ni se dibuja, y el lienzo no conserva la película anterior
         if canvas is not None:
             canvas.figure.clear()
             canvas.draw()
         return generar_reporte(picos, distancias, aviso=aviso)
+
+    # Una parada por línea: dos picos a menos de medio paso de la regla son la misma línea (queda el más alto)
+    paso_px = REGLA_DE_LA_TIRA["paso_mm"] / (cm_por_pixel * 10)
+    lineas = picos  # todos los picos finos se apartan antes de buscar las manchas
+    picos = detectar_picos(perfil, umbral_relativo, max(distancia_minima, int(paso_px / 2)))
 
     # Invertir el perfil
     max_val = np.max(perfil)
@@ -408,8 +459,8 @@ def analizar_lineas(imagen_path, metodo=True, fila_especifica=None, umbral_relat
         ancho_mm = 1 # 1 mm de ancho de pico esperado
         if cm_por_pixel:
             ancho_px = ancho_mm / (cm_por_pixel * 10)
-            izq_ips = picos - ancho_px / 2
-            der_ips = picos + ancho_px / 2
+            izq_ips = lineas - ancho_px / 2
+            der_ips = lineas + ancho_px / 2
         else:
             anchos, alturas_rel, izq_ips, der_ips = peak_widths(perfil_invertido, picos, rel_height=0.3)
             # --- FILTRO DE ANCHOS ATÍPICOS ---
@@ -426,7 +477,16 @@ def analizar_lineas(imagen_path, metodo=True, fila_especifica=None, umbral_relat
 
     # Calcular perfil interpolado y picos suaves
     perfil_interpolado, picos2, diferencias = analizar_circulos_perfil(
-        perfil_invertido, picos, izq_ips, der_ips, umbral, rel=22, dist=distancia_minima + 20)
+        perfil_invertido, picos, izq_ips, der_ips, umbral, rel=22, dist=distancia_minima + 20, ventana=paso_px / 2)
+    # Una parada es una línea con su mancha a menos de medio paso; las distancias, entre paradas seguidas
+    no_medibles = [f"el pico en {p * cm_por_pixel * 10:.1f} mm no tiene mancha a menos de {REGLA_DE_LA_TIRA['paso_mm'] / 2:g} mm: no es una parada"
+                   for p, d in zip(picos, diferencias) if d is None]
+    picos = np.array([p for p, d in zip(picos, diferencias) if d is not None], dtype=int)
+    diferencias = [d for d in diferencias if d is not None]
+    distancias = calcular_distancias(picos) if len(picos) > 1 else np.array([])
+    no_medibles += [f"entre las paradas {i + 1} y {i + 2} hay {d * cm_por_pixel * 10:.2f} mm: falta una parada medible entre ellas"
+                    for i, d in enumerate(distancias) if d > 1.5 * paso_px]
+    distancias = distancias[distancias <= 1.5 * paso_px]
 
     if cm_por_pixel:
         distancias_mm = distancias * (cm_por_pixel * 10)
@@ -439,5 +499,6 @@ def analizar_lineas(imagen_path, metodo=True, fila_especifica=None, umbral_relat
             perfil_interpolado = perfil_interpolado, picos2 = picos2, izq_ips = izq_ips, der_ips = der_ips
         )
 
-    reporte = generar_reporte(picos, distancias, cm_por_pixel, control="B", interceptos=None, anchura=None, diferencias=diferencias, aviso=aviso)
+    reporte = generar_reporte(picos, distancias, cm_por_pixel, control="B", interceptos=None, anchura=None, diferencias=diferencias, aviso=aviso,
+                              capa=CAPA_DEL_FILTRO.get(filtro, filtro), paradas=len(picos), no_medibles=no_medibles)
     return reporte
