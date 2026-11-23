@@ -198,6 +198,12 @@ class TestLaResolucionReal:
         distancias_px = np.array([10.0] * en_regla + [25.0] * (n - en_regla)) * 200 / 25.4
         assert (rc.metadata(guardar(d / "mitad.tif", tira(200, n=3), 200), distancias_px)[0] is not None) == confirma
 
+    @pytest.mark.parametrize("mm, confirma", [((10.0, 10.0, 15.0), False), ((10.0, 10.0, 10.0), True), ((10.0, 10.0, 15.0, 10.0), True), ((10.0, 10.0, 15.0, 16.0), False)])
+    def test_hacen_falta_tres_distancias_en_regla_aunque_sean_la_mitad_o_mas(self, d, mm, confirma):
+        """PD2-D1 pide al menos 3 distancias en regla Y la mitad o más: 2 de 3 son más de la mitad y no bastan, y 2 de 4 son la mitad justa y tampoco; 3 de 3 y 3 de 4 sí."""
+        ruta = guardar(d / "tres_en_regla.tif", tira(300, n=3), 300)
+        assert (rc.metadata(ruta, np.array(mm) * 300 / 25.4)[0] is not None) == confirma
+
     def test_dos_candidatas_que_cuadran_dan_una_resolucion_ambigua(self, d, monkeypatch):
         monkeypatch.setitem(rc.REGLA_DE_LA_TIRA, "resoluciones_candidatas_dpi", [300.0, 310.0])
         ruta = guardar(d / "ambigua.png", tira(300), None, "PNG")
@@ -372,7 +378,8 @@ class TestLaPaginaGuardaLosMismosSeisNumeros:
 
     @pytest.mark.parametrize("nombre, dpi, tira_kw", [("dos_paradas_a_20_mm", 600, dict(n=2, paso_mm=20.0)),
                                                        ("tres_lineas_la_del_medio_sin_mancha", 600, dict(n=3, faltan=(1,))),
-                                                       ("una_sola_mancha_en_once_lineas", 200, dict(n=11, faltan=tuple(i for i in range(11) if i != 5)))])
+                                                       ("una_sola_mancha_en_once_lineas", 200, dict(n=11, faltan=tuple(i for i in range(11) if i != 5))),
+                                                       ("tres_paradas_a_20_mm", 600, dict(n=3, paso_mm=20.0))])
     def test_sin_distancias_medibles_la_pagina_no_guarda_los_desplazamientos_como_distancias(self, d, pagina, nombre, dpi, tira_kw):
         """La página lee los dos pares «Promedio»/«Desviación estándar» por orden: sin una distancia entre paradas seguidas, el par de los desplazamientos se leería como el de las distancias
         y quedaría un número falso en el registro. Las cuatro columnas de promedio y desviación quedan vacías y la lista de desplazamientos se guarda como está."""
