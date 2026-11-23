@@ -16,10 +16,14 @@ Sin Qt (salvo la capa pura de la pantalla manual, importada en las pruebas de co
 import ast
 import json
 import os
+import pathlib
 import re
 import shutil
 import sqlite3
 import time
+import traceback
+import types
+from fractions import Fraction
 
 import pytest
 
@@ -37,6 +41,9 @@ B = {"dosis_cgy": 100, "x_cm": 10, "y_cm": 10, "ssd_cm": 100, "profundidad_cm": 
 FISICA = {"cuna_tipo": "fisica", "cuna_orientacion": "IN"}
 SIMBOLOS = re.compile("[✓✔✕✖✗✘⚠❌❎✅☑☒]")                                   # DA-18
 INGLES = re.compile(r"Expecting|line \d|column|char \d|delimiter|Exceeds|digits|recursion|Unterminated|Invalid|Extra data")
+NO_SE_VE = ". Lleva un carácter que no es el espacio normal (un tabulador, un salto de línea o un espacio especial), que no se ve o que es un guion distinto del signo menos: bórrelo y escríbalo de nuevo"      # UM.6c (UM6-CRUCE-1; el guion, H4)
+MAS_DE_64 = ". Tiene más de 64 caracteres"
+QUE_ES_UN_CODIGO = " (cada <U+…> es un carácter que no va en una clave: las claves se escriben sin tildes, sin eñes y sin caracteres que no se ven)"      # UM.6c, ronda 2 (UM6-TXT-2)
 
 
 def plan(*campos, **del_plan):
@@ -283,6 +290,7 @@ def test_los_nombres_del_formato_son_exactamente_los_que_acepta_el_lector():
     assert pj.IGNORADOS == {"id", "comentario", "gantry_grados", "colimador_grados", "camilla_grados"}
     assert pj.CLAVES_DEL_PLAN == {"plan", "paciente", "fecha", "formato", "version", "campos"}
     assert pj.TIPOS_DE_CUNA_FISICA == {"FISICA", "PHYSICAL", "HARD", "STANDARD"}
+    assert pj.TECNICAS_QUE_SE_CALCULAN == {"", "STATIC", "ESTATICO", "ESTATICA", "3D", "3DCRT", "CONFORMAL", "CONFORMADA", "CONFORMADO"}      # UM.6c (UM6-SUP2-C2): «SBRT» no entra sin que caiga
 
 
 def test_la_tabla_de_claves_cubre_cada_concepto_y_cada_nombre():
@@ -366,8 +374,8 @@ def test_una_clave_desconocida_en_el_plan_rechaza_el_archivo_y_las_conocidas_no(
     (dict(lado_equivalente_cm=8, x_equivalente_cm=8), "Trae a la vez un lado equivalente y los lados X e Y equivalentes"),
     (dict(x_equivalente_cm=8), "Trae un solo lado equivalente: faltan X o Y"),
     (dict(y_equivalente_cm=8), "Trae un solo lado equivalente: faltan X o Y"),
-    (dict(cuna_grados=15.7, **FISICA), "El ángulo de la cuña debe ser un número entero de grados, mayor que 0, y es 15.7"),
-    (dict(cuna_grados=-15, **FISICA), "El ángulo de la cuña debe ser un número entero de grados, mayor que 0, y es -15"),
+    (dict(cuna_grados=15.7, **FISICA), "El ángulo de la cuña debe ser un número entero de grados, mayor que 0, y es 15.7 [°]"),      # UM.6c (UM6-TXT-3): con su unidad
+    (dict(cuna_grados=-15, **FISICA), "El ángulo de la cuña debe ser un número entero de grados, mayor que 0, y es -15 [°]"),
     (dict(cuna_grados=15), "Una cuña sin su factor escrito («factor_cuna») debe ser física: el tipo de cuña («cuna_tipo») debe decir «fisica». Una cuña dinámica no tiene tablas y necesita su factor"),
     (dict(cuna_grados=15, cuna_tipo="SOFT", cuna_orientacion="IN"), "Una cuña sin su factor escrito («factor_cuna») debe ser física: el tipo de cuña («cuna_tipo») debe decir «fisica», y dice «SOFT». Una cuña dinámica no tiene tablas y necesita su factor"),
     (dict(cuna_grados=15, cuna_tipo="fisica"), "La orientación de la cuña (falta) debe ser IN, OUT, LEFT o RIGHT"),
@@ -570,7 +578,7 @@ def test_mandibulas_que_no_cuadran_se_rechazan(mandibulas, motivo):
 
 @pytest.mark.parametrize("extra, motivo", [(dict(x_cm=-5), "El lado X debe ser un número mayor que cero"), (dict(dosis_cgy=-5), "La dosis no es un valor posible"),
                                            (dict(punto_x_cm=50), "El punto queda en el borde o fuera del campo"), (dict(ssd_cm=200), "La SSD no es un valor posible"),
-                                           (dict(cuna_grados=10**20, **FISICA), "No hay datos de la cuña de 100000000000000000000°")])
+                                           (dict(cuna_grados=359, **FISICA), "No hay datos de la cuña de 359°")])        # UM.6c (UM6-CRUCE-4): 10**20 ya no llega al motor
 def test_una_entrada_imposible_queda_con_el_motivo_del_motor(datos, extra, motivo):
     c = un_campo(**extra)
     assert c.problema is None
@@ -600,7 +608,8 @@ def test_un_campo_malo_no_tumba_a_los_demas(datos):
 
 def test_un_defecto_propio_tampoco_tumba_a_los_demas(datos):
     _, campos = pj.leer_plan(plan(B, {**B, "equipo": "iX"}, B))
-    salida = pj.calcular_plan(campos, lambda e, f: object() if e == "Clinac iX" else datos)       # el iX trae algo que no son datos de un haz
+    sin_tablas = types.SimpleNamespace(equipo="Clinac iX", energia="6 MV")      # UM.6c: dice ser del haz pedido (pasa la guarda de UM6-CRUCE-2) y no trae tablas
+    salida = pj.calcular_plan(campos, lambda e, f: sin_tablas if e == "Clinac iX" else datos)       # el iX trae algo que no son datos de un haz
     assert [r is not None for _, r, _ in salida] == [True, False, True]
     assert salida[1][2].startswith("El cálculo falló por un error inesperado (AttributeError: ") and salida[1][2].endswith(". Avise a quien mantiene la app.")
 
@@ -797,7 +806,7 @@ def test_un_archivo_rechazado_tampoco_cita_esos_nombres(cambio):
 
 
 def test_lo_que_cita_un_motivo_va_acortado_y_en_una_linea():
-    assert motivo_de(tecnica="Arco\ncon\n" + "x" * 500) == "La técnica «Arco con xxx…xxxxxxxx» no se reconoce como un campo estático: la ecuación 3 de la TG-71 no cubre IMRT ni VMAT, y este campo no se calcula"
+    assert motivo_de(tecnica="Arco\ncon\n" + "x" * 500) == "La técnica «Arco con xxx…xxxxxxxx» no se reconoce como un campo estático" + NO_SE_VE + MAS_DE_64      # UM.6c (UM6-REG-1): como el equipo y la energía
     assert motivo_de(cuna_grados=15, cuna_tipo="fisica", cuna_orientacion="Y" * 31) == "La orientación de la cuña («YYYYYYYYYYYY…YYYYYYYY» no es una de las cuatro) debe ser IN, OUT, LEFT o RIGHT"
     assert motivo_de(cuna_grados=15, cuna_tipo="fisica", cuna_orientacion="Y" * 30) == f"La orientación de la cuña («{'Y' * 30}» no es una de las cuatro) debe ser IN, OUT, LEFT o RIGHT"
 
@@ -807,7 +816,7 @@ def test_el_modulo_no_importa_qt_ni_la_base_ni_escribe_nada():
     arbol = ast.parse(fuente)
     importados = {a.name for n in ast.walk(arbol) if isinstance(n, ast.Import) for a in n.names} | \
                  {f"{n.module}.{a.name}" for n in ast.walk(arbol) if isinstance(n, ast.ImportFrom) for a in n.names}
-    assert importados == {"json", "math", "os", "re", "unicodedata", "collections.Counter", "dataclasses.dataclass", "decimal.Decimal", "services.um_lector_eclipse", "services.um_motor"}
+    assert importados == {"json", "math", "os", "re", "unicodedata", "collections.Counter", "dataclasses.dataclass", "fractions.Fraction", "services.um_lector_eclipse", "services.um_motor", "stat"}      # UM.6c: Fraction y no Decimal (UM6-CRUCE-3); stat (UM6-TE-1)
     llamadas = [n for n in ast.walk(arbol) if isinstance(n, ast.Call)]
     nombres = [getattr(n.func, "id", getattr(n.func, "attr", None)) for n in llamadas]
     assert "print" not in nombres and "dumps" not in nombres and "write" not in nombres
@@ -831,7 +840,7 @@ def test_build_exe_lista_el_lector_una_vez_despues_de_la_puerta_y_sigue_en_crlf(
 # ================================================================================================================================== lo que dejó el barrido por AST (pre-vuelo, 12-11, 09:08)
 # Cada caso cierra un sobreviviente que no era equivalente (triaje: borradores/UM6/triaje_del_barrido_a.md).
 
-@pytest.mark.parametrize("clave, que", [("dosis_cgy", "La dosis del campo"), ("um_planeador", "Las UM de Eclipse"), ("x_cm", "El lado X"), ("y_cm", "El lado Y"),
+@pytest.mark.parametrize("clave, que", [("dosis_cgy", "La dosis del campo"), ("x_cm", "El lado X"), ("y_cm", "El lado Y"),       # UM.6c: «las UM de Eclipse» (plural), en la prueba de UM6-H4
                                         ("lado_equivalente_cm", "El lado equivalente"), ("ssd_cm", "La SSD"), ("profundidad_cm", "La profundidad"),
                                         ("profundidad_efectiva_cm", "La profundidad efectiva"), ("punto_x_cm", "La posición X del punto"), ("punto_y_cm", "La posición Y del punto"),
                                         ("oar", "El OAR"), ("factor_bandeja", "El factor de bandeja")])
@@ -849,13 +858,13 @@ def test_los_topes_son_los_decididos():
     assert (pj.TAMANO_MAXIMO_BYTES, pj.MAXIMO_DE_CAMPOS, pj.CLAVES_NOMBRADAS, pj.MAXIMO_CITADO, pj.CITA_COMIENZO, pj.CITA_FINAL, pj.MAXIMO_RECONOCIDO) == (2 * 1024 * 1024, 1000, 5, 30, 12, 8, 64)
 
 
-def test_otro_fallo_del_sistema_se_dice_con_su_tipo(tmp_path, monkeypatch):
+def test_otro_fallo_del_sistema_se_dice_en_espanol_sin_el_nombre_de_la_clase(tmp_path, monkeypatch):        # UM.6c (UM6-H4): antes decía «(OSError)»
     ruta = _escribir(tmp_path, pj.EJEMPLO_DE_PLAN.encode("utf-8"))
 
     def fallo(*a, **k):
         raise OSError(5, "Input/output error")
     monkeypatch.setattr("builtins.open", fallo)
-    with pytest.raises(pj.PlanInvalido, match="^No se pudo leer el archivo: el sistema no lo dejó leer \\(OSError\\)\\.$"):
+    with pytest.raises(pj.PlanInvalido, match="^No se pudo leer el archivo: el sistema no lo dejó leer\\.$"):
         pj.leer_archivo(ruta)
 
 
@@ -895,7 +904,7 @@ def test_un_lado_equivalente_y_solo_el_y_tambien_son_a_la_vez():
 
 
 def test_una_cuna_de_menos_un_grado_tampoco_vale():
-    assert motivo_de(cuna_grados=-1, **FISICA) == "El ángulo de la cuña debe ser un número entero de grados, mayor que 0, y es -1"
+    assert motivo_de(cuna_grados=-1, **FISICA) == "El ángulo de la cuña debe ser un número entero de grados, mayor que 0, y es -1 [°]"      # UM.6c (UM6-TXT-3): con su unidad
 
 
 def test_un_plan_sin_nombre_tiene_el_nombre_vacio():
@@ -914,7 +923,9 @@ def test_los_otros_nombres_del_plan_tambien_valen():
 def test_un_archivo_que_crecio_despues_de_mirar_su_tamano_no_se_lee_cortado(tmp_path, monkeypatch):
     """Se lee hasta pasar el tope por un byte: si creció entre mirar su tamaño y leerlo, se nota; leerlo cortado en el tope daría un JSON que no es el del archivo."""
     ruta = _escribir(tmp_path, b" " * (pj.TAMANO_MAXIMO_BYTES - 2) + b"[]  ")
-    monkeypatch.setattr(os.path, "getsize", lambda r: 10)
+    real, stat_real = os.stat(ruta), os.stat      # UM.6c (UM6-TE-1): el tamaño sale de `os.stat`, que también dice si es un archivo
+    falso = os.stat_result(tuple(real)[:6] + (10,) + tuple(real)[7:10])
+    monkeypatch.setattr(os, "stat", lambda r, *a, **k: falso if r == ruta else stat_real(r, *a, **k))
     with pytest.raises(pj.PlanInvalido, match="^El archivo mide más de 2 \\[MB\\]"):
         pj.leer_archivo(ruta)
 
@@ -1024,8 +1035,8 @@ def test_un_byte_que_no_es_utf8_se_dice_con_su_lugar_en_el_archivo_con_bom_o_sin
 
 
 @pytest.mark.parametrize("extra, motivo", [
-    (dict(equipo="A\n" + "x" * 500), "El equipo «A xxxxxxxxxx…xxxxxxxx» no es uno de esta calculadora: el Clinac 600 o el Clinac iX"),
-    (dict(energia="E\n" + "y" * 500), "La energía «E yyyyyyyyyy…yyyyyyyy» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV"),
+    (dict(equipo="A\n" + "x" * 500), "El equipo «A xxxxxxxxxx…xxxxxxxx» no es uno de esta calculadora: el Clinac 600 o el Clinac iX" + NO_SE_VE + MAS_DE_64),      # UM.6c: + lo de UM6-CRUCE-1
+    (dict(energia="E\n" + "y" * 500), "La energía «E yyyyyyyyyy…yyyyyyyy» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE + MAS_DE_64),
     (dict(cuna_grados=15, cuna_tipo="T\n" + "z" * 500, cuna_orientacion="IN"),
      "Una cuña sin su factor escrito («factor_cuna») debe ser física: el tipo de cuña («cuna_tipo») debe decir «fisica», y dice «T zzzzzzzzzz…zzzzzzzz». Una cuña dinámica no tiene tablas y necesita su factor"),
 ], ids=["el equipo", "la energia", "el tipo de cuña"])
@@ -1078,3 +1089,374 @@ def test_un_espacio_junto_a_una_tilde_suelta_se_ignora_como_los_de_los_bordes(te
     El triaje del barrido lo daba por equivalente («todo lo que llega ya viene recortado»): no lo es."""
     assert un_campo(cuna_grados=15, cuna_tipo=texto.format("fisica"), cuna_orientacion="IN").entrada.cuna == 15
     assert un_campo(cuna_grados=15, cuna_tipo="fisica", cuna_orientacion=texto.format("in")).entrada.cuna_orientacion == "IN"
+
+
+# ================================================================================================================================== UM.6c: lo que dejó la segunda vuelta de la auditoría (12-11)
+# Un caso por punto de borradores/UM6c/encargo_prevuelo_UM6c.md §2; cada uno cae contra 96d2129 (salvo el del punto 10, que fija un conjunto que no cambia: lo prueba su mutación).
+
+@pytest.mark.parametrize("concepto, texto", [("tecnica", "a-" * 500_000), ("equipo", "a " * 500_000), ("energia", "a " * 500_000)], ids=["tecnica", "equipo", "energia"])
+def test_lo_que_dice_el_plan_se_resuelve_y_se_cita_una_vez_por_plan(monkeypatch, concepto, texto):
+    """UM6-SUP2-C1 = UM6-H1 (MEDIO): la técnica del plan se normalizaba, y el equipo y la energía del plan se citaban, en CADA campo; con ~1 [MB] y 1000 campos la lectura se congelaba de 73 a 156 [s]
+    en el hilo de la pantalla. Ahora el texto del plan se cita una vez y la técnica, de más de 64 caracteres, no se normaliza."""
+    citados, normalizados = [], []
+    cita, sin_tildes = pj._cita, pj._sin_tildes
+    monkeypatch.setattr(pj, "_cita", lambda t: (citados.append(len(str(t))), cita(t))[1])
+    monkeypatch.setattr(pj, "_sin_tildes", lambda t: (normalizados.append(len(t)), sin_tildes(t))[1])
+    campos = pj.leer_plan(plan(*[B] * pj.MAXIMO_DE_CAMPOS, **{concepto: texto}))[1]
+    assert len(campos) == pj.MAXIMO_DE_CAMPOS and all(c.entrada is None for c in campos) and len({c.problema for c in campos}) == 1
+    assert [n for n in citados if n >= len(texto) - 2] == [len(texto.strip())]        # el texto del plan (como lo deja `_texto`), citado UNA vez
+    assert not [n for n in normalizados if n > pj.MAXIMO_RECONOCIDO]
+
+
+@pytest.mark.parametrize("concepto, texto", [("tecnica", "a-" * 500_000), ("equipo", "a " * 500_000), ("energia", "a " * 500_000)], ids=["tecnica", "equipo", "energia"])
+def test_un_plan_de_1000_campos_con_un_texto_del_plan_de_1_mb_se_lee_en_menos_de_2_s(concepto, texto):
+    """UM6-SUP2-C1: el caso del escéptico, dentro de los dos topes de UM6-D3 (el archivo cabe en `TAMANO_MAXIMO_BYTES`). Con 96d2129, la técnica tardaba ~60 [s]."""
+    contenido = plan(*[B] * pj.MAXIMO_DE_CAMPOS, **{concepto: texto})
+    assert len(contenido.encode("utf-8")) <= pj.TAMANO_MAXIMO_BYTES
+    t0 = time.perf_counter()
+    campos = pj.leer_plan(contenido)[1]
+    assert time.perf_counter() - t0 < 2.0
+    assert len(campos) == pj.MAXIMO_DE_CAMPOS and all(c.entrada is None for c in campos)
+
+
+@pytest.mark.parametrize("comienzo, relleno, final", [("3D", "-", ""), ("ST", " ", "ATIC"), ("3", "_", "D")], ids=["guiones", "espacios", "guiones bajos"])
+def test_una_tecnica_de_mas_de_64_caracteres_no_se_reconoce_aunque_al_normalizarla_lo_pareciera(comienzo, relleno, final):
+    """UM6c-D1: como el equipo y la energía (UM6-D9), una técnica de más de `MAXIMO_RECONOCIDO` caracteres no se normaliza; con 96d2129, «3D» seguido de 70 guiones se calculaba. Cada caso es una técnica que SÍ
+    se calcula al normalizarla (sin espacios, guiones ni «_») y solo cambia en su largo: con 64 caracteres entra, con 65 o más no."""
+    def tecnica(largo):
+        return comienzo + relleno * (largo - len(comienzo) - len(final)) + final
+    assert un_campo(tecnica=tecnica(pj.MAXIMO_RECONOCIDO)).entrada is not None       # 64 caracteres: se normaliza y se calcula
+    for largo in (pj.MAXIMO_RECONOCIDO + 1, 3 * pj.MAXIMO_RECONOCIDO):
+        assert len(tecnica(largo)) == largo
+        motivo = motivo_de(tecnica=tecnica(largo))
+        assert motivo.startswith("La técnica «") and motivo.endswith(MAS_DE_64)
+
+
+def test_una_ruta_con_un_caracter_nulo_es_un_plan_invalido():
+    """UM6-H2: `os.path.getsize('a\\x00b.json')` lanza ValueError, que el `except OSError` no atrapaba: no se cumplía «solo `PlanInvalido`»."""
+    with pytest.raises(pj.PlanInvalido) as fallo:
+        pj.leer_archivo("plan_de_Juana\x00.json")
+    assert str(fallo.value) == "No se pudo leer el archivo: la ruta no es válida."
+
+
+def _plan_invalido(como, tmp_path):
+    if como == "no existe":
+        return pj.leer_archivo(str(tmp_path / "plan de Juana Pérez.json"))
+    if como == "es una carpeta":
+        return pj.leer_archivo(str(tmp_path))
+    if como == "ruta con un nulo":
+        return pj.leer_archivo(str(tmp_path / "Juana Pérez\x00.json"))
+    if como == "no es UTF-8":
+        return pj.texto_del_archivo("Juana Pérez".encode("latin-1"))
+    if como == "JSON roto":
+        return pj.leer_json('{"paciente": "Juana Pérez", "campos": [')
+    if como == "anidado":
+        return pj.leer_json('{"paciente": "Juana Pérez", "campos": ' + "[" * 100_000)
+    if como == "un entero enorme":
+        return pj.leer_json('{"paciente": "Juana Pérez", "campos": [' + "9" * 5000 + "]}")
+    if como == "clave repetida":      # H2: estos dos nacen DENTRO de `json.loads` (sus ganchos) y salen por `except PlanInvalido: raise`
+        return pj.leer_json('{"paciente": "Juana Pérez", "campos": [{"a": 1, "a": 2}]}')
+    if como == "NaN":
+        return pj.leer_json('{"paciente": "Juana Pérez", "campos": [NaN]}')
+    if como == "-Infinity":
+        return pj.leer_json('{"paciente": "Juana Pérez", "campos": [-Infinity]}')
+    if como == "pasa del tamaño":
+        ruta = tmp_path / "plan de Juana Pérez.json"
+        ruta.write_bytes(b" " * (pj.TAMANO_MAXIMO_BYTES + 1))
+        return pj.leer_archivo(str(ruta))
+    if como == "creció tras mirar su tamaño":
+        return pj.texto_del_archivo(b" " * (pj.TAMANO_MAXIMO_BYTES + 1))
+    if como == "UTF-16":
+        return pj.texto_del_archivo('{"paciente": "Juana Pérez"}'.encode("utf-16"))
+    return pj.leer_plan(plan(B, paciente="Juana Pérez", equipo=5))
+
+
+@pytest.mark.parametrize("como", ["no existe", "es una carpeta", "ruta con un nulo", "no es UTF-8", "JSON roto", "anidado", "un entero enorme", "en el plan",
+                                  "clave repetida", "NaN", "-Infinity", "pasa del tamaño", "creció tras mirar su tamaño", "UTF-16"])
+def test_un_plan_invalido_no_lleva_causa_ni_contexto(tmp_path, como):
+    """UM6-H5: con `raise ... from fallo`, un `PlanInvalido` que escapara de un slot llevaría a `error_log.txt` (el hook de `main.py`) el `FileNotFoundError` con la RUTA (el nombre del archivo
+    suele llevar el del paciente), y el `JSONDecodeError` guarda el plan entero (`doc`). `from None` solo lo esconde al imprimir: `__context__` seguiría ahí. Se lanza fuera del `except`; también los de los
+    ganchos de `json` (clave repetida, NaN) y los del tamaño."""
+    with pytest.raises(pj.PlanInvalido) as fallo:
+        _plan_invalido(como, tmp_path)
+    assert fallo.value.__cause__ is None and fallo.value.__context__ is None
+    impreso = "".join(traceback.format_exception(type(fallo.value), fallo.value, None))      # lo que escribiría el hook de `main.py`, sin las líneas de esta prueba
+    assert "Juana" not in impreso and str(tmp_path) not in impreso
+
+
+@pytest.mark.parametrize("campo, motivo", [
+    ({**B, "d\u043esis_cgy": 1}, "Trae claves que este lector no conoce: «d<U+043E>sis_cgy»" + QUE_ES_UN_CODIGO),
+    ({**B, "um_planeado\u200br": 1}, "Trae claves que este lector no conoce: «um_planeado<U+200B>r»" + QUE_ES_UN_CODIGO),
+    ({**B, "um_planeado\ufeffr": 1}, "Trae claves que este lector no conoce: «um_planeado<U+FEFF>r»" + QUE_ES_UN_CODIGO),
+    ({**B, "ssd\x7f_cm": 1}, "Trae claves que este lector no conoce: «ssd<U+007F>_cm»" + QUE_ES_UN_CODIGO),
+    ({**B, "ssd\t_cm": 1}, "Trae claves que este lector no conoce: «ssd<U+0009>_cm»" + QUE_ES_UN_CODIGO),
+    ({**B, "x\ud800": 2}, "Trae claves que este lector no conoce: «x<U+D800>»" + QUE_ES_UN_CODIGO),
+    ({**B, "energía": "6X"}, "Trae claves que este lector no conoce: «energ<U+00ED>a»" + QUE_ES_UN_CODIGO),
+    ({**B, "\u0430" * 40: 1}, "Trae claves que este lector no conoce: «" + "<U+0430>" * 12 + "…" + "<U+0430>" * 8 + "»" + QUE_ES_UN_CODIGO),
+    ({**B, "cuna_grados": 15, "cuna_tipo": "fisica", "cuna_orientacion": "in\ufeff"}, "La orientación de la cuña («in<U+FEFF>» no es una de las cuatro) debe ser IN, OUT, LEFT o RIGHT"),
+    ({**B, "tecnica": "VM\u200bAT"}, "La técnica «VM<U+200B>AT» no se reconoce como un campo estático" + NO_SE_VE),
+    ({**B, "dosis_cgy": "1\ud800"}, "La dosis del campo debe ser un número y es el texto «1<U+D800>»"),
+], ids=["homoglifo cirilico", "ancho cero", "BOM", "DEL", "tabulador en una clave", "sustituto suelto", "tilde en una clave", "clave larga y cirilica", "orientacion con BOM",
+        "tecnica con ancho cero", "valor con sustituto"])
+def test_lo_que_no_se_ve_se_cita_con_su_codigo_y_el_motivo_se_puede_escribir(campo, motivo):
+    """UM6-H3: lo que un motivo cita no se saneaba: una clave con una «\u043e» cirílica, un carácter de ancho cero, un BOM o un DEL se citaba IGUAL a la clave válida, y un sustituto suelto (que `json`
+    acepta) hacía un motivo que no se puede escribir en UTF-8. En una clave, todo lo que no es ASCII va con su código (UM6c-D3); en un texto, lo que no se ve."""
+    c = pj.leer_plan(plan(campo))[1][0]
+    assert c.entrada is None and c.problema == motivo
+    c.problema.encode("utf-8")
+
+
+@pytest.mark.parametrize("campo, motivo", [
+    ({**B, "energia": "6\u00a0MV"}, "La energía «6 MV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE),
+    ({**B, "energia": "6\tMV"}, "La energía «6 MV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE),
+    ({**B, "energia": "6\u2009MV"}, "La energía «6 MV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE),
+    ({**B, "energia": "6" + " " * 66 + "MV"}, "La energía «6 MV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + MAS_DE_64),
+    ({**B, "equipo": "Clinac" + " " * 61 + "600"}, "El equipo «Clinac 600» no es uno de esta calculadora: el Clinac 600 o el Clinac iX" + MAS_DE_64),
+    ({**B, "equipo": "Clinac\u2028" + " " * 61 + "600"}, "El equipo «Clinac 600» no es uno de esta calculadora: el Clinac 600 o el Clinac iX" + NO_SE_VE + MAS_DE_64),
+    ({**B, "energia": "6 MeV"}, "La energía «6 MeV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV"),
+    ({**B, "energia": "6" + " " * 60 + "MeV"}, "La energía «6 MeV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV"),
+    ({**B, "energia": "6\u200bMV"}, "La energía «6<U+200B>MV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE),
+    ({**B, "energia": "\u200b6MV"}, "La energía «<U+200B>6MV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE),
+    ({**B, "energia": "6MV\u200b"}, "La energía «6MV<U+200B>» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE),
+], ids=["energia con NBSP", "energia con tabulador", "energia con espacio fino", "energia de 70 caracteres", "equipo de 70 caracteres", "equipo con separador de linea y largo",
+        "energia normal que no existe", "energia de 64 caracteres que no existe", "energia con ancho cero", "ancho cero al comienzo", "ancho cero al final"])
+def test_un_equipo_o_una_energia_que_se_ve_igual_a_uno_valido_dice_por_que_no_se_reconoce(campo, motivo):
+    """UM6-CRUCE-1: `_cita` junta los espacios, así que «6\\u00a0MV» se citaba «6 MV» y el motivo decía «no se reconoce» de un valor que se ve idéntico a uno válido (el formulario sí lo dice,
+    UM5-S6). Ahora lo dice el motivo (UM6c-D4: no se toca `um_lector_eclipse`). Una energía que de verdad no existe no lleva nada más."""
+    assert pj.leer_plan(plan(campo))[1][0].problema == motivo
+
+
+def test_un_equipo_con_un_espacio_raro_que_el_lector_reconoce_se_sigue_calculando():
+    """`clave_equipo` (UM.1b) tolera el NBSP y el tabulador: lo de UM6-CRUCE-1 solo se dice de lo que NO se reconoce."""
+    assert un_campo(equipo="Clinac\u00a0600").equipo == EQUIPO and un_campo(equipo="Clinac\t600").entrada is not None
+
+
+def test_las_tablas_de_otro_haz_no_se_usan(datos):
+    """UM6-CRUCE-2: `calcular_plan` no comprobaba que los `DatosHaz` que da `datos_de` fueran del haz pedido: con las tablas de otro equipo o de otra energía, cada campo daba un número sin
+    aviso. Era el único modo en que el servicio entregaba un número que no correspondía."""
+    _, campos = pj.leer_plan(plan(B, {**B, "equipo": "iX"}, {**B, "energia": "18X"}, B))
+    salida = pj.calcular_plan(campos, lambda equipo, energia: datos)        # quien cablea `datos_de` se equivoca: siempre el 600, 6 MV
+    assert [m for _, _, m in salida] == [None, "Las tablas que se trajeron no son las del Clinac iX, 6 MV: este campo no se calcula. Avise a quien mantiene la app.",
+                                         "Las tablas que se trajeron no son las del Clinac 600, 18 MV: este campo no se calcula. Avise a quien mantiene la app.", None]
+    assert [r is not None for _, r, _ in salida] == [True, False, False, True]
+
+
+@pytest.mark.parametrize("x1, x2", [(1.1102230246251565e-16, 1.0), (4.440892098500626e-16, 4.0), (1.7763568394002505e-15, 16.0), (0.1, 5.1), (1e-300, 10.0), (2.5, 2.5)])
+def test_las_mandibulas_se_suman_exactas_y_se_redondean_una_sola_vez(x1, x2):
+    """UM6-CRUCE-3: con `Decimal` y su contexto de 28 cifras, la suma se redondeaba ANTES del `float`, y en un empate construido se apartaba 1 ulp de la suma exacta (1.1102230246251565e-16 + 1
+    daba 1.0000000000000002). Con valores físicos no cambiaba nada; ahora no cambia nunca."""
+    sin_lados = {k: v for k, v in B.items() if k not in ("x_cm", "y_cm")}
+    e = pj.leer_plan(plan({**sin_lados, "mandibulas_cm": {"x1": x1, "x2": x2, "y1": x2, "y2": x1}}))[1][0].entrada
+    exacto = Fraction(repr(x1)) + Fraction(repr(x2))
+    assert (e.x, e.y, e.centro_x, e.centro_y) == (float(exacto), float(exacto), float((Fraction(repr(x2)) - Fraction(repr(x1))) / 2), float((Fraction(repr(x1)) - Fraction(repr(x2))) / 2))
+
+
+@pytest.mark.parametrize("mandibulas, motivo", [({"x1": 1e308, "x2": 1e308, "y1": 5, "y2": 5}, "El lado X de las mandíbulas es un número demasiado grande"),
+                                                ({"x1": 5, "x2": 5, "y1": 1.5e308, "y2": 1e308}, "El lado Y de las mandíbulas es un número demasiado grande")])
+def test_un_lado_de_las_mandibulas_que_no_cabe_es_demasiado_grande(mandibulas, motivo):
+    """UM6-CRUCE-3: 1e308 + 1e308 desbordaba a infinito, `_a_numero` ya no lo veía y el motor decía «El lado X debe ser un número mayor que cero» (falso: es demasiado grande)."""
+    assert motivo_de(x_cm=None, y_cm=None, mandibulas_cm=mandibulas) == motivo
+
+
+def test_un_angulo_de_cuna_enorme_no_hace_un_motivo_enorme(datos):
+    """UM6-CRUCE-4: un ángulo entero y enorme (1e300) pasaba `angulo != int(angulo)`, se volvía un entero de 301 cifras y el motor lo citaba entero (329 caracteres). UM6c-D5: un ángulo de
+    grados es menor que 360; 359 sigue llegando al motor, que dice que no hay datos de esa cuña."""
+    assert motivo_de(cuna_grados=1e300, **FISICA) == "El ángulo de la cuña debe ser un número entero de grados, menor que 360, y es 1e+300 [°]"
+    assert motivo_de(cuna_grados=360, **FISICA) == "El ángulo de la cuña debe ser un número entero de grados, menor que 360, y es 360 [°]"
+    c = un_campo(cuna_grados=359, **FISICA)
+    assert c.entrada.cuna == 359 and pj.calcular_plan([c], de_600(datos))[0][2] == "No hay datos de la cuña de 359°"
+
+
+def test_los_textos_para_el_fisico_concuerdan_y_dicen_que_esta_vacio(tmp_path):
+    """UM6-H4 (1) y (2): «Las UM de Eclipse debe ser un número» (el motor, para lo mismo, dice «no son») y «es el texto «»», que no explica nada."""
+    assert motivo_de(um_planeador="abc") == "Las UM de Eclipse deben ser un número y son el texto «abc»"
+    assert pj.leer_plan(plan(B).replace("}]", ', "um_planeador": 1e999}]'))[1][0].problema == "Las UM de Eclipse son un número demasiado grande"
+    assert motivo_de(um_planeador=True) == "Las UM de Eclipse deben ser un número y son un valor verdadero o falso"
+    assert motivo_de(factor_bandeja="") == "El factor de bandeja debe ser un número y es un texto vacío"
+    assert motivo_de(punto_x_cm="   ") == "La posición X del punto debe ser un número y es un texto vacío"
+    assert motivo_de(dosis_cgy="cien") == "La dosis del campo debe ser un número y es el texto «cien»"        # lo singular, como estaba
+
+
+def test_un_fallo_del_sistema_se_dice_en_espanol_y_sin_el_nombre_de_una_clase(tmp_path):
+    """UM6-H4 (3): «el sistema no lo dejó leer (NotADirectoryError)» o «(OSError)» (ENAMETOOLONG, ELOOP) no le dicen nada al físico."""
+    archivo = _escribir(tmp_path, b"{}")
+    with pytest.raises(pj.PlanInvalido) as fallo:
+        pj.leer_archivo(os.path.join(archivo, "plan.json"))
+    assert str(fallo.value) == "No se pudo leer el archivo: una parte de la ruta no es una carpeta."
+    with pytest.raises(pj.PlanInvalido) as fallo:
+        pj.leer_archivo(str(tmp_path / ("a" * 5000 + ".json")))
+    assert str(fallo.value) == "No se pudo leer el archivo: el sistema no lo dejó leer."
+
+
+# ================================================================================================================================== UM.6c, ronda 2: lo que dejó la auditoría de la referencia (12-11, 16:10)
+# Un caso por punto de borradores/UM6c/encargo_ronda2_UM6c.md §2; ninguno cuelga el rojo (la tubería se destapa sola y ningún descriptor se usa de verdad).
+
+def test_una_tecnica_de_mas_de_64_caracteres_dice_por_que_como_el_equipo_y_la_energia():
+    """UM6-REG-1: «3D» con 70 guiones bajos no es una técnica que la TG-71 no cubra: es un texto demasiado largo, y el motivo lo dice como el del equipo y el de la energía."""
+    assert motivo_de(tecnica="3D" + "_" * 70) == "La técnica «3D__________…________» no se reconoce como un campo estático" + MAS_DE_64
+    assert motivo_de(tecnica="VMAT") == "La técnica «VMAT» no se reconoce como un campo estático: la ecuación 3 de la TG-71 no cubre IMRT ni VMAT, y este campo no se calcula"
+
+
+def test_lo_que_no_se_ve_es_la_misma_regla_del_formulario(manual):
+    """UM6-REG-2: la regla del servicio es, carácter a carácter, la de `calculadora_um._no_se_ve` (UM5-S6): marcas (U+FE0F, U+034F, U+FE00, U+180B), letras de relleno (U+3164, U+115F,
+    U+1160, U+FFA0), el braille en blanco (U+2800) y los guiones Unicode (U+2011) también. Se comparan los 65 536 del plano básico y los de fuera que usa el formulario."""
+    caracteres = [chr(i) for i in range(0x10000)] + ["\U000e0001", "\U000f0000", "\U0001f600", "\U00010fff"]
+    distintos = [hex(ord(c)) for c in caracteres if pj._no_se_ve(c) != manual._no_se_ve(c)]
+    assert distintos == []
+    assert all(pj._no_se_ve(c) for c in "️͏︀᠋ㅤᅟᅠﾠ⠀‑\u0378\ue000")
+    assert not any(pj._no_se_ve(c) for c in " -_aZ09.,+−éñ«»")
+
+
+@pytest.mark.parametrize("campo, motivo", [
+    ({**B, "tecnica": "VM️AT"}, "La técnica «VM<U+FE0F>AT» no se reconoce como un campo estático" + NO_SE_VE),
+    ({**B, "tecnica": "VM\u0378AT"}, "La técnica «VM<U+0378>AT» no se reconoce como un campo estático" + NO_SE_VE),
+    ({**B, "tecnica": "VM\ue000AT"}, "La técnica «VM<U+E000>AT» no se reconoce como un campo estático" + NO_SE_VE),
+    ({**B, "energia": "6‑MV"}, "La energía «6<U+2011>MV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE),
+    ({**B, "energia": "6ㅤMV"}, "La energía «6<U+3164>MV» no se reconoce: debe ser de fotones en MV, como 6X o 6 MV" + NO_SE_VE),
+], ids=["tecnica con una marca", "tecnica con uno sin asignar", "tecnica con uno privado", "energia con un guion Unicode", "energia con una letra de relleno"])
+def test_la_tecnica_y_la_energia_dicen_lo_que_no_se_ve_con_la_regla_del_formulario(campo, motivo):
+    """UM6-REG-2 y los huecos K02 y K03 (sin asignar, privado): se citan con su código y el motivo lo dice."""
+    assert pj.leer_plan(plan(campo))[1][0].problema == motivo
+
+
+CLASES_DE_LO_QUE_NO_SE_VE = [      # (carácter, la palabra con que el motivo nombra su clase)
+    ("\u2010", "guion"), ("\u2011", "guion"), ("\u2013", "guion"), ("\u2014", "guion"), ("\uff0d", "guion"),       # Pd: se VEN, y el motivo no puede decir solo «que no se ve»
+    ("\u00a0", "espacio"), ("\u2009", "espacio especial"), ("\t", "tabulador"), ("\u2028", "salto de línea"),
+    ("\u200b", "no se ve"), ("\u0301", "no se ve"), ("\u3164", "no se ve"), ("\ue000", "no se ve")]
+SIN_MOTIVO_EN_LA_TECNICA = ("\u00a0", "\u2009", "\t", "\u2028", "\u0301")      # `_resolver` le quita a la técnica todo espacio y toda marca: «3D CRT» se calcula
+CASOS_DE_LO_QUE_NO_SE_VE = [("energia", c, p) for c, p in CLASES_DE_LO_QUE_NO_SE_VE] + [("tecnica", c, p) for c, p in CLASES_DE_LO_QUE_NO_SE_VE if c not in SIN_MOTIVO_EN_LA_TECNICA]
+
+
+@pytest.mark.parametrize("campo, caracter, palabra", CASOS_DE_LO_QUE_NO_SE_VE, ids=[f"{campo} U+{ord(c):04X}" for campo, c, _ in CASOS_DE_LO_QUE_NO_SE_VE])
+def test_el_motivo_de_una_tecnica_o_una_energia_que_no_se_reconoce_nombra_la_clase_de_lo_que_lleva(campo, caracter, palabra):
+    """El motivo nombra la clase del carácter, sea una energía («6–MV») o una técnica («3D–CRT»): un guion que no es el signo menos (se VE: no puede decir solo «que no se ve»), un espacio que no es el normal
+    o algo que no se ve."""
+    motivo = motivo_de(**{campo: ("6{}MV" if campo == "energia" else "3D{}CRT").format(caracter)})
+    assert "Lleva un carácter" in motivo and palabra in motivo.split("Lleva un carácter", 1)[1]
+
+
+def test_una_tuberia_sin_escritor_no_cuelga_la_lectura(tmp_path):
+    """UM6-TE-1: con una tubería con nombre, `os.path.getsize` daba 0 y `open` se quedaba esperando un escritor, para siempre, en el hilo de la pantalla. Si se cuelga, la prueba la destapa
+    (abre el otro extremo) para no colgar la suite, y falla."""
+    import threading
+    tuberia = str(tmp_path / "plan.json")
+    os.mkfifo(tuberia)
+    salida = []
+
+    def leer():
+        try:
+            salida.append(pj.leer_archivo(tuberia))
+        except pj.PlanInvalido as fallo:
+            salida.append(fallo)
+    hilo = threading.Thread(target=leer, daemon=True)
+    hilo.start()
+    hilo.join(5)
+    colgada = hilo.is_alive()
+    if colgada:
+        os.close(os.open(tuberia, os.O_WRONLY | os.O_NONBLOCK))
+        hilo.join(5)
+    assert not colgada and isinstance(salida[0], pj.PlanInvalido) and str(salida[0]) == "No se pudo leer el archivo: no es un archivo."
+
+
+@pytest.mark.parametrize("modo, motivo", [(0o040755, "es una carpeta"), (0o010644, "no es un archivo"), (0o020644, "no es un archivo")], ids=["carpeta", "tuberia", "dispositivo"])
+def test_una_carpeta_o_lo_que_no_es_un_archivo_se_dice_antes_de_abrirlo(tmp_path, monkeypatch, modo, motivo):
+    """`os.stat` dice qué es ANTES de abrirlo: una carpeta (en Windows, `open` sobre una carpeta da `PermissionError`: UM6-P6), una tubería o un dispositivo (que bloquearían `open`)."""
+    ruta = _escribir(tmp_path, pj.EJEMPLO_DE_PLAN.encode("utf-8"))
+    real, stat_real = os.stat(ruta), os.stat
+    falso = os.stat_result((modo,) + tuple(real)[1:10])
+    monkeypatch.setattr(os, "stat", lambda r, *a, **k: falso if r == ruta else stat_real(r, *a, **k))
+    with pytest.raises(pj.PlanInvalido) as fallo:
+        pj.leer_archivo(ruta)
+    assert str(fallo.value) == f"No se pudo leer el archivo: {motivo}."
+
+
+@pytest.mark.parametrize("ruta", [None, 1.5, [], 0, 1, True], ids=["None", "un decimal", "una lista", "cero (la entrada estandar)", "uno (la salida estandar)", "True"])
+def test_lo_que_no_es_una_ruta_no_se_lee_y_nunca_se_usa_como_descriptor(ruta, monkeypatch):
+    """UM6-TE-2: `leer_archivo(None)` daba `TypeError`, y con un entero o `True` lo tomaba como descriptor: `leer_archivo(0)` leía y CERRABA la entrada estándar. Aquí `os.stat` y `open`
+    se niegan a recibir un entero (si el lector lo usara como descriptor, esta prueba cae sin tocar ninguno)."""
+    stat_real, open_real = os.stat, open
+
+    def sin_descriptores(original):
+        def envuelta(r, *a, **k):
+            assert not isinstance(r, int), "se usó como descriptor de archivo"
+            return original(r, *a, **k)
+        return envuelta
+    monkeypatch.setattr(os, "stat", sin_descriptores(stat_real))
+    monkeypatch.setattr("builtins.open", sin_descriptores(open_real))
+    with pytest.raises(pj.PlanInvalido) as fallo:
+        pj.leer_archivo(ruta)
+    assert str(fallo.value) == "No se pudo leer el archivo: la ruta no es válida." and fallo.value.__context__ is None
+
+
+def test_una_ruta_en_bytes_o_como_path_se_lee(tmp_path):
+    ruta = _escribir(tmp_path, pj.EJEMPLO_DE_PLAN.encode("utf-8"))
+    assert pj.leer_archivo(os.fsencode(ruta)) == pj.leer_archivo(pathlib.Path(ruta)) == pj.EJEMPLO_DE_PLAN
+
+
+def test_otro_valueerror_del_sistema_tambien_es_una_ruta_que_no_vale(tmp_path, monkeypatch):
+    """El hueco K07: «la ruta no es válida» no depende de que el mensaje del sistema hable de un nulo."""
+    def falla(r, *a, **k):
+        raise ValueError("path too long for Windows")
+    monkeypatch.setattr(os, "stat", falla)
+    with pytest.raises(pj.PlanInvalido, match="^No se pudo leer el archivo: la ruta no es válida\\.$"):
+        pj.leer_archivo(str(tmp_path / "plan.json"))
+
+
+@pytest.mark.parametrize("angulo, motivo", [(15.0000001, "mayor que 0, y es 15.0000001 [°]"), (359.9999999, "mayor que 0, y es 359.9999999 [°]"), (15.5, "mayor que 0, y es 15.5 [°]"),
+                                            (1e16, "menor que 360, y es 1e+16 [°]")])
+def test_el_angulo_de_la_cuna_se_cita_como_se_escribio_y_con_su_unidad(angulo, motivo):
+    """UM6-TE-4 y TXT-3: con `:g` (6 cifras), 15.0000001 se citaba «15» y 359.9999999 «360»; y el valor iba sin su unidad."""
+    assert motivo_de(cuna_grados=angulo, **FISICA) == "El ángulo de la cuña debe ser un número entero de grados, " + motivo
+
+
+class _ErrorPropio(Exception):
+    """Una excepción que no es de ninguna clase del sistema: solo un `except Exception` (o más ancho) la atrapa."""
+
+
+@pytest.mark.parametrize("clase", [RuntimeError, ValueError, TypeError, AttributeError, KeyError, _ErrorPropio], ids=lambda c: c.__name__)
+@pytest.mark.parametrize("donde", ["las tablas", "el motor"])
+def test_un_error_que_ni_siquiera_se_deja_escribir_no_tumba_a_los_demas(datos, monkeypatch, donde, clase):
+    """UM6-TE-5: `_inesperado` hacía `str(fallo)` fuera de todo `try`: un error con un `__str__` que falla tumbaba todo el plan. Sea cual sea la clase del error que ese `__str__` lanza, y venga de quien trae
+    las tablas o del motor (los dos sitios que lo describen)."""
+    class Ilegible(Exception):
+        def __str__(self):
+            raise clase("tampoco")
+    _, campos = pj.leer_plan(plan(B, {**B, "equipo": "iX"}, B))
+    calcular = motor.calcular
+
+    def datos_de(equipo, energia):
+        if equipo != "Clinac iX":
+            return datos
+        if donde == "las tablas":
+            raise Ilegible()
+        return types.SimpleNamespace(equipo=equipo, energia=energia)      # dice ser del haz pedido: lo que falla es el cálculo de su campo
+
+    def calcula(datos_del_haz, entrada, *resto):
+        if entrada is campos[1].entrada:
+            raise Ilegible()
+        return calcular(datos_del_haz, entrada, *resto)
+    monkeypatch.setattr(motor, "calcular", calcula)
+    salida = pj.calcular_plan(campos, datos_de)
+    assert [r is not None for _, r, _ in salida] == [True, False, True]
+    assert salida[1][2] == "El cálculo falló por un error inesperado que tampoco se pudo describir. Avise a quien mantiene la app."
+
+
+def test_las_claves_con_tilde_o_enie_dicen_que_es_el_codigo_una_sola_vez():
+    """UM6-TXT-2: «energ<U+00ED>a» no explicaba qué es el código ni que las claves van sin tildes ni eñes."""
+    assert pj.QUE_ES_UN_CODIGO == QUE_ES_UN_CODIGO
+    assert motivo_de(**{"energía": "6X", "técnica": "3D"}) == "Trae claves que este lector no conoce: «energ<U+00ED>a», «t<U+00E9>cnica»" + QUE_ES_UN_CODIGO
+    assert motivo_de(**{"cuña_grados": 15, "zz": 1}) == "Trae claves que este lector no conoce: «cu<U+00F1>a_grados», «zz»" + QUE_ES_UN_CODIGO
+    assert motivo_de(zz=1) == "Trae claves que este lector no conoce: «zz»"
+
+
+def test_tres_o_cuatro_nombres_para_lo_mismo_se_cuentan_bien():
+    """UM6-TXT-3: «Trae dos nombres para lo mismo» listaba tres."""
+    assert motivo_de(nombre="a", campo="b", field_name="c") == "Trae tres nombres para lo mismo: «campo», «field_name», «nombre»"
+    assert motivo_de(nombre="a", campo="b", field_name="c", beam_name="d") == "Trae cuatro nombres para lo mismo: «beam_name», «campo», «field_name», «nombre»"
+
+
+def test_algo_que_no_son_datos_de_un_haz_tampoco_pasa_la_guarda(datos):
+    """El hueco K18: la guarda mira los atributos con `getattr`; con `datos.equipo` directo, un objeto sin ellos tumbaba `calcular_plan` entero."""
+    _, campos = pj.leer_plan(plan(B, {**B, "equipo": "iX"}, B))
+    salida = pj.calcular_plan(campos, lambda e, f: object() if e == "Clinac iX" else datos)
+    assert [m for _, _, m in salida] == [None, "Las tablas que se trajeron no son las del Clinac iX, 6 MV: este campo no se calcula. Avise a quien mantiene la app.", None]
