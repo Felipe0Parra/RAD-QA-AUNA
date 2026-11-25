@@ -2946,7 +2946,7 @@ def mostrar_indc_angulares(parent, id_ref):
     conn = Conexion().conectar()
     cursor = conn.cursor()
 
-    def cargar_datos(tabla):
+    def cargar_datos(tabla, niveles=(0, 90, 180, 270)):
         cursor.execute(f"""
             SELECT nivel, indicador_luminoso_consola, indicador_luminoso_equipo
             FROM {tabla}
@@ -2962,20 +2962,20 @@ def mostrar_indc_angulares(parent, id_ref):
                 continue
             datos_limpios[nivel_int] = (cons, equi)
 
-        return [datos_limpios.get(n, ("", "")) for n in [0, 90, 180, 270]]
+        return [datos_limpios.get(n, ("", "")) for n in niveles]
 
 
     datos_brazo = cargar_datos("indicadores_brazo")
-    datos_colimador = cargar_datos("indicadores_angulares_colimador")
+    datos_colimador = cargar_datos("indicadores_angulares_colimador", (0, 90, 270))
     conn.close()
 
     table = QTableWidget()
     table.setColumnCount(4)
-    table.setRowCount(8)
+    table.setRowCount(7)
     table.setHorizontalHeaderLabels(["", "Nivel", "Ind. Luminoso Cons.", "Ind. Luminoso Equi."])
 
     niveles = ["0", "90", "180", "270"]
-    niveles_colimador = ["0","90", "180" ,"270"]
+    niveles_colimador = ["0", "90", "270"]
 
     # Brazo
     table.setSpan(0, 0, 4, 1)
@@ -2987,7 +2987,7 @@ def mostrar_indc_angulares(parent, id_ref):
         table.setItem(i, 3, QTableWidgetItem(str(datos_brazo[i][1])))
 
     # Colimador
-    table.setSpan(4, 0, 4, 1)
+    table.setSpan(4, 0, 3, 1)
     table.setItem(4, 0, QTableWidgetItem("Colimador"))
     for i, nivel in enumerate(niveles_colimador):
         row = 4 + i
@@ -3510,11 +3510,11 @@ def mostrar_indc_brazo_HC(parent, id_ref):
     conn = Conexion().conectar()
     cursor = conn.cursor()
 
-    def cargar_datos(tabla):
+    def cargar_datos(tabla, niveles=(0, 90, 180, 270)):
         cursor.execute(f"""
             SELECT nivel, valor_medido, discrepancia
             FROM {tabla}
-            WHERE ref=?{filtro_activo(tabla)}
+            WHERE ref=? AND id_energia = 0{filtro_activo(tabla)}
         """, (id_ref,))
         datos = cursor.fetchall()
 
@@ -3526,18 +3526,18 @@ def mostrar_indc_brazo_HC(parent, id_ref):
                 continue
             datos_limpios[nivel_int] = (cons, equi)
 
-        return [datos_limpios.get(n, ("", "")) for n in [0, 90, 180, 270]]
+        return [datos_limpios.get(n, ("", "")) for n in niveles]
 
     datos_brazo = cargar_datos("HC_indicadores_brazo")
-    datos_colimador = cargar_datos("HC_indicadores_colimador")
+    datos_colimador = cargar_datos("HC_indicadores_colimador", (0, 90, 270))
     conn.close()
 
     table = QTableWidget()
     table.setColumnCount(4)
-    table.setRowCount(8)
+    table.setRowCount(7)
     table.setHorizontalHeaderLabels(["", "Nivel", "Medido", "Diferencia"])
 
-    niveles = ["0", "90", "180", "270"]
+    niveles, niveles_colimador = ["0", "90", "180", "270"], ["0", "90", "270"]
 
     # Brazo
     table.setSpan(0, 0, 4, 1)
@@ -3548,9 +3548,9 @@ def mostrar_indc_brazo_HC(parent, id_ref):
         table.setItem(i, 3, QTableWidgetItem(str(datos_brazo[i][1])))
 
     # Colimador
-    table.setSpan(4, 0, 4, 1)
+    table.setSpan(4, 0, 3, 1)
     table.setItem(4, 0, QTableWidgetItem("Colimador"))
-    for i, nivel in enumerate(niveles):
+    for i, nivel in enumerate(niveles_colimador):
         row = 4 + i
         table.setItem(row, 1, QTableWidgetItem(nivel))
         table.setItem(row, 2, QTableWidgetItem(str(datos_colimador[i][0])))

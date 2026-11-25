@@ -51,16 +51,17 @@ class TestColimadorFila180Seiscientos:
         obj.subtool = QToolBox()
         return obj
 
-    def test_colimador_tiene_4_filas_incluyendo_180(self, app):
+    def test_colimador_tiene_3_filas_sin_180(self, app):
+        # Clase b: pedido del físico del 24-11 y formato oficial (0°, 90° y 270°); antes fijaba la fila de 180° de H1.2.
         obj = self._construir()
 
         obj._crear_tablas_indicadores()
 
         assert obj.subtool.count() == 2
         tabla_colimador = obj.subtool.widget(1).findChild(QTableWidget)
-        assert tabla_colimador.rowCount() == 4
-        etiquetas = [tabla_colimador.item(f, 0).text() for f in range(4)]
-        assert etiquetas == ["0°", "90°", "180°", "270°"]
+        assert tabla_colimador.rowCount() == 3
+        etiquetas = [tabla_colimador.item(f, 0).text() for f in range(3)]
+        assert etiquetas == ["0°", "90°", "270°"]
 
     def test_brazo_sigue_con_4_filas_sin_cambios(self, app):
         obj = self._construir()
@@ -84,16 +85,17 @@ class TestColimadorFila180Halcyon:
         obj.subtool = QToolBox()
         return obj
 
-    def test_colimador_halcyon_tiene_4_filas_incluyendo_180(self, app):
+    def test_colimador_halcyon_tiene_3_filas_sin_180(self, app):
+        # Clase b: pedido del físico del 24-11 y formato oficial (0, 90 y 270); antes fijaba la fila de 180 de H1.2.
         obj = self._construir()
 
         resultado = obj._crear_tablas_aspectos_mecanicos()
 
         assert resultado is not None, "la construcción de tablas falló (ver stdout)"
         _, tabla_ic, _, _, _ = resultado
-        assert tabla_ic.rowCount() == 4
-        etiquetas = [tabla_ic.item(f, 0).text() for f in range(4)]
-        assert etiquetas == ["0", "90", "180", "270"]
+        assert tabla_ic.rowCount() == 3
+        etiquetas = [tabla_ic.item(f, 0).text() for f in range(3)]
+        assert etiquetas == ["0", "90", "270"]
 
 
 class TestTamanoCampoNaceVacio:

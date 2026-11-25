@@ -71,6 +71,7 @@ hidden_imports = [
     "ui.paginasGuia.calculadora_um_cargar",
     # UM.6b: la subpestana "Desde JSON" de la calculadora.
     "ui.paginasGuia.calculadora_um_json",
+    "ui.paginasControles.PruebasMensuales.filas_por_nivel",  # el colimador del mensual, por angulo
 
     # MODELOS
     "models.PDF.reportes",

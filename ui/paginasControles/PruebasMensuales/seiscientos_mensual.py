@@ -56,7 +56,7 @@ import numpy as np
 # services/db_pool.py. Se re-exporta el nombre para no cambiar ningún
 # call-site ni ningún import existente (~11 en este archivo, más tests).
 from services.db_pool import DatabaseManager
-
+from ui.paginasControles.PruebasMensuales.filas_por_nivel import filas_por_nivel
 # Clase principal para el control mensual del Clinac 600
 class PruebaMensual600(PruebaBasico):
     # Constantes de configuración
@@ -957,11 +957,11 @@ class PruebaMensual600(PruebaBasico):
             widget1, _ = self.createSimpleTable1(4, 3, headers, datos_brazo, "indicadores_brazo", self.ref)
             self.subtool.addItem(widget1, "Indicadores angulares del brazo")
 
-            # Indicadores angulares del colimador (H1.2, auditoría 2026-07-14:
-            # faltaba la fila 180° -- el brazo sí la tiene; el colimador
-            # también gira las 4 posiciones en el control real).
-            datos_colimador = [["0°", "", ""], ["90°", "", ""], ["180°", "", ""], ["270°", "", ""]]
-            widget2, _ = self.createSimpleTable1(4, 3, headers, datos_colimador, "indicadores_angulares_colimador", self.ref)
+            # Indicadores angulares del colimador: 0°, 90° y 270°, como el formato oficial
+            niveles_colimador = ["0°", "90°", "270°"]
+            datos_colimador = [[nivel, "", ""] for nivel in niveles_colimador]
+            widget2, _ = self.createSimpleTable1(len(niveles_colimador), 3, headers, datos_colimador,
+                                                 "indicadores_angulares_colimador", self.ref, niveles=niveles_colimador)
             self.subtool.addItem(widget2, "Indicadores angulares del colimador")
 
         except Exception as e:
@@ -2414,7 +2414,7 @@ class PruebaMensual600(PruebaBasico):
             QMessageBox.critical(self, "Error", "Error inesperado al subir datos.")
 
     def createSimpleTable1(self, rows, cols, headers, datos, nombre_tabla, ref, botones=True, pdd=None,
-                            id_energia=None, id=False):
+                            id_energia=None, id=False, niveles=None):
         """Crea tabla simple optimizada con lazy loading y mejor manejo de datos"""
         #print(f"\nCreando tabla optimizada: {nombre_tabla}")
 
@@ -2440,7 +2440,7 @@ class PruebaMensual600(PruebaBasico):
 
             if datos_tabla['source'] == 'database':
                 readonly_mode = False
-                self._llenar_tabla_bd(table, datos_tabla['data'], nombre_tabla)
+                self._llenar_tabla_bd(table, datos_tabla['data'], nombre_tabla, niveles=niveles)
                 #table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             else:
                 # B0 (PLAN_CORRECCIONES_REBUILD_25-08.md §Fase B, R3/R4):
@@ -2505,7 +2505,7 @@ class PruebaMensual600(PruebaBasico):
             print(f"Error cargando datos para {nombre_tabla}: {e}")
             return {'source': 'default', 'data': datos_default}
 
-    def _llenar_tabla_bd(self, table, datos_bd, nombre_tabla=None):
+    def _llenar_tabla_bd(self, table, datos_bd, nombre_tabla=None, niveles=None):
         """Llena tabla con datos de BD optimizadamente.
 
         A1 (PLAN_REPARACION_MENSUAL_Y_HALCYON_11-08.md §A1): en la ruta
@@ -2530,11 +2530,11 @@ class PruebaMensual600(PruebaBasico):
                 prefijo = len(identificadoras) if identificadoras else 3
             else:
                 prefijo = 1
-            for fila, fila_datos in enumerate(datos_bd):
+            # Omitir las columnas identificadoras si la fila las trae; con niveles, una fila por nivel
+            recortadas = [f[prefijo:] if len(f) > table.columnCount() else f for f in datos_bd]
+            for fila, datos_fila in enumerate(recortadas if niveles is None else filas_por_nivel(recortadas, niveles, table.columnCount())):
                 if fila >= table.rowCount():
                     break
-                # Omitir las columnas identificadoras si la fila las trae
-                datos_fila = fila_datos[prefijo:] if len(fila_datos) > table.columnCount() else fila_datos
 
                 for columna, dato in enumerate(datos_fila[:table.columnCount()]):
                     item = QTableWidgetItem(str(dato))

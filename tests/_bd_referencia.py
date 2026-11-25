@@ -57,3 +57,6 @@ BD_REBUILD_08_10 = CARPETA_BD / "BaseDatosQA(Rebuild_08-10-2026).db"
 # «Imagen del campo» del mensual del 600 y del iX: sus 19 mensuales y los 10 con imagen vieja son los casos reales. SIEMPRE se copia (los tres archivos) a un temporal antes de abrirla; abrirla con
 # `Conexion()` la cambia (md5), y abrirla con `sqlite3` absorbe el WAL y lo borra.
 BD_PRODUCCION_06_10 = CARPETA_BD / "BaseDatosQA(Produccion_2026-10-06).db"
+
+# Copia de la PRODUCCION REAL al 23-11-2026 (md5 del .db 488a6b2657445c790f3d2124566a2022): TRES archivos que van juntos (`.db`, `-wal` y `-shm`); SIEMPRE se copian los tres a un temporal antes de abrirla.
+BD_REBUILD_23_11 = CARPETA_BD / "BaseDatosQA(Rebuild_23-11-2026).db"
