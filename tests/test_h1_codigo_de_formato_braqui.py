@@ -52,12 +52,13 @@ CODIGOS_POR_HOJA = {
     "encabezado_mensualBraqui": ("IDC-F-RT-143", "V.03"),
     "encabezado_ActividadBraqui": ("IDC-F-RT-143", "V.03"),
     "encabezado_LinealidadBraqui": ("IDC-F-RT-144", "V.03"),
-    "encabezado_mensu_600": ("IDC-F-RT-119", "V.03"),
-    "encabezado_mensu_IX": ("IDC-F-RT-119", "V.03"),
-    "encabezado_mensu_Halcyon": ("IDC-F-RT-119", "V.03"),
-    "encabezado_anual_600": ("IDC-F-RT-119", "V.03"),
-    "encabezado_anual_ix": ("IDC-F-RT-119", "V.03"),
-    "encabezado_anual_Halcyon": ("IDC-F-RT-119", "V.03"),
+    # Mensual y anual de los aceleradores: pedido del físico del 24-11 (el anual tenía el código del mensual).
+    "encabezado_mensu_600": ("CLA-F-RT-119", "V.03"),
+    "encabezado_mensu_IX": ("CLA-F-RT-119", "V.03"),
+    "encabezado_mensu_Halcyon": ("CLA-F-RT-119", "V.03"),
+    "encabezado_anual_600": ("CLA-F-RT-120", "V.02"),
+    "encabezado_anual_ix": ("CLA-F-RT-120", "V.02"),
+    "encabezado_anual_Halcyon": ("CLA-F-RT-120", "V.02"),
 }
 
 
