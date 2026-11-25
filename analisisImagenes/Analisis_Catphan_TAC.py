@@ -877,7 +877,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
             # Convertir figura a formato BLOB para devolver
             import io
             buf = io.BytesIO()
-            canvas.figure.savefig(buf, format='png')
+            buf.write(_png_de_tamano_fijo(canvas.figure, ajustar=True))
             buf.seek(0)
             output_blob = buf.getvalue()  # Imagen en formato BLOB
             buf.close()
@@ -1251,7 +1251,7 @@ def linealidad_ct(datos, hu_promedio, visualizar=True, canvas=None):
             # Convertir figura a formato BLOB para devolver
             import io
             buf = io.BytesIO()
-            canvas.figure.savefig(buf, format='png')
+            buf.write(_png_de_tamano_fijo(canvas.figure))
             buf.seek(0)
             output_blob = buf.getvalue()  # Imagen en formato BLOB
             buf.close()
@@ -1423,7 +1423,7 @@ def uniformidad(corte_255, corte_hu, tam_px, visualizar:bool=True, canvas=None, 
             # Convertir output a formato BLOB para devolver
             import io
             buf = io.BytesIO()
-            canvas.figure.savefig(buf, format='png')
+            buf.write(_png_de_tamano_fijo(canvas.figure))
             buf.seek(0)
             output_blob = buf.getvalue()  # Imagen en formato BLOB
             buf.close()
@@ -1447,6 +1447,27 @@ def uniformidad(corte_255, corte_hu, tam_px, visualizar:bool=True, canvas=None, 
         resultados["imagen_analisis"] = output_blob if visualizar else None
 
     return resultados
+
+_TAMANO_ARCHIVADO_PX = (1343, 827)
+_PPP_ARCHIVADO = 100
+
+
+def _png_de_tamano_fijo(figura, ajustar=False):
+    """PNG de una copia de `figura` a _TAMANO_ARCHIVADO_PX [px]: lo archivado no depende de la ventana ni del divisor, y la pestaña no se toca."""
+    import io
+    import pickle
+    import matplotlib
+    copia = pickle.loads(pickle.dumps(figura))
+    copia.dpi_scale_trans.clear().scale(copia.dpi)   # el pickle devuelve el dpi sin escala de pantalla, pero no su transformacion
+    ancho, alto = _TAMANO_ARCHIVADO_PX
+    copia.set_size_inches(ancho / _PPP_ARCHIVADO, alto / _PPP_ARCHIVADO)
+    copia.subplots_adjust(**{k: matplotlib.rcParams[f"figure.subplot.{k}"] for k in ("left", "right", "bottom", "top", "wspace", "hspace")})
+    if ajustar:
+        copia.tight_layout()
+    buf = io.BytesIO()
+    copia.savefig(buf, format='png', dpi=_PPP_ARCHIVADO)
+    return buf.getvalue()
+
 
 if __name__ == "__main__":
     from analisisImagenes.catphan.criterios import PARAMETROS_HEREDADOS

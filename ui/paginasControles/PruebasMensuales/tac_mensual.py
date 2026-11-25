@@ -1,7 +1,7 @@
 
 from PyQt5.QtWidgets    import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QPushButton, 
-                                QToolBox, QSplitter, QLineEdit, QComboBox, QSizePolicy, QHeaderView, QMessageBox, QDialog)
-from PyQt5.QtCore import Qt, QDate, QTime, QTimer
+                                QToolBox, QSplitter, QLineEdit, QComboBox, QSizePolicy, QHeaderView, QMessageBox, QDialog, QScrollArea, QFrame)
+from PyQt5.QtCore import Qt, QDate, QTime, QTimer, QObject, QEvent
 from PyQt5.QtGui import QColor, QFont, QPixmap
 from ui.paginasControles.PruebasMensuales.seiscientos_mensual import PruebaMensual600
 from ui.util_fechas import fecha_control_a_qdate as _fecha_control_a_qdate
@@ -1987,12 +1987,20 @@ class PruebaMensualTAC(PruebaMensual600):
         NavigationToolbar = mpl['NavigationToolbar']
         
         canvas_resultados = FigureCanvas(Figure(figsize=(8, 5)))
-        canvas_resultados.setMinimumHeight(400)
+        canvas_resultados.setMinimumHeight(150)
         canvas_resultados.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        new_tab_layout.addWidget(canvas_resultados, stretch=2)
+
+        # Divisor vertical: arriba el grafico con su barra, en medio los resultados y abajo el criterio con su propia barra
+        divisor = QSplitter(Qt.Vertical)
+        divisor.setChildrenCollapsible(False)
+        divisor.setHandleWidth(max(new_tab_layout.spacing(), 1))
+        parte_grafico = QWidget()
+        capa_grafico = QVBoxLayout(parte_grafico)
+        capa_grafico.setContentsMargins(0, 0, 0, 0)
+        capa_grafico.addWidget(canvas_resultados, stretch=2)
 
         toolbar_tac = NavigationToolbar(canvas_resultados, self)
-        new_tab_layout.addWidget(toolbar_tac)
+        capa_grafico.addWidget(toolbar_tac)
 
         # Ranura de resultados: un contenedor que pertenece al layout de la pestaña y no se reemplaza nunca; lo que
         # cambia es su contenido (el texto o la tabla de cada resultado), y eso lo hace `_escribir_resultado`.
@@ -2003,7 +2011,6 @@ class PruebaMensualTAC(PruebaMensual600):
         resultados_texto = QLabel()
         resultados_texto.setWordWrap(True)
         ranura.addWidget(resultados_texto)
-        new_tab_layout.addWidget(contenedor_resultados, stretch=0)
 
         # G.3: criterio y veredicto del equipo, debajo de los resultados. Es un widget propio: sobrevive cuando
         # `_escribir_resultado` cambia lo que hay en la ranura de resultados (texto o tabla).
@@ -2011,7 +2018,19 @@ class PruebaMensualTAC(PruebaMensual600):
         criterio_texto.setObjectName("criterio_texto")
         criterio_texto.setWordWrap(True)
         criterio_texto.setTextFormat(Qt.RichText)
-        new_tab_layout.addWidget(criterio_texto, stretch=0)
+        criterio_texto.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        # El criterio en su propia area con barra: se encoge hasta una linea sin tapar la tabla
+        area_criterio = QScrollArea()
+        area_criterio.setFrameShape(QFrame.NoFrame)
+        area_criterio.setWidgetResizable(True)
+        area_criterio.setWidget(criterio_texto)
+        area_criterio.setMinimumHeight(criterio_texto.sizeHint().height())
+        for i, parte in enumerate((parte_grafico, contenedor_resultados, area_criterio)):
+            divisor.addWidget(parte)
+            divisor.setCollapsible(i, False)
+            divisor.setStretchFactor(i, 1 if i == 0 else 0)
+        _RepartoDeLaPestana(divisor, canvas_resultados, criterio_texto)
+        new_tab_layout.addWidget(divisor)
 
         # Los widgets de la pestaña viajan con ella: `dynamic_tabs[text]` los guarda completos y se van con su entrada
         # cuando la pestaña se cierra (`closeTab`) o se destruye (`limpiar_recursos`). No queda ningún puntero suelto.
@@ -2755,3 +2774,36 @@ class PruebaMensualTAC(PruebaMensual600):
         
         
         
+
+
+class _RepartoDeLaPestana(QObject):
+    """Mientras nadie mueva el divisor: resultados y criterio a su alto natural y el grafico al menos ALTO_DEL_GRAFICO [px], como antes; si no cabe, los resultados antes que el criterio."""
+    ALTO_DEL_GRAFICO = 400
+
+    def __init__(self, divisor, lienzo, criterio):
+        super().__init__(divisor)
+        self._divisor, self._lienzo, self._criterio, self._movido = divisor, lienzo, criterio, False
+        divisor.splitterMoved.connect(self._al_mover)
+        divisor.installEventFilter(self)
+        criterio.parentWidget().installEventFilter(self)
+
+    def _al_mover(self, *_):
+        self._movido = True
+
+    def eventFilter(self, objeto, evento):
+        if not self._movido and evento.type() in (QEvent.LayoutRequest, QEvent.Resize, QEvent.Show):
+            if objeto is self._divisor:
+                self._repartir(evento.size().height() if evento.type() == QEvent.Resize else objeto.height())
+            elif evento.type() == QEvent.LayoutRequest:
+                self._repartir(self._divisor.height())
+        return False
+
+    def _repartir(self, alto):
+        arriba, medio, abajo = (self._divisor.widget(i) for i in range(3))
+        ancho = self._divisor.width()
+        util = alto - 2 * self._divisor.handleWidth()
+        arriba_al_abrir = arriba.minimumSizeHint().height() - self._lienzo.minimumHeight() + self.ALTO_DEL_GRAFICO
+        resultados = medio.heightForWidth(ancho) if medio.hasHeightForWidth() else medio.sizeHint().height()
+        alto_medio = max(min(resultados, util - arriba_al_abrir - abajo.minimumHeight()), medio.minimumSizeHint().height())
+        alto_abajo = max(min(self._criterio.heightForWidth(ancho), util - arriba_al_abrir - alto_medio), abajo.minimumHeight())
+        self._divisor.setSizes([max(util - alto_medio - alto_abajo, 1), alto_medio, alto_abajo])

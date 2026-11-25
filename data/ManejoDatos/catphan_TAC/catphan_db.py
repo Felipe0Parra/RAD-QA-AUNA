@@ -2088,7 +2088,7 @@ def tabla_resultados_resolucion_contraste(resultados):
         
         # Ajustar altura
         tabla_contraste.resizeRowsToContents()
-        tabla_contraste.setMaximumHeight(250)
+        # Sin tope de altura: la reparte el divisor de la pestaña
         
         # Crear widget contenedor con información adicional
         contenedor = QWidget()
@@ -2290,7 +2290,7 @@ def tabla_resultados_resolucion_espacial(resultados):
 
     # Ajustar altura de filas al contenido
     tabla_ct.resizeRowsToContents()
-    tabla_ct.setMaximumHeight(300)
+    # Sin tope de altura: la reparte el divisor de la pestaña
     return tabla_ct
 
 def tabla_resultados_ct(resultado_completo):
@@ -2381,7 +2381,7 @@ def tabla_resultados_ct(resultado_completo):
 
     # Ajustar altura de filas al contenido
     tabla_ct.resizeRowsToContents()
-    tabla_ct.setMaximumHeight(300)
+    # Sin tope de altura: la reparte el divisor de la pestaña
     
     return tabla_ct
 
@@ -2537,7 +2537,7 @@ def tabla_resultados_uniformidad(uniformidad):
 
         tabla_un.setItem(fila_actual, 0, item_extra)
         
-    tabla_un.setMaximumHeight(300)  # Limitar altura máxima
+    # Sin tope de altura: la reparte el divisor de la pestaña
     return tabla_un
 
 def reemplazar_resultados_texto_con_tabla(contenido, label):
