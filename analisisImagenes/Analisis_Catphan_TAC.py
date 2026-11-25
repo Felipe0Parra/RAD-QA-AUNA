@@ -196,7 +196,7 @@ def espesor_corte(corte_255, corte_hu, tam_px: float, visualizar: bool = True,
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(filas, columnas, figsize=(9, 6))
             axs = axs.flatten()
-        axs[0].imshow(output)
+        axs[0].imshow(_imagen_para_pantalla(output))
         titulo = "ROIs de Espesor de Corte"
         if n_cortes > 1:
             titulo += f" ({n_cortes} cortes)"
@@ -314,7 +314,7 @@ def tamano_pixel(corte_255, corte_hu, tam_px: float, visualizar: bool, canvas = 
             # Usar la figura del canvas existente
             canvas.figure.clear()
             ax = canvas.figure.add_subplot(111)
-            ax.imshow(output)
+            ax.imshow(_imagen_para_pantalla(output))
             ax.set_title("Detección de círculos para tamaño de píxel")
             ax.axis('off')
             canvas.draw()
@@ -322,7 +322,7 @@ def tamano_pixel(corte_255, corte_hu, tam_px: float, visualizar: bool, canvas = 
             # Crear nueva figura solo si no hay canvas
             import matplotlib.pyplot as plt
             fig, ax = plt.subplots(figsize=(6, 6))
-            ax.imshow(output)
+            ax.imshow(_imagen_para_pantalla(output))
             ax.set_title("Detección de círculos para tamaño de píxel")
             ax.axis('off')
             plt.show()
@@ -553,7 +553,7 @@ def resolucion_contraste(corte_255, corte_hu, tam_px: float,
 
             estado       = {"original": False}
             original_rgb = corte_255
-            anotado_rgb  = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
+            anotado_rgb  = _imagen_para_pantalla(output)
 
             img_obj = ax.imshow(anotado_rgb)
             ax.set_title(titulo_base, fontsize=9)
@@ -581,7 +581,7 @@ def resolucion_contraste(corte_255, corte_hu, tam_px: float,
         else:
             import matplotlib.pyplot as plt
             fig, ax = plt.subplots(figsize=(10, 8))
-            ax.imshow(cv2.cvtColor(output, cv2.COLOR_BGR2RGB))
+            ax.imshow(_imagen_para_pantalla(output))
             ax.set_title(titulo_base)
             ax.axis("off")
             plt.show()
@@ -1109,7 +1109,7 @@ def valor_numero_ct(corte_255, corte_hu,tam_px, catphan=None,visualizar=True, ca
         })
         # Visualización
         if visualizar and output is not None:
-            color = (0, 255, 0) if error_abs and error_abs <= 20 else (0, 0, 255)
+            color = (128, 128, 128) if error_abs is None else (0, 255, 0) if error_abs <= 20 else (0, 0, 255)  # gris sin valor; verde en el rango o a 20 HU o menos
             cv2.circle(output, centro, radio, color, 2)
             cv2.circle(output, centro, area_int, (255, 255, 0), 1)
             cv2.putText(output, material, (centro[0] - 30, centro[1] - radio - 5), 
@@ -1130,7 +1130,7 @@ def valor_numero_ct(corte_255, corte_hu,tam_px, catphan=None,visualizar=True, ca
                 # Usar la figura del canvas existente
                 canvas.figure.clear()
                 ax = canvas.figure.add_subplot(111)
-                ax.imshow(output)
+                ax.imshow(_imagen_para_pantalla(output))
                 ax.set_title("Valores del Número CT")
                 ax.axis('off')
                 canvas.draw()
@@ -1138,7 +1138,7 @@ def valor_numero_ct(corte_255, corte_hu,tam_px, catphan=None,visualizar=True, ca
                 # Crear nueva figura solo si no hay canvas
                 import matplotlib.pyplot as plt
                 fig, ax = plt.subplots(figsize=(6, 6))
-                ax.imshow(output)
+                ax.imshow(_imagen_para_pantalla(output))
                 ax.set_title("Valores del Número CT")
                 ax.axis('off')
                 plt.show()
@@ -1467,6 +1467,12 @@ def _png_de_tamano_fijo(figura, ajustar=False):
     buf = io.BytesIO()
     copia.savefig(buf, format='png', dpi=_PPP_ARCHIVADO)
     return buf.getvalue()
+
+
+def _imagen_para_pantalla(imagen_bgr):
+    """Copia de una imagen de OpenCV (azul, verde, rojo) en el orden de la pantalla (rojo, verde, azul): la pestaña muestra los colores que se guardan."""
+    import cv2
+    return cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2RGB)
 
 
 if __name__ == "__main__":
