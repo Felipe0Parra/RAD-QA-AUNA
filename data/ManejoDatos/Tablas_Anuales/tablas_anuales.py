@@ -8,7 +8,7 @@ from pathlib import Path
 from data.ManejoDatos.load import verificar_editar, guardarEdicion, cancelarEdicion, verificar_eliminar
 from data.ManejoDatos.load import _dialogo_con_identidad
 from services.anulacion import filtro_activo
-
+from services.orden_de_controles import mas_reciente_primero
 # Tablas relacionadas al control para cada equipo
 
 " ------------------------------------- Tablas que hacen conexion a la base de datos ------------------------------------- "
@@ -107,13 +107,13 @@ def mostrar_controles_anuales(parent, tableWidget, equipo_filtrar=None):
     """
 
     if equipo_filtrar:
-        query += " AND c.equipo = ? ORDER BY c.fecha DESC"
+        query += " AND c.equipo = ? ORDER BY c.id DESC"
         cursor.execute(query, (equipo_filtrar,))
     else:
-        query += " ORDER BY c.fecha DESC"
+        query += " ORDER BY c.id DESC"
         cursor.execute(query)
 
-    rows = cursor.fetchall()
+    rows = mas_reciente_primero(cursor.fetchall(), 1)
     conn.close()
 
     # Determinar headers según el equipo

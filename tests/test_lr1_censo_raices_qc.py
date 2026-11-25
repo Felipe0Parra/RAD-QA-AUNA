@@ -169,13 +169,13 @@ CENSO_RAICES = {
         (LISTA, "catálogo de controles anuales, todos los equipos"),
 
     # -- data/ManejoDatos/load.py ---------------------------------------
-    ("data/ManejoDatos/load.py", 243, "braqui"):
+    ("data/ManejoDatos/load.py", 244, "braqui"):  # AJ.3 (24-11): 243->244
         (IDENTIDAD, "abrir_pelicula: WHERE id = ? -- la fila ya elegida en "
                     "la tabla; filtrar la haría desaparecer del visor"),
-    ("data/ManejoDatos/load.py", 337, "controles"):  # FS.1 (06-10): 341->337
+    ("data/ManejoDatos/load.py", 338, "controles"):  # FS.1 (06-10): 341->337; AJ.3 (24-11): 337->338
         (IDENTIDAD, "UPDATE de los físicos sobre el control ya localizado, "
                     "WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 950, "TipoCalibracion"):  # FS.1 (06-10): 1044->1049; G.1 (26-10): 1049->950
+    ("data/ManejoDatos/load.py", 951, "TipoCalibracion"):  # FS.1 (06-10): 1044->1049; G.1 (26-10): 1049->950; AJ.3 (24-11): 950->951
         (LISTA, "guardar_resultado_CambioFuente: busca por (fecha, tipo) -- "
                 "sin filtro, una calibración ANULADA de esa fecha se "
                 "reutilizaría como bloque a superar. EB2b (24-08): ahora "
@@ -185,23 +185,23 @@ CENSO_RAICES = {
                 "reemplazado por `reemplazar_bloque` (services/"
                 "anulacion.py, opaco para este censo -- SQL armado detrás "
                 "de un ast.Call)"),
-    ("data/ManejoDatos/load.py", 1105, "LinealidadBraquiterapia"):  # FS.1 (06-10): 1199->1204; G.1 (26-10): 1204->1105
+    ("data/ManejoDatos/load.py", 1106, "LinealidadBraquiterapia"):  # FS.1 (06-10): 1199->1204; G.1 (26-10): 1204->1105; AJ.3 (24-11): 1105->1106
         (LISTA, "catálogo completo de linealidades de braquiterapia"),
-    ("data/ManejoDatos/load.py", 1219, "TipoCalibracion"):  # FS.1 (06-10): 1313->1318; G.1 (26-10): 1318->1219
+    ("data/ManejoDatos/load.py", 1220, "TipoCalibracion"):  # FS.1 (06-10): 1313->1318; G.1 (26-10): 1318->1219; AJ.3 (24-11): 1219->1220
         (LISTA, "catálogo completo de calibraciones (el sitio que ya "
                 "filtraba bien y que hizo decidible DP-31)"),
-    ("data/ManejoDatos/load.py", 1364, "controles"):  # FS.1 (06-10): 1655->1660; G.1 (26-10): 1660->1364
+    ("data/ManejoDatos/load.py", 1365, "controles"):  # FS.1 (06-10): 1655->1660; G.1 (26-10): 1660->1364; AJ.3 (24-11): 1364->1365
         (LISTA, "mostrar_controles_mensuales, rama con equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1367, "controles"):  # FS.1 (06-10): 1658->1663; G.1 (26-10): 1663->1367
+    ("data/ManejoDatos/load.py", 1368, "controles"):  # FS.1 (06-10): 1658->1663; G.1 (26-10): 1663->1367; AJ.3 (24-11): 1367->1368
         (LISTA, "mostrar_controles_mensuales, rama sin equipo filtrado"),
-    ("data/ManejoDatos/load.py", 1637, "controles"):  # FS.1 (06-10): 1931->1936; G.1 (26-10): 1936->1637
+    ("data/ManejoDatos/load.py", 1638, "controles"):  # FS.1 (06-10): 1931->1936; G.1 (26-10): 1936->1637; AJ.3 (24-11): 1637->1638
         (LISTA, "mostrar_controles_imgIX_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 1671, "controles"):  # FS.1 (06-10): 1965->1970; G.1 (26-10): 1970->1671
+    ("data/ManejoDatos/load.py", 1672, "controles"):  # FS.1 (06-10): 1965->1970; G.1 (26-10): 1970->1671; AJ.3 (24-11): 1671->1672
         (LISTA, "mostrar_controles_imgIX_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 1826, "controles"):  # FS.1 (06-10): 2120->2125; G.1 (26-10): 2125->1826
+    ("data/ManejoDatos/load.py", 1827, "controles"):  # FS.1 (06-10): 2120->2125; G.1 (26-10): 2125->1826; AJ.3 (24-11): 1826->1827
         (LISTA, "mostrar_controles_imgIX: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A9, PLAN_FUGA_CONEXIONES_01-09.md §9): vivía
-    # aquí como ("data/ManejoDatos/load.py", 1849, "controles"), LISTA,; FS.1 (06-10): 2143->2148; G.1 (26-10): 2148->1849
+    # aquí como ("data/ManejoDatos/load.py", 1850, "controles"), LISTA,; FS.1 (06-10): 2143->2148; G.1 (26-10): 2148->1849; AJ.3 (24-11): 1849->1850
     # "mostrar_controles_imgIX: SELECT MAX de parámetros" -- A9 envolvió
     # el cuerpo de mostrar_controles_imgIX en un `with Conexion().
     # conectar() as conn:` y censar_raices() (línea ~358: "if textos is
@@ -210,37 +210,37 @@ CENSO_RAICES = {
     # que A7). El sitio SIGUE ahí y sigue filtrando -- solo el analizador
     # de este archivo perdió visibilidad; ver test_eb5/test_le4 para la
     # entrada equivalente, movida a su lista de OPACOS en vez de borrada.
-    ("data/ManejoDatos/load.py", 2031, "controles"):  # FS.1 (06-10): 2325->2330; G.1 (26-10): 2330->2031
+    ("data/ManejoDatos/load.py", 2032, "controles"):  # FS.1 (06-10): 2325->2330; G.1 (26-10): 2330->2031; AJ.3 (24-11): 2031->2032
         (LISTA, "mostrar_controles_imgHC_anual: COUNT de pruebas por control"),
-    ("data/ManejoDatos/load.py", 2065, "controles"):  # FS.1 (06-10): 2359->2364; G.1 (26-10): 2364->2065
+    ("data/ManejoDatos/load.py", 2066, "controles"):  # FS.1 (06-10): 2359->2364; G.1 (26-10): 2364->2065; AJ.3 (24-11): 2065->2066
         (LISTA, "mostrar_controles_imgHC_anual: SELECT MAX de parámetros"),
-    ("data/ManejoDatos/load.py", 2222, "controles"):  # FS.1 (06-10): 2516->2521; G.1 (26-10): 2521->2222
+    ("data/ManejoDatos/load.py", 2223, "controles"):  # FS.1 (06-10): 2516->2521; G.1 (26-10): 2521->2222; AJ.3 (24-11): 2222->2223
         (LISTA, "mostrar_controles_imgHC: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A10, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
-    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2245,; FS.1 (06-10): 2539->2544; G.1 (26-10): 2544->2245
+    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2246,; FS.1 (06-10): 2539->2544; G.1 (26-10): 2544->2245; AJ.3 (24-11): 2245->2246
     # "controles"), LISTA, "mostrar_controles_imgHC: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 2422, "controles"):  # FS.1 (06-10): 2716->2721; G.1 (26-10): 2721->2422
+    ("data/ManejoDatos/load.py", 2423, "controles"):  # FS.1 (06-10): 2716->2721; G.1 (26-10): 2721->2422; AJ.3 (24-11): 2422->2423
         (LISTA, "mostrar_controles_tac: COUNT de pruebas por control"),
     # RETIRADA el 01-09 (A11, PLAN_FUGA_CONEXIONES_01-09.md §9): mismo
-    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2445,; FS.1 (06-10): 2739->2744; G.1 (26-10): 2744->2445
+    # motivo que A9 (2119) -- ("data/ManejoDatos/load.py", 2446,; FS.1 (06-10): 2739->2744; G.1 (26-10): 2744->2445; AJ.3 (24-11): 2445->2446
     # "controles"), LISTA, "mostrar_controles_tac: SELECT MAX de
     # parámetros". Ver test_eb5/test_le4 para la entrada equivalente.
-    ("data/ManejoDatos/load.py", 3929, "controles"):  # RC.2 (30-09): 4566->4495; FS.1 (06-10): 4495->4500; GI.3 (07-10): 4500->4519; G.1 (26-10): 4519->3929
+    ("data/ManejoDatos/load.py", 3930, "controles"):  # RC.2 (30-09): 4566->4495; FS.1 (06-10): 4495->4500; GI.3 (07-10): 4500->4519; G.1 (26-10): 4519->3929; AJ.3 (24-11): 3929->3930
         (IDENTIDAD, "eliminarRegistroCT: captura la fila ANTES de anularla "
                     "(A2, evidencia de auditoría), WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 3943, "controles"):  # RC.2 (30-09): 4580->4509; FS.1 (06-10): 4509->4514; GI.3 (07-10): 4514->4533; G.1 (26-10): 4533->3943
+    ("data/ManejoDatos/load.py", 3944, "controles"):  # RC.2 (30-09): 4580->4509; FS.1 (06-10): 4509->4514; GI.3 (07-10): 4514->4533; G.1 (26-10): 4533->3943; AJ.3 (24-11): 3943->3944
         (IDENTIDAD, "la anulación misma: UPDATE ... SET activo = 0 WHERE "
                     "id = ? -- el `activo` va en el SET, no es un filtro"),
-    ("data/ManejoDatos/load.py", 4006, "controles"):  # RC.2 (30-09): 4643->4572; FS.1 (06-10): 4572->4577; GI.3 (07-10): 4577->4596; G.1 (26-10): 4596->4006
+    ("data/ManejoDatos/load.py", 4007, "controles"):  # RC.2 (30-09): 4643->4572; FS.1 (06-10): 4572->4577; GI.3 (07-10): 4577->4596; G.1 (26-10): 4596->4006; AJ.3 (24-11): 4006->4007
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (captura la "
                     "fila antes de anularla, WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4016, "controles"):  # RC.2 (30-09): 4653->4582; FS.1 (06-10): 4582->4587; GI.3 (07-10): 4587->4606; G.1 (26-10): 4606->4016
+    ("data/ManejoDatos/load.py", 4017, "controles"):  # RC.2 (30-09): 4653->4582; FS.1 (06-10): 4582->4587; GI.3 (07-10): 4587->4606; G.1 (26-10): 4606->4016; AJ.3 (24-11): 4016->4017
         (IDENTIDAD, "gemelo anual exacto de eliminarRegistroCT (la anulación "
                     "misma, UPDATE ... SET activo = 0 WHERE id = ?)"),
-    ("data/ManejoDatos/load.py", 4235, "TipoCalibracion"):  # RC.2 (30-09): 4866->4801; FS.1 (06-10): 4801->4806; GI.3 (07-10): 4806->4825; G.1 (26-10): 4825->4235
+    ("data/ManejoDatos/load.py", 4236, "TipoCalibracion"):  # RC.2 (30-09): 4866->4801; FS.1 (06-10): 4801->4806; GI.3 (07-10): 4806->4825; G.1 (26-10): 4825->4235; AJ.3 (24-11): 4235->4236
         (IDENTIDAD, "datos de la calibración ya elegida, WHERE id = ?"),
-    ("data/ManejoDatos/load.py", 4338, "TipoCalibracion"):  # RC.2 (30-09), nuevo: 4903->4904; FS.1 (06-10): 4904->4909; GI.3 (07-10): 4909->4928; G.1 (26-10): 4928->4338
+    ("data/ManejoDatos/load.py", 4339, "TipoCalibracion"):  # RC.2 (30-09), nuevo: 4903->4904; FS.1 (06-10): 4904->4909; GI.3 (07-10): 4909->4928; G.1 (26-10): 4928->4338; AJ.3 (24-11): 4338->4339
         (IDENTIDAD, "corregir_calibracion -- UPDATE de UNA celda ya identificada "
                     "por su id físico, WHERE id = ? (mismo criterio que la "
                     "entrada anterior y que el UPDATE genérico de guardarEdicion)"),

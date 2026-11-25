@@ -227,9 +227,9 @@ class TestListaBlancaCensal:
         # aquí exactamente por la misma razón estructural que tablas_
         # anuales.py:61: ES1 no puede clasificarlos, RT1 sí porque ve el SQL
         # ya resuelto en tiempo de ejecución.
-        ("data/ManejoDatos/load.py", 1874),  # FS.1 (06-10): 2168->2173; G.1 (26-10): 2173->1874
-        ("data/ManejoDatos/load.py", 2270),  # FS.1 (06-10): 2564->2569; G.1 (26-10): 2569->2270
-        ("data/ManejoDatos/load.py", 2470),  # FS.1 (06-10): 2764->2769; G.1 (26-10): 2769->2470
+        ("data/ManejoDatos/load.py", 1875),  # FS.1 (06-10): 2168->2173; G.1 (26-10): 2173->1874; AJ.3 (24-11): 1874->1875
+        ("data/ManejoDatos/load.py", 2271),  # FS.1 (06-10): 2564->2569; G.1 (26-10): 2569->2270; AJ.3 (24-11): 2270->2271
+        ("data/ManejoDatos/load.py", 2471),  # FS.1 (06-10): 2764->2769; G.1 (26-10): 2769->2470; AJ.3 (24-11): 2470->2471
     }
 
     def test_toda_excepcion_de_rt1_esta_tambien_en_es1(self):

@@ -15,6 +15,7 @@ from services.audit_minimo import (
     ACCION_GUARDAR, ACCION_REEMPLAZO, ACCION_EDITAR, ACCION_ELIMINAR, ACCION_ANULAR)
 from services.identidad_control import buscar_control_vigente, fisico_1_de_control_nuevo   # FS.1
 from services.fechas_control import mes_anio_de_fecha as _mes_anio_de_fecha
+from services.orden_de_controles import mas_reciente_primero
 from services.ventana_edicion import puede_editarse as _puede_editarse_control
 from services.ventana_edicion import mensaje_bloqueo_edicion as _mensaje_bloqueo_edicion
 from services.anulacion import TABLAS_ANULABLES, anular_fila, filtro_activo, reemplazar_bloque
@@ -1360,13 +1361,13 @@ def mostrar_controles_mensuales(parent, tableWidget, equipo_filtrar=None):
     # listado -- sigue en la BD (soft-delete), solo se oculta de la vista.
     if equipo_filtrar:
         query += (" WHERE cm.equipo = ? AND cm.control = 'Mensual' "
-                  "AND (cm.activo IS NULL OR cm.activo = 1) ORDER BY cm.fecha DESC")
+                  "AND (cm.activo IS NULL OR cm.activo = 1) ORDER BY cm.id DESC")
         cursor.execute(query, (equipo_filtrar,))
     else:
         query += " WHERE (cm.activo IS NULL OR cm.activo = 1)"
         cursor.execute(query)
 
-    rows = cursor.fetchall()
+    rows = mas_reciente_primero(cursor.fetchall(), 1) if equipo_filtrar else cursor.fetchall()
     conn.close()
 
     if equipo_filtrar == "Halcyon":
@@ -1648,7 +1649,7 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
     query = f"""
     SELECT
         c.id as id_sesion,
-        substr(c.fecha, 4, 4) || '-' || substr(c.fecha, 1, 2) as fecha,
+        CASE WHEN substr(c.fecha, 4, 4) || '-' || substr(c.fecha, 1, 2) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]' THEN substr(c.fecha, 4, 4) || '-' || substr(c.fecha, 1, 2) ELSE c.fecha END as fecha,
         u.fullname,
         c.equipo,
         MAX(p.kv) as kv,
@@ -1664,12 +1665,12 @@ def mostrar_controles_imgIX_anual(parent, tableWidget, usuario, equipo_filtrar=N
     AND c.control = 'Anual'
     AND (c.activo IS NULL OR c.activo = 1)
     GROUP BY c.id, c.fecha, c.equipo
-    ORDER BY c.fecha DESC
+    ORDER BY c.id DESC
     """
 
 
     cursor.execute(query)
-    rows = cursor.fetchall()
+    rows = mas_reciente_primero(cursor.fetchall(), 1)
     conn.commit()
     conn.close()
     # ... resto igual
@@ -1868,11 +1869,11 @@ def mostrar_controles_imgIX(parent, tableWidget,usuario,equipo_filtrar=None):
         AND c.control = 'Mensual'
         AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id, c.equipo
-        ORDER BY c.fecha DESC
+        ORDER BY c.id DESC
         """
 
         cursor.execute(query)
-        rows = cursor.fetchall()
+        rows = mas_reciente_primero(cursor.fetchall(), 1)
         conn.commit()
 
     headers = [
@@ -2042,7 +2043,7 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
     query = f"""
     SELECT
         c.id as id_sesion,
-        substr(c.fecha, 4, 4) || '-' || substr(c.fecha, 1, 2) as fecha,
+        CASE WHEN substr(c.fecha, 4, 4) || '-' || substr(c.fecha, 1, 2) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]' THEN substr(c.fecha, 4, 4) || '-' || substr(c.fecha, 1, 2) ELSE c.fecha END as fecha,
         u.fullname,
         c.equipo,
         MAX(p.kv) as kv,
@@ -2058,12 +2059,12 @@ def mostrar_controles_imgHC_anual(parent, tableWidget,usuario,equipo_filtrar=Non
     AND c.control = 'Anual'
     AND (c.activo IS NULL OR c.activo = 1)
     GROUP BY c.id, c.fecha, c.equipo
-    ORDER BY c.fecha DESC
+    ORDER BY c.id DESC
     """
 
 
     cursor.execute(query)
-    rows = cursor.fetchall()
+    rows = mas_reciente_primero(cursor.fetchall(), 1)
     conn.commit()
     conn.close()
     # ... resto igual
@@ -2264,11 +2265,11 @@ def mostrar_controles_imgHC(parent, tableWidget,usuario,equipo_filtrar=None):
         AND c.control = 'Mensual'
         AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id, c.equipo
-        ORDER BY c.fecha DESC
+        ORDER BY c.id DESC
         """
 
         cursor.execute(query)
-        rows = cursor.fetchall()
+        rows = mas_reciente_primero(cursor.fetchall(), 1)
         conn.commit()
 
     headers = [
@@ -2464,11 +2465,11 @@ def mostrar_controles_tac(parent, tableWidget,usuario,equipo_filtrar=None):
         AND c.control = 'Mensual'
         AND (c.activo IS NULL OR c.activo = 1)
         GROUP BY c.id, c.equipo
-        ORDER BY c.fecha DESC
+        ORDER BY c.id DESC
         """
 
         cursor.execute(query)
-        rows = cursor.fetchall()
+        rows = mas_reciente_primero(cursor.fetchall(), 1)
         conn.commit()
 
     headers = [
