@@ -313,8 +313,6 @@ TEXTOS_FIJOS = {"SIN_CUNA": "Sin cuña", "ELIJA_ORIENTACION": "Elija la orientac
                 "ECUACION_TEXTO": "UM = D · 100 / [D'0 · Sc(rc) · Sp(rd0) · PDD_N(d, r, SSD) · WF · TF · OAR · ((SSD0 + d0)/(SSD + d0))²]",
                 "ECUACION_MATHTEXT": (r"$UM = \dfrac{D \cdot 100}{D'_0 \cdot S_c(r_c) \cdot S_p(r_{d_0}) \cdot PDD_N(d, r, SSD) \cdot WF \cdot TF \cdot OAR \cdot "
                                       r"\left(\dfrac{SSD_0 + d_0}{SSD + d_0}\right)^2}$"),
-                "LA_JSON_LLEGA_DESPUES": ("La parte automática, que calcula cada campo de un plan a partir de un JSON con la misma cuenta de la parte manual, llega en una próxima entrega "
-                                          "de la calculadora."),
                 "QUIEN_CARGA": "Las cargan el físico jefe o el administrador con «Cargar tablas», una vez por energía y con los archivos que exporta Eclipse.",     # UM.5 (clase b)
                 "EQUIPOS": ("Clinac 600", "Clinac iX")}
 
@@ -1012,11 +1010,12 @@ def test_el_desglose_se_puede_seleccionar_y_no_editar(p):
     assert all(t.item(i, j).toolTip() == t.item(i, j).text() for i in range(t.rowCount()) for j in range(t.columnCount()))
 
 
-def test_cargar_tablas_responde_a_quien_puede_y_la_parte_json_espera_su_entrega(p):
+def test_cargar_tablas_responde_a_quien_puede_y_la_parte_json_es_su_panel(p):
     import ui.paginasGuia.calculadora_um_cargar as carga      # UM.5 (clase b): el botón ya carga; para la cuenta del físico jefe responde
+    import ui.paginasGuia.calculadora_um_json as desde_json      # UM.6b (clase b): la parte automática llegó; su panel lo fija tests/test_um6b_desde_json.py
     assert p.boton_cargar.text() == "Cargar tablas" and p.boton_cargar.isEnabled() and p.boton_cargar.toolTip() == carga.AYUDA_DE_CARGAR
     assert [p.subpestanas.tabText(i) for i in range(p.subpestanas.count())] == ["Manual", "Desde JSON"]
-    assert p.subpestanas.widget(1).text() == pantalla.LA_JSON_LLEGA_DESPUES and p.subpestanas.currentIndex() == 0
+    assert type(p.subpestanas.widget(1)) is desde_json.PanelDesdeJSON and p.subpestanas.widget(1) is p.panel_json and p.subpestanas.currentIndex() == 0
     assert not re.search(r"UM\.\d|DC\d|DA-\d|DP-\d", " ".join(_todos_los_textos(p))), "sin ids internos en lo que ve el físico"
 
 
@@ -1687,7 +1686,7 @@ def test_s1_toda_etiqueta_que_cambia_esta_en_la_lista_y_se_ajusta_con_la_regla_c
         paso(p)
         fotos.append({e: e.text() for e in etiquetas})
     dinamicas = {e for e in etiquetas if len({foto[e] for foto in fotos}) > 1}
-    assert dinamicas <= set(p.etiquetas_que_cambian) and len(p.etiquetas_que_cambian) == 8
+    assert dinamicas <= set(p.etiquetas_que_cambian) and len(p.etiquetas_que_cambian) == 8 + len(p.panel_json.etiquetas_que_cambian)      # UM.6b (clase b): la lista suma las del panel del JSON
     assert all(e.wordWrap() and e.sizePolicy().horizontalPolicy() == QSizePolicy.Expanding for e in p.etiquetas_que_cambian)
 
 

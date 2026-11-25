@@ -69,6 +69,8 @@ hidden_imports = [
     "ui.paginasGuia.calculadora_um",
     # UM.5: el dialogo de "Cargar tablas" y el historial de la calculadora.
     "ui.paginasGuia.calculadora_um_cargar",
+    # UM.6b: la subpestana "Desde JSON" de la calculadora.
+    "ui.paginasGuia.calculadora_um_json",
 
     # MODELOS
     "models.PDF.reportes",

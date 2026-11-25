@@ -17,13 +17,13 @@ import os
 import re
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-                             QPushButton, QSizePolicy, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QDialog, QFileDialog, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QPushButton,
+                              QSizePolicy, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from services import um_datos_haz, um_motor
 from services import um_lector_eclipse as lector
 from services.permisos import es_fisico_jefe
-from ui.paginasGuia.calculadora_um import EQUIPOS, Campo, leer_numero, que_no_fije_el_ancho, sin_palabras_enormes, texto_sin_perder
+from ui.paginasGuia.calculadora_um import EQUIPOS, Campo, ayuda_en_texto_plano, leer_numero, que_no_fije_el_ancho, sin_palabras_enormes, texto_sin_perder
 
 # ================================================================================================================================== capa pura (sin Qt)
 
@@ -39,17 +39,20 @@ ANCHO_DEL_CONTEO = 320                    # [px], R1-S8b: cabe «22 archivos: 12
 FILTRO_DE_ARCHIVOS = "Archivos de Eclipse (*.txt *.data *.asc);;Todos los archivos (*)"
 TAMANO_MAXIMO_BYTES = 20 * 1024 * 1024      # UM5-D7: el mayor archivo real mide 188 [kB]; uno de más de 20 [MB] no es una exportación de Eclipse y no se lee (no se congela la pantalla)
 D0_EN_DMAX, D0_EN_LA_TABLA = "en dmax", "en las condiciones de la tabla"
-ORIGEN_INICIAL = "Eclipse: 1 cGy/UM en dmax"         # DC2 y DA-95: el valor de Eclipse, escrito con su origen
+ORIGEN_INICIAL = "Eclipse: 1 [cGy/UM] en dmax"       # DC2 y DA-95: el valor de Eclipse, escrito con su origen; UM6-S6 (UM5-A6, decidido por el físico el 12-11): la unidad entre corchetes (NAV-D1)
 CAMPO_D0 = Campo("d0", "D'0 [cGy/UM]", "D'0 [cGy/UM]", True, inicial="1.000",
                  explicacion="La tasa de referencia de Eclipse: 1 [cGy/UM] en dmax. Si la tabla de factores no está a la SSD de los PDD, se escribe en las condiciones de la tabla.")
 AYUDA_DE_CARGAR = "Elija los archivos que exporta Eclipse para una energía: antes de guardar se ve qué entendió la app, y nada se guarda sin pulsar «Guardar estas tablas»."
 AYUDA_SIN_PERMISO = ("Las tablas las cargan el físico jefe o el administrador. Con esta cuenta se pueden ver las tablas cargadas y su historial, pero no cargarlas.")
+AYUDA_SIN_COMPROBAR = ("No se pudo comprobar su permiso: la base no respondió. Las tablas las cargan el físico jefe o el administrador; se vuelve a comprobar al cambiar de "
+                       "equipo.")                   # UM6-S4 (UM5-A4): no se da por hecho que no puede, ni se promete lo que la base caída no deja ver
 AYUDA_DEL_HISTORIAL = "Las cargas del equipo y la energía elegidos: la vigente y las que reemplazó, con quién y cuándo las cargó."
 SIN_ARCHIVOS = "Pulse «Elegir archivos» y elija todos los que exporta Eclipse para una energía (los que el cálculo no lee se ignoran)."
 LO_ESCRITO_CAMBIO = "Lo escrito o los archivos cambiaron desde la última revisión: pulse «Revisar» para ver el resumen de nuevo antes de guardar."
 SE_PUEDE_GUARDAR = "Nada impide guardar. Revise el resumen y, si es lo que quiere, pulse «Guardar estas tablas»."
 NADA_IMPIDE = "Nada impide guardar."
 SIN_REVISAR = "Sin revisar: corrija lo escrito"
+REVISION_FALLIDA = "Sin revisar: la revisión falló"      # UM6-S5 (UM5-A5): la tabla dice lo mismo que la lista de lo que impide guardar
 # UM5-S8: qué es cada archivo elegido para la carga, y cómo lo dice la tabla. De esta única clasificación salen las filas y el conteo (cada archivo se cuenta una vez y los números suman el total).
 USA, IGNORA, IMPIDE, SIN_CLASIFICAR = range(4)           # cuatro etiquetas: solo importa que sean distintas
 ESTADO_EN_LA_TABLA = {USA: "Se usa", IGNORA: "Se ignora: el cálculo no lo lee", IMPIDE: "Impide guardar: vea el motivo", SIN_CLASIFICAR: "Sin revisar: lo impide otro problema"}
@@ -74,6 +77,15 @@ def login_de_la_sesion(usuario):
 def puede_cargar(login):
     """Solo para PINTAR el botón (DA-81): el servicio lo vuelve a comprobar al guardar con la misma regla, `es_fisico_jefe` (hoy el jefe y el administrador; el rol «físico» no, PC-12)."""
     return bool(login) and es_fisico_jefe(login)
+
+
+def permiso_de_la_sesion(login, base_responde):
+    """UM6-S4 (UM5-A4): (si «Cargar tablas» se habilita, su ayuda), con la regla de `puede_cargar`. Si no puede y la base no respondió en la misma relectura de la pestaña (`base_responde`:
+    `um_datos_haz.energias_cargadas` falló), no se sabe si es por su rol: se dice, en lugar de afirmar que esa cuenta no carga (`permisos.rol_de` da None tanto si el rol no es uno de los que
+    cargan como si la base falló, y no se toca). Se vuelve a evaluar en cada relectura."""
+    if puede_cargar(login):
+        return True, AYUDA_DE_CARGAR
+    return False, AYUDA_SIN_COMPROBAR if login and not base_responde else AYUDA_SIN_PERMISO
 
 
 def leer_archivos(rutas, abrir=open):
@@ -165,7 +177,7 @@ def carga_desde_textos(equipo, energia, d0, donde, origen, wf, observaciones, ar
         if valor is not None:
             escritos[angulo] = valor
     if not origen.strip():
-        motivos.append("Falta escribir de dónde sale D'0, por ejemplo «Eclipse: 1 cGy/UM en dmax».")
+        motivos.append(f"Falta escribir de dónde sale D'0, por ejemplo «{ORIGEN_INICIAL}».")
     if motivos:
         raise um_motor.FaltaDato("\n".join(motivos))
     return {"equipo": equipo, "energia": clave, "archivos": archivos, "d0_dmax": valor_d0 if donde == D0_EN_DMAX else None,
@@ -194,11 +206,12 @@ def estado_de_cada_archivo(archivos, revision):
     return estados
 
 
-def filas_de_los_archivos(archivos, no_leidos, dichos, revision, cortos):
+def filas_de_los_archivos(archivos, no_leidos, dichos, revision, cortos, sin_revisar=SIN_REVISAR):
     """Una fila por archivo elegido, en el orden en que llegaron: (cómo se ve, lo que dice ser, qué pasa con él en la carga, según `estado_de_cada_archivo`). `dichos`: {ruta: texto de
-    `lo_que_dice`}; `revision`: la `um_armar.Revision` del servicio, o None si lo escrito no se entendió y no se revisó."""
+    `lo_que_dice`}; `revision`: la `um_armar.Revision` del servicio, o None si no se revisó; `sin_revisar`: lo que dice entonces cada fila (UM6-S5: `REVISION_FALLIDA` si el servicio falló por
+    un error inesperado; `SIN_REVISAR` si lo escrito no se entendió)."""
     estados = estado_de_cada_archivo(archivos, revision)
-    filas = [(cortos[ruta], dichos[ruta], SIN_REVISAR if estados is None else ESTADO_EN_LA_TABLA[estados[i]]) for i, (ruta, _) in enumerate(archivos)]
+    filas = [(cortos[ruta], dichos[ruta], sin_revisar if estados is None else ESTADO_EN_LA_TABLA[estados[i]]) for i, (ruta, _) in enumerate(archivos)]
     filas += [(cortos[ruta], motivo, "Impide guardar: no se leyó") for ruta, motivo in no_leidos]
     return filas
 
@@ -238,9 +251,19 @@ def texto_del_rechazo(motivo, cortos):
     return legible(motivo, cortos)
 
 
+def habia_otras_cargas(registros, nuevo_id):
+    """UM6-S3 (UM5-A3): si la carga recién guardada (`nuevo_id`) tiene otras en el historial leído DESPUÉS de guardar (`um_datos_haz.historial`): True o False, o None si no se pudo saber (el
+    historial no se leyó, o no trae la carga nueva). Sale de lo que pasó, no de lo que se supo al revisar: una carga dañada que no se pudo leer o una que otro guardó entre revisar y guardar
+    también quedan en el historial."""
+    if registros is None or nuevo_id not in [r.get("id") for r in registros]:
+        return None
+    return len(registros) > 1
+
+
 def texto_de_lo_guardado(equipo, energia, habia):
-    return (f"Guardadas las tablas del {equipo}, {energia}: la pestaña ya calcula con ellas. "
-            + ("Las anteriores quedan en el historial." if habia else "Son las primeras de esta energía."))
+    """Lo que dice el diálogo tras guardar. `habia`: `habia_otras_cargas` (None: no se afirma nada sobre las anteriores)."""
+    return (f"Guardadas las tablas del {equipo}, {energia}: la pestaña ya calcula con ellas."
+            + ("" if habia is None else " Las anteriores quedan en el historial." if habia else " Son las primeras de esta energía."))
 
 
 def _vigente(registro):
@@ -290,7 +313,7 @@ def _llenar(tabla, filas, anchos=()):
     for i, fila in enumerate(filas):
         for j, texto in enumerate(fila):
             celda = QTableWidgetItem(texto)
-            celda.setToolTip(texto)
+            celda.setToolTip(ayuda_en_texto_plano(texto))
             tabla.setItem(i, j, celda)
     for j, ancho in enumerate(anchos):
         tabla.setColumnWidth(j, ancho)
@@ -325,7 +348,6 @@ class DialogoCargarTablas(QDialog):
         self.campos_wf = {}
         self.revision = None
         self._revisada = None        # los argumentos de la última revisión SIN problemas: lo único que «Guardar» guarda
-        self._habia_vigente = None   # si al revisar ya había tablas vigentes de esa clave (None: no se supo)
         self._carpeta = ""
         self._armar()
         self._invalidar()
@@ -342,6 +364,7 @@ class DialogoCargarTablas(QDialog):
         self.linea_energia.setPlaceholderText("por ejemplo, 6 MV")
         self.linea_energia.setToolTip("La energía de los archivos; vacía, se toma de lo que dicen los archivos. Si los archivos dicen otra, no se puede guardar.")
         self.boton_elegir = QPushButton("Elegir archivos")
+        self.boton_elegir.setAutoDefault(False)        # UM6-S1 (UM5-A1): ningún botón del diálogo es el de por omisión; Enter en una casilla no abre el selector
         self.etiqueta_conteo = QLabel()
         self.linea_d0 = QLineEdit(CAMPO_D0.inicial)
         self.linea_d0.setToolTip(CAMPO_D0.explicacion)
@@ -476,7 +499,7 @@ class DialogoCargarTablas(QDialog):
         if not (self.archivos or self.no_leidos):
             self.estado.setText(SIN_ARCHIVOS)
             return
-        self.revision, problemas, avisos, vigente = None, [], [], ""
+        self.revision, problemas, avisos, vigente, sin_revisar = None, [], [], "", SIN_REVISAR
         try:
             argumentos = self._argumentos()
         except um_motor.FaltaDato as fallo:
@@ -490,9 +513,10 @@ class DialogoCargarTablas(QDialog):
                 problemas, avisos = [legible(p, self.cortos) for p in self.revision.problemas], [legible(a, self.cortos) for a in self.revision.avisos]
             except Exception as fallo:   # noqa: BLE001 -- la frontera de la ventana: lo que no se esperaba se dice y no deja guardar
                 problemas = [f"La revisión falló por un error inesperado ({type(fallo).__name__}: {fallo}). Avise a quien mantiene la app."]
+                sin_revisar = REVISION_FALLIDA
             vigente = self._lo_vigente(argumentos["equipo"], argumentos["energia"])
         problemas += [f"{self.cortos[ruta]}: {motivo}" for ruta, motivo in self.no_leidos]
-        _llenar(self.tabla_archivos, filas_de_los_archivos(self.archivos, self.no_leidos, self.dichos, self.revision, self.cortos), ANCHOS_DE_LOS_ARCHIVOS)
+        _llenar(self.tabla_archivos, filas_de_los_archivos(self.archivos, self.no_leidos, self.dichos, self.revision, self.cortos, sin_revisar), ANCHOS_DE_LOS_ARCHIVOS)
         self.etiqueta_conteo.setText(texto_del_conteo(self.archivos, self.no_leidos, self.revision))
         self.lista_problemas.clear()
         self.lista_problemas.addItems(problemas or [NADA_IMPIDE])
@@ -509,13 +533,11 @@ class DialogoCargarTablas(QDialog):
         self.estado.setText(SE_PUEDE_GUARDAR)
 
     def _lo_vigente(self, equipo, energia):
-        """El texto de lo que pasa con las tablas vigentes al guardar; anota si las hay (lo dice el aviso de lo guardado)."""
+        """El texto de lo que pasa con las tablas vigentes al guardar (el aviso de lo guardado no sale de aquí, UM6-S3: sale del historial leído después de guardar)."""
         try:
             registro = um_datos_haz.vigente(equipo, energia)
         except Exception as fallo:   # noqa: BLE001 -- no saber si hay tablas vigentes no impide revisar; se dice
-            self._habia_vigente = None
             return f"No se pudo saber si ya hay tablas vigentes del {equipo}, {energia}: {fallo}"
-        self._habia_vigente = registro is not None
         return texto_de_lo_vigente(equipo, energia, registro)
 
     def guardar(self):
@@ -523,9 +545,8 @@ class DialogoCargarTablas(QDialog):
         argumentos = self._revisada
         if argumentos is None:
             return
-        habia = self._habia_vigente
         try:
-            ok, motivo, _ = _con_espera(lambda: um_datos_haz.guardar(equipo=argumentos["equipo"], energia=argumentos["energia"], archivos=argumentos["archivos"],
+            ok, motivo, nuevo = _con_espera(lambda: um_datos_haz.guardar(equipo=argumentos["equipo"], energia=argumentos["energia"], archivos=argumentos["archivos"],
                                                                     d0_dmax=argumentos["d0_dmax"], d0_tabla=argumentos["d0_tabla"], d0_origen=argumentos["d0_origen"],
                                                                     wf_escritos=argumentos["wf_escritos"], curva_sc=argumentos["curva_sc"], sc_origen=argumentos["sc_origen"],
                                                                     observaciones=argumentos["observaciones"], usuario=self.pagina.login))
@@ -536,8 +557,15 @@ class DialogoCargarTablas(QDialog):
             self.estado.setText(sin_palabras_enormes(texto_del_rechazo(motivo, self.cortos)))
             return
         self.etiqueta_vigente.setText("")         # lo que decía de las tablas vigentes ya no es cierto: ahora las vigentes son éstas
-        self.estado.setText(texto_de_lo_guardado(argumentos["equipo"], argumentos["energia"], habia))
+        self.estado.setText(texto_de_lo_guardado(argumentos["equipo"], argumentos["energia"], self._habia_otras(argumentos["equipo"], argumentos["energia"], nuevo)))
         self.pagina.tablas_guardadas(argumentos["equipo"], argumentos["energia"])
+
+    def _habia_otras(self, equipo, energia, nuevo_id):
+        """UM6-S3: lo que dice el historial DESPUÉS de guardar; si no se puede leer, None (no se afirma nada)."""
+        try:
+            return habia_otras_cargas(um_datos_haz.historial(equipo, energia), nuevo_id)
+        except Exception:   # noqa: BLE001 -- lo guardado está bien; solo no se dice si había otras
+            return None
 
 
 class DialogoHistorial(QDialog):
@@ -546,7 +574,6 @@ class DialogoHistorial(QDialog):
 
     def __init__(self, pagina, equipo, energia):
         super().__init__(pagina)
-        self.setWindowTitle(f"{TITULO_DEL_HISTORIAL}: {equipo}, {energia}" if energia else TITULO_DEL_HISTORIAL)
         self.setModal(False)
         capa = QVBoxLayout(self)
         self.aviso = QLabel()
@@ -558,6 +585,13 @@ class DialogoHistorial(QDialog):
         capa.addWidget(QLabel("Archivos de la carga elegida"))
         capa.addWidget(self.tabla_archivos, 1)
         self.resize(*TAMANO_DEL_HISTORIAL)
+        self.tabla.currentCellChanged.connect(self._mostrar_archivos)
+        self.recargar(equipo, energia)
+
+    def recargar(self, equipo, energia):
+        """Lee y muestra el historial de (`equipo`, `energia`). UM6-S2 (UM5-A2): la pestaña lo vuelve a llamar tras guardar, con el equipo y la energía de la carga, si el historial está abierto:
+        un historial a la vista nunca dice lo que ya no es cierto."""
+        self.setWindowTitle(f"{TITULO_DEL_HISTORIAL}: {equipo}, {energia}" if energia else TITULO_DEL_HISTORIAL)
         self.registros = []
         if energia is None:
             self.aviso.setText(f"No hay tablas cargadas del {equipo}: no hay historial.")
@@ -569,9 +603,10 @@ class DialogoHistorial(QDialog):
             else:
                 self.aviso.setText(f"{len(self.registros)} {'carga' if len(self.registros) == 1 else 'cargas'} del {equipo}, {energia}, de la más reciente a la más antigua.")
         _llenar(self.tabla, filas_del_historial(self.registros), ANCHOS_DEL_HISTORIAL)
-        self.tabla.currentCellChanged.connect(self._mostrar_archivos)
+        _llenar(self.tabla_archivos, [], ANCHOS_DE_LOS_GUARDADOS)
         if self.registros:
             self.tabla.setCurrentCell(0, 0)
+            self._mostrar_archivos(0)
 
     def _mostrar_archivos(self, fila, *_):
         _llenar(self.tabla_archivos, filas_de_los_archivos_guardados(self.registros[fila]) if 0 <= fila < len(self.registros) else [], ANCHOS_DE_LOS_GUARDADOS)

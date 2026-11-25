@@ -16,6 +16,7 @@ plano del punto; al volver a leer las tablas la cuña elegida se conserva si sig
 Enter calcula también desde el botón y las listas; lo copiado empieza con el contexto."""
 import math
 import re
+from contextlib import contextmanager
 from decimal import Decimal
 import unicodedata
 from dataclasses import dataclass
@@ -41,8 +42,6 @@ ECUACION_MATHTEXT = (r"$UM = \dfrac{D \cdot 100}{D'_0 \cdot S_c(r_c) \cdot S_p(r
                      r"\left(\dfrac{SSD_0 + d_0}{SSD + d_0}\right)^2}$")
 SIN_RESULTADO = "Sin resultado"
 SIN_UM_DE_ECLIPSE = "Sin UM de Eclipse: no hay error ni estado."
-LA_JSON_LLEGA_DESPUES = ("La parte automática, que calcula cada campo de un plan a partir de un JSON con la misma cuenta de la parte manual, llega en una próxima entrega "
-                         "de la calculadora.")
 QUIEN_CARGA = "Las cargan el físico jefe o el administrador con «Cargar tablas», una vez por energía y con los archivos que exporta Eclipse."      # UM.5
 _NUMERO = re.compile(r"[+-]?(?:[0-9]+(?:[.,][0-9]*)?|[.,][0-9]+)")      # cifras ASCII, un punto o una coma decimal; nada más (ni exponente, ni unidades, ni separadores de miles)
 MAXIMO_CITADO = 30               # caracteres del texto escrito que un motivo cita: un token enorme pegado en un campo no ensancha la ventana (E2)
@@ -266,6 +265,12 @@ def que_no_fije_el_ancho(*etiquetas, vertical=QSizePolicy.Minimum):
     for etiqueta in etiquetas:
         etiqueta.setWordWrap(True)
         etiqueta.setSizePolicy(QSizePolicy.Expanding, vertical)
+        etiqueta.setTextFormat(Qt.PlainText)        # lo escrito o lo cargado se ve tal cual, nunca como HTML
+
+
+def ayuda_en_texto_plano(texto):
+    """La ayuda de una celda con `texto` tal cual: Qt dibuja como HTML toda ayuda que lo parece (`Qt.mightBeRichText`), así que esa se escapa; la demás queda igual."""
+    return Qt.convertFromPlainText(texto, Qt.WhiteSpaceNormal) if Qt.mightBeRichText(texto) else texto
 
 
 def _cuatro(valor):
@@ -300,11 +305,16 @@ def texto_de_d_um(resultado):
     return f"D/UM: {resultado.d_um:.4f} [cGy/UM]"
 
 
-def texto_del_error(error_pct, umbrales):
+def cifras_del_error(error_pct, umbrales):
     """El error con signo y dos decimales; con más si con dos se leería igual que un umbral que no es el suyo (con dos, 2.004 se leía «2.00» y su estado es Revisar). Las cifras junto a
-    un límite las decide `um_motor.cifras`, el único formato de un valor junto a su límite (desde UM.2b, un valor IGUAL al límite va con el formato normal)."""
+    un límite las decide `um_motor.cifras`, el único formato de un valor junto a su límite (desde UM.2b, un valor IGUAL al límite va con el formato normal). UM.6b: lo usan la etiqueta de la parte
+    manual y la columna del error de la parte del JSON (una sola definición)."""
     n = max([len(um_motor.cifras(abs(error_pct), u).split(".")[1]) for u in umbrales] + [2])
-    return f"Error frente a Eclipse: {error_pct:+.{n}f} [%]"
+    return f"{error_pct:+.{n}f}"
+
+
+def texto_del_error(error_pct, umbrales):
+    return f"Error frente a Eclipse: {cifras_del_error(error_pct, umbrales)} [%]"
 
 
 def texto_del_estado(error_pct, textos_de_umbrales):
@@ -405,17 +415,29 @@ def _tabla(columnas):
     return tabla
 
 
+@contextmanager
+def columnas_quietas(tabla):
+    """Mientras cambian muchas celdas, la cabecera no mide sus columnas en cada una (con `ResizeToContents` el costo crecía con el cuadrado de las filas); al salir mide una vez."""
+    cabecera = tabla.horizontalHeader()
+    cabecera.setSectionResizeMode(QHeaderView.Fixed)
+    try:
+        yield
+    finally:
+        cabecera.setSectionResizeMode(QHeaderView.ResizeToContents)
+
+
 def _llenar(tabla, filas):
-    tabla.setRowCount(len(filas))
-    for i, fila in enumerate(filas):
-        for j, texto in enumerate(fila):
-            celda = QTableWidgetItem(texto)
-            celda.setToolTip(texto)
-            tabla.setItem(i, j, celda)
+    with columnas_quietas(tabla):
+        tabla.setRowCount(len(filas))
+        for i, fila in enumerate(filas):
+            for j, texto in enumerate(fila):
+                celda = QTableWidgetItem(texto)
+                celda.setToolTip(ayuda_en_texto_plano(texto))
+                tabla.setItem(i, j, celda)
 
 
 class CalculadoraUM(QWidget):
-    """La pestaña. `usuario` es la identidad de la sesión (la de `MainWindow`): UM.4 no la usa (no guarda nada) y la recibe para que «Cargar tablas» se conecte sin tocar `mainpages.py`."""
+    """La pestaña. `usuario` es la identidad de la sesión (la de `MainWindow`): de ella sale el login con que «Cargar tablas» guarda y su permiso (UM.5); el cálculo no la usa (no guarda nada)."""
 
     def __init__(self, usuario=None, parent=None):
         super().__init__(parent)
@@ -455,10 +477,7 @@ class CalculadoraUM(QWidget):
 
         self.subpestanas = QTabWidget()
         self.subpestanas.addTab(self._armar_manual(), "Manual")
-        json = QLabel(LA_JSON_LLEGA_DESPUES)
-        json.setWordWrap(True)
-        json.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.subpestanas.addTab(json, "Desde JSON")
+        self.subpestanas.addTab(self._armar_json(), "Desde JSON")
         principal.addWidget(self.subpestanas, 1)
 
         self.combo_equipo.currentIndexChanged.connect(self._al_cambiar_equipo)
@@ -576,35 +595,43 @@ class CalculadoraUM(QWidget):
             energias = um_datos_haz.energias_cargadas(equipo)
         except Exception as fallo:   # noqa: BLE001 -- se dice, no se traga: sin energías no hay número
             energias, self.aviso_tablas_texto = [], f"No se pudieron leer las tablas guardadas del {equipo}: {fallo}"
+            self._pintar_el_permiso(base_responde=False)        # UM6-S4 (UM5-A4): el permiso se vuelve a mirar en cada relectura
         else:
             self.aviso_tablas_texto = "" if energias else texto_sin_tablas(equipo)
+            self._pintar_el_permiso(base_responde=True)
         for energia in energias:
             self.combo_energia.addItem(energia, energia)
         self.combo_energia.setEnabled(bool(energias))
         self.combo_energia.blockSignals(False)
         self._al_cambiar_energia()
 
-    def _leer_haz(self):
-        """(id, DatosHaz) del conjunto vigente del equipo y la energía elegidos, o `um_motor.FaltaDato` con el motivo (sin tablas, o lo guardado no se puede usar)."""
-        equipo, energia = self._equipo_y_energia()
-        if energia is None:
-            raise um_motor.FaltaDato(self.aviso_tablas_texto or texto_sin_tablas(equipo))
+    def haz_vigente(self, equipo, energia):
+        """(id, DatosHaz) del conjunto vigente de (`equipo`, `energia`), o None si no hay; `um_motor.FaltaDato` con el motivo si lo guardado no se puede usar o la base falla. UM.6b: la ÚNICA
+        lectura de un haz, para la parte manual (`_leer_haz`) y para la del JSON (cada campo, el de su equipo y su energía), con el mismo diccionario por `id` (Trampa 10)."""
         try:
             registro = um_datos_haz.vigente(equipo, energia)
             if registro is None:
-                raise um_motor.FaltaDato(f"Ya no hay tablas vigentes del {equipo}, {energia}.")
+                return None
             if registro["id"] not in self._haces:
                 datos = um_datos_haz.datos_del_haz(equipo, energia)
                 if datos is None:
-                    raise um_motor.FaltaDato(f"Ya no hay tablas vigentes del {equipo}, {energia}.")
+                    return None
                 self._haces[registro["id"]] = datos
-        except um_motor.FaltaDato:
-            raise
         except um_datos_haz.DatosHazError as fallo:
             raise um_motor.FaltaDato(str(fallo)) from fallo
         except Exception as fallo:   # noqa: BLE001 -- un fallo de la base se dice con su texto, nunca cae en silencio a otro haz
             raise um_motor.FaltaDato(f"No se pudieron leer las tablas guardadas del {equipo}, {energia}: {fallo}") from fallo
         return registro["id"], self._haces[registro["id"]]
+
+    def _leer_haz(self):
+        """(id, DatosHaz) del conjunto vigente del equipo y la energía elegidos, o `um_motor.FaltaDato` con el motivo (sin tablas, o lo guardado no se puede usar)."""
+        equipo, energia = self._equipo_y_energia()
+        if energia is None:
+            raise um_motor.FaltaDato(self.aviso_tablas_texto or texto_sin_tablas(equipo))
+        haz = self.haz_vigente(equipo, energia)
+        if haz is None:
+            raise um_motor.FaltaDato(f"Ya no hay tablas vigentes del {equipo}, {energia}.")
+        return haz
 
     def _al_cambiar_energia(self, *_, conservar_cuna=False):
         """Rehace la lista de cuñas del haz de la energía elegida. `conservar_cuna` (solo al volver a leer un conjunto nuevo dentro de `calcular`): la cuña elegida sigue elegida si el conjunto
@@ -722,15 +749,24 @@ class CalculadoraUM(QWidget):
         self.dialogo_info.show()
         self.dialogo_info.raise_()
 
+    # ------------------------------------------------------------------ UM.6b: la subpestaña «Desde JSON» (el panel y su capa pura, en `calculadora_um_json`)
+    def _armar_json(self):
+        """El panel de la parte del JSON. Sus etiquetas cuyo texto cambia se suman a la lista de la pestaña (una sola, E2 y UM5-S1); los umbrales son los de la parte manual: cambiarlos
+        refresca los estados de la tabla."""
+        from ui.paginasGuia import calculadora_um_json as desde_json      # diferido: ese módulo importa de éste
+        self.panel_json = desde_json.PanelDesdeJSON(self)
+        self.etiquetas_que_cambian += self.panel_json.etiquetas_que_cambian
+        que_no_fije_el_ancho(*self.panel_json.etiquetas_que_cambian)
+        for linea in self.umbrales.values():
+            linea.textEdited.connect(self.panel_json.refrescar_estados)
+        return self.panel_json
+
     # ------------------------------------------------------------------ UM.5: cargar tablas e historial (los diálogos y su capa pura, en `calculadora_um_cargar`)
     def _armar_la_carga(self):
         """«Cargar tablas», habilitado solo para quien puede cargar (el servicio lo vuelve a comprobar al guardar, DA-81), con una ayuda que a los demás les dice quién carga; e «Historial»,
         para todos, DEBAJO de él: uno sobre otro caben en el alto de la ecuación y la fila de arriba no se ensancha (lado a lado, el mínimo de la ventana pasaba de 1194 a 1280 [px])."""
         from ui.paginasGuia import calculadora_um_cargar as carga      # diferido: ese módulo importa de éste
-        self.login = carga.login_de_la_sesion(self.usuario)
-        puede = carga.puede_cargar(self.login)
-        self.boton_cargar.setEnabled(puede)
-        self.boton_cargar.setToolTip(carga.AYUDA_DE_CARGAR if puede else carga.AYUDA_SIN_PERMISO)
+        self.login = carga.login_de_la_sesion(self.usuario)       # el permiso lo pinta `_pintar_el_permiso` en cada relectura (UM6-S4)
         self.boton_historial = QPushButton("Historial")
         self.boton_historial.setToolTip(carga.AYUDA_DEL_HISTORIAL)
         self.dialogo_carga = self.dialogo_historial = None
@@ -741,6 +777,13 @@ class CalculadoraUM(QWidget):
         for boton in (self.boton_cargar, self.boton_historial):
             botones.addWidget(boton)
         return botones
+
+    def _pintar_el_permiso(self, base_responde):
+        """UM6-S4 (UM5-A4): «Cargar tablas» y su ayuda, según `calculadora_um_cargar.permiso_de_la_sesion`, cada vez que la pestaña relee (al armarla, al cambiar de equipo y al guardar)."""
+        from ui.paginasGuia import calculadora_um_cargar as carga
+        puede, ayuda = carga.permiso_de_la_sesion(self.login, base_responde)
+        self.boton_cargar.setEnabled(puede)
+        self.boton_cargar.setToolTip(ayuda)
 
     def _soltar(self, dialogo):
         if dialogo is not None:
@@ -763,6 +806,7 @@ class CalculadoraUM(QWidget):
         """Tras guardar: el equipo y la energía de la carga quedan elegidos y la lista de energías y el haz se vuelven a leer sin reiniciar. Releer la energía borra el resultado de antes, como
         cualquier cambio de energía (UM4-D6 y UM4-D9: nunca un número de otro conjunto); los haces armados con los conjuntos anteriores se sueltan."""
         self._haces.clear()
+        self.panel_json.recalcular(tras_cargar=True)          # UM.6b: el plan importado se vuelve a calcular con las tablas nuevas, y lo dice
         indice = self.combo_equipo.findText(equipo)
         if indice >= 0 and indice != self.combo_equipo.currentIndex():
             self.combo_equipo.setCurrentIndex(indice)        # su señal relee las energías
@@ -771,3 +815,5 @@ class CalculadoraUM(QWidget):
         indice = self.combo_energia.findData(energia)
         if indice >= 0:
             self.combo_energia.setCurrentIndex(indice)
+        if self.dialogo_historial is not None and self.dialogo_historial.isVisible():
+            self.dialogo_historial.recargar(*self._equipo_y_energia())        # UM6-S2 (UM5-A2): un historial abierto no se queda con lo de antes

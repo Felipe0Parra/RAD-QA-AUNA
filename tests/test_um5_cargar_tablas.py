@@ -332,7 +332,7 @@ TEXTOS_FIJOS = {
     'TAMANO_MAXIMO_BYTES': 20971520,
     'D0_EN_DMAX': 'en dmax',
     'D0_EN_LA_TABLA': 'en las condiciones de la tabla',
-    'ORIGEN_INICIAL': 'Eclipse: 1 cGy/UM en dmax',
+    'ORIGEN_INICIAL': 'Eclipse: 1 [cGy/UM] en dmax',          # UM6-S6 (UM5-A6, decidido por el físico el 12-11; clase b): la unidad entre corchetes
     'AYUDA_DE_CARGAR': 'Elija los archivos que exporta Eclipse para una energía: antes de guardar se ve qué entendió la app, y nada se guarda sin pulsar «Guardar estas tablas».',
     'AYUDA_SIN_PERMISO': 'Las tablas las cargan el físico jefe o el administrador. Con esta cuenta se pueden ver las tablas cargadas y su historial, pero no cargarlas.',
     'AYUDA_DEL_HISTORIAL': 'Las cargas del equipo y la energía elegidos: la vigente y las que reemplazó, con quién y cuándo las cargó.',
@@ -458,13 +458,13 @@ def test_un_cero_escrito_no_es_un_campo_vacio():
     ({"energia": ""}, ["Falta escribir la energía, por ejemplo «6 MV»."]),
     ({"energia": "6"}, ["No se entiende la energía «6»: se escribe como «6 MV» o «6X» (solo fotones)."]),
     ({"energia": "6 MeV"}, ["No se entiende la energía «6 MeV»: se escribe como «6 MV» o «6X» (solo fotones)."]),
-    ({"origen": "  "}, ["Falta escribir de dónde sale D'0, por ejemplo «Eclipse: 1 cGy/UM en dmax»."]),
+    ({"origen": "  "}, ["Falta escribir de dónde sale D'0, por ejemplo «Eclipse: 1 [cGy/UM] en dmax»."]),          # UM6-S6 (clase b)
     ({"wf": {30: "0.6x"}}, ["No se entiende el factor de la cuña de 30° en 10 × 10: «0.6x». Escriba solo el número, con punto o coma decimal y sin unidades."]),
     ({"energia": "", "d0": "x", "wf": {45: "1e0", 15: "y"}, "origen": ""},
      ["Falta escribir la energía, por ejemplo «6 MV».", "No se entiende D'0 [cGy/UM]: «x». Escriba solo el número, con punto o coma decimal y sin unidades.",
       "No se entiende el factor de la cuña de 15° en 10 × 10: «y». Escriba solo el número, con punto o coma decimal y sin unidades.",
       "No se entiende el factor de la cuña de 45° en 10 × 10: «1e0». Escriba solo el número, con punto o coma decimal y sin unidades.",
-      "Falta escribir de dónde sale D'0, por ejemplo «Eclipse: 1 cGy/UM en dmax»."]),
+      "Falta escribir de dónde sale D'0, por ejemplo «Eclipse: 1 [cGy/UM] en dmax»."]),          # UM6-S6 (clase b)
 ])
 def test_lo_escrito_que_no_se_entiende_da_todos_sus_motivos_en_orden(cambios, motivos):
     with pytest.raises(motor.FaltaDato) as fallo:
@@ -688,8 +688,8 @@ def test_cargar_otra_vez_reemplaza_deja_historial_y_borra_el_resultado(bd, fabri
     assert isinstance(h, carga.DialogoHistorial) and h.isVisible() and not h.isModal() and h.parent() is p
     assert h.aviso.text() == "2 cargas del Clinac 600, 6 MV, de la más reciente a la más antigua."
     vistas = filas(h.tabla)
-    assert [f[1:5] for f in vistas] == [("Jefa de Física", "Vigente", "1 [cGy/UM] en dmax (Eclipse: 1 cGy/UM en dmax)", "12"),
-                                         ("Jefa de Física", "Reemplazada", "1 [cGy/UM] en dmax (Eclipse: 1 cGy/UM en dmax)", "12")]
+    assert [f[1:5] for f in vistas] == [("Jefa de Física", "Vigente", "1 [cGy/UM] en dmax (Eclipse: 1 [cGy/UM] en dmax)", "12"),          # UM6-S6 (clase b): la del diálogo, con
+                                         ("Jefa de Física", "Reemplazada", "1 [cGy/UM] en dmax (Eclipse: 1 cGy/UM en dmax)", "12")]           # el origen nuevo; la de la plantilla, como se guardó
     assert vistas[0][5] == f"La carga del {vistas[1][0]}, de Jefa de Física" and vistas[1][5] == "Ninguna: fue la primera"
     assert [f[6] for f in vistas] == ["segunda carga", "primera carga"]
     assert len(filas(h.tabla_archivos)) == USADOS and {f[5] for f in filas(h.tabla_archivos)} == {"Vigente"}
@@ -1473,3 +1473,193 @@ def test_el_historial_muestra_el_d0_tal_como_se_guardo(bd_vacia, fabrica, elegir
     assert _sql(bd_vacia, "SELECT d0_dmax, d0_tabla FROM um_datos_haz") == [(None, 0.86012345)]
     QTest.mouseClick(p.boton_historial, Qt.LeftButton)
     assert filas(p.dialogo_historial.tabla)[0][3] == f"0.86012345 [cGy/UM] en las condiciones de la tabla ({carga.ORIGEN_INICIAL})"
+
+
+# ================================================================================================================================== UM.6b, la capa UM6-S1 a UM6-S6 (los seis puntos bajos de la segunda vuelta de la auditoría
+# de UM.5, UM5-A1 a UM5-A6, borradores/UM5/suplemento_segunda_vuelta_UM5.md; UM6-S6 decidido por el físico el 12-11). Van aquí, la casa del diálogo; los de la pestaña (S2 y S4) también,
+# porque lo que fijan es el historial y el botón «Cargar tablas», que son de UM.5.
+
+def test_um6_s1_enter_en_una_casilla_del_dialogo_no_abre_el_selector(bd_vacia, fabrica, elegir, reales):
+    """UM5-A1: «Elegir archivos» era el botón por omisión del diálogo: Enter en la energía, en D'0, en el origen o en las observaciones abría el selector de archivos."""
+    from PyQt5.QtWidgets import QPushButton
+    p = fabrica()
+    d = con_archivos(p, elegir, list(reales.values()))
+    assert len(elegir.llamadas) == 1
+    for linea in (d.linea_energia, d.linea_d0, d.linea_origen, d.linea_observaciones):
+        antes = linea.text()
+        linea.setFocus()
+        QTest.keyClick(linea, Qt.Key_Return)
+        QTest.keyClick(linea, Qt.Key_Enter)
+        assert len(elegir.llamadas) == 1 and linea.text() == antes, linea.placeholderText() or linea.text()
+    assert not [b.text() for b in d.findChildren(QPushButton) if b.autoDefault() or b.isDefault()]
+    assert d.boton_guardar.isEnabled() and d.estado.text() == carga.SE_PUEDE_GUARDAR        # nada de lo escrito ni de lo revisado cambió
+
+
+def test_um6_s2_un_historial_abierto_se_recarga_al_guardar(bd, fabrica, elegir, reales):
+    """UM5-A2: el historial no es modal; abierto mientras se guardaba otra carga, seguía diciendo «1 carga … Vigente» sobre la que acababa de quedar reemplazada."""
+    p = fabrica()
+    QTest.mouseClick(p.boton_historial, Qt.LeftButton)
+    h = p.dialogo_historial
+    assert h.aviso.text() == "1 carga del Clinac 600, 6 MV, de la más reciente a la más antigua." and [f[2] for f in filas(h.tabla)] == ["Vigente"]
+    d = con_archivos(p, elegir, list(reales.values()))
+    QTest.mouseClick(d.boton_guardar, Qt.LeftButton)
+    assert p.dialogo_historial is h and h.isVisible()
+    assert h.aviso.text() == "2 cargas del Clinac 600, 6 MV, de la más reciente a la más antigua." and [f[2] for f in filas(h.tabla)] == ["Vigente", "Reemplazada"]
+    assert h.tabla.currentRow() == 0 and {f[5] for f in filas(h.tabla_archivos)} == {"Vigente"} and len(filas(h.tabla_archivos)) == USADOS
+    assert h.windowTitle() == "Historial de las tablas guardadas: Clinac 600, 6 MV"
+
+
+def test_um6_s2_un_historial_abierto_sin_tablas_pasa_a_las_recien_guardadas(bd_vacia, fabrica, elegir, reales):
+    p = fabrica()
+    QTest.mouseClick(p.boton_historial, Qt.LeftButton)
+    h = p.dialogo_historial
+    assert h.aviso.text() == "No hay tablas cargadas del Clinac 600: no hay historial." and h.windowTitle() == carga.TITULO_DEL_HISTORIAL
+    d = con_archivos(p, elegir, list(reales.values()))
+    QTest.mouseClick(d.boton_guardar, Qt.LeftButton)
+    assert h.aviso.text() == "1 carga del Clinac 600, 6 MV, de la más reciente a la más antigua." and h.windowTitle() == "Historial de las tablas guardadas: Clinac 600, 6 MV"
+    assert [f[2] for f in filas(h.tabla)] == ["Vigente"] and len(filas(h.tabla_archivos)) == USADOS
+
+
+def test_um6_s2_un_historial_cerrado_no_se_vuelve_a_leer(bd_vacia, fabrica, elegir, reales, monkeypatch):
+    p = fabrica()
+    QTest.mouseClick(p.boton_historial, Qt.LeftButton)
+    p.dialogo_historial.close()
+    lecturas = espia(monkeypatch, "historial")
+    d = con_archivos(p, elegir, list(reales.values()))
+    QTest.mouseClick(d.boton_guardar, Qt.LeftButton)
+    assert len(lecturas) == 1          # la del aviso de lo guardado (UM6-S3); el historial cerrado no se lee
+
+
+def test_um6_s3_habia_otras_cargas_sale_del_historial_leido_despues_de_guardar():
+    nueva, vieja = {"id": 7}, {"id": 3}
+    assert carga.habia_otras_cargas([nueva], 7) is False and carga.habia_otras_cargas([nueva, vieja], 7) is True
+    assert carga.habia_otras_cargas(None, 7) is None and carga.habia_otras_cargas([vieja], 7) is None and carga.habia_otras_cargas([], None) is None
+    assert carga.texto_de_lo_guardado(EQUIPO, ENERGIA, None) == "Guardadas las tablas del Clinac 600, 6 MV: la pestaña ya calcula con ellas."
+    assert carga.texto_de_lo_guardado(EQUIPO, ENERGIA, True).endswith("ya calcula con ellas. Las anteriores quedan en el historial.")
+    assert carga.texto_de_lo_guardado(EQUIPO, ENERGIA, False).endswith("ya calcula con ellas. Son las primeras de esta energía.")
+
+
+def test_um6_s3_con_lo_vigente_danado_al_revisar_el_aviso_no_dice_que_son_las_primeras(bd, fabrica, elegir, reales, monkeypatch):
+    """UM5-A3 (a): si lo vigente no se pudo leer al revisar, el diálogo deja guardar (la vía de reparación) y el aviso decía «Son las primeras de esta energía»."""
+    real = um_datos_haz.vigente
+
+    def danada(*a, **k):
+        raise um_datos_haz.DatosHazError("sus factores de cuña están dañados")
+    monkeypatch.setattr(um_datos_haz, "vigente", danada)
+    p = fabrica()
+    d = con_archivos(p, elegir, list(reales.values()))
+    assert d.etiqueta_vigente.text().startswith("No se pudo saber si ya hay tablas vigentes") and d.boton_guardar.isEnabled()
+    monkeypatch.setattr(um_datos_haz, "vigente", real)
+    QTest.mouseClick(d.boton_guardar, Qt.LeftButton)
+    assert d.estado.text() == "Guardadas las tablas del Clinac 600, 6 MV: la pestaña ya calcula con ellas. Las anteriores quedan en el historial."
+    assert _sql(bd, "SELECT accion FROM audit_log WHERE tabla = 'um_datos_haz' ORDER BY id") == [("guardar",), ("reemplazo",)]
+
+
+def test_um6_s3_si_otro_guarda_entre_revisar_y_guardar_el_aviso_lo_sabe(bd_vacia, fabrica, elegir, reales, originales):
+    """UM5-A3 (b): otro equipo guarda la misma energía entre la revisión y el guardado."""
+    p = fabrica()
+    d = con_archivos(p, elegir, list(reales.values()))
+    assert d.etiqueta_vigente.text() == "No hay tablas guardadas del Clinac 600, 6 MV: estas serán las primeras."
+    ok, motivo, _ = um_datos_haz.guardar(equipo=EQUIPO, energia=ENERGIA, archivos=originales, d0_dmax=1.0, d0_tabla=None, d0_origen="otro equipo", wf_escritos=None, curva_sc=None,
+                                         sc_origen=None, observaciones=None, usuario="admin1")
+    assert ok, motivo
+    QTest.mouseClick(d.boton_guardar, Qt.LeftButton)
+    assert d.estado.text().endswith("ya calcula con ellas. Las anteriores quedan en el historial.")
+
+
+def test_um6_s3_si_el_historial_no_se_lee_tras_guardar_no_se_afirma_nada(bd_vacia, fabrica, elegir, reales, monkeypatch):
+    p = fabrica()
+    d = con_archivos(p, elegir, list(reales.values()))
+
+    def roto(*a, **k):
+        raise um_datos_haz.DatosHazError("la base no se abre")
+    monkeypatch.setattr(um_datos_haz, "historial", roto)
+    QTest.mouseClick(d.boton_guardar, Qt.LeftButton)
+    assert d.estado.text() == "Guardadas las tablas del Clinac 600, 6 MV: la pestaña ya calcula con ellas."
+    assert _sql(bd_vacia, "SELECT COUNT(*) FROM um_datos_haz WHERE activo = 1") == [(1,)] and p.combo_energia.currentData() == ENERGIA
+
+
+def test_um6_s4_el_permiso_dice_si_no_se_pudo_comprobar(monkeypatch):
+    monkeypatch.setattr(carga, "puede_cargar", lambda login: login == "jefa")
+    assert carga.permiso_de_la_sesion("jefa", True) == carga.permiso_de_la_sesion("jefa", False) == (True, carga.AYUDA_DE_CARGAR)
+    assert carga.permiso_de_la_sesion("fisica", True) == (False, carga.AYUDA_SIN_PERMISO)
+    assert carga.permiso_de_la_sesion("fisica", False) == (False, carga.AYUDA_SIN_COMPROBAR)
+    assert carga.permiso_de_la_sesion(None, False) == carga.permiso_de_la_sesion(None, True) == (False, carga.AYUDA_SIN_PERMISO)        # sin sesión, no hay permiso que comprobar
+    assert carga.AYUDA_SIN_COMPROBAR.startswith("No se pudo comprobar su permiso: la base no respondió.")
+    # clase b (auditoría previa de UM.6b): con la base caída no hay tablas ni historial que ver; la ayuda no lo promete y dice quién carga
+    assert "se pueden ver" not in carga.AYUDA_SIN_COMPROBAR and "el físico jefe o el administrador" in carga.AYUDA_SIN_COMPROBAR
+
+
+@pytest.mark.parametrize("login, ayuda_luego", [("jefa", "AYUDA_DE_CARGAR"), ("fisica", "AYUDA_SIN_PERMISO")])
+def test_um6_s4_si_la_base_no_responde_al_armar_se_dice_y_al_volver_se_reevalua(bd_vacia, fabrica, monkeypatch, tmp_path, login, ayuda_luego):
+    """UM5-A4: el permiso se calculaba una vez al armar la pestaña; con la base caída en ese instante el botón de la jefa quedaba apagado toda la sesión, con una ayuda que le decía que su
+    cuenta no carga. Ahora se reevalúa en cada relectura (al cambiar de equipo, al guardar) y, si la base no respondió, se dice."""
+    monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: str(tmp_path / "no_hay_carpeta" / "base.db"))
+    p = fabrica(Usuario(username=login))
+    assert not p.boton_cargar.isEnabled() and p.boton_cargar.toolTip() == carga.AYUDA_SIN_COMPROBAR
+    assert p.aviso_tablas.text().startswith("No se pudieron leer las tablas guardadas del Clinac 600")
+    monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: bd_vacia)
+    p.combo_equipo.setCurrentIndex(p.combo_equipo.findText("Clinac iX"))
+    assert p.boton_cargar.isEnabled() is (login == "jefa") and p.boton_cargar.toolTip() == getattr(carga, ayuda_luego)
+    monkeypatch.setattr(conection_mod, "ruta_base_datos", lambda: str(tmp_path / "no_hay_carpeta" / "base.db"))
+    p.combo_equipo.setCurrentIndex(p.combo_equipo.findText(EQUIPO))
+    assert not p.boton_cargar.isEnabled() and p.boton_cargar.toolTip() == carga.AYUDA_SIN_COMPROBAR       # y al revés: se vuelve a mirar cada vez
+
+
+def test_um6_s4_el_permiso_se_vuelve_a_mirar_al_guardar(bd_vacia, fabrica, elegir, reales, monkeypatch):
+    p = fabrica()
+    pintados = []
+    real = p._pintar_el_permiso
+    monkeypatch.setattr(p, "_pintar_el_permiso", lambda base_responde: pintados.append(base_responde) or real(base_responde))
+    d = con_archivos(p, elegir, list(reales.values()))
+    QTest.mouseClick(d.boton_guardar, Qt.LeftButton)
+    assert pintados and pintados[-1] is True and p.boton_cargar.isEnabled() and p.boton_cargar.toolTip() == carga.AYUDA_DE_CARGAR
+
+
+def test_um6_s5_la_tabla_dice_que_la_revision_fallo_y_no_que_corrija_lo_escrito(bd_vacia, fabrica, elegir, reales, monkeypatch):
+    """UM5-A5: con un error inesperado del servicio cada fila decía «Sin revisar: corrija lo escrito» mientras la lista decía «La revisión falló…»: dos consejos contrarios."""
+    archivos = [("/d/a.txt", b""), ("/d/b.txt", b"")]
+    dichos, cortos = {"/d/a.txt": "x", "/d/b.txt": "y"}, {"/d/a.txt": "a.txt", "/d/b.txt": "b.txt"}
+    assert [f[2] for f in carga.filas_de_los_archivos(archivos, [], dichos, None, cortos, carga.REVISION_FALLIDA)] == [carga.REVISION_FALLIDA] * 2
+    assert [f[2] for f in carga.filas_de_los_archivos(archivos, [], dichos, None, cortos)] == [carga.SIN_REVISAR] * 2
+    assert carga.REVISION_FALLIDA == "Sin revisar: la revisión falló"
+
+    def rota(**k):
+        raise RuntimeError("se cayó")
+    monkeypatch.setattr(um_datos_haz, "revisar", rota)
+    p = fabrica()
+    d = con_archivos(p, elegir, list(reales.values()))
+    assert {f[2] for f in filas(d.tabla_archivos)} == {carga.REVISION_FALLIDA} and len(filas(d.tabla_archivos)) == 22
+    assert items(d.lista_problemas)[0].startswith("La revisión falló por un error inesperado") and d.etiqueta_conteo.text() == "22 archivos: sin revisar."
+    d.linea_d0.setText("x")                      # lo escrito que no se entiende sigue con su texto de siempre
+    QTest.mouseClick(d.boton_revisar, Qt.LeftButton)
+    assert {f[2] for f in filas(d.tabla_archivos)} == {carga.SIN_REVISAR}
+
+
+UNIDAD_SUELTA = re.compile(r"\d\s*(cGy/UM|cGy|Gy|cm|mm|UM|MU|MB|kB|bytes|%)(?![\w/])")       # NAV-D1: un número con su unidad fuera de corchetes («1 cGy/UM»)
+
+
+def _unidad_suelta(texto):
+    return UNIDAD_SUELTA.search(re.sub(r"\[[^\]]*\]", "", texto))
+
+
+def test_um6_s6_ninguna_unidad_suelta_en_los_textos_del_dialogo_ni_en_el_origen_que_se_guarda(bd_vacia, fabrica, elegir, reales):
+    """UM5-A6 (decidido por el físico el 12-11): el origen que propone el diálogo SE GUARDA con cada carga y el historial lo muestra junto a «[cGy/UM]»: va con la unidad entre corchetes, y la
+    prueba de formato caza también la unidad suelta (la de NAV-D1 solo cazaba «(cm)» entre paréntesis)."""
+    assert carga.ORIGEN_INICIAL == "Eclipse: 1 [cGy/UM] en dmax"
+    assert _unidad_suelta("Eclipse: 1 cGy/UM en dmax") and _unidad_suelta("mide 20 MB") and not _unidad_suelta("1 [cGy/UM] en dmax (Eclipse: 1 [cGy/UM] en dmax)")
+    assert not _unidad_suelta("22 archivos: 12 se usan y 10 se ignoran.") and not _unidad_suelta("Cuña de 15° en 10 × 10, 6 MV")
+    p = fabrica()
+    d = con_archivos(p, elegir, list(reales.values()))
+    textos = textos_que_se_ven(d) + [d.linea_origen.text()]
+    with pytest.raises(motor.FaltaDato) as fallo:
+        carga.carga_desde_textos(EQUIPO, ENERGIA, "1.000", carga.D0_EN_DMAX, " ", {}, "", [])
+    textos.append(str(fallo.value))
+    QTest.mouseClick(d.boton_guardar, Qt.LeftButton)
+    textos.append(d.estado.text())
+    QTest.mouseClick(p.boton_historial, Qt.LeftButton)
+    textos += [c for fila in filas(p.dialogo_historial.tabla) for c in fila] + [p.dialogo_historial.aviso.text()]
+    textos += [v for k, v in vars(carga).items() if k.isupper() and isinstance(v, str)] + list(carga.QUE_ES.values()) + [carga.CAMPO_D0.explicacion]
+    for texto in textos:
+        assert not _unidad_suelta(texto), texto
+    assert _sql(bd_vacia, "SELECT d0_origen FROM um_datos_haz") == [("Eclipse: 1 [cGy/UM] en dmax",)]
