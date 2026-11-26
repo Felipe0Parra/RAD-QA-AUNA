@@ -73,6 +73,7 @@ hidden_imports = [
     "ui.paginasGuia.calculadora_um_json",
     "ui.paginasControles.PruebasMensuales.filas_por_nivel",  # el colimador del mensual, por angulo
     "services.orden_de_controles",  # el orden de fecha de las listas de controles
+    "models.PDF.Imagenes.maqueta_catphan",  # la maqueta del PDF del Catphan
 
     # MODELOS
     "models.PDF.reportes",

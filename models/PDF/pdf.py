@@ -9,6 +9,7 @@ from reportlab.lib.utils import ImageReader
 from PyQt5.QtCore import QByteArray
 import io
 from services.anulacion import filtro_activo
+from models.PDF.Imagenes import maqueta_catphan
 from models.PDF.clasificacion_diario import (
     COLUMNAS_IDENTIFICACION, COLUMNAS_MOVIDAS_A_OTRA_TABLA, COLUMNAS_RETIRADAS)
 
@@ -730,7 +731,7 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                             data[row_idx][col_idx] = Image(img_buffer, width=5*inch, height=3*inch)
                         # Si es una ruta de imagen válida
                         elif isinstance(cell, str) and os.path.isfile(cell) and cell.lower().endswith(('.png', '.jpg', '.jpeg')):
-                            data[row_idx][col_idx] = Image(cell, width=2.5*inch, height=2.5*inch)
+                            data[row_idx][col_idx] = cell if es_informe_de_imagenes and nombre_tabla in maqueta_catphan.TABLAS_DE_IMAGENES else Image(cell, width=2.5*inch, height=2.5*inch)
                         # Si es string, conviértelo a Paragraph centrado
                         elif isinstance(cell, str):
                             data[row_idx][col_idx] = Paragraph(cell, centered_style)
@@ -936,11 +937,11 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                     tabla.repeatRows = 2
                     elements.append(tabla)
                 else:
-                    elements.append(KeepTogether(tabla))  # <-- Envuelve la tabla
+                    elements.extend(maqueta_catphan.colocar(nombre_tabla, tabla, data, style) if es_informe_de_imagenes else [KeepTogether(tabla)])  # <-- Envuelve la tabla
 
                 # Agregar espaciador entre tablas (excepto la última)
                 if i < len(orden_tablas) - 1:
-                        elements.append(Spacer(1, 0.3*inch))
+                        elements.append(maqueta_catphan.espacio_entre_tablas(nombre_tabla) if es_informe_de_imagenes else Spacer(1, 0.3*inch))
         # ════════════════════════════════════════════════════════════════
     # R7 (PLAN_REPORTES_LEGIBLES_08-09.md): la tabla "Definiciones de
     # métricas" que iba aquí se añadía SIN CONDICIÓN a TODO mensual --
@@ -1159,8 +1160,8 @@ def generar_reporte_pdf_multitabla_anual(tablas_dict, fecha, user, tipo_reporte=
                         tabla_pdf.repeatRows = 2
                         elements.append(tabla_pdf)
                     else:
-                        elements.append(KeepTogether(tabla_pdf))
-                    elements.append(Spacer(1, 0.3*inch))
+                        elements.extend(maqueta_catphan.colocar(categoria, tabla_pdf))
+                    elements.append(maqueta_catphan.espacio_entre_tablas(categoria))
 
         # Si es una lista de tablas con títulos (factores de campo, transmisión, etc.)
         elif isinstance(contenido, list):
@@ -1242,7 +1243,7 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
                                     'imagen_resolucion_espacial', 'imagen_valores_ct', 'imagen_linealidad_ct',
                                     'imagen_uniformidad']:
                     # Imágenes del sistema de imágenes - tamaño ajustado para caber en la tabla
-                    data[row_idx][col_idx] = Image(cell, width=3.8*inch, height=3.8*inch)
+                    data[row_idx][col_idx] = cell  # la maqueta del Catphan la dibuja con su forma
                 else:
                     data[row_idx][col_idx] = Image(cell, width=3*inch, height=2.5*inch)
             # Si es string, conviértelo a Paragraph centrado
@@ -1375,7 +1376,7 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
         style.extend(_spans_de_filas_completas(df_tabla))
 
     tabla.setStyle(TableStyle(style))
-    return tabla
+    return maqueta_catphan.TablaDeImagenes(data, style) if tipo_tabla in maqueta_catphan.TABLAS_DE_IMAGENES else tabla
 
 
 #### REPORTE MLCS
