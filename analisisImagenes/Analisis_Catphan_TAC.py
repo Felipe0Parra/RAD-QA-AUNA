@@ -877,7 +877,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
             # Convertir figura a formato BLOB para devolver
             import io
             buf = io.BytesIO()
-            buf.write(_png_de_tamano_fijo(canvas.figure, ajustar=True))
+            buf.write(_png_de_la_curva_mtf(mtf_values, mtf_lp_cm))  # el par: el corte ya es la imagen original
             buf.seek(0)
             output_blob = buf.getvalue()  # Imagen en formato BLOB
             buf.close()
@@ -911,7 +911,7 @@ def resolucion_espacial(corte, corte_hu, tam_px: float, visualizar=True, canvas=
             # Convertir figura a formato BLOB para devolver
             import io
             buf = io.BytesIO()
-            fig.savefig(buf, format='png')
+            buf.write(_png_de_la_curva_mtf(mtf_values, mtf_lp_cm))
             buf.seek(0)
             output_blob = buf.getvalue()  # Imagen en formato BLOB
             buf.close()
@@ -1452,7 +1452,7 @@ _TAMANO_ARCHIVADO_PX = (1343, 827)
 _PPP_ARCHIVADO = 100
 
 
-def _png_de_tamano_fijo(figura, ajustar=False):
+def _png_de_tamano_fijo(figura, ajustar=False, metadatos=None):
     """PNG de una copia de `figura` a _TAMANO_ARCHIVADO_PX [px]: lo archivado no depende de la ventana ni del divisor, y la pestaña no se toca."""
     import io
     import pickle
@@ -1465,8 +1465,37 @@ def _png_de_tamano_fijo(figura, ajustar=False):
     if ajustar:
         copia.tight_layout()
     buf = io.BytesIO()
-    copia.savefig(buf, format='png', dpi=_PPP_ARCHIVADO)
+    copia.savefig(buf, format='png', dpi=_PPP_ARCHIVADO, metadata=metadatos)
     return buf.getvalue()
+
+
+SIN_CURVA_MTF = "Sin curva MTF: hubo menos de dos regiones medibles"
+
+def figura_de_la_curva_mtf(mtf_values, mtf_lp_cm):
+    """La figura que se archiva de la resolucion espacial: solo la curva MTF, dibujada como en la pestana, o el aviso si no hubo dos regiones medibles."""
+    from matplotlib.figure import Figure
+    figura = Figure()
+    ax4 = figura.add_subplot(1, 1, 1)
+    if mtf_values:
+        xs = [float(k) for k in mtf_values.keys()]
+        ys = list(mtf_values.values())
+        ax4.plot(xs, ys, 'o-')
+        for pct, val in mtf_lp_cm.items():
+            ax4.plot(val, int(pct)/100, 'rx')
+            ax4.text(val, int(pct)/100, f"{pct}% {val:.2f}", fontsize=8)
+        ax4.set_ylim(0, 1.05); ax4.grid(True)
+        ax4.set_xlabel("lp/cm"); ax4.set_ylabel("MTF")
+        ax4.set_title("MTF normalizada")
+    else:
+        ax4.text(0.5, 0.5, SIN_CURVA_MTF, ha="center", va="center", fontsize=14, transform=ax4.transAxes)
+        ax4.set_xticks([]); ax4.set_yticks([])  # el recuadro queda: el PDF no lo recorta a una tira
+    return figura
+
+
+def _png_de_la_curva_mtf(mtf_values, mtf_lp_cm):
+    """El PNG archivado de la resolucion espacial, a _TAMANO_ARCHIVADO_PX [px] y con la marca que dice que es solo la curva."""
+    from analisisImagenes.catphan.figura_archivada import MARCA_DE_LA_CURVA_SOLA
+    return _png_de_tamano_fijo(figura_de_la_curva_mtf(mtf_values, mtf_lp_cm), ajustar=True, metadatos=MARCA_DE_LA_CURVA_SOLA)
 
 
 def _imagen_para_pantalla(imagen_bgr):

@@ -1376,7 +1376,7 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
         style.extend(_spans_de_filas_completas(df_tabla))
 
     tabla.setStyle(TableStyle(style))
-    return maqueta_catphan.TablaDeImagenes(data, style) if tipo_tabla in maqueta_catphan.TABLAS_DE_IMAGENES else tabla
+    return maqueta_catphan.TablaDeImagenes(data, style, tipo_tabla) if tipo_tabla in maqueta_catphan.TABLAS_DE_IMAGENES else tabla
 
 
 #### REPORTE MLCS

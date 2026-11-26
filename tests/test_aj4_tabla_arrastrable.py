@@ -652,8 +652,10 @@ def test_la_resolucion_espacial_archivada_ajusta_sus_margenes(pagina):
     w = pagina._crear_nueva_tab("Resolución Espacial")
     _esperar()
     blob = _analizar("resolucion_espacial", w["canvas"])
-    assert blob == A._png_de_tamano_fijo(w["canvas"].figure, ajustar=True), "la resolucion espacial ajusta sus margenes al tamano fijo, como en la pestana"
-    assert blob != A._png_de_tamano_fijo(w["canvas"].figure)
+    from analisisImagenes.catphan.figura_archivada import MARCA_DE_LA_CURVA_SOLA
+    curva = A.figura_de_la_curva_mtf({}, {})  # AJ.6b (25-11): se archiva solo la curva (con el fantoma uniforme, el aviso), no la figura de la pestana
+    assert blob == A._png_de_tamano_fijo(curva, ajustar=True, metadatos=MARCA_DE_LA_CURVA_SOLA), "la resolucion espacial ajusta sus margenes al tamano fijo"
+    assert blob != A._png_de_tamano_fijo(curva, metadatos=MARCA_DE_LA_CURVA_SOLA)
 
 
 def test_las_tres_llamadas_que_archivan_usan_el_tamano_fijo():

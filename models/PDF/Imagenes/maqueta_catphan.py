@@ -27,6 +27,15 @@ PRUEBAS = (
 )
 TABLAS_DE_RESULTADOS = frozenset(resultados for resultados, _ in PRUEBAS)
 TABLAS_DE_IMAGENES = frozenset(imagenes for _, imagenes in PRUEBAS)
+TABLA_DE_LA_MTF = 'imagen_resolucion_espacial'  # solo su imagen del analisis se recorta a la curva
+FRACCION_DEL_CORTE = 0.35  # una columna del corte tiene al menos esta fraccion de pixeles que no son blancos
+ANCHO_MINIMO_DEL_CORTE = 0.05  # fraccion del ancho de la figura
+COLUMNA_QUE_CUBRE_EL_CORTE = 0.25  # fraccion del ancho: el corte empieza antes de esa columna y acaba despues
+FIN_MAXIMO_DEL_CORTE = 0.6  # fraccion del ancho antes de la que acaba el corte
+ANCHO_DEL_CORTE_SOBRE_EL_ALTO = 0.3  # el corte es mas ancho que esta fraccion del alto de la figura
+GRIS_DEL_CORTE = 128  # gris medio por debajo del cual el bloque es el corte
+FRANJA_MAXIMA = 0.05  # la franja blanca empieza a menos de esta fraccion del ancho tras el corte
+GRAFICO_MINIMO = 0.3  # el grafico a la derecha ocupa al menos esta fraccion del ancho
 
 
 def recortar_margen_blanco(imagen):
@@ -40,11 +49,44 @@ def recortar_margen_blanco(imagen):
     return imagen if caja == (0, 0) + imagen.size else imagen.crop(caja)
 
 
-def imagen_preparada(ruta):
-    """Los bytes PNG de la imagen recortada y su tamano en pixeles."""
+def panel_de_la_mtf(imagen):
+    """La caja (x0, y0, x1, y1) [px] del panel de la MTF de una figura combinada guardada antes (corte oscuro a la izquierda, franja blanca, grafico a la derecha), o None si duda."""
+    rgba = np.asarray(imagen.convert('RGBA')).astype(int)
+    alto, ancho = rgba.shape[:2]
+    contenido = ~np.all(rgba[..., :3] == 255, axis=-1) & (rgba[..., 3] > 0)  # lo mismo que en recortar_margen_blanco
+    llenas = list(contenido.mean(axis=0) >= FRACCION_DEL_CORTE) + [False]
+    tramos, inicio = [], None
+    for x, llena in enumerate(llenas):
+        if llena and inicio is None:
+            inicio = x
+        elif not llena and inicio is not None:
+            tramos.append((inicio, x))
+            inicio = None
+    anchos = [t for t in tramos if t[1] - t[0] >= ANCHO_MINIMO_DEL_CORTE * ancho]  # los ejes del grafico dejan columnas llenas de 1 px: no son un corte
+    if len(anchos) != 1:
+        return None
+    x0, x1 = anchos[0]
+    if rgba[:, x0:x1, :3].mean(axis=-1)[contenido[:, x0:x1]].mean() >= GRIS_DEL_CORTE:
+        return None
+    if not (x0 < COLUMNA_QUE_CUBRE_EL_CORTE * ancho and COLUMNA_QUE_CUBRE_EL_CORTE * ancho < x1 < FIN_MAXIMO_DEL_CORTE * ancho and alto * ANCHO_DEL_CORTE_SOBRE_EL_ALTO < x1 - x0):
+        return None
+    blancas = np.flatnonzero(~contenido.any(axis=0)[x1:]) + x1
+    if not blancas.size or blancas[0] > x1 + FRANJA_MAXIMA * ancho:
+        return None
+    fin = blancas[0]
+    while fin + 1 < ancho and not contenido[:, fin + 1].any():
+        fin += 1
+    if ancho - fin - 1 < GRAFICO_MINIMO * ancho:
+        return None
+    return int((x1 + fin + 1) // 2), 0, ancho, alto  # desde la mitad de la franja blanca: el blanco que queda lo quita recortar_margen_blanco
+
+
+def imagen_preparada(ruta, solo_la_curva=False):
+    """Los bytes PNG de la imagen recortada y su tamano en pixeles; con `solo_la_curva`, de una figura combinada guardada antes solo su panel de la MTF, o entera si duda."""
     with ImagenPIL.open(ruta) as original:
         original.load()
-        recortada = recortar_margen_blanco(original)
+        caja = panel_de_la_mtf(original) if solo_la_curva else None  # el PNG temporal del informe ya no trae la marca: se decide por el contenido
+        recortada = recortar_margen_blanco(original if caja is None else original.crop(caja))
         salida = io.BytesIO()
         recortada.save(salida, 'PNG')
         return salida.getvalue(), recortada.size
@@ -92,10 +134,11 @@ def _armar(cabeceras, preparadas, apiladas, medidas, estilo, columnas, huecos=No
 class TablaDeImagenes(Flowable):
     """La tabla de imagenes de una prueba: comparte la pagina con sus resultados si asi cada imagen mide al menos 180 pt de alto; si no, pasa entera a la siguiente llenando el ancho."""
 
-    def __init__(self, data, estilo):
+    def __init__(self, data, estilo, nombre_tabla=None):
         super().__init__()
         self._cabeceras = [list(f) for f in data[:-1]]
-        self._preparadas = [imagen_preparada(r) for r in data[-1] if isinstance(r, str) and r]
+        ultima = len(data[-1]) - 1  # la columna de la imagen del analisis
+        self._preparadas = [imagen_preparada(r, nombre_tabla == TABLA_DE_LA_MTF and c == ultima) for c, r in enumerate(data[-1]) if isinstance(r, str) and r]
         self._columnas, self._estilo = len(data[-1]), list(estilo)
         self._huecos = {c: r for c, r in enumerate(data[-1]) if not (isinstance(r, str) and r)}  # celdas sin imagen: quedan como vinieron, en su columna
         if self._huecos:
@@ -149,6 +192,8 @@ class TablaDeImagenes(Flowable):
 
 def colocar(nombre_tabla, tabla, data=None, estilo=None):
     """Lo que el generador agrega por una tabla del informe del Catphan: un salto de pagina antes de los resultados de cada prueba y sus imagenes con su forma."""
+    if nombre_tabla == TABLA_DE_LA_MTF and not isinstance(tabla, TablaDeImagenes):
+        return [TablaDeImagenes(data, estilo, nombre_tabla)]  # solo su imagen del analisis se recorta a la curva
     if nombre_tabla in TABLAS_DE_IMAGENES:
         return [tabla if isinstance(tabla, TablaDeImagenes) else TablaDeImagenes(data, estilo)]
     if nombre_tabla in TABLAS_DE_RESULTADOS:

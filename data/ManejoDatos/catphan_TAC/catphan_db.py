@@ -69,7 +69,7 @@ def mostrar_imagen_blob_en_canvas(blob_data, canvas=None):
         #print(f"❌ Error al mostrar imagen BLOB: {e}")
         return False
 
-def crear_widget_con_imagen_y_resultados(texto_resultados, imagen_blob, kv, ma, espesor_corte, label, canvas):
+def crear_widget_con_imagen_y_resultados(texto_resultados, imagen_blob, kv, ma, espesor_corte, label, canvas, corte_blob=None):
     """
     Actualiza el label con texto e información de parámetros, y muestra la imagen en el canvas.
     """
@@ -95,11 +95,11 @@ def crear_widget_con_imagen_y_resultados(texto_resultados, imagen_blob, kv, ma, 
     
     # 3. Mostrar la imagen en el canvas si está disponible
     if imagen_blob and canvas:
-        mostrar_imagen_blob_en_canvas(imagen_blob, canvas)
+        mostrar_el_par_o_la_imagen(imagen_blob, canvas, corte_blob)
 
     return True  # Indicar que se completó la operación
 
-def crear_widget_con_parametros_imagen_y_contenido(widget_contenido, label_objetivo, kv, ma, espesor_corte, imagen_blob, canvas):
+def crear_widget_con_parametros_imagen_y_contenido(widget_contenido, label_objetivo, kv, ma, espesor_corte, imagen_blob, canvas, corte_blob=None):
     """
     Actualiza el label con parámetros y tabla de resultados, y muestra la imagen en el canvas proporcionado.
     Similar a crear_widget_con_imagen_y_resultados pero usando el canvas existente.
@@ -129,7 +129,7 @@ def crear_widget_con_parametros_imagen_y_contenido(widget_contenido, label_objet
     
     # 4. Mostrar la imagen en el canvas proporcionado si está disponible
     if imagen_blob and canvas:
-        mostrar_imagen_blob_en_canvas(imagen_blob, canvas)
+        mostrar_el_par_o_la_imagen(imagen_blob, canvas, corte_blob)
     return True  # Indicar que se completó la operación
 
 # ------------------------------------ FUNCIONES DE MAPEO ------------------------------------
@@ -1303,12 +1303,12 @@ def reconstruir_resultados_desde_bd(id_sesion, categorias=None, label=None, canv
                 if isinstance(contenido, str):
                     # Función simplificada que actualiza label y canvas por separado
                     crear_widget_con_imagen_y_resultados(
-                        contenido, imagen_blob, kv, ma, espesor_corte, label, canvas
+                        contenido, imagen_blob, kv, ma, espesor_corte, label, canvas, imagen_path if categoria == "resolucion_espacial" else None
                     )
                 else:
                     # Para widgets/tablas, crear contenedor con parámetros e imagen
                     crear_widget_con_parametros_imagen_y_contenido(
-                        contenido, label, kv, ma, espesor_corte, imagen_blob, canvas
+                        contenido, label, kv, ma, espesor_corte, imagen_blob, canvas, imagen_path if categoria == "resolucion_espacial" else None  # el par: el corte guardado
                     )
             else:
                 pass
@@ -2708,3 +2708,23 @@ def reemplazar_resultados_texto_con_tabla(contenido, label):
                 label.setText(f"Error al mostrar resultados: {str(e)}")
             except:
                 pass
+
+
+def mostrar_el_par_o_la_imagen(imagen_blob, canvas, corte_blob=None):
+    """La imagen guardada de una prueba en su lienzo; de una resolucion espacial que guardo solo la curva, el par: el corte y la curva lado a lado."""
+    from analisisImagenes.catphan.figura_archivada import es_la_curva_sola
+    if not (corte_blob and canvas and es_la_curva_sola(imagen_blob)):
+        return mostrar_imagen_blob_en_canvas(imagen_blob, canvas)
+    try:
+        par = [np.array(Image.open(io.BytesIO(blob))) for blob in (corte_blob, imagen_blob)]
+        canvas.figure.clear()
+        rejilla = canvas.figure.add_gridspec(1, 2, width_ratios=[a.shape[1] / a.shape[0] for a in par])  # cada una con su forma
+        for n, (imagen, titulo) in enumerate(zip(par, ("Imagen original", "Imagen del análisis"))):
+            ax = canvas.figure.add_subplot(rejilla[0, n])
+            ax.imshow(imagen, cmap='gray')
+            ax.set_title(titulo, fontsize=12, pad=15)
+            ax.axis('off')
+        canvas.draw()
+        return True
+    except Exception:
+        return mostrar_imagen_blob_en_canvas(imagen_blob, canvas)  # un corte guardado que no se puede leer: la curva sola, como antes
