@@ -71,8 +71,8 @@ def categorias_de_imagenes_anual(tablas_dict):
 # palabra. Suma 462 pt (6.4 in), dentro del ancho útil de los dos generadores.
 ANCHOS_PARAMETROS_ADQUISICION_PT = [94, 137, 94, 137]
 
-# G.3: tabla de criterio y veredicto (prueba, métrica, valor, criterio, veredicto, fuente). Suma 486 pt (6.75 in).
-ANCHOS_CRITERIOS_VEREDICTOS_PT = [62, 80, 44, 118, 60, 122]
+# G.3: tabla de criterio y veredicto (prueba, métrica, valor, criterio, veredicto, fuente). Suma 496 pt; «Uniformidad» e «Informativo» caben enteras.
+ANCHOS_CRITERIOS_VEREDICTOS_PT = [68, 80, 44, 118, 64, 122]
 
 
 def _spans_de_filas_completas(df_tabla):
@@ -926,8 +926,8 @@ def generar_reporte_pdf_multitabla_mensual(tablas, fecha, user, tipo_reporte=" "
                             # prueba (Si/No/N/A); fundir las columnas 1 y 2 la hacia desaparecer del informe mensual.
 
 
-                if nombre_tabla == 'parametros_adquisicion':
-                    style.extend(_spans_de_filas_completas(df_tabla))
+                if nombre_tabla in ('parametros_adquisicion', 'criterios_veredictos'):
+                    style.extend(_spans_de_filas_completas(df_tabla) if nombre_tabla == 'parametros_adquisicion' else maqueta_catphan.uniones_de_criterio(df_tabla))
                 tabla.setStyle(TableStyle(style))
                 from reportlab.platypus import KeepTogether
                 if nombre_tabla == 'parametros_adquisicion':
@@ -1372,8 +1372,8 @@ def _crear_tabla_pdf_anual(df_tabla, tipo_tabla, maquina):
             if row_idx % 2 == 0:
                 style.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.HexColor("#f0f0f0")))
 
-    if tipo_tabla == 'parametros_adquisicion':
-        style.extend(_spans_de_filas_completas(df_tabla))
+    if tipo_tabla in ('parametros_adquisicion', 'criterios_veredictos'):
+        style.extend(_spans_de_filas_completas(df_tabla) if tipo_tabla == 'parametros_adquisicion' else maqueta_catphan.uniones_de_criterio(df_tabla))
 
     tabla.setStyle(TableStyle(style))
     return maqueta_catphan.TablaDeImagenes(data, style, tipo_tabla) if tipo_tabla in maqueta_catphan.TABLAS_DE_IMAGENES else tabla

@@ -68,15 +68,13 @@ EQUIVALENCIAS = {
 
 # Por qué cada una de las pruebas SIN equivalencia queda pendiente de métrica.
 MOTIVO_PENDIENTE = {
-    "geometria": (
-        "la regla mide cuatro distancias de 50 mm; la función actual mide el tamaño del píxel, no esas distancias"),
+    "geometria": "la app mide el tamaño del píxel, no las cuatro distancias de 50 mm",
     "bajo_contraste": (
-        "la regla cuenta los insertos de 1 % visibles con la métrica de pylinac; la función actual cuenta ROI por CNR "
-        "(≥ 1: 5 o 6 de 6 en todas las series, también con 17.6 HU de ruido) y por visibilidad, y el físico decide cuál "
-        "es el criterio (tabla ROI por ROI de G.3)"),
+        "la regla cuenta insertos de 1 % visibles; la app cuenta ROI por CNR y por visibilidad (5 o 6 de 6 en todas "
+        "las series); decide el físico"),
     "resolucion_espacial": (
-        "la regla pide la MTF al 10 %; la función actual reporta las regiones de pares de líneas que resuelve, y con el "
-        "píxel del Halcyon ese método no demuestra el criterio de 5 lp/cm (B.1)"),
+        "la regla pide la MTF al 10 %; la app reporta los pares de líneas que resuelve, que con el píxel del Halcyon "
+        "no demuestran 5 lp/cm"),
 }
 
 # ---------------------------------------------------------------------------
@@ -145,7 +143,7 @@ def texto_criterio(regla: ReglaPrueba, metrica: str, referencia: Optional[float]
     if tipo == "linea_base_rel":
         return f"± {_fmt(tol * 100)} % de la línea base"
     if tipo == "linea_base_min":
-        return f"no menos de la línea base − {_fmt(tol)}{unidad}"
+        return "no menos de la línea base" if tol == 0 else f"no menos de la línea base − {_fmt(tol)}{unidad}"
     return "criterio no definido"
 
 

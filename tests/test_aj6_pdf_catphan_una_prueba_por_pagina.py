@@ -546,8 +546,8 @@ def test_pdf_py_llama_a_la_maqueta_solo_en_las_ramas_del_catphan_y_build_exe_la_
         for n in ast.walk(funcion):
             if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "maqueta_catphan":
                 usos.setdefault(funcion.name, []).append(n.attr)
-    assert {k: sorted(v) for k, v in usos.items()} == {"generar_reporte_pdf_multitabla_mensual": ["TABLAS_DE_IMAGENES", "colocar", "espacio_entre_tablas"],
+    assert {k: sorted(v) for k, v in usos.items()} == {"generar_reporte_pdf_multitabla_mensual": ["TABLAS_DE_IMAGENES", "colocar", "espacio_entre_tablas", "uniones_de_criterio"],
                                                        "generar_reporte_pdf_multitabla_anual": ["colocar", "espacio_entre_tablas"],
-                                                       "_crear_tabla_pdf_anual": ["TABLAS_DE_IMAGENES", "TablaDeImagenes"]}, usos
+                                                       "_crear_tabla_pdf_anual": ["TABLAS_DE_IMAGENES", "TablaDeImagenes", "uniones_de_criterio"]}, usos
     texto = (RAIZ / "build_exe.py").read_text(encoding="utf-8")
     assert texto.count('"models.PDF.Imagenes.maqueta_catphan"') == 1

@@ -158,10 +158,7 @@ class PerfilEquipo:
     reglas: dict = field(default_factory=dict)  # {nombre_prueba: ReglaPrueba}
 
 
-_MOTIVO_ESPESOR_NO_APLICA = (
-    "No aplica a la CBCT de acelerador (criterio del jefe de física 18-09-2026; "
-    "AAPM TG-142 Tabla VI no lo incluye)"
-)
+_MOTIVO_ESPESOR_NO_APLICA = "No aplica a la CBCT de acelerador (TG-142 Tabla VI no lo incluye)"
 
 _HU_METRICAS = (
     "hu_aire",
@@ -198,7 +195,7 @@ PERFIL_TOMOGRAFO = PerfilEquipo(
             nominal=None,  # el nominal es el de CADA serie (serie.espesor_mm), no fijo
             tolerancia=1.0,
             unidad="mm",
-            fuente="AAPM TG-66 (ancho del perfil de sensibilidad / espesor, ±1 mm)",
+            fuente="AAPM TG-66 (espesor de corte, ±1 mm)",
             estado="norma",
         ),
         "numeros_ct": ReglaPrueba(
@@ -215,10 +212,7 @@ PERFIL_TOMOGRAFO = PerfilEquipo(
                 "hu_teflon": 50.0,
             },
             unidad="HU",
-            fuente=(
-                "Propuesta del plan: TG-66 pide constancia mensual; 20 HU ≈ 1 % de dosis "
-                "en tejido blando y 50 HU en pulmón/hueso"
-            ),
+            fuente="TG-66, constancia mensual: 20 HU tejido blando; 50 HU pulmón y hueso",
             estado="propuesta",
         ),
         "linealidad": ReglaPrueba(
@@ -227,7 +221,7 @@ PERFIL_TOMOGRAFO = PerfilEquipo(
             tipo_tolerancia="min",
             tolerancia=0.99,
             unidad="1",
-            fuente="Criterio actual de la app, sin fuente normativa (P8, requiere confirmación del físico)",
+            fuente="Criterio de la app, sin norma; por confirmar",
             estado="propuesta",
         ),
         "uniformidad": ReglaPrueba(
@@ -245,7 +239,7 @@ PERFIL_TOMOGRAFO = PerfilEquipo(
             tipo_tolerancia="linea_base_rel",
             tolerancia=0.20,
             unidad="1",
-            fuente="Propuesta del plan (TG-66 remite al criterio del fabricante)",
+            fuente="TG-66 remite al fabricante",
             estado="propuesta",
         ),
         "bajo_contraste": ReglaPrueba(
@@ -254,7 +248,7 @@ PERFIL_TOMOGRAFO = PerfilEquipo(
             tipo_tolerancia="linea_base_min",
             tolerancia=1.0,
             unidad="conteo",
-            fuente="Propuesta del plan; el juicio visual del físico se conserva como complemento",
+            fuente="Con el juicio visual del físico como complemento",
             estado="propuesta",
         ),
         "resolucion_espacial": ReglaPrueba(
@@ -263,10 +257,7 @@ PERFIL_TOMOGRAFO = PerfilEquipo(
             tipo_tolerancia="linea_base_min",
             tolerancia=0.0,
             unidad="lp/cm",
-            fuente=(
-                "Contra línea base (TG-66: según el fabricante). Techo físico ≈4.65 lp/cm "
-                "con el FOV de 550 mm de la serie de QA (P4)"
-            ),
+            fuente="Línea base (TG-66: según el fabricante); máximo medible ≈4.65 lp/cm con FOV 550 mm",
             estado="propuesta",
         ),
     },
@@ -286,14 +277,14 @@ PERFIL_CLINAC_IX = PerfilEquipo(
             nominal=50.0,
             tolerancia=2.0,
             unidad="mm",
-            fuente="AAPM TG-142 Tabla VI (distorsión geométrica CBCT, ≤2 mm; ≤1 mm si SRS/SBRT, P5)",
+            fuente="AAPM TG-142 Tabla VI (≤2 mm; ≤1 mm en SRS/SBRT)",
             estado="norma",
         ),
         "espesor": ReglaPrueba(
             aplica="no",
             metricas=("espesor_mm",),
             motivo_no_aplica=_MOTIVO_ESPESOR_NO_APLICA,
-            fuente="DA-78",
+            fuente="Jefe de física, 18-09-2026",
         ),
         "numeros_ct": ReglaPrueba(
             aplica="si",
@@ -301,17 +292,13 @@ PERFIL_CLINAC_IX = PerfilEquipo(
             tipo_tolerancia="linea_base_abs",
             tolerancia=50.0,
             unidad="HU",
-            fuente=(
-                "AAPM TG-142 (constancia de HU) + TG-179. Los HU del iX no están calibrados "
-                "(desplazamiento de +500 o -450 según el protocolo): nunca se juzgan en absoluto, "
-                "solo contra su propia línea base"
-            ),
+            fuente="AAPM TG-142 y TG-179; HU sin calibrar: solo contra su línea base",
             estado="norma",
         ),
         "linealidad": ReglaPrueba(
             aplica="informativo",
             metricas=("linealidad_r2",),
-            fuente="AAPM TG-142 no la pide para CBCT (P8)",
+            fuente="AAPM TG-142 no la pide para CBCT",
             estado="norma",
         ),
         "uniformidad": ReglaPrueba(
@@ -320,7 +307,7 @@ PERFIL_CLINAC_IX = PerfilEquipo(
             tipo_tolerancia="max",
             tolerancia=40.0,
             unidad="HU",
-            fuente="Especificación Varian / AAPM TG-142 (baseline)",
+            fuente="Varian / AAPM TG-142 (línea base)",
             estado="norma",
         ),
         "ruido": ReglaPrueba(
@@ -329,7 +316,7 @@ PERFIL_CLINAC_IX = PerfilEquipo(
             tipo_tolerancia="linea_base_rel",
             tolerancia=0.20,
             unidad="1",
-            fuente="AAPM TG-142 (baseline)",
+            fuente="AAPM TG-142 (línea base)",
             estado="norma",
         ),
         "bajo_contraste": ReglaPrueba(
@@ -338,7 +325,7 @@ PERFIL_CLINAC_IX = PerfilEquipo(
             tipo_tolerancia="linea_base_min",
             tolerancia=1.0,
             unidad="conteo",
-            fuente="Propuesta del plan; el juicio visual del físico se conserva como complemento",
+            fuente="Con el juicio visual del físico como complemento",
             estado="propuesta",
         ),
         "resolucion_espacial": ReglaPrueba(
@@ -347,10 +334,7 @@ PERFIL_CLINAC_IX = PerfilEquipo(
             tipo_tolerancia="min",
             tolerancia=6.0,
             unidad="lp/cm",
-            fuente=(
-                "Especificación Varian (full-fan, ≥6 lp/cm). Métrica exacta del veredicto "
-                "pendiente de confirmar (P7)"
-            ),
+            fuente="Varian (full-fan, ≥6 lp/cm); métrica por confirmar",
             estado="norma",
         ),
     },
@@ -370,14 +354,14 @@ PERFIL_HALCYON = PerfilEquipo(
             nominal=50.0,
             tolerancia=0.5,
             unidad="mm",
-            fuente="IDC-F-RT-120 (formato anual del servicio, 2025)",
+            fuente="Formato anual del servicio, 2025 (hoy CLA-F-RT-120)",
             estado="confirmada",
         ),
         "espesor": ReglaPrueba(
             aplica="no",
             metricas=("espesor_mm",),
             motivo_no_aplica=_MOTIVO_ESPESOR_NO_APLICA,
-            fuente="DA-78",
+            fuente="Jefe de física, 18-09-2026",
         ),
         "numeros_ct": ReglaPrueba(
             aplica="si",
@@ -393,13 +377,13 @@ PERFIL_HALCYON = PerfilEquipo(
                 "hu_teflon": 50.0,
             },
             unidad="HU",
-            fuente="AAPM TG-179 (tejido-equivalente ±30 HU; pulmón/hueso ±50 HU) + Varian (±50 HU)",
+            fuente="AAPM TG-179 (±30 HU tejido; ±50 HU pulmón y hueso) y Varian (±50 HU)",
             estado="norma",
         ),
         "linealidad": ReglaPrueba(
             aplica="informativo",
             metricas=("linealidad_r2",),
-            fuente="Informativo (P8)",
+            fuente="Informativo",
             estado="propuesta",
         ),
         "uniformidad": ReglaPrueba(
@@ -408,7 +392,7 @@ PERFIL_HALCYON = PerfilEquipo(
             tipo_tolerancia="max",
             tolerancia=40.0,
             unidad="HU",
-            fuente="IDC-F-RT-120 (formato anual del servicio, 2025)",
+            fuente="Formato anual del servicio, 2025 (hoy CLA-F-RT-120)",
             estado="confirmada",
         ),
         "ruido": ReglaPrueba(
@@ -417,7 +401,7 @@ PERFIL_HALCYON = PerfilEquipo(
             tipo_tolerancia="linea_base_rel",
             tolerancia=0.20,
             unidad="1",
-            fuente="AAPM TG-142 (baseline)",
+            fuente="AAPM TG-142 (línea base)",
             estado="norma",
         ),
         "bajo_contraste": ReglaPrueba(
@@ -426,10 +410,7 @@ PERFIL_HALCYON = PerfilEquipo(
             tipo_tolerancia="linea_base_min",
             tolerancia=1.0,
             unidad="conteo",
-            fuente=(
-                "Propuesta del plan; el formato IDC-F-RT-120 pide además \"menor círculo "
-                "observable\" en los grupos 1 %/0.5 %/0.3 % (visual, P6)"
-            ),
+            fuente="El formato anual pide además el menor círculo visible en 1 %, 0.5 % y 0.3 %",
             estado="propuesta",
         ),
         "resolucion_espacial": ReglaPrueba(
@@ -438,10 +419,7 @@ PERFIL_HALCYON = PerfilEquipo(
             tipo_tolerancia="min",
             tolerancia=5.0,
             unidad="lp/cm",
-            fuente=(
-                "IDC-F-RT-120 (visual, ≥5 lp/cm) + AAPM TG-179. Techo físico ≈5.2 lp/cm con "
-                "el FOV de 491 mm de la serie de QA (P4/P7)"
-            ),
+            fuente="Formato anual (≥5 lp/cm, visual) y TG-179; máximo medible ≈5.2 lp/cm",
             estado="confirmada",
         ),
     },

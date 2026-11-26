@@ -214,3 +214,21 @@ def espacio_entre_tablas(nombre_tabla):
     if nombre_tabla in TABLAS_DE_RESULTADOS | TABLAS_DE_IMAGENES:
         return EspacioQueNoPasa(1, ESPACIO_ENTRE_TABLAS_PT)
     return Spacer(1, ESPACIO_ENTRE_TABLAS_PT)
+
+
+COLUMNA_PRUEBA, COLUMNA_FUENTE = 0, 5  # de la tabla de criterio (Prueba, Metrica, Valor, Criterio, Veredicto, Fuente)
+SIN_FUENTE = '---'  # lo que imprime la tabla cuando una regla no trae fuente
+
+
+def uniones_de_criterio(df_tabla):
+    """Las celdas unidas de la tabla de criterio: la fuente de filas seguidas de la misma prueba con la misma fuente se imprime una vez."""
+    filas = df_tabla.values.tolist()[1:]  # sin la fila de cabeceras; la fila i va en la fila i + 2 de la tabla (titulo y cabeceras)
+    uniones, inicio = [], 0
+    for i in range(1, len(filas) + 1):
+        igual = i < len(filas) and filas[i][COLUMNA_PRUEBA] == filas[inicio][COLUMNA_PRUEBA] and filas[i][COLUMNA_FUENTE] == filas[inicio][COLUMNA_FUENTE]
+        if igual and filas[inicio][COLUMNA_FUENTE] != SIN_FUENTE:
+            continue
+        if i - inicio > 1:
+            uniones.append(('SPAN', (COLUMNA_FUENTE, inicio + 2), (COLUMNA_FUENTE, i + 1)))
+        inicio = i
+    return uniones
