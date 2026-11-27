@@ -378,8 +378,10 @@ class TestDenominadorDeCobertura:
         #             bloque de QC): `guardar` (la vigente de la clave de bloque que reemplaza), `vigente`, `energias_cargadas` y `datos_del_haz` (las vigentes, con `filtro_activo`),
         #             `historial` (las dos ramas a proposito, con `activo` como dato) y `_archivos_del_conjunto` (los archivos de un conjunto). Medido con `lectoras_del_bloque_qc()`
         #             sobre el arbol de UM.3 (114) y sobre un espejo de 85f02a3 con la referencia de UM.2 (108).
+        #   114 -> 115 AF.1 (26-11): `reetiquetar_tasas_anual_600` (scripts/migrar_bd_a_estandar.py) -- lee los anuales vigentes del Clinac 600 en `controles` y sus bloques vigentes de
+        #             `tabla_control_camaras_monitoras` (con `filtro_activo`) para re-etiquetar por posicion sus tasas. Medido con `lectoras_del_bloque_qc()` sobre el arbol de AF.1 (115) y sobre su base (114).
         lectoras = _rt1.lectoras_del_bloque_qc()
-        assert len(lectoras) == 114, (
+        assert len(lectoras) == 115, (
             f"PI.3 sumó `services/posicion_inicial_braqui.py` (cinco funciones lectoras sobre `TipoCalibracion` y "
             f"`braqui_posicion_inicial`, con su filtro de vigencia o por identidad), PI.9 retiró dos de la clase vieja de posición "
             f"inicial, FS.1 unificó la búsqueda del control (entra `buscar_control_vigente`, salen las dos `create_control`) y "

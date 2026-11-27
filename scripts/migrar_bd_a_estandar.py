@@ -631,6 +631,80 @@ def _reportar_retiro_tabla(titulo, resultado):
         print(f"  {estado}")
 
 
+# Las tres tasas del anual del Clinac 600 guardadas con las etiquetas del iX, en su orden, y las que les tocan por posicion.
+ETIQUETAS_VIEJAS_TASA_600 = ("Tasa mínima 100 cGy/min", "Tasa máxima 400 cGy/min", "Tasa máxima 600 cGy/min")
+ETIQUETAS_NUEVAS_TASA_600 = ("Tasa mínima 80 cGy/min", "Tasa intermedia 240 cGy/min", "Tasa máxima 400 cGy/min")
+
+
+def reetiquetar_tasas_anual_600(ruta_bd, usuario=None):
+    """Re-etiqueta POR POSICION (orden por id del bloque vigente) las tres filas de tasa de cada anual vigente del Clinac 600, con `reemplazar_bloque` y una fila de auditoria por bloque.
+
+    Exige las tres etiquetas viejas, una vez cada una y en su orden; si no, salta el bloque y lo dice. Una segunda corrida no encuentra nada que cambiar."""
+    from services.anulacion import filtro_activo, reemplazar_bloque
+    from services.audit_minimo import ACCION_MIGRACION
+    from services.nombres_acelerador import nombre_canonico
+    tabla = "tabla_control_camaras_monitoras"
+    resultado = []
+    con = sqlite3.connect(ruta_bd)
+    try:
+        columnas = [c[1] for c in con.execute(f"PRAGMA table_info('{tabla}')").fetchall() if c[1] not in ("id", "activo")]
+        if "indicador_medir" not in columnas:
+            return resultado
+        indicador, energia = columnas.index("indicador_medir"), columnas.index("id_energia")
+        valor = columnas.index("valor_medido") if "valor_medido" in columnas else None
+        anuales = [(ref, equipo) for ref, equipo in con.execute(
+            f"SELECT id, equipo FROM controles WHERE control = 'Anual'{filtro_activo('controles')} ORDER BY id").fetchall()
+            if nombre_canonico(equipo) == "Clinac 600"]
+        for ref, equipo in anuales:
+            bloques = {}
+            for fila in con.execute(f"SELECT {', '.join(columnas)} FROM {tabla} WHERE ref = ?{filtro_activo(tabla)} ORDER BY id", (ref,)).fetchall():
+                bloques.setdefault(fila[energia], []).append(fila)
+            for id_energia, filas in bloques.items():
+                tasas = tuple(f[indicador] for f in filas if f[indicador] in ETIQUETAS_VIEJAS_TASA_600 + ETIQUETAS_NUEVAS_TASA_600)
+                if not tasas or tasas == ETIQUETAS_NUEVAS_TASA_600:
+                    continue
+                caso = {"ref": ref, "equipo": equipo, "id_energia": id_energia, "cambios": []}
+                if id_energia is None or tasas != ETIQUETAS_VIEJAS_TASA_600:
+                    resultado.append(dict(caso, estado=f"saltado: las etiquetas de tasa del bloque son {list(tasas)} (energia {id_energia}) y se esperaban exactamente "
+                                                      f"{list(ETIQUETAS_VIEJAS_TASA_600)}, en ese orden"))
+                    continue
+                nuevas, cambios = [], []
+                for fila in filas:
+                    fila = list(fila)
+                    if fila[indicador] in ETIQUETAS_VIEJAS_TASA_600:
+                        nueva = ETIQUETAS_NUEVAS_TASA_600[len(cambios)]
+                        cambios.append((fila[indicador], nueva, fila[valor] if valor is not None else None))
+                        fila[indicador] = nueva
+                    nuevas.append(tuple(fila))
+                detalle = "re-etiquetado por posicion de las tasas del anual del Clinac 600: " + "; ".join(f"'{a}' -> '{b}'" for a, b, _ in cambios)
+                cursor = con.cursor()
+                try:
+                    cursor.execute("BEGIN")
+                    reemplazar_bloque(cursor, tabla, [("ref", ref), ("id_energia", id_energia)],
+                                      f"INSERT INTO {tabla} ({', '.join(columnas)}) VALUES ({', '.join('?' for _ in columnas)})",
+                                      nuevas, usuario, ref=ref, detalle=detalle, accion=ACCION_MIGRACION)
+                    con.commit()
+                except Exception:
+                    con.rollback()
+                    raise
+                finally:
+                    cursor.close()
+                resultado.append(dict(caso, estado="re-etiquetado", cambios=cambios))
+    finally:
+        con.close()
+    return resultado
+
+
+def _reportar_reetiquetado(resultado):
+    print("\n=== Re-etiquetado de las tasas del anual del Clinac 600 (por posicion) ===")
+    if not resultado:
+        print("  Ningun anual vigente del Clinac 600 tiene las etiquetas viejas: no hay nada que re-etiquetar.")
+    for r in resultado:
+        print(f"  control {r['ref']} ({r['equipo']}), energia {r['id_energia']}: {r['estado']}")
+        for vieja, nueva, valor in r["cambios"]:
+            print(f"      '{vieja}' -> '{nueva}' (valor {valor})")
+
+
 def migrar(ruta_bd, aplicar=False, usuario=None):
     """Punto de entrada reutilizable (además de la CLI). Devuelve un dict
     con el resultado -- útil para tests y para invocarlo desde la propia
@@ -665,6 +739,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             (sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc,
              equipos_anual, posicionamiento,
              starshot) = _aplicar_migracion_en(copia, usuario=usuario)
+            reetiquetado = reetiquetar_tasas_anual_600(copia, usuario=usuario)
             con_copia = sqlite3.connect(copia)
             try:
                 inventario_despues = _inventario_esquema(con_copia)
@@ -686,6 +761,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
         _reportar_retiro_tabla(
             "Retiro de posicionamiento_reposicionamiento (EB7, DA-50)",
             posicionamiento)
+        _reportar_reetiquetado(reetiquetado)
         _reportar_cambios_estructurales(estructural_antes, estructural_despues,
                                      duplicados_controles_despues)
         _reportar_qc(qc_antes, qc_despues)
@@ -697,6 +773,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
                 "equipos_anual": equipos_anual,
                 "posicionamiento_reposicionamiento": posicionamiento,
                 "angulo_starshot_sin_unique": starshot,
+                "reetiquetado_tasas_600": reetiquetado,
                 "qc_antes": qc_antes, "qc_despues": qc_despues,
                 "censo_antes": censo_antes, "censo_despues": censo_despues,
                 "duplicados_controles": duplicados_controles_despues}
@@ -725,6 +802,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     (sentinelas_normalizadas, equipos, bloque_qc, indices_bloque_qc,
      equipos_anual, posicionamiento,
      starshot) = _aplicar_migracion_en(ruta_bd, usuario=usuario)
+    reetiquetado = reetiquetar_tasas_anual_600(ruta_bd, usuario=usuario)
 
     con_despues = sqlite3.connect(ruta_bd)
     try:
@@ -750,6 +828,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
     _reportar_retiro_tabla(
         "Retiro de posicionamiento_reposicionamiento (EB7, DA-50)",
         posicionamiento)
+    _reportar_reetiquetado(reetiquetado)
     _reportar_cambios_estructurales(estructural_antes, estructural_despues,
                                      duplicados_controles_despues)
     hubo_perdida_qc = _reportar_qc(qc_antes, qc_despues)
@@ -820,6 +899,7 @@ def migrar(ruta_bd, aplicar=False, usuario=None):
             "equipos_anual": equipos_anual,
             "posicionamiento_reposicionamiento": posicionamiento,
             "angulo_starshot_sin_unique": starshot,
+            "reetiquetado_tasas_600": reetiquetado,
             "qc_antes": qc_antes, "qc_despues": qc_despues,
             "censo_antes": censo_antes, "censo_despues": censo_despues,
             "duplicados_controles": duplicados_controles_despues}

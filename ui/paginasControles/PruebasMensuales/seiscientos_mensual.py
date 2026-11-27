@@ -1903,7 +1903,7 @@ class PruebaMensual600(PruebaBasico):
             with self.db_manager.obtener_conexion() as conn:
                 cursor = conn.cursor()
                 cursor.execute(f"PRAGMA table_info({nombre_tabla})")
-                nombres_columnas = [row[1] for row in cursor.fetchall()]
+                nombres_columnas = [row[1] for row in cursor.fetchall() if not (row[1] == "activo" and nombre_tabla in TABLAS_ANULABLES)]
 
                 prueba1 = self.pruebatalas(nombre_tabla, ref)
                 if prueba1:
@@ -3931,9 +3931,9 @@ class PruebaMensual600(PruebaBasico):
             with self.db_manager.obtener_conexion() as conn:
                 cursor = conn.cursor()
                 # MI0 (PLAN_CONTRATO_COMPLETO_19-08.md §6-MI0): columnas
-                # explícitas, excluyendo SOLO 'activo' (siempre la última del
-                # esquema -- ALTER TABLE ADD COLUMN de _asegurar_activo_bloque_qc
-                # siempre anexa al final). Se conserva el prefijo identificador
+                # explícitas, excluyendo SOLO 'activo', por NOMBRE (ya no es
+                # siempre la última: una columna agregada después de ella, como
+                # la tercera lectura de la tasa, queda detrás). Se conserva el prefijo identificador
                 # (ref/id/id_energia) en el SELECT: los recortes row[1:]/row[2:]
                 # de más abajo dependen de la INSTANCIA que llama (mensual vs.
                 # anual de Halcyon leen la MISMA tabla con recortes distintos),
@@ -3944,8 +3944,8 @@ class PruebaMensual600(PruebaBasico):
                 cursor.execute(f"PRAGMA table_info({nombre_tabla})")
                 columnas = [c[1] for c in cursor.fetchall()]
                 if (nombre_tabla in TABLAS_ANULABLES and columnas
-                        and columnas[-1] == "activo"):
-                    columnas.pop()
+                        and "activo" in columnas):
+                    columnas = [c for c in columnas if c != "activo"]
                 columnas_str = ", ".join(columnas)
                 # Query con parámetros seguros
                 sql = f"SELECT {columnas_str} FROM {nombre_tabla} WHERE ref = ?"

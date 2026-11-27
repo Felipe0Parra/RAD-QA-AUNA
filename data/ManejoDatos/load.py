@@ -485,8 +485,8 @@ def loadtablacomplex(nombre_tabla, table, datos, reference, from_range = 0, id_e
     for fila in datos:
         print(f"  - {fila}")
 
-    #print(datos)
-
+    # las columnas finales que la tabla visible no trae van en NULL solo si la lista blanca las admite
+    datos = completar_con_null(nombre_tabla, columnas_str, datos)
     # INSERT en la base de datos
     # conn = Conexion().conectar()
     # cursor = conn.cursor()
@@ -4385,3 +4385,20 @@ def corregir_calibracion(dlg, ref, columna, valor_anterior, valor_nuevo):
             mostrar_db_mensualBraqui(dlg)
         except Exception:
             traceback.print_exc()
+
+
+# Las unicas columnas finales que el guardado de una tabla puede dejar en NULL cuando la tabla visible no las trae.
+RELLENO_CON_NULL = {"anual_tasa_dosis": ("med3",)}
+
+
+def completar_con_null(nombre_tabla, columnas_str, datos):
+    """Completa con NULL lo que le falta a cada fila solo si son las ultimas columnas de la lista blanca de su tabla; cualquier otro desajuste queda igual y el INSERT falla como siempre."""
+    permitidas = RELLENO_CON_NULL.get(nombre_tabla, ())
+    columnas = [c.strip() for c in columnas_str.split(",")]
+    completas = []
+    for fila in datos:
+        faltan = len(columnas) - len(fila)
+        if 0 < faltan <= len(permitidas) and tuple(columnas[-faltan:]) == permitidas[-faltan:]:
+            fila = list(fila) + [None] * faltan
+        completas.append(fila)
+    return completas

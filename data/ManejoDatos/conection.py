@@ -325,6 +325,7 @@ class Conexion():
             self._asegurar_criterio_visibilidad_roi()  # GI.8c (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             self._asegurar_rango_referencia_valores_ct()  # GI.8d (PLAN_REPARACIONES_IMAGENES_FISICOS_06-10.md)
             self._asegurar_medidas_por_capa_posicion_inicial()  # B.5 (PLAN_ANALISIS_PELICULAS_08-10.md)
+            self._asegurar_columnas_de_los_anuales()
             # E10: DESPUÉS de _asegurar_activo_bloque_qc, para que la
             # recreación de tablas ya incluya las columnas `activo` de E7 y
             # solo haya UNA recreación. Y SIEMPRE ANTES de que exista
@@ -1242,6 +1243,21 @@ class Conexion():
                     _asegurar_columna(cur, "braqui_posicion_inicial", columna, ddl)
             except sqlite3.Error as ex:
                 print(f"Aviso: no se pudo asegurar 'braqui_posicion_inicial.{columna}': {ex}")
+        self.con.commit()
+        cur.close()
+
+    def _asegurar_columnas_de_los_anuales(self):
+        """Agrega al final de su tabla las columnas de `COLUMNAS_NUEVAS_DE_LOS_ANUALES` que falten (aditiva e idempotente, sin rellenar ninguna fila).
+
+        Cada columna tiene su propio intento: un fallo se avisa y no corta el resto del arranque."""
+        cur = self.con.cursor()
+        for tabla, columna, ddl in COLUMNAS_NUEVAS_DE_LOS_ANUALES:
+            try:
+                existentes = [c[1].lower() for c in cur.execute(f"PRAGMA table_info('{tabla}')").fetchall()]
+                if bool(existentes) and columna.lower() not in existentes:
+                    _asegurar_columna(cur, tabla, columna, ddl)
+            except sqlite3.Error as ex:
+                print(f"Aviso: no se pudo asegurar '{tabla}.{columna}': {ex}")
         self.con.commit()
         cur.close()
 
@@ -2992,3 +3008,12 @@ class Conexion():
             )
         """)
         self.con.commit()
+
+
+# Columnas que ganan los anuales (tercera lectura de la tasa del 600 y dosis maxima del PDD del Halcyon), en este orden, al final de cada tabla.
+COLUMNAS_NUEVAS_DE_LOS_ANUALES = (
+    ("anual_tasa_dosis", "med3", "REAL"),
+    ("HC_dosimetria_anual", "dmax_mm", "REAL"),
+    ("HC_dosimetria_anual", "discrepancia_dmax_mm", "REAL"),
+    ("HC_dosimetria_anual", "tolerancia_dmax_mm", "REAL"),
+)

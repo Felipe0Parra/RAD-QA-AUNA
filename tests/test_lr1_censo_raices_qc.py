@@ -285,6 +285,9 @@ CENSO_RAICES = {
         (CENSO, "migración (UPDATE que normaliza el centinela a NULL): "
                 "misma razón que la cuenta de arriba -- filtrar dejaría el "
                 "histórico a medio migrar, que es peor que no migrarlo"),
+    ("scripts/migrar_bd_a_estandar.py", 655, "controles"):
+        (LISTA, "migración (reetiquetar_tasas_anual_600): los anuales VIGENTES del Clinac 600, WHERE control = 'Anual' -- "
+                "solo se re-etiqueta lo vigente; un control anulado conserva sus etiquetas viejas como historia"),
 
     # -- services --------------------------------------------------------
     ("services/consistencia_dosis.py", 51, "controles"):
@@ -406,13 +409,13 @@ CENSO_RAICES = {
 # quinta raíz nueva y su servicio (`services/referencias_qc.py`) lee de ella
 # en 3 sitios (leer_referencia, listar_vigentes, historial): 72 -> 75 filas,
 # 70 -> 73 sitios físicos.
-FILAS_ESPERADAS = 88      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`); FS.1 (06-10): -1 (-2 busquedas de create_control retiradas de load.py y seiscientos_anual.py, +1 la unica `identidad_control.py::buscar_control_vigente`); FS.2 (06-10): -1 (la consulta propia de `actualizar_fisicos` se retira: usa `buscar_control_vigente`)
+FILAS_ESPERADAS = 89      # F.2 (25-09): +1, `referencias_qc.py::_historico_calidad` (LISTA sobre `controles`); FS.1 (06-10): -1 (-2 busquedas de create_control retiradas de load.py y seiscientos_anual.py, +1 la unica `identidad_control.py::buscar_control_vigente`); FS.2 (06-10): -1 (la consulta propia de `actualizar_fisicos` se retira: usa `buscar_control_vigente`); AF.1 (26-11): +1, `reetiquetar_tasas_anual_600` (LISTA sobre `controles`)
                           # RC.2 (30-09): +1, `corregir_calibracion` (IDENTIDAD sobre TipoCalibracion)
                           # PI.3 (02-10): +6, `services/posicion_inicial_braqui.py` (3 LISTA y 3 IDENTIDAD)
                           # PI.9 (05-10): -3, los tres sitios de la clase retirada (`actualizar_ref_bd` y las dos series temporales; LISTA)
                           # CD.4 (30-10): +5, `services/curva_dosis.py` sobre `calibracion_pelicula` (2 LISTA: guardar y listar; 3 IDENTIDAD: anular x2 y leer)
                           # UM.3 (08-11): +5, `services/um_datos_haz.py` sobre `um_datos_haz` (4 LISTA: guardar, vigente, energias_cargadas y datos_del_haz; 1 CENSO: historial)
-SITIOS_FISICOS_ESPERADOS = 86      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`); FS.1 (06-10): -1 (el mismo recuento de arriba); FS.2 (06-10): -1 (idem)
+SITIOS_FISICOS_ESPERADOS = 87      # F.2 (25-09): +1 (el mismo sitio de `_historico_calidad`); FS.1 (06-10): -1 (el mismo recuento de arriba); FS.2 (06-10): -1 (idem); AF.1 (26-11): +1 (`reetiquetar_tasas_anual_600`)
                                     # RC.2 (30-09): +1 (corregir_calibracion, IDENTIDAD)
                                     # PI.3 (02-10): +6 (los seis del servicio, ninguno se resuelve a dos textos)
                                     # PI.9 (05-10): -3 (los mismos tres sitios; ninguno se resolvia a dos textos)
