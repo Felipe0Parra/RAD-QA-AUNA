@@ -134,9 +134,9 @@ class PruebaAnualIX(PruebaAnual600):
             toolbox.addItem(self.category1, "EQUIPOS DE MEDICIÓN")
             toolbox.addItem(self.subtool, "FACTOR DE CAMPO")
             toolbox.addItem(self.subtool2, "FACTOR DE TRANSMISIÓN")
-            toolbox.addItem(self.subtool3, "FACTOR SOBRE EL EJE")
+            self.menu_fse = self._agregar_seccion_con_menu(toolbox, self.subtool3, "FACTOR SOBRE EL EJE", agrupar=False)
             toolbox.addItem(self.subtool4, "CONTROL DE CÁMARAS")
-            toolbox.addItem(self.subtool5, "LECTURAS DE LINEALIDAD")
+            self.menu_linealidad = self._agregar_seccion_con_menu(toolbox, self.subtool5, "LECTURAS DE LINEALIDAD", agrupar=True)
 
         except Exception as e:
             print(f"Error configurando toolbox principal: {e}")
@@ -167,11 +167,11 @@ class PruebaAnualIX(PruebaAnual600):
                 self.tablas_fc.append({'tabla': tabla, 'id_energia': self.id_energia})
 
             # ------------------------- Tabla factores de transmisión de accesorios -------------------------
-            # Fuera de alcance de E1 -- el formato pide lo mismo para las 6 energías.
+            # P3: el formato no tiene cuñas para electrones; solo fotones.
             headers_fta = ["Accesorio", "Factor de transmisión", "Factor esperado", "Discrepancia (%)"]
             datos_fta = [ ["15°", "", "",""], ["30°", "", "", ""], ["45°", "", "", ""], ["60°", "", "", ""], ["MLC", "", "", ""]]
             self.tablas_fta = []
-            for energia in energias:
+            for energia in [e for e in energias if e in self.ENERGIAS_CON_CUNAS]:
                 self.id_energia = energia_ids.get(energia, None)
                 widget, tabla = PruebaMensual600.createSimpleTable1(
                     self, len(datos_fta), 4, headers_fta, datos_fta, "tabla_factores_transmision", self.ref, id_energia=self.id_energia, id=True
@@ -253,9 +253,9 @@ class PruebaAnualIX(PruebaAnual600):
     NIVELES_UM_LINEALIDAD = ["50", "100", "150", "200", "250", "300", "350", "400", "500", "600"]
     ACCESORIOS_TRANSMISION = ["Open", "15°", "30°", "45°", "60°", "MLC"]
     TASAS_DOSIS_UM_MIN = ["100", "300", "400", "600"]
-    # F-5: la constancia de tasa de dosis solo se mide en el formato real
-    # para las 2 energías de fotones -- no hay bloque de electrones en la
-    # hoja "Linealidad" para este ensayo.
+    # P3: las cuñas (transmisión) solo existen en fotones, como el formato.
+    ENERGIAS_CON_CUNAS = frozenset({"6 MV", "15 MV"})
+    # F-5: la constancia de tasa de dosis solo se mide en fotones.
     ENERGIAS_CON_TASA_DOSIS = frozenset({"6 MV", "15 MV"})
 
     def _crear_tablas_linealidad(self):
@@ -300,11 +300,11 @@ class PruebaAnualIX(PruebaAnual600):
                 self.subtool5.addItem(widget, f"Lecturas de factor de {titulo} - {energia}")
                 self.tablas_lecturas_fc.append({'tabla': tabla, 'id_energia': self.id_energia})
 
-            # 3. Lecturas de transmisión de cuñas: 6 energías x 6 accesorios
+            # 3. Lecturas de transmisión de cuñas: fotones x 6 accesorios
             # (incluye "Open", el denominador de T = Q(cuña)/Q(open)).
             headers_lt = ["Accesorio", "Q1 IN (nC)", "Q2 IN (nC)", "Q1 OUT (nC)", "Q2 OUT (nC)", "Q MED (nC)", "T"]
             self.tablas_lecturas_transmision = []
-            for energia in energias:
+            for energia in [e for e in energias if e in self.ENERGIAS_CON_CUNAS]:
                 datos_lt = [[acc, "", "", "", "", "", ""] for acc in self.ACCESORIOS_TRANSMISION]
                 self.id_energia = energia_ids[energia]
                 widget, tabla = PruebaMensual600.createSimpleTable1(
@@ -434,6 +434,7 @@ class PruebaAnualIX(PruebaAnual600):
                 # B1: solo se audita un guardado que de verdad ocurrió.
                 _registrar_auditoria(_usuario_actual(self), ACCION_GUARDAR,
                                      nombre_tabla, ref=ref)
+                self._marcar_subida(table)
 
                 # Z5 (PLAN_REPARACION_DIARIO_Y_ANULACION_05-08.md): el botón
                 # ya NO se bloquea tras el primer guardado -- la protección
@@ -456,9 +457,54 @@ class PruebaAnualIX(PruebaAnual600):
         except Exception as e:
             print(f"Error agregando botones: {e}")
 
+    # Columnas que calcula la app: cuentan como edición solo si el físico las corrige a mano
+    _CALCULADAS = {"anual_linealidad_um": (3,), "anual_lecturas_factor_campo": (3, 4),
+                   "anual_lecturas_transmision": (5, 6), "anual_tasa_dosis": (), "tabla_factores_sobre_eje": (3,)}
+    # Las listas de «Lecturas de linealidad», en el orden de sus subsecciones
+    _LISTAS_LINEALIDAD = (("tablas_linealidad_um", "anual_linealidad_um"),
+                          ("tablas_lecturas_fc", "anual_lecturas_factor_campo"),
+                          ("tablas_lecturas_transmision", "anual_lecturas_transmision"),
+                          ("tablas_tasa_dosis", "anual_tasa_dosis"))
+
+    def _cargar_datos_tabla(self, nombre_tabla, ref, datos_default, pdd=None, id_energia=None, id=False):
+        """El de siempre; además recuerda si cada tabla vino de la base (para su circulito)."""
+        datos = super()._cargar_datos_tabla(nombre_tabla, ref, datos_default, pdd=pdd, id_energia=id_energia, id=id)
+        self.__dict__.setdefault("_origenes", {})[(nombre_tabla, ref, id_energia, pdd)] = datos['source']
+        return datos
+
+    def _de_la_base(self, nombre_tabla, id_energia, pdd=None):
+        return getattr(self, "_origenes", {}).get((nombre_tabla, self.ref, id_energia, pdd)) == 'database'
+
+    def _elementos_de_seccion(self, subcaja, agrupar):
+        """Un elemento por subsección: una tabla en linealidad, las tres de PDD de una energía en el eje."""
+        if agrupar:
+            entradas = [(e, nombre) for lista, nombre in self._LISTAS_LINEALIDAD for e in getattr(self, lista, [])]
+            return [Elemento(subcaja.itemText(i), [e['tabla']], self._CALCULADAS[nombre],
+                             self._de_la_base(nombre, e['id_energia'])) for i, (e, nombre) in enumerate(entradas)]
+        nombre = "tabla_factores_sobre_eje"
+        return [Elemento(subcaja.itemText(i), [e['tabla'] for e in grupo], self._CALCULADAS[nombre],
+                         all(self._de_la_base(nombre, e['id_energia'], e['pdd']) for e in grupo))
+                for i, grupo in enumerate(getattr(self, "tablas_fse", []))]
+
+    def _agregar_seccion_con_menu(self, toolbox, subcaja, titulo, agrupar):
+        """La sección con su menú desplegable; si no se puede armar, en cascada como antes."""
+        try:
+            return SeccionConMenu(toolbox, subcaja, titulo, self._elementos_de_seccion(subcaja, agrupar), agrupar)
+        except Exception as e:
+            print(f"Error armando el menú de {titulo}: {e}")
+            toolbox.addItem(subcaja, titulo)
+            return None
+
+    def _marcar_subida(self, tabla):
+        """Un «Subir» que salió bien pone en verde el circulito de lo subido."""
+        for seccion in (getattr(self, "menu_fse", None), getattr(self, "menu_linealidad", None)):
+            if seccion is not None:
+                seccion.marcar_subida(tabla)
+
 # P1 (PLAN_P1_POOL_CONEXIONES_27-07.md): la clase con estado que vivía aquí
 # fue reemplazada por la fachada sin estado de services/db_pool.py.
 from services.db_pool import DatabaseManager
+from ui.paginasControles.PruebasAnuales.menu_de_secciones import Elemento, SeccionConMenu
 
 
 class PruebaImagenesIX(PruebaMensualTAC):

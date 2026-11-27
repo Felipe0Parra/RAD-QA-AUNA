@@ -76,7 +76,7 @@ class TestR2PanelesIXPorEnergia:
     def test_lecturas_transmision_seis_accesorios_incluye_open(self, app):
         obj = _ix_pelado()
         _, _, tablas_lt, _ = obj._crear_tablas_linealidad()
-        assert len(tablas_lt) == 6
+        assert len(tablas_lt) == 2  # AF.3 (P3): solo fotones; el formato no tiene cuñas para electrones
         accesorios = [tablas_lt[0]["tabla"].item(f, 0).text() for f in range(6)]
         assert accesorios == ["Open", "15°", "30°", "45°", "60°", "MLC"]
 

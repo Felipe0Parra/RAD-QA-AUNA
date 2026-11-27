@@ -9,6 +9,7 @@ hidden_imports = [
     "ui.paginasControles.PruebasMensuales.ix_mensual",
     "ui.paginasControles.PruebasMensuales.tac_mensual",
     "ui.paginasControles.PruebasAnuales.ix_anual",
+    "ui.paginasControles.PruebasAnuales.menu_de_secciones",
     "ui.paginasControles.PruebasDiarias.seiscientos",
     "ui.paginasControles.PruebasMensuales.seiscientos_mensual",
     "ui.paginasControles.PruebasDiarias.braquiterapia",
